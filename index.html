@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>笹川晴央 / Haru Sasagawa - Profile</title>
+  <style>
+    :root {
+      --text: #222222;
+      --muted: #666666;
+      --rule: #d0d0d0;
+      --heading: #1f2a44;
+      --bg: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Meiryo", "メイリオ", "Hiragino Kaku Gothic ProN",
+                   "ヒラギノ角ゴ ProN W3", "Yu Gothic", "游ゴシック",
+                   "MS PGothic", sans-serif;
+      font-size: 11pt;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 32px 64px;
+    }
+
+    header.profile-header {
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 20px;
+      margin-bottom: 28px;
+    }
+
+    .name-ja {
+      font-size: 24pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--heading);
+      margin: 0 0 4px 0;
+      line-height: 1.3;
+    }
+
+    .name-en {
+      font-size: 11pt;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      margin: 0 0 12px 0;
+    }
+
+    .affiliation {
+      font-size: 11pt;
+      color: var(--text);
+      margin: 0;
+    }
+
+    section {
+      margin-bottom: 28px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    h2.section-title {
+      font-size: 12pt;
+      font-weight: 700;
+      color: var(--heading);
+      letter-spacing: 0.1em;
+      margin: 0 0 12px 0;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    dl.profile-list {
+      margin: 0;
+      display: grid;
+      grid-template-columns: 8em 1fr;
+      row-gap: 8px;
+      column-gap: 16px;
+    }
+
+    dl.profile-list dt {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    dl.profile-list dd {
+      margin: 0;
+      color: var(--text);
+    }
+
+    ul.hobbies {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    ul.hobbies li {
+      position: relative;
+      padding-left: 1.2em;
+      margin-bottom: 6px;
+    }
+
+    ul.hobbies li::before {
+      content: "・";
+      position: absolute;
+      left: 0;
+      color: var(--muted);
+    }
+
+    .hobby-label {
+      font-weight: 600;
+      color: var(--heading);
+      margin-right: 0.4em;
+    }
+
+    .hobby-note {
+      color: var(--muted);
+      font-size: 10.5pt;
+    }
+
+    footer.page-footer {
+      margin-top: 36px;
+      padding-top: 12px;
+      border-top: 1px solid var(--rule);
+      font-size: 9.5pt;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 18mm;
+    }
+
+    @media print {
+      html, body {
+        background: #ffffff;
+        color: #000000;
+      }
+      .page {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+      }
+      header.profile-header,
+      h2.section-title,
+      footer.page-footer {
+        border-color: #888888;
+      }
+      .name-ja,
+      h2.section-title,
+      .hobby-label {
+        color: #000000;
+      }
+      .name-en,
+      dl.profile-list dt,
+      .hobby-note,
+      footer.page-footer {
+        color: #333333;
+      }
+      section {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" role="main">
+    <header class="profile-header">
+      <h1 class="name-ja">笹川 晴央</h1>
+      <p class="name-en">Haru Sasagawa</p>
+      <p class="affiliation">TOHOシネマズ新宿　副支配人</p>
+    </header>
+
+    <section aria-labelledby="profile-title">
+      <h2 id="profile-title" class="section-title">Profile</h2>
+      <dl class="profile-list">
+        <dt>名前</dt>
+        <dd>笹川 晴央（Haru Sasagawa）</dd>
+        <dt>所属</dt>
+        <dd>TOHOシネマズ新宿　副支配人</dd>
+      </dl>
+    </section>
+
+    <section aria-labelledby="hobbies-title">
+      <h2 id="hobbies-title" class="section-title">Hobbies</h2>
+      <ul class="hobbies">
+        <li><span class="hobby-label">映画</span><span class="hobby-note">作品ジャンルを問わず、劇場で観る体験を大切にしています。</span></li>
+        <li><span class="hobby-label">サッカー</span><span class="hobby-note">マンチェスター・シティのサポーターです。</span></li>
+        <li><span class="hobby-label">ラーメン</span><span class="hobby-note">あっさり系から濃厚系まで、新しいお店を開拓するのが好きです。</span></li>
+        <li><span class="hobby-label">温泉</span><span class="hobby-note">休日には各地の名湯を巡って心身をリセットしています。</span></li>
+      </ul>
+    </section>
+
+    <footer class="page-footer">
+      Haru Sasagawa &middot; Profile
+    </footer>
+  </main>
+</body>
+</html>
