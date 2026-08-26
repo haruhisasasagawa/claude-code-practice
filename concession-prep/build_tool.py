@@ -155,6 +155,9 @@ ws = wb.active
 ws.title = "使い方"
 ws.sheet_properties.tabColor = NAVY
 ws.sheet_view.showGridLines = False
+ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+ws.page_setup.fitToWidth = 1
+ws.page_setup.fitToHeight = 0
 widths = {"A": 2.5, "B": 6, "C": 13, "D": 13, "E": 13, "F": 13, "G": 13,
           "H": 13, "I": 13, "J": 13}
 for c, w in widths.items():
@@ -179,15 +182,16 @@ steps = [
 r = 6
 for mark, color, head, desc in steps:
     ws.row_dimensions[r].height = 24
-    ws.row_dimensions[r + 1].height = 20
+    ws.row_dimensions[r + 1].height = 32
     chip(ws, f"B{r}:B{r + 1}", mark, "FFFFFF", color, 16, True, "center")
     style_range(ws, f"B{r}:B{r + 1}", border=Border(left=Side(style="medium", color=color),
                                                     top=Side(style="medium", color=color),
-                                                    bottom=Side(style="medium", color=color)))
+                                                    bottom=Side(style="medium", color=color),
+                                                    right=Side(style="medium", color=color)))
     ws.merge_cells(f"C{r}:J{r}")
     style_range(ws, f"C{r}:J{r}", font=fnt(11, True, INK), alignment=align("left", "bottom"))
     ws[f"C{r}"] = head
-    note(ws, f"C{r + 1}:J{r + 1}", desc, 9)
+    note(ws, f"C{r + 1}:J{r + 1}", desc, 9, wrap=True)
     r += 3
 
 r += 1                                        # 凡例
@@ -219,8 +223,8 @@ notes = [
 ]
 for t in notes:
     r += 1
-    ws.row_dimensions[r].height = 18
-    note(ws, f"C{r}:J{r}", t, 9.5, INK)
+    ws.row_dimensions[r].height = 30
+    note(ws, f"C{r}:J{r}", t, 9.5, INK, wrap=True)
 r += 2
 note(ws, f"C{r}:J{r}", "雛形版 v1.0（2026/8）｜数式・レイアウトは自由に調整してください", 8.5)
 
@@ -275,7 +279,7 @@ note(ws, "E5:I5", "← 準備したい日（明日など）の予測動員数を
 
 ws.row_dimensions[6].height = 20
 chip(ws, "B6:C6", "  ③ 時間帯倍率", CHIP_CORAL, INK, 10)
-note(ws, "D6:I6", "→ 表の右上「×○○%」を書き換えると、時間帯ごとの準備数に反映されます（名前も変更OK）", 9)
+note(ws, "D6:I6", "→ 右の「×○○%」を書き換えると時間帯ごとの準備数に反映（名前も変更OK）", 9)
 ws.row_dimensions[7].height = 6
 
 # --- 表ヘッダー -------------------------------------------------------------
@@ -384,7 +388,7 @@ chip(ws, "B2", "✏️ 入力セル", F_INPUT, INK, 8.5, False, "center")
 style_range(ws, "B2", border=BORDER_INPUT)
 chip(ws, "C2:D2", "🔒 自動計算", F_AUTO, "5B6472", 8.5, False, "center")
 style_range(ws, "C2:D2", border=BORDER_LIGHT)
-note(ws, "F2:K2", "日付は左から古い順（右端＝昨日）。販売数は「CSV貼付」シートから自動集計されます。", 8.5)
+note(ws, "F2:K2", "日付は左から古い順（右端＝昨日）。販売数はCSV貼付から自動集計。", 8.5)
 ws.row_dimensions[3].height = 6
 
 ws.row_dimensions[4].height = 22
@@ -466,6 +470,10 @@ ws.freeze_panes = "C9"
 ws = wb.create_sheet("CSV貼付")
 ws.sheet_properties.tabColor = AMBER
 ws.sheet_view.showGridLines = False
+ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+ws.page_setup.fitToWidth = 1
+ws.page_setup.fitToHeight = 0
+ws.print_area = "A1:I64"
 
 ws.column_dimensions["A"].width = 12
 ws.column_dimensions["B"].width = 28
