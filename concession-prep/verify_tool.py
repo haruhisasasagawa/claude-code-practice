@@ -95,9 +95,19 @@ for i in range(12, 20):
 
 # ---- CSV貼付: チェック列・件数 ----
 ws = wb["CSV貼付"]
-check("CSV貼付!I2(貼付行数)", ws["I2"].value, 84)
-check("CSV貼付!I3(未登録件数)", ws["I3"].value, 0)
-check("CSV貼付!F5(チェック)", ws["F5"].value, "✔ OK")
+check("CSV貼付!J2(貼付行数)", ws["J2"].value, 84)
+check("CSV貼付!J3(未登録件数)", ws["J3"].value, 0)
+check("CSV貼付!I5(チェック)", ws["I5"].value, "✔ OK")
+
+# ---- ガード類: CSV取込チェック行・警告セル ----
+ws = wb["日別データ"]
+for j in range(7):
+    v = ws.cell(row=7, column=3 + j).value
+    check(f"日別データ!{chr(67 + j)}7(CSV取込)", v, "✔")
+ws = wb["準備数計算"]
+warn = ws["B7"].value
+if warn not in (None, ""):
+    errors.append(f"NG 準備数計算!B7 警告が出ている: {warn!r}")
 
 if errors:
     print(f"FAILED ({len(errors)} errors, period={N}日)")

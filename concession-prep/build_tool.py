@@ -144,7 +144,7 @@ for d, att in zip(DATES, ATTEND):
         CSV_ROWS.append((d, name, q, q * price))
 
 N_SLOTS = 20            # 商品枠(10〜20種類想定 → 20枠)
-CSV_MAX = 500           # CSV貼付の最大行数
+CSV_MAX = 2000          # CSV貼付の最大行数(全商品×7日でも余裕を持てる行数)
 ROW_P0 = 9              # 日別データ: 商品1行目
 ROW_M0 = 11             # 準備数計算: 商品1行目
 
@@ -175,7 +175,7 @@ steps = [
     ("①", CORAL, "「日別データ」シートに 日付 と 動員数 を入力",
      "直近7日分。日付は左から古い順（右端＝昨日）。販売数はSTEP②のCSVから自動で入ります。｜担当：社員"),
     ("②", AMBER, "「CSV貼付」シートに 集計ソフトのCSV を貼り付け",
-     "A列=日付・B列=商品名・C列=販売数。右側の商品名チェックが「✔ OK」になっているか確認。｜担当：社員"),
+     "A列=日付・B列=商品名・C列=販売数（D〜G列は予備）。商品名チェックと日別データのCSV取込チェックが「✔」か確認。｜担当：社員"),
     ("③", TEAL, "「準備数計算」シートで 参照期間 と 予測動員数 を選ぶ",
      "直近7日間/3日間/昨日から期間を選択。時間帯の倍率（×120%など）は表の右上で自由に変更。｜担当：社員（確認：スタッフ）"),
 ]
@@ -218,7 +218,9 @@ chip(ws, f"B{r}:D{r}", "  注意メモ", CHIP_NAVY, NAVY)
 notes = [
     "・商品枠は最大20です（「日別データ」シートの商品名欄）。10〜20品での運用を想定しています。",
     "・商品名はCSV側と完全一致が必要です。「⚠ 未登録」が出たら、どちらかの名前をそろえてください。",
+    "・CSV貼付は最大2000行まで集計されます。列が多いCSVは「日付・商品名・販売数」の3列だけコピーして貼ると確実です。",
     "・CSVを貼り付けて日付が文字列になった場合は、日付列を選択 →「データ」→「区切り位置」で日付に戻せます。",
+    "・購買率に「要確認」と出たときは、参照期間の動員数が未入力です。「日別データ」シートを確認してください。",
     "・いまはサンプルデータが入っています。実際のデータで上書きしてお使いください。",
 ]
 for t in notes:
@@ -235,7 +237,8 @@ ws.sheet_view.showGridLines = False
 ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 ws.page_setup.orientation = "landscape"
 ws.page_setup.fitToWidth = 1
-ws.page_setup.fitToHeight = 0
+ws.page_setup.fitToHeight = 1
+ws.print_area = "A1:I31"
 
 widths = {"A": 2.5, "B": 6, "C": 26, "D": 12, "E": 11, "F": 13,
           "G": 12, "H": 12, "I": 12, "J": 2.5, "K": 12, "L": 10}
@@ -253,7 +256,7 @@ chip(ws, "K3:L3", " ⚙ 計算用（さわらない）", "F7F8FA", GRAY, 8, Fals
 note(ws, "K4", "参照日数", 8.5, GRAY, h="right")
 ws["L4"] = '=IF($D$4="昨日",1,IF($D$4="直近3日間",3,7))'
 note(ws, "K5", "動員合計", 8.5, GRAY, h="right")
-ws["L5"] = "=SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$L$4)*1,日別データ!$C$6:$I$6)"
+ws["L5"] = "=SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$L$4)*(日別データ!$C$6:$I$6>0),日別データ!$C$6:$I$6)"
 style_range(ws, "L4:L5", font=fnt(8.5, False, GRAY), alignment=align("left"), num="#,##0")
 style_range(ws, "K3:L5", border=BORDER_HAIR)
 
@@ -265,7 +268,8 @@ style_range(ws, "D4", font=fnt(10.5, True), fl=fill(F_INPUT),
             alignment=align("center"), border=BORDER_INPUT)
 ws.merge_cells("E4:I4")
 ws["E4"] = ('=IF(日別データ!$I$4="","（「日別データ」シートに日付を入力してください）",'
-            '"参照: "&TEXT(INDEX(日別データ!$C$4:$I$4,1,8-$L$4),"m/d")&"〜"&'
+            '"参照: "&IF(INDEX(日別データ!$C$4:$I$4,1,8-$L$4)="","—",'
+            'TEXT(INDEX(日別データ!$C$4:$I$4,1,8-$L$4),"m/d"))&"〜"&'
             'TEXT(日別データ!$I$4,"m/d")&"（動員合計 "&TEXT($L$5,"#,##0")&"人）")')
 style_range(ws, "E4:I4", font=fnt(9.5, False, "5B6472"), alignment=align("left"))
 
@@ -280,7 +284,14 @@ note(ws, "E5:I5", "← 準備したい日（明日など）の予測動員数を
 ws.row_dimensions[6].height = 20
 chip(ws, "B6:C6", "  ③ 時間帯倍率", CHIP_CORAL, INK, 10)
 note(ws, "D6:I6", "→ 右の「×○○%」を書き換えると時間帯ごとの準備数に反映（名前も変更OK）", 9)
-ws.row_dimensions[7].height = 6
+ws.row_dimensions[7].height = 14
+ws.merge_cells("B7:I7")
+ws["B7"] = ('=IF(日別データ!$I$4="","",TRIM('
+            'IF(SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$L$4)*(日別データ!$C$6:$I$6>0))<$L$4,'
+            '"⚠ 参照期間に動員数が未入力の日があります（入力済みの日だけで計算します）。","")&" "&'
+            'IF(SUMPRODUCT((COLUMN(日別データ!$C$7:$I$7)>=10-$L$4)*(日別データ!$C$7:$I$7="✔"))=0,'
+            '"⚠ 参照期間の販売データがCSV貼付にありません。CSVを確認してください。","")))')
+style_range(ws, "B7:I7", font=fnt(8.5, True, "D14343"), alignment=align("left"))
 
 # --- 表ヘッダー -------------------------------------------------------------
 ws.row_dimensions[8].height = 18
@@ -311,13 +322,14 @@ for i in range(N_SLOTS):
     zebra = fill(F_ZEBRA) if i % 2 else None
     ws[f"B{r}"] = i + 1
     ws[f"C{r}"] = f'=IF(日別データ!B{dr}="","",日別データ!B{dr})'
-    ws[f"D{r}"] = (f'=IF($C{r}="","",SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$L$4)*1,'
-                   f'日別データ!C{dr}:I{dr}))')
-    ws[f"E{r}"] = f'=IF($C{r}="","",IFERROR(D{r}/$L$5,0))'
-    ws[f"F{r}"] = f'=IF(OR($C{r}="",$D$5=""),"",ROUNDUP($D$5*E{r},0))'
+    ws[f"D{r}"] = (f'=IF($C{r}="","",SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$L$4)'
+                   f'*(日別データ!$C$6:$I$6>0),日別データ!C{dr}:I{dr}))')
+    ws[f"E{r}"] = f'=IF($C{r}="","",IF($L$5<=0,"要確認",D{r}/$L$5))'
+    ws[f"F{r}"] = (f'=IF(OR($C{r}="",$D$5=""),"",'
+                   f'IF(ISNUMBER($E{r}),ROUNDUP($D$5*$E{r},0),"—"))')
     for col in "GHI":
         ws[f"{col}{r}"] = (f'=IF(OR($C{r}="",$D$5="",{col}$10=""),"",'
-                           f'ROUNDUP($D$5*$E{r}*{col}$10,0))')
+                           f'IF(ISNUMBER($E{r}),ROUNDUP($D$5*$E{r}*{col}$10,0),"—"))')
     style_range(ws, f"B{r}", font=fnt(9, False, GRAY), alignment=align("center"))
     style_range(ws, f"C{r}", font=fnt(10.5), alignment=align("left"))
     style_range(ws, f"D{r}", font=fnt(10, False, "5B6472"), alignment=align("center"), num="#,##0")
@@ -343,20 +355,26 @@ note(ws, f"B{last + 1}:I{last + 1}",
 bar = DataBarRule(start_type="num", start_value=0, end_type="max",
                   color=CORAL, showValue=True)
 ws.conditional_formatting.add(f"F{ROW_M0}:F{last}", bar)
+rate_warn = FormulaRule(formula=[f"ISTEXT(E{ROW_M0})"],
+                        font=Font(name=FONT_NAME, size=9, bold=True, color="D14343"))
+ws.conditional_formatting.add(f"E{ROW_M0}:E{last}", rate_warn)
 
-dv_period = DataValidation(type="list", formula1='"直近7日間,直近3日間,昨日"', allow_blank=False)
+dv_period = DataValidation(type="list", formula1='"直近7日間,直近3日間,昨日"',
+                           allow_blank=False, showErrorMessage=True)
 dv_period.error = "リストから選んでください（直近7日間／直近3日間／昨日）"
 dv_period.errorTitle = "参照期間"
 ws.add_data_validation(dv_period)
 dv_period.add("D4")
 
-dv_fore = DataValidation(type="whole", operator="between", formula1="0", formula2="999999")
+dv_fore = DataValidation(type="whole", operator="between", formula1="0", formula2="999999",
+                         showErrorMessage=True)
 dv_fore.error = "予測動員数は 0〜999,999 の整数で入力してください"
 dv_fore.errorTitle = "予測動員数"
 ws.add_data_validation(dv_fore)
 dv_fore.add("D5")
 
-dv_mult = DataValidation(type="decimal", operator="between", formula1="0", formula2="5")
+dv_mult = DataValidation(type="decimal", operator="between", formula1="0", formula2="5",
+                         showErrorMessage=True)
 dv_mult.error = "倍率は 0〜5 の数値で入力してください（1.2 → ×120%）"
 dv_mult.errorTitle = "時間帯倍率"
 ws.add_data_validation(dv_mult)
@@ -419,7 +437,18 @@ weekend_blue = FormulaRule(formula=['WEEKDAY(C$4)=7'], font=Font(name=FONT_NAME,
 ws.conditional_formatting.add("C4:I5", weekend_red)
 ws.conditional_formatting.add("C4:I5", weekend_blue)
 
-ws.row_dimensions[7].height = 6
+ws.row_dimensions[7].height = 16
+note(ws, "B7", "  CSV取込チェック", 8, GRAY)
+for j in range(7):
+    col = get_column_letter(3 + j)
+    ws[f"{col}7"] = (f'=IF({col}$4="","",IF(COUNTIFS(CSV貼付!$A$5:$A${4 + CSV_MAX},">="&{col}$4,'
+                     f'CSV貼付!$A$5:$A${4 + CSV_MAX},"<"&{col}$4+1)=0,"⚠なし","✔"))')
+    style_range(ws, f"{col}7", font=fnt(8, False, GRAY), alignment=align("center"))
+csv_ok = FormulaRule(formula=['C$7="✔"'], font=Font(name=FONT_NAME, size=8, color=GREEN))
+csv_ng = FormulaRule(formula=['ISNUMBER(SEARCH("⚠",C$7))'],
+                     font=Font(name=FONT_NAME, size=8, bold=True, color="D14343"))
+ws.conditional_formatting.add("C7:I7", csv_ok)
+ws.conditional_formatting.add("C7:I7", csv_ng)
 ws.row_dimensions[8].height = 22
 for ref, text in [("A8", "No."), ("B8", "商品名"), ("J8", "7日合計"), ("K8", "メモ")]:
     style_range(ws, ref, font=fnt(9.5, True, "FFFFFF"), fl=fill(NAVY),
@@ -443,7 +472,9 @@ for i in range(N_SLOTS):
     for j in range(7):
         col = get_column_letter(3 + j)
         ws[f"{col}{r}"] = (f'=IF(OR($B{r}="",{col}$4=""),"",'
-                           f'SUMIFS(CSV貼付!$C$5:$C${4 + CSV_MAX},CSV貼付!$A$5:$A${4 + CSV_MAX},{col}$4,'
+                           f'SUMIFS(CSV貼付!$C$5:$C${4 + CSV_MAX},'
+                           f'CSV貼付!$A$5:$A${4 + CSV_MAX},">="&{col}$4,'
+                           f'CSV貼付!$A$5:$A${4 + CSV_MAX},"<"&{col}$4+1,'
                            f'CSV貼付!$B$5:$B${4 + CSV_MAX},$B{r}))')
         style_range(ws, f"{col}{r}", font=fnt(10, False, "5B6472"),
                     fl=fill(F_AUTO if i % 2 == 0 else F_ZEBRA),
@@ -473,47 +504,45 @@ ws.sheet_view.showGridLines = False
 ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 ws.page_setup.fitToWidth = 1
 ws.page_setup.fitToHeight = 0
-ws.print_area = "A1:I64"
+ws.print_area = "A1:J64"
 
-ws.column_dimensions["A"].width = 12
-ws.column_dimensions["B"].width = 28
-ws.column_dimensions["C"].width = 10
-ws.column_dimensions["D"].width = 13
-ws.column_dimensions["E"].width = 10
-ws.column_dimensions["F"].width = 15
-ws.column_dimensions["G"].width = 2.5
-ws.column_dimensions["H"].width = 11
-ws.column_dimensions["I"].width = 9
+for c, w in {"A": 12, "B": 28, "C": 10, "D": 13, "E": 10, "F": 10,
+             "G": 10, "H": 2.5, "I": 15, "J": 9}.items():
+    ws.column_dimensions[c].width = w
 
 ws.row_dimensions[1].height = 34
-title_band(ws, "A1:I1", "　📋 CSV貼付（集計ソフトのデータ）")
+title_band(ws, "A1:J1", "　📋 CSV貼付（集計ソフトのデータ）")
 ws.row_dimensions[2].height = 30
-note(ws, "A2:F2",
-     "集計ソフトから抽出したCSVを、5行目以降にそのまま貼り付けてください（A=日付・B=商品名・C=販売数、最大500行）。"
-     "列の並びが違う場合は、貼り付けてから列を入れ替えてください。", 9, GRAY, wrap=True)
+note(ws, "A2:G2",
+     "集計ソフトから抽出したCSVを、5行目以降にそのまま貼り付けてください（A=日付・B=商品名・C=販売数、"
+     "D〜G列は予備、最大2000行）。列が多いCSVは「日付・商品名・販売数」の3列だけコピーして貼ると確実です。",
+     9, GRAY, wrap=True)
 ws.row_dimensions[3].height = 18
 
-chip(ws, "H2", "貼付行数", CHIP_AMBER, INK, 8.5, False, "center")
-ws["I2"] = f"=COUNTA($A$5:$A${4 + CSV_MAX})"
-style_range(ws, "I2", font=fnt(10, True), alignment=align("center"), num="#,##0")
-chip(ws, "H3", "⚠ 未登録", CHIP_AMBER, INK, 8.5, False, "center")
-ws["I3"] = f'=COUNTIF($F$5:$F${4 + CSV_MAX},"⚠ 未登録")'
-style_range(ws, "I3", font=fnt(10, True), alignment=align("center"), num="#,##0")
-warn_red = FormulaRule(formula=["$I$3>0"], font=Font(name=FONT_NAME, color="D14343", bold=True))
-ws.conditional_formatting.add("I3", warn_red)
+chip(ws, "I2", "貼付行数", CHIP_AMBER, INK, 8.5, False, "center")
+ws["J2"] = f"=COUNTA($A$5:$A${4 + CSV_MAX})"
+style_range(ws, "J2", font=fnt(10, True), alignment=align("center"), num="#,##0")
+chip(ws, "I3", "⚠ 未登録", CHIP_AMBER, INK, 8.5, False, "center")
+# チェック列(I列)が上書きで消えても件数が出るよう、貼付データを直接判定する
+ws["J3"] = (f'=SUMPRODUCT(($B$5:$B${4 + CSV_MAX}<>"")*'
+            f'ISNA(MATCH($B$5:$B${4 + CSV_MAX},日別データ!$B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1},0)))')
+style_range(ws, "J3", font=fnt(10, True), alignment=align("center"), num="#,##0")
+warn_red = FormulaRule(formula=["$J$3>0"], font=Font(name=FONT_NAME, color="D14343", bold=True))
+ws.conditional_formatting.add("J3", warn_red)
 
 ws.row_dimensions[4].height = 22
 for ref, text in [("A4", "日付"), ("B4", "商品名"), ("C4", "販売数"),
-                  ("D4", "金額（予備）"), ("E4", "（予備）"), ("F4", "商品名チェック")]:
+                  ("D4", "金額（予備）"), ("E4", "（予備）"), ("F4", "（予備）"),
+                  ("G4", "（予備）"), ("I4", "商品名チェック")]:
     style_range(ws, ref, font=fnt(9.5, True, "FFFFFF"), fl=fill(NAVY),
                 alignment=align("center"), border=BORDER_LIGHT)
     ws[ref] = text
-ws["F4"].comment = Comment("「日別データ」の商品名一覧に載っているかを自動判定します。"
+ws["I4"].comment = Comment("「日別データ」の商品名一覧に載っているかを自動判定します。"
                            "「⚠ 未登録」の行は集計されません。", "準備数ツール")
 
 for i in range(CSV_MAX):
     r = 5 + i
-    for col in "ABCDE":
+    for col in "ABCDEFG":
         ws[f"{col}{r}"].border = BORDER_HAIR
         ws[f"{col}{r}"].font = fnt(9.5)
     ws[f"A{r}"].number_format = "m/d"
@@ -522,19 +551,19 @@ for i in range(CSV_MAX):
     ws[f"C{r}"].alignment = align("center")
     ws[f"D{r}"].number_format = "#,##0"
     ws[f"D{r}"].alignment = align("center")
-    ws[f"F{r}"] = (f'=IF($B{r}="","",IF(ISNUMBER(MATCH($B{r},日別データ!$B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1},0)),'
+    ws[f"I{r}"] = (f'=IF($B{r}="","",IF(ISNUMBER(MATCH($B{r},日別データ!$B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1},0)),'
                    f'"✔ OK","⚠ 未登録"))')
-    ws[f"F{r}"].font = fnt(9, False, GRAY)
-    ws[f"F{r}"].alignment = align("center")
-    ws[f"F{r}"].border = BORDER_HAIR
+    ws[f"I{r}"].font = fnt(9, False, GRAY)
+    ws[f"I{r}"].alignment = align("center")
+    ws[f"I{r}"].border = BORDER_HAIR
 
-ok_green = FormulaRule(formula=[f'ISNUMBER(SEARCH("✔",F5))'],
+ok_green = FormulaRule(formula=[f'ISNUMBER(SEARCH("✔",I5))'],
                        font=Font(name=FONT_NAME, size=9, color=GREEN))
-ng_red = FormulaRule(formula=[f'ISNUMBER(SEARCH("⚠",F5))'],
+ng_red = FormulaRule(formula=[f'ISNUMBER(SEARCH("⚠",I5))'],
                      font=Font(name=FONT_NAME, size=9, bold=True, color="D14343"),
                      fill=fill("FDECEC"))
-ws.conditional_formatting.add(f"F5:F{4 + CSV_MAX}", ok_green)
-ws.conditional_formatting.add(f"F5:F{4 + CSV_MAX}", ng_red)
+ws.conditional_formatting.add(f"I5:I{4 + CSV_MAX}", ok_green)
+ws.conditional_formatting.add(f"I5:I{4 + CSV_MAX}", ng_red)
 
 for i, (d, name, qty, amount) in enumerate(CSV_ROWS):
     r = 5 + i
