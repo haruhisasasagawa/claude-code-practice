@@ -25,6 +25,8 @@ ap.add_argument("--att-b")
 ap.add_argument("--peak", type=int)
 ap.add_argument("--mult", type=float, default=1.0, help="時間帯係数")
 ap.add_argument("--adjust", type=float, default=1.0, help="調整倍率")
+for k in range(1, 5):
+    ap.add_argument(f"--mso{k}", help="係数貼付①〜④に入っているMSO商品CSV")
 a = ap.parse_args()
 
 wb = load_workbook(a.xlsx, data_only=True)
@@ -138,6 +140,74 @@ for i in range(len(DEFAULT_PRODUCTS), 20):
         v = m[f"{col}{11 + i}"].value
         if v not in (None, ""):
             errors.append(f"NG 準備数計算 空き枠 {col}{11 + i}: {v!r}")
+
+# ------------------------------------------------ 係数算出(時間帯係数の較正) --
+from build_calib import CALIB_SHEETS, read_mso_rows  # noqa: E402
+
+ks = wb["係数算出"]
+mso_paths = [a.mso1, a.mso2, a.mso3, a.mso4]
+
+
+def mso_band_counts(path):
+    """MSO明細をExcel側と同じルールで帯別集計(先頭行の日付を対象日とする)"""
+    rows = read_mso_rows(path)
+    target = rows[0][10] if rows else None
+    windows = [(8 / 24, 11 / 24), (11 / 24, 15 / 24), (15 / 24, 18 / 24),
+               (18 / 24, 21 / 24), None]
+    counts = [0] * 5
+    for r in rows:
+        date, t = r[10], r[12]
+        if (date != target or r[18] != "提供済" or r[19] != "販売"
+                or r[27] == "セット親" or not isinstance(t, str)):
+            continue
+        q = r[25] or 0
+        if not isinstance(q, (int, float)) or q <= 0:
+            continue
+        h, mi, s = map(int, t.split(":"))
+        tv = (h * 3600 + mi * 60 + s) / 86400
+        for bi, w in enumerate(windows):
+            if w and w[0] <= tv < w[1]:
+                counts[bi] += q
+                break
+        else:
+            if tv >= 21 / 24 or tv < 2 / 24:
+                counts[4] += q
+    return counts
+
+
+if any(mso_paths):
+    durs = [3, 4, 3, 3, 5]
+    week_counts = [mso_band_counts(p) if p else [0] * 5 for p in mso_paths]
+    n_weeks = sum(1 for wcs in week_counts if sum(wcs) > 0)
+    for wi, wcs in enumerate(week_counts):
+        col = "DEFG"[wi]
+        for bi in range(5):
+            check(f"係数算出!{col}{7 + bi}({wi + 1}週目)", ks[f"{col}{7 + bi}"].value, wcs[bi])
+        check(f"係数算出!{col}12(週合計)", ks[f"{col}12"].value, sum(wcs))
+    check("係数算出!H13(週数)", ks["H13"].value, n_weeks)
+    if n_weeks:
+        avgs = [sum(wcs[bi] for wcs in week_counts) / n_weeks for bi in range(5)]
+        day_pace = sum(avgs) / sum(durs)
+        for bi in range(5):
+            coef = (avgs[bi] / durs[bi]) / day_pace
+            check(f"係数算出!K{7 + bi}(係数候補)", ks[f"K{7 + bi}"].value, coef, tol=1e-6)
+            rounded = round(round(coef / 0.05) * 0.05, 10)
+            check(f"係数算出!L{7 + bi}(転記用)", ks[f"L{7 + bi}"].value, rounded, tol=1e-6)
+            check(f"準備数計算!K{4 + bi}(実測候補の連動)", m[f"K{4 + bi}"].value, rounded, tol=1e-6)
+        check("係数算出!B23(警告なし)", ks["B23"].value in (None, ""), True)
+    for wi, p in enumerate(mso_paths):
+        st = wb[CALIB_SHEETS[wi]]["A3"].value or ""
+        if p:
+            check(f"{CALIB_SHEETS[wi]}!A3(貼付済表示)", "貼付" in st and "対象個数" in st, True)
+        else:
+            check(f"{CALIB_SHEETS[wi]}!A3(未貼付表示)", "未貼付" in st, True)
+else:
+    check("係数算出!H13(週数=0)", ks["H13"].value, 0)
+    check("係数算出!L7(未算出=—)", ks["L7"].value, "—")
+    check("係数算出!B23(未貼付警告)", "まだデータが貼られていません" in (ks["B23"].value or ""), True)
+    check("準備数計算!K4(実測候補=—)", m["K4"].value, "—")
+    for s in CALIB_SHEETS:
+        check(f"{s}!A3(未貼付)", wb[s]["A3"].value, "（未貼付）")
 
 if errors:
     print(f"FAILED ({len(errors)}):")

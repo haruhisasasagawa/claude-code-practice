@@ -1,45 +1,41 @@
 # -*- coding: utf-8 -*-
 """
-時間帯係数 較正シート（金曜4週分のMSO商品CSVから5段階の高低差を算出）生成スクリプト
+時間帯係数の較正シート群（係数算出＋係数貼付①〜④）を本体ワークブックへ追加するモジュール
 
 MSO商品CSV(注文明細・28列): K=売店売上日付, M=注文時間, S=ステータス, T=取消区分,
-Z=販売数量, AB=商品区分。金曜1日分で出力したCSVを貼付①〜④にそのまま貼ると、
-時間帯(5段階)ごとの販売ペースから時間帯係数の候補を自動算出する。
+Z=販売数量, AB=商品区分。金曜1日分で出力したCSVを係数貼付①〜④にそのまま貼ると、
+時間帯(5段階)ごとの販売ペースから時間帯係数の候補を自動算出し、
+「準備数計算」プリセット表の実測候補列(K列)にも表示される。
 
-使い方:
-  python build_calib.py                          # 未入力テンプレート
-  python build_calib.py --csv1 0717MSO.csv       # 貼付①にサンプル投入
-  python build_calib.py --show-notes <xlsx>      # 再計算後にメモ常時表示化
+build_tool.py の build() から add_calib_sheets(wb, csvs) として呼ばれる。
+単体では実行しない(本体の生成は python build_tool.py)。
 """
-import argparse
 import csv
 
-from openpyxl import Workbook
 from openpyxl.comments import Comment
-from openpyxl.formatting.rule import FormulaRule
-from openpyxl.styles import Border, Font
+from openpyxl.styles import Border
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
 
-from build_tool import (AMBER, BORDER_HAIR, BORDER_INPUT, BORDER_LIGHT, CHIP_AMBER,
-                        CHIP_CORAL, CHIP_NAVY, CORAL, F_AUTO, F_INPUT, F_ZEBRA, FONT_NAME,
-                        GRAY, GREEN, INK, NAVY, RED, TEAL, WEEKDAY_JA, align, chip,
-                        coral_side, fill, fnt, note, show_paste_comments, style_range,
-                        title_band)
+from build_tool import (BORDER_HAIR, BORDER_INPUT, BORDER_LIGHT, CHIP_AMBER,
+                        CHIP_CORAL, CHIP_NAVY, CORAL, F_INPUT, F_ZEBRA, GRAY,
+                        INK, NAVY, TEAL, WEEKDAY_JA, align, chip, coral_side,
+                        fill, fnt, note, style_range, title_band)
 
 MSO_HEADERS = ["操作モード", "伝票番号", "伝票枝番", "サイトコード", "サイト名",
                "劇場コード", "劇場名", "販売場所コード", "販売場所名", "端末番号",
                "売店売上日付", "注文日付", "注文時間", "受付時間", "提供時間", "提供済時間",
                "注文金額", "注文番号", "ステータス", "取消区分", "会員番号", "商品明細番号",
                "商品コード", "商品名", "販売単価", "販売数量", "販売金額", "商品区分"]
-NCOL = len(MSO_HEADERS)          # 28列: K=日付(11), M=時間(13), S=状態(19), T=取消(20),
+MSO_NCOL = len(MSO_HEADERS)      # 28列: K=日付(11), M=時間(13), S=状態(19), T=取消(20),
 #                                        Z=数量(26), AB=区分(28)
 MSO_MAX = 12000                  # 貼付データ最大行数(金曜1日分を想定。5〜12004行目)
 MSO_END = 4 + MSO_MAX
-SHEETS = ["貼付①", "貼付②", "貼付③", "貼付④"]
+CALIB_SHEETS = ["係数貼付①", "係数貼付②", "係数貼付③", "係数貼付④"]
 BANDS = ["① 朝一", "② 昼ピーク", "③ 夕方", "④ 夜ピーク", "⑤ レイト"]
 
-OUT_DEFAULT = "/home/user/claude-code-practice/concession-prep/TOHO新宿_時間帯係数_較正シート.xlsx"
+PURPLE = "7C5CB0"                # 係数算出タブ
+PURPLE_L = "B9A3D6"              # 係数貼付タブ
 
 
 def read_mso_rows(path):
@@ -50,7 +46,7 @@ def read_mso_rows(path):
             break
         except UnicodeDecodeError:
             continue
-    rows = [r for r in csv.reader(text.splitlines()) if len(r) == NCOL]
+    rows = [r for r in csv.reader(text.splitlines()) if len(r) == MSO_NCOL]
     out = []
     for r in rows[1:]:
         conv = []
@@ -68,74 +64,12 @@ def read_mso_rows(path):
     return out
 
 
-def build(out_path, csvs=(None, None, None, None)):
-    wb = Workbook()
-
-    # ============================================================ 使い方 =====
-    ws = wb.active
-    ws.title = "使い方"
-    ws.sheet_properties.tabColor = NAVY
-    ws.sheet_view.showGridLines = False
-    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 1
-    ws.page_setup.paperSize = 9
-    for c, w in {"A": 2.5, "B": 6, "C": 13, "D": 13, "E": 13, "F": 13, "G": 13,
-                 "H": 13, "I": 13, "J": 13}.items():
-        ws.column_dimensions[c].width = w
-
-    ws.row_dimensions[1].height = 38
-    title_band(ws, "A1:J1", "　⏱ 時間帯係数 較正シート")
-    ws.row_dimensions[2].height = 20
-    note(ws, "B2:J2", "金曜4週分の注文明細（MSO商品CSV）から、時間帯5段階の高低差（係数）を実測で算出します。月1回の更新を想定。", 9.5)
-
-    ws.row_dimensions[4].height = 22
-    chip(ws, "B4:D4", "  つかいかた（3ステップ）", CHIP_NAVY, NAVY)
-    steps = [
-        ("①", AMBER, "先月の金曜4日分のMSO商品CSVを、貼付①〜④に1日ずつ貼る",
-         "金曜1日分で出力したCSVを全選択コピー→各シートのオレンジのA4セルへ『値の貼り付け』（ヘッダー行ごとでOK）。｜担当：社員"),
-        ("②", TEAL, "「係数算出」シートで 4週の波と係数候補 を確認",
-         "時間帯ごとの販売個数・1時間あたりペース・係数候補が自動で出ます。貼った週だけで平均します（4週未満でも動作）。"),
-        ("③", CORAL, "転記テーブルの5つの値を、準備数ツールのプリセット表へ写す",
-         "「準備数計算」シート右上の時間帯プリセット表（J4:J8）に、①〜⑤の係数を手で入力すれば較正完了。"),
-    ]
-    r = 6
-    for mark, color, head, desc in steps:
-        ws.row_dimensions[r].height = 24
-        ws.row_dimensions[r + 1].height = 20
-        chip(ws, f"B{r}:B{r + 1}", mark, "FFFFFF", color, 16, True, "center")
-        from openpyxl.styles import Side
-        style_range(ws, f"B{r}:B{r + 1}", border=Border(left=Side(style="medium", color=color),
-                                                        top=Side(style="medium", color=color),
-                                                        bottom=Side(style="medium", color=color)))
-        ws.merge_cells(f"C{r}:J{r}")
-        style_range(ws, f"C{r}:J{r}", font=fnt(11, True, INK), alignment=align("left", "bottom"))
-        ws[f"C{r}"] = head
-        note(ws, f"C{r + 1}:J{r + 1}", desc, 9)
-        r += 3
-
-    r += 1
-    ws.row_dimensions[r].height = 22
-    chip(ws, f"B{r}:D{r}", "  注意メモ", CHIP_NAVY, NAVY)
-    notes = [
-        "・貼るのは「金曜1日分」で出力したCSVです（最大12,000行）。複数日が混ざった場合は先頭の日付だけを集計し、状態表示に注意が出ます。",
-        "・集計ルール: セット親（セットの親行）は除外し、単品と構成品の実個数を数えます。注文取消・払戻も除外します。",
-        "・係数候補 ＝ その時間帯の1時間あたり販売個数 ÷ 全時間帯平均の1時間あたり販売個数。時間の区切りは係数算出シートで変更できます。",
-        "・金曜以外の日付を貼ると状態表示に「※金曜ではありません」と出ます（集計はされます）。",
-        "・このレポートがセルフ/モバイルオーダーのみか、対面レジ分も含むかは本社仕様をご確認ください（波の形はどちらでも概ね有効です）。",
-        "・算出された係数はあくまで候補です。現場の体感と大きくずれる場合は、転記時に丸めて調整してください。",
-    ]
-    for t in notes:
-        r += 1
-        ws.row_dimensions[r].height = 18
-        note(ws, f"C{r}:J{r}", t, 9.5, INK)
-    r += 2
-    note(ws, f"C{r}:J{r}", "較正シート v1.0（2026/8）｜本体: TOHO新宿_コンセッション準備数ツール.xlsx", 8.5)
+def add_calib_sheets(wb, csvs=(None, None, None, None)):
+    """本体ワークブックへ「係数算出」「係数貼付①〜④」を追加する"""
 
     # ========================================================== 係数算出 =====
     ws = wb.create_sheet("係数算出")
-    ws.sheet_properties.tabColor = CORAL
+    ws.sheet_properties.tabColor = PURPLE
     ws.sheet_view.showGridLines = False
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
     ws.page_setup.orientation = "landscape"
@@ -149,7 +83,7 @@ def build(out_path, csvs=(None, None, None, None)):
         ws.column_dimensions[c].width = w
 
     ws.row_dimensions[1].height = 34
-    title_band(ws, "B1:L1", "　⏱ 係数算出｜金曜4週分の時間帯の波")
+    title_band(ws, "B1:L1", "　⏱ 係数算出｜金曜4週分の時間帯の波（月1回・任意）")
     ws.row_dimensions[2].height = 18
     note(ws, "B2:L2", "係数候補 ＝ 帯の1時間あたり販売個数 ÷ 全帯平均の1時間あたり販売個数（セット親・取消・払戻は除外）", 9)
 
@@ -165,7 +99,7 @@ def build(out_path, csvs=(None, None, None, None)):
         ws[vref] = val
         style_range(ws, vref, font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="h:mm")
-    ws["H3"].comment = Comment("最終レイトの終わり(翌日側)。翌2:00なら 2:00 と入力。", "較正シート")
+    ws["H3"].comment = Comment("最終レイトの終わり(翌日側)。翌2:00なら 2:00 と入力。", "準備数ツール")
 
     # 帯ごとの窓: ①[開店,朝→昼) ②[朝→昼,昼→夕) ③[昼→夕,夕→夜) ④[夕→夜,夜→レイト)
     #             ⑤[夜→レイト,24:00)+[0:00,閉店)
@@ -190,7 +124,7 @@ def build(out_path, csvs=(None, None, None, None)):
         ws[f"B{r}"] = name
         ws[f"C{r}"] = (f'=TEXT({starts[bi]},"h:mm")&"〜"&' +
                        (f'TEXT({ends[bi]},"h:mm")' if ends[bi] else 'TEXT($H$4,"h:mm")&"(翌)"'))
-        for wi, sheet in enumerate(SHEETS):
+        for wi, sheet in enumerate(CALIB_SHEETS):
             col = get_column_letter(4 + wi)
             rng_t = f"{sheet}!$AE$5:$AE${MSO_END}"
             rng_q = f"{sheet}!$AF$5:$AF${MSO_END}"
@@ -253,7 +187,7 @@ def build(out_path, csvs=(None, None, None, None)):
     # 週ごとの状態表示
     ws.row_dimensions[15].height = 18
     chip(ws, "B15:L15", "  各週の貼付状況", CHIP_NAVY, NAVY, 9)
-    for wi, sheet in enumerate(SHEETS):
+    for wi, sheet in enumerate(CALIB_SHEETS):
         r = 16 + wi
         ws.row_dimensions[r].height = 16
         note(ws, f"B{r}", f"  {wi + 1}週目（{sheet}）", 8.5, GRAY)
@@ -266,19 +200,20 @@ def build(out_path, csvs=(None, None, None, None)):
     chip(ws, "B21:L21", "  📋 転記のしかた", CHIP_CORAL, INK, 9.5)
     ws.row_dimensions[22].height = 30
     note(ws, "B22:L22",
-         "上の表の「転記用(丸め)」①〜⑤の5つの値を、本体ツール「準備数計算」シート右上の"
-         "時間帯プリセット表（J4:J8）に手で入力してください。平常（基準）は 1.0倍 のままでOKです。",
+         "上の表の「転記用(丸め)」①〜⑤の5つの値を、「準備数計算」シート右上の時間帯プリセット表"
+         "（J4:J8）に手で入力してください（プリセット表の右の「実測候補」列にも同じ値が自動表示"
+         "されます。採用は手入力で）。平常（基準）は 1.0倍 のままでOKです。",
          9, INK, wrap=True)
-    warn_rule = FormulaRule(formula=['$H$13=0'], font=Font(name=FONT_NAME, size=9, bold=True, color=RED))
     ws.row_dimensions[23].height = 16
-    ws["B23"] = '=IF($H$13=0,"⚠ まだデータが貼られていません。貼付①〜④にMSO商品CSVを貼ってください。","")'
+    ws["B23"] = ('=IF($H$13=0,"⚠ まだデータが貼られていません。係数貼付①〜④に金曜1日分の'
+                 'MSO商品CSVを貼ってください（貼らなくても本体はプリセットの既定係数で使えます）。","")')
     ws.merge_cells("B23:L23")
-    style_range(ws, "B23:L23", font=fnt(8.5, True, RED), alignment=align("left"))
+    style_range(ws, "B23:L23", font=fnt(8.5, True, "D14343"), alignment=align("left"))
 
-    # ========================================================== 貼付①〜④ ====
-    for si, sheet_name in enumerate(SHEETS):
+    # ======================================================= 係数貼付①〜④ ===
+    for si, sheet_name in enumerate(CALIB_SHEETS):
         ws = wb.create_sheet(sheet_name)
-        ws.sheet_properties.tabColor = AMBER
+        ws.sheet_properties.tabColor = PURPLE_L
         ws.sheet_view.showGridLines = False
         ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
         ws.page_setup.orientation = "landscape"
@@ -288,7 +223,7 @@ def build(out_path, csvs=(None, None, None, None)):
         ws.print_area = "A1:N40"
 
         ws.column_dimensions["A"].width = 11
-        for c_idx in range(2, NCOL + 1):
+        for c_idx in range(2, MSO_NCOL + 1):
             ws.column_dimensions[get_column_letter(c_idx)].width = 11
         ws.column_dimensions["X"].width = 26          # 商品名
         ws.column_dimensions["AC"].width = 2.5        # 緩衝
@@ -297,8 +232,8 @@ def build(out_path, csvs=(None, None, None, None)):
         ws.column_dimensions["AF"].width = 9
 
         ws.row_dimensions[1].height = 34
-        title_band(ws, f"A1:{get_column_letter(NCOL)}1",
-                   f"　📋 {sheet_name}｜{si + 1}週目の金曜のMSO商品CSV")
+        title_band(ws, f"A1:{get_column_letter(MSO_NCOL)}1",
+                   f"　⏱ {sheet_name}｜{si + 1}週目の金曜のMSO商品CSV（時間帯係数の較正用）")
         ws.row_dimensions[2].height = 30
         note(ws, "A2:N2",
              "① 金曜1日分で出力したMSO商品CSVを開いて全選択→コピー（Ctrl+A → Ctrl+C）　"
@@ -339,11 +274,9 @@ def build(out_path, csvs=(None, None, None, None)):
         ws["A4"].comment = Comment("👉 貼り付けはここから！\n"
                                    "金曜1日分のMSO商品CSVを全選択コピーして、このセル（A4）を選択し、\n"
                                    "右クリック→「値の貼り付け」。ヘッダー行ごと貼ってOKです。",
-                                   "較正シート", height=95, width=270)
-        for ref, text in [("AD4", "⚙時刻"), ("AE4", "⚙時刻値"), ("AF4", "⚙個数")]:
+                                   "準備数ツール", height=95, width=270)
+        for ref, text in [("AE4", "⚙時刻値"), ("AF4", "⚙対象個数")]:
             note(ws, ref, text, 8, GRAY, h="center")
-        ws["AE4"] = "⚙時刻値"
-        ws["AF4"] = "⚙対象個数"
 
         # ヘルパー列: AE=時刻値, AF=集計対象個数(日付・状態・区分・数量のフィルタ込み)
         for i in range(MSO_MAX):
@@ -359,7 +292,7 @@ def build(out_path, csvs=(None, None, None, None)):
 
         for i in range(200):                      # 目安の枠線
             rr = 5 + i
-            for c_idx in range(1, NCOL + 1):
+            for c_idx in range(1, MSO_NCOL + 1):
                 cell = ws.cell(row=rr, column=c_idx)
                 cell.border = BORDER_HAIR
                 cell.font = fnt(9)
@@ -367,26 +300,7 @@ def build(out_path, csvs=(None, None, None, None)):
         rows = read_mso_rows(csvs[si]) if csvs[si] else []
         for i, row in enumerate(rows[:MSO_MAX]):
             rr = 5 + i
-            for c_idx, v in enumerate(row[:NCOL], start=1):
+            for c_idx, v in enumerate(row[:MSO_NCOL], start=1):
                 ws.cell(row=rr, column=c_idx).value = v
 
         ws.freeze_panes = "A5"
-
-    wb.properties.title = "時間帯係数 較正シート"
-    wb.properties.creator = "TOHOシネマズ新宿 コンセッション"
-    wb.save(out_path)
-    print("saved:", out_path)
-
-
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=OUT_DEFAULT)
-    for k in range(1, 5):
-        ap.add_argument(f"--csv{k}")
-    ap.add_argument("--show-notes", metavar="XLSX")
-    a = ap.parse_args()
-    if a.show_notes:
-        n = show_paste_comments(a.show_notes, sheets=tuple(SHEETS))
-        print(f"notes patched: {n} vml file(s)")
-        raise SystemExit(0)
-    build(a.out, csvs=(a.csv1, a.csv2, a.csv3, a.csv4))

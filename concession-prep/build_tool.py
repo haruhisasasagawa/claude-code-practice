@@ -6,17 +6,20 @@ TOHOの営業週(金曜開始)に合わせ、本社集計「売上・在庫・�
 期間A(直近 金土日)・期間B(前週 金〜木)の2本貼り付けて使う構成。
 
 シート構成:
-  使い方      … 3ステップの利用ガイド・凡例・注意点
-  準備数計算  … 参照期間(A/B)の購買率 × ピーク動員数 × 時間帯プリセット倍率 →「作る数」
-  印刷用      … A4縦1枚の仕込み指示書(自動連動・チェック欄付き)
-  期間データ  … 期間A/Bの日付・動員数を入力。商品別販売数はCSVから自動集計
-  CSV貼付A/B  … 集計CSVをそのまま貼るだけの貼り付けシート(数式なし)
+  使い方       … 3ステップの利用ガイド・凡例・注意点
+  準備数計算   … 参照期間(A/B)の購買率 × ピーク動員数 × 時間帯プリセット倍率 →「作る数」
+  印刷用       … A4縦1枚の仕込み指示書(自動連動・チェック欄付き)
+  期間データ   … 期間A/Bの日付・動員数を入力。商品別販売数はCSVから自動集計
+  CSV貼付A/B   … 集計CSVをそのまま貼るだけの貼り付けシート(数式なし)
+  係数算出     … 金曜4週分のMSO商品CSVから時間帯係数の実測候補を算出(月1回・任意)
+  係数貼付①〜④ … MSO商品CSV(注文明細)を1週1日分ずつ貼る較正用シート(build_calib.py)
 
 使い方:
   python build_tool.py                            # 未入力テンプレートを生成
   python build_tool.py --out サンプル.xlsx \
       --csv-a A期間.csv --csv-b B期間.csv \
-      --select A --att-a 9000,13000,12000 --att-b 8500,... --peak 1200 --preset 昼ピーク
+      --select A --att-a 9000,13000,12000 --att-b 8500,... --peak 1200 --preset 昼ピーク \
+      --mso1 0717MSO.csv                          # 係数貼付①にMSO明細を投入
 """
 import argparse
 import csv
@@ -195,7 +198,10 @@ def parse_ymd(x):
     return f'IFERROR(IF(AND({inner}>=36526,{inner}<=73415),{inner},-1),-1)'
 
 
-def show_paste_comments(path, sheets=("CSV貼付A", "CSV貼付B")):
+PASTE_SHEETS = ("CSV貼付A", "CSV貼付B", "係数貼付①", "係数貼付②", "係数貼付③", "係数貼付④")
+
+
+def show_paste_comments(path, sheets=PASTE_SHEETS):
     """指定シートのコメント(A4の貼り付け案内)を常時表示にする。
     openpyxl/LibreOfficeはコメントを非表示で書き出すため、xlsx内のVMLを直接
     書き換える。生成・再計算・後編集がすべて終わった最後に呼ぶこと。"""
@@ -271,7 +277,7 @@ def read_csv_rows(path):
 # ---------------------------------------------------------------- build ------
 def build(out_path, csv_a=None, csv_b=None, select="A",
           att_a=None, att_b=None, peak=None, preset="平常（基準）", adjust=1.0,
-          products=DEFAULT_PRODUCTS):
+          products=DEFAULT_PRODUCTS, mso_csvs=(None, None, None, None)):
     wb = Workbook()
 
     # ============================================================ 使い方 =====
@@ -357,15 +363,31 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "・別の期間（連休比較など）を見たいときは、その期間で出力したCSVを貼り替えてください。"
         "日付は自動で切り替わります（期間A=3日・期間B=7日の枠。日付セルは数式のため手入力しないこと）。",
         "・販売数を手入力したい場合は「期間データ」の販売数セルに直接数値を入れても使えます（数式は上書きされます）。",
-        "・時間帯別の購買率（朝昼夕夜で率を変える）は、CSVに時刻情報が無いため今後の課題です。当面は時間帯係数で調整します。",
         "・毎週の作業は「CSV2本の貼り替え」と「動員数の入力」だけです。日付・商品リストは自動で追随します。",
     ]
     for t in notes:
         r += 1
         ws.row_dimensions[r].height = 18
         note(ws, f"C{r}:J{r}", t, 9.5, INK)
+
     r += 2
-    note(ws, f"C{r}:J{r}", "雛形版 v4.0（2026/8）｜数式・レイアウトは自由に調整してください", 8.5)
+    ws.row_dimensions[r].height = 22
+    chip(ws, f"B{r}:E{r}", "  ⏱ 時間帯係数の較正（月1回・任意）", CHIP_NAVY, NAVY)
+    calib_notes = [
+        "・「係数貼付①〜④」に、先月の金曜4日分のMSO商品CSV（注文明細・金曜1日分で出力）を1週ずつ貼ると、"
+        "「係数算出」シートに時間帯5段階の係数候補が実測から自動で出ます（貼った週だけで平均・4週未満でも可・最大12,000行/シート）。",
+        "・算出された候補は「準備数計算」右上のプリセット表のとなり（実測候補列）にも表示されます。"
+        "採用するときはプリセット表の係数（J列）へ手で入力してください（自動では書き換わりません）。",
+        "・集計ルール：セット親・注文取消・払戻は除外して実個数を数えます。複数日が混ざったCSVは先頭の日付だけを集計し、状態表示に⚠が出ます。",
+        "・貼らなくても本体はプリセットの既定係数のまま使えます。時間帯別の購買率（商品ごとに率を変える）は引き続き今後の課題です。",
+    ]
+    for t in calib_notes:
+        r += 1
+        ws.row_dimensions[r].height = 18
+        note(ws, f"C{r}:J{r}", t, 9.5, INK)
+
+    r += 2
+    note(ws, f"C{r}:J{r}", "雛形版 v5.0（2026/8）｜数式・レイアウトは自由に調整してください", 8.5)
 
     # ======================================================== 準備数計算 =====
     ws = wb.create_sheet("準備数計算")
@@ -379,7 +401,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.print_area = "A1:H31"
 
     for c, w in {"A": 2.5, "B": 6, "C": 32, "D": 22, "E": 11, "F": 16,
-                 "G": 13, "H": 8, "I": 24, "J": 9, "K": 2.5, "L": 12, "M": 10}.items():
+                 "G": 13, "H": 8, "I": 24, "J": 9, "K": 9, "L": 12, "M": 10}.items():
         ws.column_dimensions[c].width = w
 
     ws.row_dimensions[1].height = 34
@@ -401,10 +423,21 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         # ％を含む表示形式だとExcelの「パーセント自動入力」で 1.2 が 1.2% になるため「倍」表記にする
         style_range(ws, f"J{rr}", font=fnt(9, True, CORAL), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num='0.0"倍"')
+    # 実測候補(係数算出シートの転記用①〜⑤を参照表示。採用はJ列へ手入力)
+    note(ws, "K3", "実測候補", 8, GRAY, h="center")
+    for i in range(5):
+        rr = 4 + i
+        ws[f"K{rr}"] = f"=係数算出!$L${7 + i}"
+        style_range(ws, f"K{rr}", font=fnt(9, False, GRAY), fl=fill(F_AUTO),
+                    alignment=align("center"), border=BORDER_HAIR, num='0.00"倍"')
+    ws["K4"].comment = Comment("「係数算出」シートで金曜4週分のMSO商品CSVから実測した係数候補です"
+                               "（①〜⑤の並び。未貼付のときは「—」）。採用するときは左のJ列へ手で"
+                               "入力してください（自動では書き換わりません）。", "準備数ツール")
     ws["I4"].comment = Comment("時間帯の高低差は5段階(朝一→昼ピーク→夕方→夜ピーク→レイト)+基準の平常で"
                                "管理します。名前・時刻の目安・係数とも自由に書き換えでき、空き枠に追加も"
-                               "できます(最大7枠)。係数は 1.2 ＝ 1.2倍(×120%) の形で入力してください。",
-                               "準備数ツール")
+                               "できます(最大7枠)。係数は 1.2 ＝ 1.2倍(×120%) の形で入力してください。"
+                               "右の「実測候補」列には係数算出シート(係数貼付①〜④のMSO商品CSV)の"
+                               "実測値が自動表示されます。", "準備数ツール")
 
     # 計算用ヘルパー L3:M6
     chip(ws, "L3:M3", " ⚙ 計算用（さわらない）", "F7F8FA", GRAY, 8, False)
@@ -997,6 +1030,11 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
 
         ws.freeze_panes = "A5"
 
+    # ============================================== 係数算出・係数貼付①〜④ ==
+    # 時間帯係数の較正シート群(実測候補は準備数計算のK列に連動)
+    from build_calib import add_calib_sheets
+    add_calib_sheets(wb, mso_csvs)
+
     # ------------------------------------------------------------------ save -
     wb.properties.title = "コンセッション事前準備数ツール"
     wb.properties.creator = "TOHOシネマズ新宿 コンセッション"
@@ -1015,8 +1053,10 @@ if __name__ == "__main__":
     ap.add_argument("--peak", type=int)
     ap.add_argument("--preset", default="平常（基準）")
     ap.add_argument("--adjust", type=float, default=1.0)
+    for k in range(1, 5):
+        ap.add_argument(f"--mso{k}", help=f"係数貼付{'①②③④'[k - 1]}に入れるMSO商品CSV(金曜1日分)")
     ap.add_argument("--show-notes", metavar="XLSX",
-                    help="既存xlsxのCSV貼付シートのメモを常時表示化して終了(再計算後に実行)")
+                    help="既存xlsxの貼り付けシートのメモを常時表示化して終了(再計算後に実行)")
     a = ap.parse_args()
     if a.show_notes:
         n = show_paste_comments(a.show_notes)
@@ -1025,4 +1065,5 @@ if __name__ == "__main__":
     build(a.out, csv_a=a.csv_a, csv_b=a.csv_b, select=a.select,
           att_a=[int(x) for x in a.att_a.split(",")] if a.att_a else None,
           att_b=[int(x) for x in a.att_b.split(",")] if a.att_b else None,
-          peak=a.peak, preset=a.preset, adjust=a.adjust)
+          peak=a.peak, preset=a.preset, adjust=a.adjust,
+          mso_csvs=(a.mso1, a.mso2, a.mso3, a.mso4))
