@@ -136,6 +136,7 @@ ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 ws.page_setup.orientation = "landscape"
 ws.page_setup.fitToWidth = 1
 ws.page_setup.fitToHeight = 1
+ws.page_setup.paperSize = 9          # A4
 for c, w in {"A": 2.5, "B": 6, "C": 13, "D": 13, "E": 13, "F": 13, "G": 13,
              "H": 13, "I": 13, "J": 13}.items():
     ws.column_dimensions[c].width = w
@@ -194,8 +195,10 @@ chip(ws, f"B{r}:D{r}", "  注意メモ", CHIP_NAVY, NAVY)
 notes = [
     "・ピーク動員数には「これから準備する回」の合計動員数を入れます（例：1時間後のピークの回の計）。",
     "・CSVのD列に時刻（例 13:05）か時間帯（朝/昼/夕方/夜）が入っていると、時間帯別の購買率で計算できます。",
-    "　（無い場合は自動で「1日全体」の購買率になります。時間帯の区切りはCSV貼付シートの右側で変更できます）",
+    "　（無い場合は自動で「1日全体」の購買率になります。時間帯の区切りはCSV貼付シートの上部で変更できます）",
+    "・深夜〜早朝（5:00より前、変更可）の時刻は「夜」として扱います（レイトショー対応）。",
     "・時間帯別の購買率を使うときは、「日別データ」の朝〜夜の動員数も入力してください（未入力だと「要確認」表示）。",
+    "・販売数を手入力した場合は時間帯別には反映されないため、「1日全体」でお使いください。",
     "・商品枠は最大20です（「日別データ」シートの商品名欄）。商品名はCSV側と完全一致が必要です。",
     "・CSV貼付は最大2000行まで集計されます。列が多いCSVは「日付・商品名・販売数（・時刻）」だけ貼ると確実です。",
     "・CSVを貼り付けて日付が文字列になった場合は、日付列を選択 →「データ」→「区切り位置」で日付に戻せます。",
@@ -217,6 +220,7 @@ ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 ws.page_setup.orientation = "landscape"
 ws.page_setup.fitToWidth = 1
 ws.page_setup.fitToHeight = 1
+ws.page_setup.paperSize = 9          # A4
 ws.print_area = "A1:H31"
 
 for c, w in {"A": 2.5, "B": 6, "C": 26, "D": 13, "E": 11, "F": 16,
@@ -231,24 +235,38 @@ ws.row_dimensions[3].height = 6
 
 # --- 計算用ヘルパー ----------------------------------------------------------
 chip(ws, "I3:J3", " ⚙ 計算用（さわらない）", "F7F8FA", GRAY, 8, False)
+# 参照期間の開始/終了(終了は排他)。開始セルが空欄なら0(=すべて含む)扱い
+W_START = ('IF(INDEX(日別データ!$C$4:$I$4,1,8-$J$4)="",0,'
+           'INDEX(日別データ!$C$4:$I$4,1,8-$J$4))')
+W_END = "日別データ!$I$4+1"
+CSV_A = f"CSV貼付!$A$5:$A${CSV_END}"
+CSV_B = f"CSV貼付!$B$5:$B${CSV_END}"
+CSV_J = f"CSV貼付!$J$5:$J${CSV_END}"
+IN_WINDOW = f"({CSV_A}>={W_START})*({CSV_A}<{W_END})"
+# 動員行のマスク: 期間内×日付入力済み×数値かつ正(文字列動員の混入を除外)
+ATT_SEL = "INDEX(日別データ!$C$6:$I$10,$J$6,0)"
+MASK_SEL = (f"(COLUMN(日別データ!$C$6:$I$6)>=10-$J$4)*(日別データ!$C$4:$I$4<>\"\")"
+            f"*ISNUMBER({ATT_SEL})*({ATT_SEL}>0)")
+MASK_ALL = ('(COLUMN(日別データ!$C$6:$I$6)>=10-$J$4)*(日別データ!$C$4:$I$4<>"")'
+            "*ISNUMBER(日別データ!$C$6:$I$6)*(日別データ!$C$6:$I$6>0)")
 helpers = [
     ("I4", "参照日数", "J4", '=IF($D$4="昨日",1,IF($D$4="直近3日間",3,7))'),
-    ("I5", "動員合計", "J5", "=SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$J$4)"
-                             "*(INDEX(日別データ!$C$6:$I$10,$J$6,0)>0),INDEX(日別データ!$C$6:$I$10,$J$6,0))"),
-    ("I6", "動員行", "J6", '=IF(OR($D$5="1日全体",$J$8=0),1,MATCH($D$5,{"朝","昼","夕方","夜"},0)+1)'),
-    ("I7", "帯条件", "J7", '=IF(OR($D$5="1日全体",$J$8=0),"*",$D$5)'),
-    ("I8", "帯データ数", "J8", '=COUNTIF(CSV貼付!$J$5:$J$' + str(CSV_END) + ',"朝")'
-                               '+COUNTIF(CSV貼付!$J$5:$J$' + str(CSV_END) + ',"昼")'
-                               '+COUNTIF(CSV貼付!$J$5:$J$' + str(CSV_END) + ',"夕方")'
-                               '+COUNTIF(CSV貼付!$J$5:$J$' + str(CSV_END) + ',"夜")'),
-    ("I9", "全体動員", "J9", "=SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$J$4)"
-                             "*(日別データ!$C$6:$I$6>0),日別データ!$C$6:$I$6)"),
+    ("I5", "動員合計", "J5", f"=SUMPRODUCT({MASK_SEL},{ATT_SEL})"),
+    ("I6", "動員行", "J6", '=IFERROR(IF(OR($D$5="1日全体",$D$5="",$J$8=0),1,'
+                           'MATCH($D$5,{"朝","昼","夕方","夜"},0)+1),1)'),
+    ("I7", "帯条件", "J7", '=IF(OR($D$5="1日全体",$D$5="",$J$8=0,'
+                           'ISNA(MATCH($D$5,{"朝","昼","夕方","夜"},0))),"*",$D$5)'),
+    ("I8", "帯データ数", "J8", f'=SUMPRODUCT(({CSV_B}<>"")*{IN_WINDOW}*'
+                               f'(({CSV_J}="朝")+({CSV_J}="昼")+({CSV_J}="夕方")+({CSV_J}="夜")))'),
+    ("I9", "全体動員", "J9", f"=SUMPRODUCT({MASK_ALL},日別データ!$C$6:$I$6)"),
+    ("I10", "判定不能行", "J10", f'=SUMPRODUCT(({CSV_B}<>"")*{IN_WINDOW}*'
+                                 f'(({CSV_J}="－")+({CSV_J}="⚠ 不明")))'),
 ]
 for lref, ltext, vref, formula in helpers:
     note(ws, lref, ltext, 8.5, GRAY, h="right")
     ws[vref] = formula
     style_range(ws, vref, font=fnt(8.5, False, GRAY), alignment=align("left"), num="#,##0")
-style_range(ws, "I3:J9", border=BORDER_HAIR)
+style_range(ws, "I3:J10", border=BORDER_HAIR)
 
 # --- コントロール ------------------------------------------------------------
 ws.row_dimensions[4].height = 24
@@ -294,15 +312,22 @@ note(ws, "E7:H7", "← 余裕を持たせるなら ×110%〜×150% など", 9)
 ws.row_dimensions[8].height = 14
 ws.merge_cells("B8:H8")
 ws["B8"] = ('=IF(日別データ!$I$4="","",TRIM('
-            'IF(AND($D$5<>"1日全体",$J$8=0),'
-            '"⚠ CSVに時刻・時間帯の情報が無いため、1日全体の購買率で計算しています。","")&" "&'
-            'IF(SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$J$4)*'
-            '(INDEX(日別データ!$C$6:$I$10,$J$6,0)>0))<$J$4,'
-            '"⚠ 参照期間に動員数（"&IF($J$7="*","1日計",$D$5)&"）が未入力の日があります'
-            '（入力済みの日だけで計算します）。","")&" "&'
+            'IF(AND($D$5<>"1日全体",$D$5<>"",$J$8=0),'
+            '"⚠ 参照期間のCSVに時刻・時間帯の情報が無いため、1日全体の購買率で計算しています。","")&" "&'
+            f'IF(SUMPRODUCT({MASK_SEL})<$J$4,'
+            '"⚠ 参照期間に日付か動員数（"&IF($J$7="*","1日計",$D$5)&"）が未入力の日があります'
+            '（そろっている日だけで計算します）。","")&" "&'
             'IF(SUMPRODUCT((COLUMN(日別データ!$C$11:$I$11)>=10-$J$4)*'
             '(日別データ!$C$11:$I$11="✔"))=0,'
-            '"⚠ 参照期間の販売データがCSV貼付にありません。CSVを確認してください。","")))')
+            '"⚠ 参照期間の販売データがCSV貼付にありません。CSVを確認してください。","")&" "&'
+            'IF(AND($J$7<>"*",$J$10>0),'
+            '"⚠ CSVに時間帯を判定できない行が "&$J$10&" 件あり、集計から除外されています'
+            '（CSV貼付のD列を確認）。","")&" "&'
+            'IF(SUMPRODUCT((日別データ!$B$13:$B$32<>"")*'
+            '(COUNTIF(日別データ!$B$13:$B$32,日別データ!$B$13:$B$32)>1))>0,'
+            '"⚠ 日別データに同じ商品名が重複しています（集計が二重になります）。","")&" "&'
+            'IF(OR($D$6="",$D$6=0),"⚠ ピーク動員数が未入力です。","")&" "&'
+            'IF(OR($D$7="",$D$7=0),"⚠ 倍率が0%または未入力です。","")))')
 style_range(ws, "B8:H8", font=fnt(8.5, True, RED), alignment=align("left"))
 ws.row_dimensions[9].height = 6
 
@@ -326,8 +351,8 @@ for i in range(N_SLOTS):
     ws[f"C{r}"] = f'=IF(日別データ!B{dr}="","",日別データ!B{dr})'
     ws[f"D{r}"] = (
         f'=IF($C{r}="","",IF($J$7="*",'
-        f'SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$J$4)*(日別データ!$C$6:$I$6>0),日別データ!C{dr}:I{dr}),'
-        f'SUMPRODUCT((COLUMN(日別データ!$C$4:$I$4)>=10-$J$4)*(INDEX(日別データ!$C$6:$I$10,$J$6,0)>0)*'
+        f'SUMPRODUCT({MASK_ALL},日別データ!C{dr}:I{dr}),'
+        f'SUMPRODUCT({MASK_SEL}*'
         f'SUMIFS(CSV貼付!$C$5:$C${CSV_END},'
         f'CSV貼付!$A$5:$A${CSV_END},">="&日別データ!$C$4:$I$4,'
         f'CSV貼付!$A$5:$A${CSV_END},"<"&日別データ!$C$4:$I$4+1,'
@@ -337,8 +362,7 @@ for i in range(N_SLOTS):
     ws[f"F{r}"] = (f'=IF(OR($C{r}="",$D$6="",$D$7=""),"",'
                    f'IF(ISNUMBER($E{r}),ROUNDUP($D$6*$E{r}*$D$7,0),"—"))')
     ws[f"G{r}"] = (f'=IF($C{r}="","",IF($J$9<=0,"－",'
-                   f'SUMPRODUCT((COLUMN(日別データ!$C$6:$I$6)>=10-$J$4)*(日別データ!$C$6:$I$6>0),'
-                   f'日別データ!C{dr}:I{dr})/$J$9))')
+                   f'SUMPRODUCT({MASK_ALL},日別データ!C{dr}:I{dr})/$J$9))')
     style_range(ws, f"B{r}", font=fnt(9, False, GRAY), alignment=align("center"))
     style_range(ws, f"C{r}", font=fnt(10.5), alignment=align("left"))
     style_range(ws, f"D{r}", font=fnt(10, False, "5B6472"), alignment=align("center"), num="#,##0")
@@ -403,6 +427,7 @@ ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 ws.page_setup.orientation = "portrait"
 ws.page_setup.fitToWidth = 1
 ws.page_setup.fitToHeight = 1
+ws.page_setup.paperSize = 9          # A4
 ws.print_area = "A1:F28"
 
 for c, w in {"A": 2.5, "B": 7, "C": 30, "D": 16, "E": 14, "F": 2.5}.items():
@@ -416,15 +441,20 @@ chip(ws, "B2:E2", "  👇 この数を作ってください", CHIP_CORAL, CORAL,
 ws.row_dimensions[3].height = 22
 ws.merge_cells("B3:E3")
 ws["B3"] = ('="対象時間帯: "&IF(準備数計算!$J$7="*","1日全体",準備数計算!$D$5)&'
-            '"　｜　ピーク動員数: "&TEXT(準備数計算!$D$6,"#,##0")&"人"')
+            '"　｜　ピーク動員数: "&IF(準備数計算!$D$6="","（未入力）",'
+            'TEXT(準備数計算!$D$6,"#,##0")&"人")')
 style_range(ws, "B3:E3", font=fnt(11, True, INK), alignment=align("left"))
 ws.row_dimensions[4].height = 20
 ws.merge_cells("B4:E4")
-ws["B4"] = '="倍率: ×"&TEXT(準備数計算!$D$7*100,"0")&"%　｜　"&準備数計算!$E$4'
+ws["B4"] = ('="倍率: "&IF(準備数計算!$D$7="","（未入力）",'
+            '"×"&TEXT(準備数計算!$D$7*100,"0")&"%")&"　｜　"&準備数計算!$E$4')
 style_range(ws, "B4:E4", font=fnt(9.5, False, "5B6472"), alignment=align("left"))
 ws.row_dimensions[5].height = 22
 note(ws, "B5:E5", "日付・回：＿＿＿＿＿＿＿＿＿＿　　作成者：＿＿＿＿＿＿　　確認者：＿＿＿＿＿＿", 10, INK)
-ws.row_dimensions[6].height = 8
+ws.row_dimensions[6].height = 14
+ws.merge_cells("B6:E6")
+ws["B6"] = "=準備数計算!$B$8"
+style_range(ws, "B6:E6", font=fnt(8, True, RED), alignment=align("left"))
 
 ws.row_dimensions[7].height = 26
 for ref, text in [("B7", "No."), ("C7", "商品名"), ("E7", "できたら✓")]:
@@ -463,6 +493,7 @@ ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 ws.page_setup.orientation = "landscape"
 ws.page_setup.fitToWidth = 1
 ws.page_setup.fitToHeight = 1
+ws.page_setup.paperSize = 9          # A4
 
 ws.column_dimensions["A"].width = 5
 ws.column_dimensions["B"].width = 24
@@ -580,6 +611,16 @@ for i in range(N_SLOTS):
     ws[f"B{r}"].border = BORDER_INPUT
 
 ws[f"B{ROW_P0}"].comment = Comment("商品名はサンプルです(最大20枠)。CSV側の商品名と完全一致させてください。", "準備数ツール")
+dup_rule = FormulaRule(
+    formula=[f'AND($B{ROW_P0}<>"",COUNTIF($B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1},$B{ROW_P0})>1)'],
+    font=Font(name=FONT_NAME, bold=True, color=RED), fill=fill("FDECEC"))
+ws.conditional_formatting.add(f"B{ROW_P0}:B{ROW_P0 + N_SLOTS - 1}", dup_rule)
+dv_att = DataValidation(type="whole", operator="between", formula1="0", formula2="999999",
+                        showErrorMessage=True)
+dv_att.error = "動員数は 0〜999,999 の整数で入力してください（文字や記号は不可）"
+dv_att.errorTitle = "動員数"
+ws.add_data_validation(dv_att)
+dv_att.add("C6:I10")
 last = ROW_P0 + N_SLOTS - 1
 ws.row_dimensions[last + 1].height = 26
 note(ws, f"A{last + 1}:K{last + 1}",
@@ -596,6 +637,7 @@ ws.sheet_view.showGridLines = False
 ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 ws.page_setup.fitToWidth = 1
 ws.page_setup.fitToHeight = 0
+ws.page_setup.paperSize = 9          # A4
 ws.print_area = "A1:L64"
 
 for c, w in {"A": 12, "B": 26, "C": 10, "D": 13, "E": 12, "F": 10,
@@ -604,12 +646,23 @@ for c, w in {"A": 12, "B": 26, "C": 10, "D": 13, "E": 12, "F": 10,
 
 ws.row_dimensions[1].height = 34
 title_band(ws, "A1:L1", "　📋 CSV貼付（集計ソフトのデータ）")
-ws.row_dimensions[2].height = 30
-note(ws, "A2:G2",
-     "集計ソフトから抽出したCSVを、5行目以降にそのまま貼り付けてください（A=日付・B=商品名・C=販売数・"
-     "D=時刻か時間帯(任意)・E〜G=予備、最大2000行）。列が多いCSVは必要な列だけ貼ると確実です。",
+ws.row_dimensions[2].height = 34
+note(ws, "A2:F2",
+     "集計ソフトのCSVを5行目以降にそのまま貼り付け（A=日付・B=商品名・C=販売数・D=時刻か時間帯(任意)・"
+     "E〜G=予備、最大2000行）。列が多いCSVは必要な列だけ貼ると確実です。",
      9, GRAY, wrap=True)
 ws.row_dimensions[3].height = 18
+
+# 時間帯の区切り設定(貼付範囲より上の行なので、貼り付けで壊れない)
+ws.column_dimensions["H"].width = 8
+for lref, vref, label, val in [("G2", "H2", "⏰深夜→朝", 5 / 24), ("G3", "H3", "朝→昼", 11 / 24),
+                               ("I2", "J2", "昼→夕方", 15 / 24), ("I3", "J3", "夕方→夜", 18 / 24)]:
+    note(ws, lref, label + " ", 8.5, GRAY, h="right")
+    ws[vref] = val
+    style_range(ws, vref, font=fnt(9, True), fl=fill(F_INPUT),
+                alignment=align("center"), border=BORDER_INPUT, num="h:mm")
+ws["H2"].comment = Comment("時間帯の区切り時刻です（変更OK）。この時刻より前は「夜」（深夜・レイトショー扱い）、"
+                           "ここから「朝→昼」の時刻までが「朝」です。", "準備数ツール")
 
 chip(ws, "K2", "貼付行数", CHIP_AMBER, INK, 8.5, False, "center")
 ws["L2"] = f"=COUNTA($A$5:$A${CSV_END})"
@@ -634,15 +687,6 @@ ws["I4"].comment = Comment("「日別データ」の商品名一覧に載って�
 ws["J4"].comment = Comment("D列の時刻(または時間帯名)から 朝/昼/夕方/夜 を自動判定します。"
                            "D列が空の行は「－」(時間帯なし)になります。", "準備数ツール")
 
-# 時間帯の区切り設定(貼付範囲の右外・K/L列)
-chip(ws, "K5:L5", " ⏰ 時間帯の区切り", CHIP_AMBER, INK, 8.5, False)
-for r, (label, val) in enumerate([("朝→昼", 11 / 24), ("昼→夕方", 15 / 24), ("夕方→夜", 18 / 24)]):
-    note(ws, f"K{6 + r}", label + " ", 8.5, GRAY, h="right")
-    ws[f"L{6 + r}"] = val
-    style_range(ws, f"L{6 + r}", font=fnt(9, True), fl=fill(F_INPUT),
-                alignment=align("center"), border=BORDER_INPUT, num="h:mm")
-ws["L6"].comment = Comment("この時刻より前が「朝」です。区切り時刻は自由に変更できます。", "準備数ツール")
-
 for i in range(CSV_MAX):
     r = 5 + i
     for col in "ABCDEFG":
@@ -664,8 +708,8 @@ for i in range(CSV_MAX):
     ws[f"J{r}"] = (f'=IF($B{r}="","",IF($D{r}="","－",'
                    f'IF(ISNUMBER($D{r}),'
                    f'IF(AND($D{r}>=1,MOD($D{r},1)=0),"－",'
-                   f'IF(MOD($D{r},1)<$L$6,"朝",IF(MOD($D{r},1)<$L$7,"昼",'
-                   f'IF(MOD($D{r},1)<$L$8,"夕方","夜")))),'
+                   f'IF(MOD($D{r},1)<$H$2,"夜",IF(MOD($D{r},1)<$H$3,"朝",'
+                   f'IF(MOD($D{r},1)<$J$2,"昼",IF(MOD($D{r},1)<$J$3,"夕方","夜"))))),'
                    f'IF(OR($D{r}="朝",$D{r}="昼",$D{r}="夕方",$D{r}="夜"),$D{r},"⚠ 不明"))))')
     ws[f"J{r}"].font = fnt(9, False, GRAY)
     ws[f"J{r}"].alignment = align("center")

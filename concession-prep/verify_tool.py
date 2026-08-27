@@ -68,8 +68,9 @@ for i in range(len(PRODUCTS), 20):
 ws = wb["準備数計算"]
 check("準備数計算!J4(参照日数)", ws["J4"].value, N)
 check("準備数計算!J5(動員合計)", ws["J5"].value, att_total)
-check("準備数計算!J8(帯データあり)", ws["J8"].value, len(CSV_ROWS))
+check("準備数計算!J8(期間内帯データ数)", ws["J8"].value, len(PRODUCTS) * len(BANDS) * N)
 check("準備数計算!J9(全体動員)", ws["J9"].value, att_total_all)
+check("準備数計算!J10(判定不能行)", ws["J10"].value, 0)
 warn = ws["B8"].value
 if warn not in (None, ""):
     errors.append(f"NG 準備数計算!B8 警告が出ている: {warn!r}")
