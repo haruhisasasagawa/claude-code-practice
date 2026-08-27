@@ -82,6 +82,7 @@ else:
     check("期間データ!E4(自動日付)", pd["E4"].value, _dt.datetime(2026, 8, 23))
     check("期間データ!C8(自動日付)", pd["C8"].value, _dt.datetime(2026, 8, 14))
     check("期間データ!I8(自動日付)", pd["I8"].value, _dt.datetime(2026, 8, 20))
+    check("期間データ!C37(除外リスト照合✔)", pd["C37"].value, "✔")
 
     for i, name in enumerate(DEFAULT_PRODUCTS):
         r = 14 + i

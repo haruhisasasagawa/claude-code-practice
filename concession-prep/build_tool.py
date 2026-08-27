@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-TOHOシネマズ新宿 コンセッション事前準備数ツール（v3）生成スクリプト
+TOHOシネマズ新宿 コンセッション事前準備数ツール（v4）生成スクリプト
 
 TOHOの営業週(金曜開始)に合わせ、本社集計「売上・在庫・原価」CSV(34列/cp932)を
 期間A(直近 金土日)・期間B(前週 金〜木)の2本貼り付けて使う構成。
@@ -180,9 +180,11 @@ WEEKDAY_JA = '"日","月","火","水","木","金","土"'
 
 
 def parse_ymd(x):
-    """yyyymmdd数値/文字列・日付型セルのどれでも日付シリアルに解釈する式(失敗時-1)"""
-    return (f'IFERROR(IF(VALUE({x})<19000101,INT(VALUE({x})),'
-            f'DATEVALUE(TEXT(VALUE({x}),"0000-00-00"))),-1)')
+    """yyyymmdd数値/文字列・日付型セルのどれでも日付シリアルに解釈する式。
+    2000〜2100年の範囲外(0・空欄・壊れた値)は-1を返す。"""
+    inner = (f'IF(VALUE({x})<19000101,INT(VALUE({x})),'
+             f'DATEVALUE(TEXT(VALUE({x}),"0000-00-00")))')
+    return f'IFERROR(IF(AND({inner}>=36526,{inner}<=73415),{inner},-1),-1)'
 
 
 def read_csv_rows(path):
@@ -289,13 +291,14 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "・ドリンク類・調味料・ＳＥＴ作品コンボ・引換券・包材はプルダウンに出ません"
         "（期間データシート下部の除外リストで自由に変更できます）。",
         "・ピーク動員数には「これから準備する回」の合計動員数を入れます（例：1時間後のピークの回の計）。",
-        "・倍率は二段構えです：時間帯係数（朝いち80%/昼ピーク120%…の固定の型・右上の表で編集）×"
-        "調整倍率（大作初日や雨など、その日の状況での上乗せ/控えめ）。",
+        "・倍率は二段構えです：時間帯係数（朝いち0.8倍/昼ピーク1.2倍…の固定の型・右上の表で編集）×"
+        "調整倍率（大作初日や雨など、その日の状況での上乗せ/控えめ）。どちらも 1.2 ＝ 1.2倍 の形で入力します。",
         "・CSVは各期間 最大1000行。貼り替える前に、5行目以降のデータだけを選択して削除してください"
         "（1〜4行目の見出し・状態表示は消さないこと）。",
         "・期間の日付は貼られたCSVの「対象期間」から自動表示されます。貼付後は「期間データ」の"
         "CSV行数・日数チェック（✔／⚠）を確認してください。日数違い・貼付位置ズレ・旧データ残存は⚠が出ます。",
-        "・日付を変えれば任意の期間（連休比較など）にも使えます。期間A=3日・期間B=7日の枠です。",
+        "・別の期間（連休比較など）を見たいときは、その期間で出力したCSVを貼り替えてください。"
+        "日付は自動で切り替わります（期間A=3日・期間B=7日の枠。日付セルは数式のため手入力しないこと）。",
         "・販売数を手入力したい場合は「期間データ」の販売数セルに直接数値を入れても使えます（数式は上書きされます）。",
         "・時間帯別の購買率（朝昼夕夜で率を変える）は、CSVに時刻情報が無いため今後の課題です。当面は時間帯係数で調整します。",
         "・毎週の作業は「CSV2本の貼り替え」と「動員数の入力」だけです。日付・商品リストは自動で追随します。",
@@ -305,7 +308,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ws.row_dimensions[r].height = 18
         note(ws, f"C{r}:J{r}", t, 9.5, INK)
     r += 2
-    note(ws, f"C{r}:J{r}", "雛形版 v3.0（2026/8）｜数式・レイアウトは自由に調整してください", 8.5)
+    note(ws, f"C{r}:J{r}", "雛形版 v4.0（2026/8）｜数式・レイアウトは自由に調整してください", 8.5)
 
     # ======================================================== 準備数計算 =====
     ws = wb.create_sheet("準備数計算")
@@ -337,10 +340,12 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         style_range(ws, f"I{rr}", font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT)
         ws[f"J{rr}"] = mult
+        # ％を含む表示形式だとExcelの「パーセント自動入力」で 1.2 が 1.2% になるため「倍」表記にする
         style_range(ws, f"J{rr}", font=fnt(9, True, CORAL), fl=fill(F_INPUT),
-                    alignment=align("center"), border=BORDER_INPUT, num='"×"0%')
-    ws["I4"].comment = Comment("時間帯ごとの高低差はこの6枠で管理します。名前(例:18時台)も倍率も"
-                               "自由に書き換えできます(枠の追加は不可)。", "準備数ツール")
+                    alignment=align("center"), border=BORDER_INPUT, num='0.0"倍"')
+    ws["I4"].comment = Comment("時間帯ごとの高低差はこの6枠で管理します。名前(例:18時台)も係数も"
+                               "自由に書き換えできます(枠の追加は不可)。係数は 1.2 ＝ 1.2倍(×120%) の"
+                               "形で入力してください。", "準備数ツール")
 
     # 計算用ヘルパー L3:M6
     chip(ws, "L3:M3", " ⚙ 計算用（さわらない）", "F7F8FA", GRAY, 8, False)
@@ -394,11 +399,12 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     chip(ws, "B7:C7", "  ④ 調整倍率", CHIP_CORAL, INK, 10)
     ws["D7"] = adjust
     ws["D7"].comment = Comment("その日の状況（大作初日・雨・イベント等）に合わせた上乗せ/控えめの調整です。"
-                               "時間帯係数に掛け合わされます。1.1 と入力すると ×110%。", "準備数ツール")
+                               "時間帯係数に掛け合わされます。1.1 ＝ 1.1倍(×110%) の形で入力してください。",
+                               "準備数ツール")
     style_range(ws, "D7", font=fnt(10.5, True), fl=fill(F_INPUT),
-                alignment=align("center"), border=BORDER_INPUT, num='"×"0%')
+                alignment=align("center"), border=BORDER_INPUT, num='0.0"倍"')
     ws.merge_cells("E7:H7")
-    ws["E7"] = ('="→ 合計適用倍率 ×"&TEXT($M$7*IF($D$7="",1,$D$7)*100,"0")&'
+    ws["E7"] = ('="→ 合計適用倍率 ×"&TEXT($M$7*IF(ISNUMBER($D$7),$D$7,1)*100,"0")&'
                 '"%（時間帯係数 × 調整倍率）"')
     style_range(ws, "E7:H7", font=fnt(9, True, "5B6472"), alignment=align("left"))
 
@@ -417,18 +423,22 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 'IF(SUMPRODUCT((期間データ!$B$14:$B$33<>"")*'
                 '(COUNTIF(期間データ!$B$14:$B$33,期間データ!$B$14:$B$33)>1))>0,'
                 '"⚠ 商品名が重複しています（集計が二重になります）。","")&" "&'
-                'IF(AND(OR(CSV貼付A!$N$5<>"",CSV貼付B!$N$5<>""),'
+                'IF(AND(IF($M$4=2,CSV貼付B!$N$5,CSV貼付A!$N$5)<>"",'
                 'SUMPRODUCT((期間データ!$B$14:$B$33<>"")*'
-                f'(COUNTIF(CSV貼付A!$N$5:$N${CSV_END},期間データ!$B$14:$B$33)+'
-                f'COUNTIF(CSV貼付B!$N$5:$N${CSV_END},期間データ!$B$14:$B$33)=0))>0),'
-                '"⚠ CSVに存在しない商品名があります（空白の全角/半角など表記を確認）。","")&" "&'
+                f'(IF($M$4=2,COUNTIF(CSV貼付B!$N$5:$N${CSV_END},期間データ!$B$14:$B$33),'
+                f'COUNTIF(CSV貼付A!$N$5:$N${CSV_END},期間データ!$B$14:$B$33))=0))>0),'
+                '"⚠ 参照期間のCSVに無い商品名があります（別期間のみの商品か、表記を確認。期間販売数0扱い）。","")&" "&'
                 'IF(COUNTIF($D$11:$D$30,"<0")>0,'
                 '"⚠ 期間販売数がマイナスの商品があります（返品超過）。作る数は0扱いです。","")&" "&'
                 'IF(AND($D$6<>"",ISNA(MATCH($D$6,$I$4:$I$9,0))),'
                 '"⚠ 時間帯プリセット名が表にありません（係数100%扱い）。","")&" "&'
-                'IF(OR($D$5="",$D$5=0),"⚠ ピーク動員数が未入力です。","")&" "&'
-                'IF($M$7=0,"⚠ 時間帯係数が0%です。","")&" "&'
-                'IF(AND($D$7<>"",$D$7=0),"⚠ 調整倍率が0%です。",""))')
+                'IF(OR($D$5="",$D$5=0,NOT(ISNUMBER($D$5))),"⚠ ピーク動員数が未入力か数値ではありません。","")&" "&'
+                'IF($M$7=0,"⚠ 時間帯係数が0です。","")&" "&'
+                'IF(AND($D$7<>"",NOT(ISNUMBER($D$7))),"⚠ 調整倍率が数値ではありません（1倍扱いで計算します）。","")&" "&'
+                'IF(AND($D$7<>"",ISNUMBER($D$7),$D$7=0),"⚠ 調整倍率が0です。","")&" "&'
+                'IF(AND($M$7*IF(ISNUMBER($D$7),$D$7,1)>0,'
+                'OR($M$7*IF(ISNUMBER($D$7),$D$7,1)<0.5,$M$7*IF(ISNUMBER($D$7),$D$7,1)>5)),'
+                '"⚠ 合計適用倍率が×50%〜×500%の範囲外です。係数・調整倍率の入力を確認してください。",""))')
     style_range(ws, "B8:H8", font=fnt(8.5, True, RED), alignment=align("left"))
     ws.row_dimensions[9].height = 6
 
@@ -453,9 +463,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ws[f"C{r}"] = f'=IF(期間データ!B{dr}="","",期間データ!B{dr})'
         ws[f"D{r}"] = f'=IF($C{r}="","",IF($M$4=2,期間データ!D{dr},期間データ!C{dr}))'
         ws[f"E{r}"] = f'=IF($C{r}="","",IF($M$5<=0,"要確認",D{r}/$M$5))'
-        ws[f"F{r}"] = (f'=IF(OR($C{r}="",$D$5=""),"",'
+        ws[f"F{r}"] = (f'=IF(OR($C{r}="",NOT(ISNUMBER($D$5))),"",'
                        f'IF(ISNUMBER($E{r}),'
-                       f'MAX(0,ROUNDUP($D$5*$E{r}*$M$7*IF($D$7="",1,$D$7),0)),"—"))')
+                       f'MAX(0,ROUNDUP($D$5*$E{r}*$M$7*IF(ISNUMBER($D$7),$D$7,1),0)),"—"))')
         ws[f"G{r}"] = (f'=IF($C{r}="","",'
                        f'IF(ISNUMBER(SEARCH("⚠",IF($M$4=2,期間データ!$G$4,期間データ!$B$11))),"要確認",'
                        f'IF($M$6<=0,"－",IF($M$4=2,期間データ!C{dr},期間データ!D{dr})/$M$6)))')
@@ -509,7 +519,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
 
     dv_adjust = DataValidation(type="decimal", operator="between", formula1="0", formula2="5",
                                showErrorMessage=True)
-    dv_adjust.error = "調整倍率は 0〜5 の数値で入力してください（1.1 → ×110%）"
+    dv_adjust.error = "調整倍率は 0〜5 の数値で入力してください（1.1 ＝ 1.1倍・×110%）"
     dv_adjust.errorTitle = "調整倍率"
     ws.add_data_validation(dv_adjust)
     dv_adjust.add("D7")
@@ -544,8 +554,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[4].height = 20
     ws.merge_cells("B4:E4")
     ws["B4"] = ('="時間帯: "&準備数計算!$D$6&"（係数 ×"&TEXT(準備数計算!$M$7*100,"0")&'
-                '"% × 調整 ×"&TEXT(IF(準備数計算!$D$7="",1,準備数計算!$D$7)*100,"0")&'
-                '"% ＝ ×"&TEXT(準備数計算!$M$7*IF(準備数計算!$D$7="",1,準備数計算!$D$7)*100,"0")&"%）'
+                '"% × 調整 ×"&TEXT(IF(ISNUMBER(準備数計算!$D$7),準備数計算!$D$7,1)*100,"0")&'
+                '"% ＝ ×"&TEXT(準備数計算!$M$7*IF(ISNUMBER(準備数計算!$D$7),準備数計算!$D$7,1)*100,"0")&"%）'
                 '　｜　"&準備数計算!$E$4')
     style_range(ws, "B4:E4", font=fnt(9.5, False, "5B6472"), alignment=align("left"))
     ws.row_dimensions[5].height = 22
@@ -627,7 +637,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[6].height = 22
     chip(ws, "B6", "  動員数（人）", CHIP_TEAL, INK, 10)
     ws["C4"] = f'=IF(CSV貼付A!$N$5="","",IF({pa_s}=-1,"",{pa_s}))'
-    ws["D4"] = '=IF($C$4="","",$C$4+1)'
+    ws["D4"] = '=IF(OR($C$4="",$E$4="",$E$4<$C$4),"",$C$4+1)'
     ws["E4"] = f'=IF(CSV貼付A!$N$5="","",IF({pa_e}=-1,"",{pa_e}))'
     for j in range(3):
         col = get_column_letter(3 + j)
@@ -649,6 +659,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 'IF(CSV貼付A!$N$4<>"商品名","⚠ 貼付位置ズレ（5行目のA列から貼り直し）",'
                 'IF(CSV貼付A!$A$5="タイトル","⚠ ヘッダー行ごと貼付（1行目を除いて貼り直し）",'
                 'IF(OR($C$4="",$E$4=""),"⚠ 対象期間を読み取れません（CSVのD/E列を確認）",'
+                'IF($E$4<$C$4,"⚠ 対象期間が逆転しています（CSVのD/E列を確認）",'
                 'TRIM('
                 'IF($E$4-$C$4<>2,"⚠ "&($E$4-$C$4+1)&"日分のCSVです（期間Aは金土日3日想定）",'
                 '"✔ "&($E$4-$C$4+1)&"日間")&" "&'
@@ -656,7 +667,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 'SUMPRODUCT((CSV貼付A!$E$5:$E$' + str(CSV_END) + '<>"")*(CSV貼付A!$E$5:$E$' + str(CSV_END) + '<>CSV貼付A!$E$5))>0,'
                 '"⚠ 別期間の行が混ざっています（前回分を削除して貼り直し）","")&" "&'
                 'IF(WEEKDAY($C$4)<>6,"※開始が金曜以外","")'
-                ')))))')
+                '))))))')
     style_range(ws, "G4:K4", font=fnt(9, False, "5B6472"), alignment=align("left"))
     ws["C4"].comment = Comment("貼られたCSVの対象期間から自動表示されます（入力不要）。", "準備数ツール")
 
@@ -672,7 +683,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     chip(ws, "B10", "  動員数（人）", CHIP_TEAL, INK, 10)
     ws["C8"] = f'=IF(CSV貼付B!$N$5="","",IF({pb_s}=-1,"",{pb_s}))'
     for j in range(1, 6):
-        ws[f"{get_column_letter(3 + j)}8"] = f'=IF($C$8="","",$C$8+{j})'
+        ws[f"{get_column_letter(3 + j)}8"] = f'=IF(OR($C$8="",$I$8="",$I$8<$C$8),"",$C$8+{j})'
     ws["I8"] = f'=IF(CSV貼付B!$N$5="","",IF({pb_e}=-1,"",{pb_e}))'
     for j in range(7):
         col = get_column_letter(3 + j)
@@ -695,6 +706,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                  'IF(CSV貼付B!$N$4<>"商品名","⚠ 貼付位置ズレ（5行目のA列から貼り直し）",'
                  'IF(CSV貼付B!$A$5="タイトル","⚠ ヘッダー行ごと貼付（1行目を除いて貼り直し）",'
                  'IF(OR($C$8="",$I$8=""),"⚠ 対象期間を読み取れません（CSVのD/E列を確認）",'
+                 'IF($I$8<$C$8,"⚠ 対象期間が逆転しています（CSVのD/E列を確認）",'
                  'TRIM('
                  'IF($I$8-$C$8<>6,"⚠ "&($I$8-$C$8+1)&"日分のCSVです（期間Bは金〜木7日想定）",'
                  '"✔ "&($I$8-$C$8+1)&"日間")&" "&'
@@ -702,7 +714,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                  'SUMPRODUCT((CSV貼付B!$E$5:$E$' + str(CSV_END) + '<>"")*(CSV貼付B!$E$5:$E$' + str(CSV_END) + '<>CSV貼付B!$E$5))>0,'
                  '"⚠ 別期間の行が混ざっています（前回分を削除して貼り直し）","")&" "&'
                  'IF(WEEKDAY($C$8)<>6,"※開始が金曜以外","")'
-                 ')))))')
+                 '))))))')
     style_range(ws, "B11:K11", font=fnt(9, False, "5B6472"), alignment=align("left"))
 
     # 週末色分け
@@ -744,7 +756,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
             ws[f"{col}{r}"].border = Border(bottom=hair, left=hair, right=hair)
         ws[f"B{r}"].border = BORDER_INPUT
 
-    ws[f"B{ROW_P0}"].comment = Comment("プルダウンにはCSV貼付A/Bの商品名が自動で並びます(最大20枠)。"
+    ws[f"B{ROW_P0}"].comment = Comment("商品は最大20枠(B14〜B33)まで登録できます。プルダウンには"
+                                       "CSV貼付A/Bの商品名が自動で並びます(項目数の上限はありません)。"
                                        "ドリンク・包材などはシート下部の除外リストで検索対象外です。"
                                        "手入力する場合はCSVの商品名と完全一致させてください。", "準備数ツール")
     dup_rule = FormulaRule(
@@ -784,10 +797,23 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
             ws[f"B{r}"] = EXCLUDE_CATS[i]
         style_range(ws, f"B{r}", font=fnt(9.5), fl=fill(F_INPUT),
                     alignment=align("left"), border=BORDER_INPUT)
-    note(ws, f"C{EXC_TOP}:K{EXC_TOP + 2}",
+        # CSVに実在する小分類名かの照合(タイポ・表記ゆれの空振り検知)
+        ws[f"C{r}"] = (f'=IF(OR(TRIM($B{r})="",AND(CSV貼付A!$N$5="",CSV貼付B!$N$5="")),"",'
+                       f'IF(COUNTIF(CSV貼付A!$H$5:$H${CSV_END},$B{r})+'
+                       f'COUNTIF(CSV貼付B!$H$5:$H${CSV_END},$B{r})=0,"⚠該当なし","✔"))')
+        style_range(ws, f"C{r}", font=fnt(8.5, False, GRAY), alignment=align("center"))
+    exc_ok = FormulaRule(formula=[f'C{EXC_TOP}="✔"'],
+                         font=Font(name=FONT_NAME, size=8.5, color=GREEN))
+    exc_ng = FormulaRule(formula=[f'ISNUMBER(SEARCH("⚠",C{EXC_TOP}))'],
+                         font=Font(name=FONT_NAME, size=8.5, bold=True, color=RED))
+    ws.conditional_formatting.add(f"C{EXC_TOP}:C{EXC_END}", exc_ok)
+    ws.conditional_formatting.add(f"C{EXC_TOP}:C{EXC_END}", exc_ng)
+    note(ws, f"D{EXC_TOP}:K{EXC_TOP + 3}",
          "← ここに書いた小分類（CSVのH列「小分類名」と完全一致）の商品は、商品名プルダウンに"
          "出なくなります。集計からは除外されないため、手入力すれば集計できます。"
-         "行を消したり追加したりして自由に調整してください。", 8.5, GRAY, wrap=True)
+         "不要になった名前はセルの値をDeleteで消し、追加は空き枠に入力してください（最大12件）。"
+         "行そのものの挿入・削除はしないでください（内部の自動計算が壊れます）。"
+         "左の✔/⚠は、CSVに実在する小分類名かの照合結果です。", 8.5, GRAY, wrap=True)
     ws[f"B{EXC_TOP}"].comment = Comment("既定: ドリンク類(コールド/コーヒー/アルコール/その他ドリンク/ホット)、"
                                         "調味料類、ＳＥＴ作品コンボ、引換券、コンセ包材。", "準備数ツール")
 
@@ -798,13 +824,16 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     exc = f"$B${EXC_TOP}:$B${EXC_END}"
     for i in range(CSV_MAX):
         r = 5 + i
+        # 重複判定は非除外カテゴリの先行行のみ数える(除外行で先に出た同名商品が消えないように)
         ws[f"M{r}"] = (f'=IF(CSV貼付A!$N{r}="","",'
                        f'IF(COUNTIF({exc},CSV貼付A!$H{r})>0,"",'
-                       f'IF(COUNTIF(CSV貼付A!$N$5:$N{r},CSV貼付A!$N{r})>1,"",'
+                       f'IF(SUMPRODUCT((CSV貼付A!$N$5:$N{r}=CSV貼付A!$N{r})*'
+                       f'(COUNTIF({exc},CSV貼付A!$H$5:$H{r})=0))>1,"",'
                        f'MAX($M$4:M{r - 1})+1)))')
         ws[f"O{r}"] = (f'=IF(CSV貼付B!$N{r}="","",'
                        f'IF(COUNTIF({exc},CSV貼付B!$H{r})>0,"",'
-                       f'IF(COUNTIF(CSV貼付B!$N$5:$N{r},CSV貼付B!$N{r})>1,"",'
+                       f'IF(SUMPRODUCT((CSV貼付B!$N$5:$N{r}=CSV貼付B!$N{r})*'
+                       f'(COUNTIF({exc},CSV貼付B!$H$5:$H{r})=0))>1,"",'
                        f'MAX($O$4:O{r - 1})+1)))')
     for i in range(LIST_MAX):
         r = 5 + i
@@ -853,9 +882,10 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
              9, GRAY, wrap=True)
         ws.row_dimensions[3].height = 18
         ws.merge_cells("A3:J3")
+        ps, pe = parse_ymd("$D$5"), parse_ymd("$E$5")
         ws["A3"] = (f'="貼付行数: "&COUNTA($N$5:$N${CSV_END})&"行"&IF($N$5="","",'
-                    f'"｜対象期間: "&IFERROR(TEXT(DATEVALUE(TEXT(VALUE($D$5),"0000-00-00")),"m/d")&"〜"&'
-                    f'TEXT(DATEVALUE(TEXT(VALUE($E$5),"0000-00-00")),"m/d"),"—"))')
+                    f'"｜対象期間: "&IF(OR({ps}=-1,{pe}=-1),"—",'
+                    f'TEXT({ps},"m/d")&"〜"&TEXT({pe},"m/d")))')
         style_range(ws, "A3:J3", font=fnt(9, True, "5B6472"), alignment=align("left"))
 
         ws.row_dimensions[4].height = 20
