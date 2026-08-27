@@ -277,8 +277,13 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
         note(ws, "Q3:R3", "対象日(空欄=自動):", 8, GRAY, h="right")
         style_range(ws, "S3", font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="m/d")
-        ws["AD2"] = ('=IF($S$3<>"",$S$3,IF($K$5="","",'
-                     'IF(ISNUMBER($K$5),INT($K$5),IFERROR(DATE(VALUE(LEFT($K$5,4)),VALUE(MID($K$5,6,2)),VALUE(MID($K$5,9,2))),IFERROR(DATEVALUE($K$5),"")))))')
+        # 2000〜2100年の範囲外(誤貼付で数値コード等が来た場合)は空欄に落とす。
+        # AD2はm/d日付書式のため、範囲外シリアルを返すとLibreOfficeが#VALUE!で書き出す
+        ad2_inner = ('IF(ISNUMBER($K$5),INT($K$5),'
+                     'IFERROR(DATE(VALUE(LEFT($K$5,4)),VALUE(MID($K$5,6,2)),VALUE(MID($K$5,9,2))),'
+                     'DATEVALUE($K$5)))')
+        ws["AD2"] = (f'=IF($S$3<>"",$S$3,IF($K$5="","",'
+                     f'IFERROR(IF(AND({ad2_inner}>=36526,{ad2_inner}<=73415),{ad2_inner},""),"")))')
         note(ws, "AD1", "⚙対象日", 8, GRAY)
         style_range(ws, "AD2", font=fnt(8.5, False, GRAY), alignment=align("center"), num="m/d")
 
