@@ -321,8 +321,8 @@ def build(out_path, csvs=(None, None, None, None)):
         note(ws, "Q3:R3", "対象日(空欄=自動):", 8, GRAY, h="right")
         style_range(ws, "S3", font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="m/d")
-        ws["AD2"] = ('=IF($S$3<>"",$S$3,'
-                     'IFERROR(IF(ISNUMBER($K$5),INT($K$5),DATEVALUE($K$5)),""))')
+        ws["AD2"] = ('=IF($S$3<>"",$S$3,IF($K$5="","",'
+                     'IF(ISNUMBER($K$5),INT($K$5),IFERROR(DATE(VALUE(LEFT($K$5,4)),VALUE(MID($K$5,6,2)),VALUE(MID($K$5,9,2))),IFERROR(DATEVALUE($K$5),"")))))')
         note(ws, "AD1", "⚙対象日", 8, GRAY)
         style_range(ws, "AD2", font=fnt(8.5, False, GRAY), alignment=align("center"), num="m/d")
 
@@ -351,7 +351,9 @@ def build(out_path, csvs=(None, None, None, None)):
             ws[f"AE{rr}"] = (f'=IF($M{rr}="","",IFERROR(IF(ISNUMBER($M{rr}),MOD($M{rr},1),'
                              f'TIMEVALUE($M{rr})),""))')
             ws[f"AF{rr}"] = (f'=IF(OR($M{rr}="",$AE{rr}=""),0,'
-                             f'IF(IFERROR(IF(ISNUMBER($K{rr}),INT($K{rr}),DATEVALUE($K{rr})),-1)<>$AD$2,0,'
+                             f'IF(IF(ISNUMBER($K{rr}),INT($K{rr}),'
+                             f'IFERROR(DATE(VALUE(LEFT($K{rr},4)),VALUE(MID($K{rr},6,2)),VALUE(MID($K{rr},9,2))),'
+                             f'IFERROR(DATEVALUE($K{rr}),-1)))<>$AD$2,0,'
                              f'IF(OR($AB{rr}="セット親",$S{rr}<>"提供済",$T{rr}<>"販売"),0,'
                              f'IF(ISNUMBER($Z{rr}),MAX(0,$Z{rr}),0))))')
 
