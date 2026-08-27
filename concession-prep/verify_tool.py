@@ -100,20 +100,25 @@ for p in mso_paths:
 n_weeks = sum(1 for wcs in week_counts if sum(wcs) > 0)
 
 
-def r005(x):
-    """ExcelのROUND(x/0.05,0)*0.05と同じ半数切り上げ(Pythonのroundは偶数丸めのため不可)"""
-    return round(math.floor(x / 0.05 + 0.5 + 1e-9) * 0.05, 10)
+def check_r005(label, got, raw):
+    """0.05刻みセルの検証。刻みのちょうど中間は浮動小数の微差で丸め方向が
+    環境依存になるため、「0.05の倍数」かつ「生係数から半ステップ以内」を確認する"""
+    ok = (isinstance(got, (int, float))
+          and abs(got / 0.05 - round(got / 0.05)) < 1e-6
+          and abs(got - raw) <= 0.025 + 1e-6)
+    if not ok:
+        errors.append(f"NG {label}: got={got!r} raw={raw!r}")
 
 
 def wave_coef(name, band):
-    """商品別係数(0.05刻み)。使えないときはNone"""
+    """商品別係数(丸め前の生値)。使えないときはNone"""
     if n_weeks == 0 or band < 1 or band > 5:
         return None
     cs = prod_counts.get(name)
     total = sum(cs) if cs else 0
     if total == 0 or total < a.wave_thr:
         return None
-    return r005((cs[band - 1] / total) * (sum(DURS) / DURS[band - 1]))
+    return (cs[band - 1] / total) * (sum(DURS) / DURS[band - 1])
 
 
 pd = wb["期間データ"]
@@ -177,15 +182,18 @@ else:
         s = sel_sales.get(name, 0)
         rate = s / att_sel
         cp = wave_coef(name, a.band) if wave_active else None
-        eff = cp if cp is not None else a.mult
+        hv = m[f"H{r}"].value
+        if cp is not None:
+            # H列(0.05刻み)を生係数で検証し、作る数はExcelが実際に使った係数で突合
+            check_r005(f"準備数計算!H{r}(商品係数)", hv, cp)
+            eff = hv if isinstance(hv, (int, float)) else a.mult
+        else:
+            check(f"準備数計算!H{r}(商品係数=—)", hv, "—")
+            eff = a.mult
         check(f"準備数計算!D{r}", m[f"D{r}"].value, s)
         check(f"準備数計算!E{r}", m[f"E{r}"].value, rate, tol=1e-9)
         check(f"準備数計算!F{r}", m[f"F{r}"].value, math.ceil(a.peak * rate * eff * a.adjust), tol=1)
         check(f"準備数計算!G{r}", m[f"G{r}"].value, oth_sales.get(name, 0) / att_oth, tol=1e-9)
-        if cp is not None:
-            check(f"準備数計算!H{r}(商品係数)", m[f"H{r}"].value, cp, tol=1e-6)
-        else:
-            check(f"準備数計算!H{r}(商品係数=—)", m[f"H{r}"].value, "—")
         check(f"印刷用!D{8 + i}", pr[f"D{8 + i}"].value, math.ceil(a.peak * rate * eff * a.adjust), tol=1)
     warn = m["B9"].value
     if warn not in (None, ""):
@@ -235,9 +243,9 @@ if any(mso_paths):
         for bi in range(5):
             coef = (avgs[bi] / DURS[bi]) / day_pace
             check(f"係数算出!K{7 + bi}(係数候補)", ks[f"K{7 + bi}"].value, coef, tol=1e-6)
-            rounded = r005(coef)
-            check(f"係数算出!L{7 + bi}(転記用)", ks[f"L{7 + bi}"].value, rounded, tol=1e-6)
-            check(f"準備数計算!K{4 + bi}(実測候補の連動)", m[f"K{4 + bi}"].value, rounded, tol=1e-6)
+            lv = ks[f"L{7 + bi}"].value
+            check_r005(f"係数算出!L{7 + bi}(転記用)", lv, coef)
+            check(f"準備数計算!K{4 + bi}(実測候補の連動)", m[f"K{4 + bi}"].value, lv, tol=1e-9)
         check("係数算出!B23(警告なし)", ks["B23"].value in (None, ""), True)
     for wi, p in enumerate(mso_paths):
         st = wb[CALIB_SHEETS[wi]]["A3"].value or ""
@@ -263,7 +271,7 @@ if any(mso_paths):
             if cexp is None:
                 check(f"{WAVE_SHEET}!{kcol}{wr}(係数—)", wv[f"{kcol}{wr}"].value, "—")
             else:
-                check(f"{WAVE_SHEET}!{kcol}{wr}(係数)", wv[f"{kcol}{wr}"].value, cexp, tol=1e-6)
+                check_r005(f"{WAVE_SHEET}!{kcol}{wr}(係数)", wv[f"{kcol}{wr}"].value, cexp)
         check(f"{WAVE_SHEET}!H{wr}(合計)", wv[f"H{wr}"].value, total)
         want_j = (JUDGE_NONE if total == 0 else
                   JUDGE_FEW if total < a.wave_thr else JUDGE_USE)
