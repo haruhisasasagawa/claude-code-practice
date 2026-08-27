@@ -75,7 +75,7 @@ else:
     check("期間データ!F6(A動員計)", pd["F6"].value, sum(att_a))
     check("期間データ!J10(B動員計)", pd["J10"].value, sum(att_b))
     check("期間データ!G4(✔一致)", "✔一致" in (pd["G4"].value or ""), True)
-    check("期間データ!J8(✔一致)", "✔一致" in (pd["J8"].value or ""), True)
+    check("期間データ!B11(✔一致)", "✔一致" in (pd["B11"].value or ""), True)
 
     for i, name in enumerate(DEFAULT_PRODUCTS):
         r = 14 + i
