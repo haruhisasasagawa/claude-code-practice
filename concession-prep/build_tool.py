@@ -163,8 +163,15 @@ DEFAULT_PRODUCTS = [
     "チュリトス　チョコクリーム",
 ]
 
-PRESETS = [("平常", 1.0), ("朝いち", 0.8), ("昼ピーク", 1.2),
-           ("夕方", 1.1), ("夜ピーク", 1.3), ("レイト", 0.9)]
+# 時間帯は5段階(朝一→昼ピーク→夕方→夜ピーク→レイト)+基準の平常。名前・係数・時刻の目安は編集可
+PRESETS = [("① 朝一（〜11時）", 0.8),
+           ("② 昼ピーク（11〜15時）", 1.2),
+           ("③ 夕方（15〜18時）", 1.1),
+           ("④ 夜ピーク（18〜21時）", 1.3),
+           ("⑤ レイト（21時〜）", 0.9),
+           ("平常（基準）", 1.0)]
+PRESET_SLOTS = 7                 # プリセット表の枠数(I4:J10。6件+空き1枠)
+PRESET_END = 3 + PRESET_SLOTS
 
 # プルダウン検索から既定で除外する小分類(実CSVのH列の表記に完全一致・シート上で編集可)
 EXCLUDE_CATS = ["コールド", "コーヒー", "アルコール", "その他ドリンク", "ホット",
@@ -216,7 +223,7 @@ def read_csv_rows(path):
 
 # ---------------------------------------------------------------- build ------
 def build(out_path, csv_a=None, csv_b=None, select="A",
-          att_a=None, att_b=None, peak=None, preset="平常", adjust=1.0,
+          att_a=None, att_b=None, peak=None, preset="平常（基準）", adjust=1.0,
           products=DEFAULT_PRODUCTS):
     wb = Workbook()
 
@@ -291,7 +298,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "・ドリンク類・調味料・ＳＥＴ作品コンボ・引換券・包材はプルダウンに出ません"
         "（期間データシート下部の除外リストで自由に変更できます）。",
         "・ピーク動員数には「これから準備する回」の合計動員数を入れます（例：1時間後のピークの回の計）。",
-        "・倍率は二段構えです：時間帯係数（朝いち0.8倍/昼ピーク1.2倍…の固定の型・右上の表で編集）×"
+        "・倍率は二段構えです：時間帯係数（朝一0.8倍→昼ピーク1.2倍→夕方1.1倍→夜ピーク1.3倍→レイト0.9倍の5段階＋平常・右上の表で編集）×"
         "調整倍率（大作初日や雨など、その日の状況での上乗せ/控えめ）。どちらも 1.2 ＝ 1.2倍 の形で入力します。",
         "・CSVは各期間 最大1000行。貼り替える前に、5行目以降のデータだけを選択して削除してください"
         "（1〜4行目の見出し・状態表示は消さないこと）。",
@@ -321,8 +328,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.page_setup.paperSize = 9
     ws.print_area = "A1:H31"
 
-    for c, w in {"A": 2.5, "B": 6, "C": 32, "D": 14, "E": 11, "F": 16,
-                 "G": 13, "H": 8, "I": 12, "J": 9, "K": 2.5, "L": 12, "M": 10}.items():
+    for c, w in {"A": 2.5, "B": 6, "C": 32, "D": 22, "E": 11, "F": 16,
+                 "G": 13, "H": 8, "I": 24, "J": 9, "K": 2.5, "L": 12, "M": 10}.items():
         ws.column_dimensions[c].width = w
 
     ws.row_dimensions[1].height = 34
@@ -331,21 +338,23 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     note(ws, "B2:H2", "参照期間(A/B)の購買率 × ピーク動員数 × 時間帯係数 × 調整倍率 で「作る数」を自動計算します", 9)
     ws.row_dimensions[3].height = 6
 
-    # 時間帯プリセット表(編集OK) I3:J9
-    chip(ws, "I3:J3", " ⏰ 時間帯プリセット（編集OK）", CHIP_AMBER, INK, 8.5)
-    for i, (name, mult) in enumerate(PRESETS):
+    # 時間帯プリセット表(編集OK) I3:J10 — 5段階の時間帯+基準+空き枠
+    chip(ws, "I3:J3", " ⏰ 時間帯プリセット（5段階・編集OK）", CHIP_AMBER, INK, 8.5)
+    for i in range(PRESET_SLOTS):
         rr = 4 + i
         ws.row_dimensions[rr].height = 18
-        ws[f"I{rr}"] = name
+        if i < len(PRESETS):
+            ws[f"I{rr}"] = PRESETS[i][0]
+            ws[f"J{rr}"] = PRESETS[i][1]
         style_range(ws, f"I{rr}", font=fnt(9, True), fl=fill(F_INPUT),
-                    alignment=align("center"), border=BORDER_INPUT)
-        ws[f"J{rr}"] = mult
+                    alignment=align("left"), border=BORDER_INPUT)
         # ％を含む表示形式だとExcelの「パーセント自動入力」で 1.2 が 1.2% になるため「倍」表記にする
         style_range(ws, f"J{rr}", font=fnt(9, True, CORAL), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num='0.0"倍"')
-    ws["I4"].comment = Comment("時間帯ごとの高低差はこの6枠で管理します。名前(例:18時台)も係数も"
-                               "自由に書き換えできます(枠の追加は不可)。係数は 1.2 ＝ 1.2倍(×120%) の"
-                               "形で入力してください。", "準備数ツール")
+    ws["I4"].comment = Comment("時間帯の高低差は5段階(朝一→昼ピーク→夕方→夜ピーク→レイト)+基準の平常で"
+                               "管理します。名前・時刻の目安・係数とも自由に書き換えでき、空き枠に追加も"
+                               "できます(最大7枠)。係数は 1.2 ＝ 1.2倍(×120%) の形で入力してください。",
+                               "準備数ツール")
 
     # 計算用ヘルパー L3:M6
     chip(ws, "L3:M3", " ⚙ 計算用（さわらない）", "F7F8FA", GRAY, 8, False)
@@ -353,7 +362,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ("L4", "選択期間", "M4", f'=IF(TRIM($D$4)="{SEL_B}",2,IF(TRIM($D$4)="{SEL_A}",1,0))'),
         ("L5", "動員合計", "M5", "=IF($M$4=2,SUM(期間データ!$C$10:$I$10),SUM(期間データ!$C$6:$E$6))"),
         ("L6", "他方動員", "M6", "=IF($M$4=2,SUM(期間データ!$C$6:$E$6),SUM(期間データ!$C$10:$I$10))"),
-        ("L7", "時間帯係数", "M7", "=IFERROR(INDEX($J$4:$J$9,MATCH($D$6,$I$4:$I$9,0)),1)"),
+        ("L7", "時間帯係数", "M7", "=IFERROR(INDEX($J$4:$J$10,MATCH($D$6,$I$4:$I$10,0)),1)"),
     ]
     for lref, ltext, vref, formula in helpers:
         note(ws, lref, ltext, 8.5, GRAY, h="right")
@@ -408,7 +417,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 '"%（時間帯係数 × 調整倍率）"')
     style_range(ws, "E7:H7", font=fnt(9, True, "5B6472"), alignment=align("left"))
 
-    ws.row_dimensions[8].height = 14
+    ws.row_dimensions[8].height = 18
     ws.merge_cells("B8:H8")
     ws["B8"] = ('=TRIM('
                 'IF($M$4=0,"⚠ 参照期間の選択が不正です（現在は期間A扱い）。リストから選び直してください。","")&" "&'
@@ -430,7 +439,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 '"⚠ 参照期間のCSVに無い商品名があります（別期間のみの商品か、表記を確認。期間販売数0扱い）。","")&" "&'
                 'IF(COUNTIF($D$11:$D$30,"<0")>0,'
                 '"⚠ 期間販売数がマイナスの商品があります（返品超過）。作る数は0扱いです。","")&" "&'
-                'IF(AND($D$6<>"",ISNA(MATCH($D$6,$I$4:$I$9,0))),'
+                'IF(AND($D$6<>"",ISNA(MATCH($D$6,$I$4:$I$10,0))),'
                 '"⚠ 時間帯プリセット名が表にありません（係数100%扱い）。","")&" "&'
                 'IF(OR($D$5="",$D$5=0,NOT(ISNUMBER($D$5))),"⚠ ピーク動員数が未入力か数値ではありません。","")&" "&'
                 'IF($M$7=0,"⚠ 時間帯係数が0です。","")&" "&'
@@ -440,7 +449,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 'OR($M$7*IF(ISNUMBER($D$7),$D$7,1)<0.5,$M$7*IF(ISNUMBER($D$7),$D$7,1)>5)),'
                 '"⚠ 合計適用倍率が×50%〜×500%の範囲外です。係数・調整倍率の入力を確認してください。",""))')
     style_range(ws, "B8:H8", font=fnt(8.5, True, RED), alignment=align("left"))
-    ws.row_dimensions[9].height = 6
+    ws.row_dimensions[9].height = 18
 
     # 表ヘッダー
     ws.row_dimensions[10].height = 34
@@ -512,7 +521,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.add_data_validation(dv_peak)
     dv_peak.add("D5")
 
-    dv_preset = DataValidation(type="list", formula1="=$I$4:$I$9", allow_blank=True,
+    dv_preset = DataValidation(type="list", formula1="=$I$4:$I$10", allow_blank=True,
                                showErrorMessage=False)
     ws.add_data_validation(dv_preset)
     dv_preset.add("D6")
@@ -929,7 +938,7 @@ if __name__ == "__main__":
     ap.add_argument("--att-a", help="期間Aの動員数3日分(カンマ区切り)")
     ap.add_argument("--att-b", help="期間Bの動員数7日分(カンマ区切り)")
     ap.add_argument("--peak", type=int)
-    ap.add_argument("--preset", default="平常")
+    ap.add_argument("--preset", default="平常（基準）")
     ap.add_argument("--adjust", type=float, default=1.0)
     a = ap.parse_args()
     build(a.out, csv_a=a.csv_a, csv_b=a.csv_b, select=a.select,
