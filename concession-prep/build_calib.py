@@ -13,13 +13,17 @@ build_tool.py の build() から add_calib_sheets(wb, csvs) として呼ばれ�
 import csv
 
 from openpyxl.comments import Comment
-from openpyxl.styles import Border
+from openpyxl.formatting.rule import DataBarRule, FormulaRule
+from openpyxl.styles import Border, Font
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.properties import PageSetupProperties
 
 from build_tool import (BORDER_HAIR, BORDER_INPUT, BORDER_LIGHT, CHIP_AMBER,
-                        CHIP_CORAL, CHIP_NAVY, CORAL, F_INPUT, F_ZEBRA, GRAY,
-                        INK, NAVY, TEAL, WEEKDAY_JA, align, chip, coral_side,
+                        CHIP_CORAL, CHIP_NAVY, CHIP_TEAL, CORAL, F_INPUT, F_ZEBRA,
+                        FONT_NAME, GRAY, GREEN, INK, JUDGE_FEW, JUDGE_NODATA,
+                        JUDGE_NONE, JUDGE_USE, N_SLOTS, NAVY, RED, ROW_P0, TEAL,
+                        WAVE_ROW0, WAVE_SHEET, WEEKDAY_JA, align, chip, coral_side,
                         fill, fnt, note, style_range, title_band)
 
 MSO_HEADERS = ["操作モード", "伝票番号", "伝票枝番", "サイトコード", "サイト名",
@@ -217,6 +221,139 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
                  '"⚠ 貼付シートに問題があり集計から除外した週があります（上の貼付状況を確認）。",""))')
     ws.merge_cells("B23:L23")
     style_range(ws, "B23:L23", font=fnt(8.5, True, "D14343"), alignment=align("left"))
+
+    # ======================================================== 商品別の波 =====
+    ws = wb.create_sheet(WAVE_SHEET)
+    ws.sheet_properties.tabColor = PURPLE
+    ws.sheet_view.showGridLines = False
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    ws.page_setup.paperSize = 9
+    ws.print_area = "A1:N30"
+
+    ws.column_dimensions["A"].width = 2.5
+    ws.column_dimensions["B"].width = 30
+    for c in "CDEFG":
+        ws.column_dimensions[c].width = 8.5
+    ws.column_dimensions["H"].width = 9
+    for c in "IJKLM":
+        ws.column_dimensions[c].width = 8.5
+    ws.column_dimensions["N"].width = 22
+    ws.column_dimensions["O"].width = 2.5
+    for c in "PQRST":
+        ws.column_dimensions[c].width = 8
+        ws.column_dimensions[c].hidden = True
+
+    ws.row_dimensions[1].height = 34
+    title_band(ws, "B1:N1", "　⏱ 商品別の波｜商品ごとの時間帯パターン（自動）")
+    ws.row_dimensions[2].height = 18
+    note(ws, "B2:N2",
+         "商品＝期間データの登録商品（B14〜B33）。個数＝係数貼付①〜④（有効な週）の合計。"
+         "構成比で1日の売れ方の推移が見え、商品別係数は準備数計算「⑤ 商品別の波」で作る数に適用できます。", 9)
+
+    ws.row_dimensions[3].height = 20
+    chip(ws, "B3", "  ⚙ 係数を使う最低個数", CHIP_AMBER, INK, 9)
+    ws["D3"] = 30
+    style_range(ws, "D3", font=fnt(9, True), fl=fill(F_INPUT),
+                alignment=align("center"), border=BORDER_INPUT, num='#,##0"個"')
+    note(ws, "E3:N3",
+         "← 係数貼付①〜④の合計個数がこの数に満たない商品は、精度が低いため全体の時間帯係数で計算します（編集可）。", 8.5)
+    dv_thr = DataValidation(type="whole", operator="between", formula1="1", formula2="999999",
+                            showErrorMessage=True)
+    dv_thr.error = "最低個数は 1〜999,999 の整数で入力してください"
+    dv_thr.errorTitle = "最低個数"
+    ws.add_data_validation(dv_thr)
+    dv_thr.add("D3")
+
+    ws.row_dimensions[5].height = 18
+    chip(ws, "C5:G5", " 構成比（1日の売れ方の推移）", CHIP_TEAL, INK, 8.5)
+    chip(ws, "I5:M5", " 商品別係数（0.05刻み・自動）", CHIP_CORAL, INK, 8.5)
+    ws.row_dimensions[6].height = 26
+    style_range(ws, "B6", font=fnt(9, True, "FFFFFF"), fl=fill(NAVY),
+                alignment=align("center", "center", True), border=BORDER_LIGHT)
+    ws["B6"] = "商品名"
+    for bi, name in enumerate(BANDS):
+        for base in ("C", "I"):
+            ref = f"{get_column_letter(ord(base) - 64 + bi)}6"
+            ws[ref] = name
+            style_range(ws, ref, font=fnt(8, True, "FFFFFF"),
+                        fl=fill(CORAL if base == "I" else NAVY),
+                        alignment=align("center", "center", True), border=BORDER_LIGHT)
+    for ref, text in [("H6", "合計個数"), ("N6", "判定")]:
+        ws[ref] = text
+        style_range(ws, ref, font=fnt(9, True, "FFFFFF"), fl=fill(NAVY),
+                    alignment=align("center", "center", True), border=BORDER_LIGHT)
+    for bi in range(5):
+        note(ws, f"{get_column_letter(16 + bi)}6", f"⚙個数{'①②③④⑤'[bi]}", 8, GRAY)
+
+    starts5 = ["$C$4", "$D$4", "$E$4", "$F$4", "$G$4"]
+    ends5 = ["$D$4", "$E$4", "$F$4", "$G$4", None]
+    thr = 'IF(ISNUMBER($D$3),$D$3,30)'
+    for i in range(N_SLOTS):
+        wr = WAVE_ROW0 + i
+        pr = ROW_P0 + i
+        ws.row_dimensions[wr].height = 19
+        ws[f"B{wr}"] = f'=IF(期間データ!B{pr}="","",期間データ!B{pr})'
+        # 帯別個数(非表示P〜T列)。無効な週(AD3=0)は除外。⑤は閉店(翌)をMODで正規化
+        for bi in range(5):
+            col = get_column_letter(16 + bi)
+            terms = []
+            for sheet in CALIB_SHEETS:
+                q = f"{sheet}!$AF$5:$AF${MSO_END}"
+                t = f"{sheet}!$AE$5:$AE${MSO_END}"
+                x = f"{sheet}!$X$5:$X${MSO_END}"
+                if ends5[bi]:
+                    s = (f'IF({sheet}!$AD$3=1,SUMIFS({q},{x},$B{wr},'
+                         f'{t},">="&係数算出!{starts5[bi]},{t},"<"&係数算出!{ends5[bi]}),0)')
+                else:
+                    s = (f'IF({sheet}!$AD$3=1,SUMIFS({q},{x},$B{wr},{t},">="&係数算出!$G$4)'
+                         f'+SUMIFS({q},{x},$B{wr},{t},"<"&MOD(係数算出!$H$4,1)),0)')
+                terms.append(s)
+            ws[f"{col}{wr}"] = f'=IF($B{wr}="","",{"+".join(terms)})'
+            style_range(ws, f"{col}{wr}", font=fnt(8.5, False, GRAY), alignment=align("center"))
+        ws[f"H{wr}"] = f'=IF($B{wr}="","",SUM($P{wr}:$T{wr}))'
+        ws[f"N{wr}"] = (f'=IF($B{wr}="","",IF(係数算出!$H$13=0,"{JUDGE_NODATA}",'
+                        f'IF($H{wr}=0,"{JUDGE_NONE}",'
+                        f'IF($H{wr}<{thr},"{JUDGE_FEW}","{JUDGE_USE}"))))')
+        for bi in range(5):
+            ccol = get_column_letter(3 + bi)
+            pcol = get_column_letter(16 + bi)
+            ws[f"{ccol}{wr}"] = f'=IF($B{wr}="","",IF($H{wr}=0,"—",{pcol}{wr}/$H{wr}))'
+            kcol = get_column_letter(9 + bi)
+            ws[f"{kcol}{wr}"] = (f'=IF($B{wr}="","",IF($N{wr}<>"{JUDGE_USE}","—",'
+                                 f'IFERROR(ROUND(({pcol}{wr}/$H{wr})*'
+                                 f'(係数算出!$I$12/係数算出!$I${7 + bi})/0.05,0)*0.05,"—")))')
+        style_range(ws, f"B{wr}", font=fnt(9.5), alignment=align("left"))
+        style_range(ws, f"C{wr}:G{wr}", font=fnt(9, False, "5B6472"),
+                    alignment=align("center"), num="0%")
+        style_range(ws, f"H{wr}", font=fnt(9, True, "5B6472"), alignment=align("center"), num="#,##0")
+        style_range(ws, f"I{wr}:M{wr}", font=fnt(9.5, True, CORAL), fl=fill("FFF1EE"),
+                    alignment=align("center"), num='0.00"倍"')
+        style_range(ws, f"N{wr}", font=fnt(8.5, False, GRAY), alignment=align("left"))
+        if i % 2:
+            for c in "BCDEFGHN":
+                ws[f"{c}{wr}"].fill = fill(F_ZEBRA)
+        for c in "BCDEFGHIJKLMN":
+            ws[f"{c}{wr}"].border = BORDER_HAIR
+    last_w = WAVE_ROW0 + N_SLOTS - 1
+    bar = DataBarRule(start_type="num", start_value=0, end_type="max", color=TEAL, showValue=True)
+    ws.conditional_formatting.add(f"C{WAVE_ROW0}:G{last_w}", bar)
+    j_ok = FormulaRule(formula=[f'LEFT($N{WAVE_ROW0},1)="✔"'],
+                       font=Font(name=FONT_NAME, size=8.5, color=GREEN))
+    j_ng = FormulaRule(formula=[f'ISNUMBER(SEARCH("⚠",$N{WAVE_ROW0}))'],
+                       font=Font(name=FONT_NAME, size=8.5, bold=True, color=RED))
+    ws.conditional_formatting.add(f"N{WAVE_ROW0}:N{last_w}", j_ok)
+    ws.conditional_formatting.add(f"N{WAVE_ROW0}:N{last_w}", j_ng)
+
+    ws.row_dimensions[last_w + 2].height = 16
+    note(ws, f"B{last_w + 2}:N{last_w + 2}",
+         "※ 商品別係数 ＝ その商品の帯の1時間あたり個数 ÷ その商品の1日平均ペース。時間の区切り・帯の長さは係数算出シートに連動します。", 8.5)
+    ws.row_dimensions[last_w + 3].height = 16
+    note(ws, f"B{last_w + 3}:N{last_w + 3}",
+         "※ 「該当なし」はMSO側に同名の商品が無い場合です（商品名の表記が売上CSVと異なる可能性。その商品は全体の時間帯係数で計算されます）。", 8.5)
+    ws.freeze_panes = "A7"
 
     # ======================================================= 係数貼付①〜④ ===
     for si, sheet_name in enumerate(CALIB_SHEETS):
