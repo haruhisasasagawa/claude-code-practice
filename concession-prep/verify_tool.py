@@ -12,7 +12,7 @@ import sys
 
 from openpyxl import load_workbook
 
-from build_tool import DEFAULT_PRODUCTS, read_csv_rows
+from build_tool import DEFAULT_PRODUCTS, EXCLUDE_CATS, read_csv_rows
 
 ap = argparse.ArgumentParser()
 ap.add_argument("xlsx")
@@ -23,7 +23,8 @@ ap.add_argument("--select", choices=["A", "B"], default="A")
 ap.add_argument("--att-a")
 ap.add_argument("--att-b")
 ap.add_argument("--peak", type=int)
-ap.add_argument("--mult", type=float, default=1.0)
+ap.add_argument("--mult", type=float, default=1.0, help="時間帯係数")
+ap.add_argument("--adjust", type=float, default=1.0, help="調整倍率")
 a = ap.parse_args()
 
 wb = load_workbook(a.xlsx, data_only=True)
@@ -74,8 +75,13 @@ else:
 
     check("期間データ!F6(A動員計)", pd["F6"].value, sum(att_a))
     check("期間データ!J10(B動員計)", pd["J10"].value, sum(att_b))
-    check("期間データ!G4(✔一致)", "✔一致" in (pd["G4"].value or ""), True)
-    check("期間データ!B11(✔一致)", "✔一致" in (pd["B11"].value or ""), True)
+    check("期間データ!G4(✔3日間)", "✔ 3日間" in (pd["G4"].value or ""), True)
+    check("期間データ!B11(✔7日間)", "✔ 7日間" in (pd["B11"].value or ""), True)
+    import datetime as _dt
+    check("期間データ!C4(自動日付)", pd["C4"].value, _dt.datetime(2026, 8, 21))
+    check("期間データ!E4(自動日付)", pd["E4"].value, _dt.datetime(2026, 8, 23))
+    check("期間データ!C8(自動日付)", pd["C8"].value, _dt.datetime(2026, 8, 14))
+    check("期間データ!I8(自動日付)", pd["I8"].value, _dt.datetime(2026, 8, 20))
 
     for i, name in enumerate(DEFAULT_PRODUCTS):
         r = 14 + i
@@ -85,27 +91,40 @@ else:
     check("準備数計算!M4", m["M4"].value, 1 if a.select == "A" else 2)
     check("準備数計算!M5", m["M5"].value, att_sel)
     check("準備数計算!M6", m["M6"].value, att_oth)
-    check("準備数計算!D7(適用倍率)", m["D7"].value, a.mult, tol=1e-9)
+    check("準備数計算!M7(時間帯係数)", m["M7"].value, a.mult, tol=1e-9)
+    check("準備数計算!D7(調整倍率)", m["D7"].value, a.adjust, tol=1e-9)
+    total = a.mult * a.adjust
     for i, name in enumerate(DEFAULT_PRODUCTS):
         r = 11 + i
         s = sel_sales.get(name, 0)
         rate = s / att_sel
         check(f"準備数計算!D{r}", m[f"D{r}"].value, s)
         check(f"準備数計算!E{r}", m[f"E{r}"].value, rate, tol=1e-9)
-        check(f"準備数計算!F{r}", m[f"F{r}"].value, math.ceil(a.peak * rate * a.mult), tol=1)
+        check(f"準備数計算!F{r}", m[f"F{r}"].value, math.ceil(a.peak * rate * total), tol=1)
         check(f"準備数計算!G{r}", m[f"G{r}"].value, oth_sales.get(name, 0) / att_oth, tol=1e-9)
-        check(f"印刷用!D{8 + i}", pr[f"D{8 + i}"].value, math.ceil(a.peak * rate * a.mult), tol=1)
+        check(f"印刷用!D{8 + i}", pr[f"D{8 + i}"].value, math.ceil(a.peak * rate * total), tol=1)
     warn = m["B8"].value
     if warn not in (None, ""):
         errors.append(f"NG B8警告が出ている: {warn!r}")
 
-    # 商品リスト(プルダウン)の中身
-    uniq_a = list(dict.fromkeys(r[13] for r in read_csv_rows(a.csv_a) if r[13]))
-    uniq_b = list(dict.fromkeys(r[13] for r in read_csv_rows(a.csv_b) if r[13]))
+    # 商品リスト(プルダウン)の中身: 除外小分類を除いた先出順
+    def uniq_names(path):
+        return list(dict.fromkeys(
+            r[13] for r in read_csv_rows(path)
+            if r[13] and r[7] not in EXCLUDE_CATS))
+    uniq_a = uniq_names(a.csv_a)
+    uniq_b = uniq_names(a.csv_b)
     check("商品リスト先頭", pd["Q5"].value, uniq_a[0])
     check("商品リストA件数目", pd[f"Q{4 + len(uniq_a)}"].value, uniq_a[-1])
     check("商品リストB先頭", pd[f"Q{5 + len(uniq_a)}"].value, uniq_b[0])
     check("商品リスト末尾", pd[f"Q{4 + len(uniq_a) + len(uniq_b)}"].value, uniq_b[-1])
+    check("商品リスト末尾+1は空", pd[f"Q{5 + len(uniq_a) + len(uniq_b)}"].value in (None, ""), True)
+    # 除外カテゴリの商品がリストに無いこと
+    excluded_names = {r[13] for r in read_csv_rows(a.csv_a) if r[13] and r[7] in EXCLUDE_CATS}
+    listed = {pd.cell(row=rr, column=17).value for rr in range(5, 5 + len(uniq_a) + len(uniq_b))}
+    leak = excluded_names & listed
+    if leak:
+        errors.append(f"NG 除外カテゴリの商品がリストに混入: {sorted(leak)[:5]}")
 
 # 空き枠
 for i in range(len(DEFAULT_PRODUCTS), 20):
