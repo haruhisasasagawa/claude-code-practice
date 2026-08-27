@@ -17,7 +17,7 @@ TOHOシネマズ新宿のコンセッション（飲食売店）向けに、ピ�
 | 準備数計算 | 参照期間(A/B)の購買率 × ピーク動員数 × 時間帯係数 × 調整倍率 →「👉 作る数」 |
 | 印刷用 | A4縦1枚の仕込み指示書（自動連動・チェック欄・記入欄付き） |
 | 期間データ | 期間A（直近 金土日）・期間B（前週 金〜木）の日付・動員数入力と商品別販売集計 |
-| CSV貼付A / B | 本社集計「売上・在庫・原価」CSV（34列・cp932）をそのまま貼るだけのシート |
+| CSV貼付A / B | 本社集計「売上・在庫・原価」CSVを全選択コピー→オレンジのA4セルへ「値の貼り付け」するだけのシート（貼り付け位置は常時表示メモで案内） |
 
 ## 計算ロジック
 
@@ -52,6 +52,7 @@ python build_tool.py --out サンプル.xlsx \
     --att-a 9000,13000,12000 --att-b 8500,12500,11500,6000,6500,7000,6000 \
     --peak 1200 --preset 昼ピーク --adjust 1.1               # 入力済みサンプル
 python <xlsxスキルのrecalc.py> <xlsx>                        # 数式の再計算(LibreOffice)
+python build_tool.py --show-notes <xlsx>                    # 貼り付け案内メモの常時表示化(最後に実行)
 python verify_tool.py <xlsx> --template                      # テンプレートの検証
 python verify_tool.py <xlsx> --csv-a ... --csv-b ... --select A --att-a ... --att-b ... --peak 1200 --mult 1.2 --adjust 1.1
 ```

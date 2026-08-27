@@ -194,6 +194,52 @@ def parse_ymd(x):
     return f'IFERROR(IF(AND({inner}>=36526,{inner}<=73415),{inner},-1),-1)'
 
 
+def show_paste_comments(path, sheets=("CSV貼付A", "CSV貼付B")):
+    """指定シートのコメント(A4の貼り付け案内)を常時表示にする。
+    openpyxl/LibreOfficeはコメントを非表示で書き出すため、xlsx内のVMLを直接
+    書き換える。生成・再計算・後編集がすべて終わった最後に呼ぶこと。"""
+    import os
+    import re
+    import zipfile
+
+    with zipfile.ZipFile(path) as z:
+        names = set(z.namelist())
+        wbxml = z.read("xl/workbook.xml").decode("utf-8")
+        rels = z.read("xl/_rels/workbook.xml.rels").decode("utf-8")
+        rid_target = dict(re.findall(r'Id="([^"]+)"[^>]*?Target="([^"]+)"', rels))
+        sheet_files = {}
+        for tag in re.findall(r"<sheet [^>]*/>", wbxml):
+            nm = re.search(r'name="([^"]+)"', tag)
+            rid = re.search(r'r:id="([^"]+)"', tag)
+            if nm and rid and rid.group(1) in rid_target:
+                tgt = rid_target[rid.group(1)]
+                sheet_files[nm.group(1)] = tgt if tgt.startswith("xl/") else "xl/" + tgt.lstrip("/")
+        vml_files = set()
+        for s in sheets:
+            sf = sheet_files.get(s)
+            if not sf:
+                continue
+            d, f = sf.rsplit("/", 1)
+            rel = f"{d}/_rels/{f}.rels"
+            if rel not in names:
+                continue
+            for t in re.findall(r'Target="([^"]+\.vml)"', z.read(rel).decode("utf-8")):
+                vml_files.add(os.path.normpath(os.path.join(d, t)).replace("\\", "/"))
+    if not vml_files:
+        return 0
+    patched = 0
+    tmp = path + ".tmp"
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename in vml_files and b"visibility:hidden" in data:
+                data = data.replace(b"visibility:hidden", b"visibility:visible")
+                patched += 1
+            zout.writestr(item, data)
+    os.replace(tmp, path)
+    return patched
+
+
 def read_csv_rows(path):
     """cp932/utf-8のCSVを読み、値を数値化して返す(ヘッダー行は除く)"""
     raw = open(path, "rb").read()
@@ -250,8 +296,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     chip(ws, "B4:D4", "  つかいかた（3ステップ）", CHIP_NAVY, NAVY)
     steps = [
         ("①", AMBER, "「CSV貼付A」「CSV貼付B」に 売上・在庫・原価CSV を貼り付け",
-         "期間A＝直近の金土日、期間B＝前週の金〜木で出力したCSVを、5行目のA列からそのまま貼り付け"
-         "（1行目のヘッダーは不要）。日付は自動で入ります。｜担当：社員"),
+         "CSVを全選択コピーし、オレンジのA4セルを選択→『値の貼り付け』（ヘッダー行ごとでOK）。"
+         "日付は自動で入ります。｜担当：社員"),
         ("②", CORAL, "「期間データ」シートに 動員数 を入力",
          "期間A＝3日分、期間B＝7日分の動員数。日付・販売数は自動表示。CSVの行数・日数チェック（✔／⚠）も確認。｜担当：社員"),
         ("③", TEAL, "「準備数計算」で 参照期間・ピーク動員数・時間帯・調整倍率 を選ぶ",
@@ -300,7 +346,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "・ピーク動員数には「これから準備する回」の合計動員数を入れます（例：1時間後のピークの回の計）。",
         "・倍率は二段構えです：時間帯係数（朝一0.8倍→昼ピーク1.2倍→夕方1.1倍→夜ピーク1.3倍→レイト0.9倍の5段階＋平常・右上の表で編集）×"
         "調整倍率（大作初日や雨など、その日の状況での上乗せ/控えめ）。どちらも 1.2 ＝ 1.2倍 の形で入力します。",
-        "・CSVは各期間 最大1000行。貼り替える前に、5行目以降のデータだけを選択して削除してください"
+        "・貼り付けは必ずオレンジのA4セルを選択して『値の貼り付け』（右クリック→値のみ）。"
+        "通常の貼り付けだと色やメモが上書きされます。CSVは各期間 最大1000行。",
+        "・貼り替える前に、5行目以降のデータだけを選択して削除してください"
         "（1〜4行目の見出し・状態表示は消さないこと）。",
         "・期間の日付は貼られたCSVの「対象期間」から自動表示されます。貼付後は「期間データ」の"
         "CSV行数・日数チェック（✔／⚠）を確認してください。日数違い・貼付位置ズレ・旧データ残存は⚠が出ます。",
@@ -665,8 +713,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.merge_cells("G4:K4")
     ws["G4"] = ('=IF(CSV貼付A!$N$5="","（CSV貼付Aにデータを貼り付けてください）",'
                 '"CSV "&COUNTA(CSV貼付A!$N$5:$N$' + str(CSV_END) + ')&"行｜"&'
-                'IF(CSV貼付A!$N$4<>"商品名","⚠ 貼付位置ズレ（5行目のA列から貼り直し）",'
-                'IF(CSV貼付A!$A$5="タイトル","⚠ ヘッダー行ごと貼付（1行目を除いて貼り直し）",'
+                'IF(CSV貼付A!$N$4<>"商品名","⚠ 貼付位置がずれています（ヘッダーごとならA4、データのみならA5から）",'
+                'IF(CSV貼付A!$A$5="タイトル","⚠ 貼付開始セルがずれています（A4から貼り直してください）",'
                 'IF(OR($C$4="",$E$4=""),"⚠ 対象期間を読み取れません（CSVのD/E列を確認）",'
                 'IF($E$4<$C$4,"⚠ 対象期間が逆転しています（CSVのD/E列を確認）",'
                 'TRIM('
@@ -712,8 +760,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.merge_cells("B11:K11")
     ws["B11"] = ('=IF(CSV貼付B!$N$5="","CSV貼付B:（未貼付）",'
                  '"CSV貼付B: "&COUNTA(CSV貼付B!$N$5:$N$' + str(CSV_END) + ')&"行｜"&'
-                 'IF(CSV貼付B!$N$4<>"商品名","⚠ 貼付位置ズレ（5行目のA列から貼り直し）",'
-                 'IF(CSV貼付B!$A$5="タイトル","⚠ ヘッダー行ごと貼付（1行目を除いて貼り直し）",'
+                 'IF(CSV貼付B!$N$4<>"商品名","⚠ 貼付位置がずれています（ヘッダーごとならA4、データのみならA5から）",'
+                 'IF(CSV貼付B!$A$5="タイトル","⚠ 貼付開始セルがずれています（A4から貼り直してください）",'
                  'IF(OR($C$8="",$I$8=""),"⚠ 対象期間を読み取れません（CSVのD/E列を確認）",'
                  'IF($I$8<$C$8,"⚠ 対象期間が逆転しています（CSVのD/E列を確認）",'
                  'TRIM('
@@ -885,9 +933,10 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                    f"　📋 {sheet_name}｜{label}の「売上・在庫・原価」CSV")
         ws.row_dimensions[2].height = 30
         note(ws, "A2:J2",
-             "本社集計ソフトの「売上・在庫・原価」CSVを、5行目のA列を選択してそのまま貼り付けてください"
-             "（1行目のヘッダー行は不要、最大1000行）。貼り替えるときは、先に前回のデータ"
-             "（5行目以降）だけを選択して削除してください。1〜4行目は消さないこと。",
+             "① CSVを開いて全選択→コピー（Ctrl+A → Ctrl+C）　"
+             "② 下のオレンジのセル（A4）を選択　③ 右クリック→『値の貼り付け』。"
+             "ヘッダー行ごと貼ってOKです（最大1000行）。貼り替えるときは、先に前回のデータ"
+             "（5行目以降）を選択して削除してください。",
              9, GRAY, wrap=True)
         ws.row_dimensions[3].height = 18
         ws.merge_cells("A3:J3")
@@ -903,6 +952,16 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
             ws[ref] = h
             style_range(ws, ref, font=fnt(8.5, True, "FFFFFF"), fl=fill(NAVY),
                         alignment=align("center"), border=BORDER_LIGHT)
+        # 貼り付け開始セル(A4)を強調。値の貼り付けなら塗り・メモは残る
+        style_range(ws, "A4", font=fnt(9, True, "7A4A00"), fl=fill("FFB84C"),
+                    alignment=align("center"),
+                    border=Border(left=coral_side, right=coral_side,
+                                  top=coral_side, bottom=coral_side))
+        c = Comment("👉 貼り付けはここから！\n"
+                    "CSV全体をコピー（Ctrl+A→Ctrl+C）して、このセル（A4）を選択し、\n"
+                    "右クリック→「値の貼り付け」。ヘッダー行ごと貼ってOKです。",
+                    "準備数ツール", height=95, width=270)
+        ws["A4"].comment = c
 
         for i in range(350):                     # 目安の枠線(貼付は1000行まで有効)
             r = 5 + i
@@ -917,8 +976,6 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 r = 5 + i
                 for c_idx, v in enumerate(row[:NCOL], start=1):
                     ws.cell(row=r, column=c_idx).value = v
-        else:
-            ws["A5"].comment = Comment("ここに集計CSVのデータ部分を貼り付けます。", "準備数ツール")
 
         ws.freeze_panes = "A5"
 
@@ -940,7 +997,13 @@ if __name__ == "__main__":
     ap.add_argument("--peak", type=int)
     ap.add_argument("--preset", default="平常（基準）")
     ap.add_argument("--adjust", type=float, default=1.0)
+    ap.add_argument("--show-notes", metavar="XLSX",
+                    help="既存xlsxのCSV貼付シートのメモを常時表示化して終了(再計算後に実行)")
     a = ap.parse_args()
+    if a.show_notes:
+        n = show_paste_comments(a.show_notes)
+        print(f"notes patched: {n} vml file(s) in {a.show_notes}")
+        raise SystemExit(0)
     build(a.out, csv_a=a.csv_a, csv_b=a.csv_b, select=a.select,
           att_a=[int(x) for x in a.att_a.split(",")] if a.att_a else None,
           att_b=[int(x) for x in a.att_b.split(",")] if a.att_b else None,
