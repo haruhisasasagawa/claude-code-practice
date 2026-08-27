@@ -100,6 +100,11 @@ for p in mso_paths:
 n_weeks = sum(1 for wcs in week_counts if sum(wcs) > 0)
 
 
+def r005(x):
+    """ExcelのROUND(x/0.05,0)*0.05と同じ半数切り上げ(Pythonのroundは偶数丸めのため不可)"""
+    return round(math.floor(x / 0.05 + 0.5 + 1e-9) * 0.05, 10)
+
+
 def wave_coef(name, band):
     """商品別係数(0.05刻み)。使えないときはNone"""
     if n_weeks == 0 or band < 1 or band > 5:
@@ -108,7 +113,7 @@ def wave_coef(name, band):
     total = sum(cs) if cs else 0
     if total == 0 or total < a.wave_thr:
         return None
-    return round(round((cs[band - 1] / total) * (sum(DURS) / DURS[band - 1]) / 0.05) * 0.05, 10)
+    return r005((cs[band - 1] / total) * (sum(DURS) / DURS[band - 1]))
 
 
 pd = wb["期間データ"]
@@ -230,7 +235,7 @@ if any(mso_paths):
         for bi in range(5):
             coef = (avgs[bi] / DURS[bi]) / day_pace
             check(f"係数算出!K{7 + bi}(係数候補)", ks[f"K{7 + bi}"].value, coef, tol=1e-6)
-            rounded = round(round(coef / 0.05) * 0.05, 10)
+            rounded = r005(coef)
             check(f"係数算出!L{7 + bi}(転記用)", ks[f"L{7 + bi}"].value, rounded, tol=1e-6)
             check(f"準備数計算!K{4 + bi}(実測候補の連動)", m[f"K{4 + bi}"].value, rounded, tol=1e-6)
         check("係数算出!B23(警告なし)", ks["B23"].value in (None, ""), True)
