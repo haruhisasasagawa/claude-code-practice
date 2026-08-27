@@ -99,7 +99,8 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
         ws[vref] = val
         style_range(ws, vref, font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="h:mm")
-    ws["H3"].comment = Comment("最終レイトの終わり(翌日側)。翌2:00なら 2:00 と入力。", "準備数ツール")
+    ws["H3"].comment = Comment("最終レイトの終わり(翌日側)。翌2:00なら 2:00 と入力"
+                               "(26:00 と入力しても翌2:00として扱います)。", "準備数ツール")
 
     # 帯ごとの窓: ①[開店,朝→昼) ②[朝→昼,昼→夕) ③[昼→夕,夕→夜) ④[夕→夜,夜→レイト)
     #             ⑤[夜→レイト,24:00)+[0:00,閉店)
@@ -128,17 +129,20 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
             col = get_column_letter(4 + wi)
             rng_t = f"{sheet}!$AE$5:$AE${MSO_END}"
             rng_q = f"{sheet}!$AF$5:$AF${MSO_END}"
+            # 貼付シートの正常フラグ(AD3)が0の週(別CSVの誤貼付・式の破損)は集計しない
+            ok = f"{sheet}!$AD$3=1"
+            # 閉店時刻はMODで正規化(26:00=1.083等の24時間超え表記でも翌2:00として扱う)
             if ends[bi]:
-                ws[f"{col}{r}"] = (f'=SUMIFS({rng_q},{rng_t},">="&{starts[bi]},'
-                                   f'{rng_t},"<"&{ends[bi]})')
+                ws[f"{col}{r}"] = (f'=IF({ok},SUMIFS({rng_q},{rng_t},">="&{starts[bi]},'
+                                   f'{rng_t},"<"&{ends[bi]}),0)')
             else:
-                ws[f"{col}{r}"] = (f'=SUMIFS({rng_q},{rng_t},">="&{starts[bi]})'
-                                   f'+SUMIFS({rng_q},{rng_t},"<"&$H$4)')
+                ws[f"{col}{r}"] = (f'=IF({ok},SUMIFS({rng_q},{rng_t},">="&{starts[bi]})'
+                                   f'+SUMIFS({rng_q},{rng_t},"<"&MOD($H$4,1)),0)')
         ws[f"H{r}"] = f'=IF($H$13=0,"",SUM(D{r}:G{r})/$H$13)'
         if ends[bi]:
             ws[f"I{r}"] = f'=({ends[bi]}-{starts[bi]})*24'
         else:
-            ws[f"I{r}"] = f'=(1-{starts[bi]})*24+$H$4*24'
+            ws[f"I{r}"] = f'=(1-{starts[bi]})*24+MOD($H$4,1)*24'
         ws[f"J{r}"] = f'=IF(OR($H{r}="",$I{r}<=0),"",$H{r}/$I{r})'
         ws[f"K{r}"] = f'=IF(OR($J{r}="",$J$12=""),"",IF($J$12<=0,"",$J{r}/$J$12))'
         ws[f"L{r}"] = f'=IF($K{r}="","—",ROUND($K{r}/0.05,0)*0.05)'
@@ -205,8 +209,12 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
          "されます。採用は手入力で）。平常（基準）は 1.0倍 のままでOKです。",
          9, INK, wrap=True)
     ws.row_dimensions[23].height = 16
-    ws["B23"] = ('=IF($H$13=0,"⚠ まだデータが貼られていません。係数貼付①〜④に金曜1日分の'
-                 'MSO商品CSVを貼ってください（貼らなくても本体はプリセットの既定係数で使えます）。","")')
+    bad_any = "+".join(f"({s}!$AD$3=0)" for s in CALIB_SHEETS)
+    ws["B23"] = ('=TRIM('
+                 'IF($H$13=0,"⚠ まだ有効なデータが貼られていません。係数貼付①〜④に金曜1日分の'
+                 'MSO商品CSVを貼ってください（貼らなくても本体はプリセットの既定係数で使えます）。","")&" "&'
+                 f'IF(({bad_any})>0,'
+                 '"⚠ 貼付シートに問題があり集計から除外した週があります（上の貼付状況を確認）。",""))')
     ws.merge_cells("B23:L23")
     style_range(ws, "B23:L23", font=fnt(8.5, True, "D14343"), alignment=align("left"))
 
@@ -238,20 +246,33 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
         note(ws, "A2:N2",
              "① 金曜1日分で出力したMSO商品CSVを開いて全選択→コピー（Ctrl+A → Ctrl+C）　"
              "② 下のオレンジのセル（A4）を選択　③ 右クリック→『値の貼り付け』。"
-             "ヘッダー行ごと貼ってOKです（最大12,000行）。貼り替える前に5行目以降を削除してください。",
+             "ヘッダー行ごと貼ってOKです（最大12,000行）。貼り替えるときは、前回のデータ"
+             "（5行目以降のA〜AB列）だけを選択してDeleteで消してください（行ごと削除しないこと）。",
              9, GRAY, wrap=True)
 
         ws.row_dimensions[3].height = 18
         ws.merge_cells("A3:P3")
-        ws["A3"] = (f'=IF($M$5="","（未貼付）",'
+        # AD3=正常フラグ: ヘッダー行の照合(別CSVの誤貼付・貼付位置ズレ検知)と
+        # ヘルパー式AE/AFの生存数チェック(行削除による式の破損検知)。0の週は係数算出で無視される
+        ws["AD3"] = (f'=IF(OR($K$4<>"売店売上日付",COUNTA($AE$5:$AE${MSO_END})<{MSO_MAX},'
+                     f'COUNT($AF$5:$AF${MSO_END})<{MSO_MAX}),0,1)')
+        style_range(ws, "AD3", font=fnt(8.5, False, GRAY), alignment=align("center"))
+        ws["A3"] = (f'=IF($AD$3=0,'
+                    f'IF($K$4<>"売店売上日付",'
+                    f'"⚠ 貼り付け内容がMSO商品CSVではないか、位置がずれています'
+                    f'（ヘッダーごとならA4、データのみならA5から。このシートは集計から除外中）",'
+                    f'"⚠ 内部の集計式（AE・AF列）が一部消えています（行ごと削除が原因。'
+                    f'配布元ファイルのシートから作り直してください。このシートは集計から除外中）"),'
+                    f'IF($M$5="","（未貼付）",'
                     f'"貼付 "&COUNTA($M$5:$M${MSO_END})&"行"&'
                     f'IF($AD$2="","｜⚠ 日付を読み取れません",'
                     f'"｜対象日: "&TEXT($AD$2,"m/d")&"（"&CHOOSE(WEEKDAY($AD$2),{WEEKDAY_JA})&"）'
                     f'｜対象個数 "&TEXT(SUM($AF$5:$AF${MSO_END}),"#,##0")&"個"&'
                     f'IF(WEEKDAY($AD$2)<>6,"｜※金曜ではありません","")&'
                     f'IF(SUMPRODUCT(($K$5:$K${MSO_END}<>"")*($K$5:$K${MSO_END}<>$K$5))>0,'
-                    f'"｜⚠ 複数日が混在（対象日以外は無視）","")))'
-                    )
+                    f'"｜⚠ 複数日が混在（対象日以外は無視）","")&'
+                    f'IF($M${MSO_END + 1}<>"","｜⚠ 12,000行を超えています（超過分は集計対象外）","")'
+                    f')))')
         style_range(ws, "A3:P3", font=fnt(9, True, "5B6472"), alignment=align("left"))
         note(ws, "Q3:R3", "対象日(空欄=自動):", 8, GRAY, h="right")
         style_range(ws, "S3", font=fnt(9, True), fl=fill(F_INPUT),

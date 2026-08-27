@@ -142,15 +142,17 @@ for i in range(len(DEFAULT_PRODUCTS), 20):
             errors.append(f"NG 準備数計算 空き枠 {col}{11 + i}: {v!r}")
 
 # ------------------------------------------------ 係数算出(時間帯係数の較正) --
-from build_calib import CALIB_SHEETS, read_mso_rows  # noqa: E402
+from build_calib import CALIB_SHEETS, MSO_MAX, read_mso_rows  # noqa: E402
 
 ks = wb["係数算出"]
 mso_paths = [a.mso1, a.mso2, a.mso3, a.mso4]
+for s in CALIB_SHEETS:
+    check(f"{s}!AD3(正常フラグ)", wb[s]["AD3"].value, 1)
 
 
 def mso_band_counts(path):
     """MSO明細をExcel側と同じルールで帯別集計(先頭行の日付を対象日とする)"""
-    rows = read_mso_rows(path)
+    rows = read_mso_rows(path)[:MSO_MAX]
     target = rows[0][10] if rows else None
     windows = [(8 / 24, 11 / 24), (11 / 24, 15 / 24), (15 / 24, 18 / 24),
                (18 / 24, 21 / 24), None]
@@ -204,7 +206,7 @@ if any(mso_paths):
 else:
     check("係数算出!H13(週数=0)", ks["H13"].value, 0)
     check("係数算出!L7(未算出=—)", ks["L7"].value, "—")
-    check("係数算出!B23(未貼付警告)", "まだデータが貼られていません" in (ks["B23"].value or ""), True)
+    check("係数算出!B23(未貼付警告)", "データが貼られていません" in (ks["B23"].value or ""), True)
     check("準備数計算!K4(実測候補=—)", m["K4"].value, "—")
     for s in CALIB_SHEETS:
         check(f"{s}!A3(未貼付)", wb[s]["A3"].value, "（未貼付）")

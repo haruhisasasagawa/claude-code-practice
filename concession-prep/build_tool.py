@@ -18,7 +18,8 @@ TOHOの営業週(金曜開始)に合わせ、本社集計「売上・在庫・�
   python build_tool.py                            # 未入力テンプレートを生成
   python build_tool.py --out サンプル.xlsx \
       --csv-a A期間.csv --csv-b B期間.csv \
-      --select A --att-a 9000,13000,12000 --att-b 8500,... --peak 1200 --preset 昼ピーク \
+      --select A --att-a 9000,13000,12000 --att-b 8500,... --peak 1200 \
+      --preset "② 昼ピーク（11〜15時）" \
       --mso1 0717MSO.csv                          # 係数貼付①にMSO明細を投入
 """
 import argparse
