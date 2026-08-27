@@ -1,31 +1,32 @@
 # -*- coding: utf-8 -*-
 """
-生成したExcel(v2)の計算結果を、Pythonで再計算した期待値と突合する検証スクリプト。
-使い方: python verify_tool.py <xlsx> [period] [band]
-  period: 7 / 3 / 1 (省略時 7) … 準備数計算!D4 の参照期間と合わせる
-  band:   全体 / 朝 / 昼 / 夕方 / 夜 (省略時 昼) … 準備数計算!D5 と合わせる
+生成したExcel(v3)の計算結果を、CSVからPythonで独立集計した期待値と突合する。
+使い方:
+  python verify_tool.py <xlsx> --template
+  python verify_tool.py <xlsx> --csv-a A.csv --csv-b B.csv --select A \
+      --att-a 9000,13000,12000 --att-b ... --peak 1200 --mult 1.2
 """
+import argparse
 import math
 import sys
 
 from openpyxl import load_workbook
 
-import sample_data as sd
+from build_tool import DEFAULT_PRODUCTS, read_csv_rows
 
-XLSX = sys.argv[1]
-N = int(sys.argv[2]) if len(sys.argv) > 2 else 7
-BAND = sys.argv[3] if len(sys.argv) > 3 else "昼"
+ap = argparse.ArgumentParser()
+ap.add_argument("xlsx")
+ap.add_argument("--template", action="store_true")
+ap.add_argument("--csv-a")
+ap.add_argument("--csv-b")
+ap.add_argument("--select", choices=["A", "B"], default="A")
+ap.add_argument("--att-a")
+ap.add_argument("--att-b")
+ap.add_argument("--peak", type=int)
+ap.add_argument("--mult", type=float, default=1.0)
+a = ap.parse_args()
 
-ATT_BANDS, QTY, CSV_ROWS = sd.build()
-PRODUCTS, ATTEND, BANDS = sd.PRODUCTS, sd.ATTEND, sd.BANDS
-
-PEAK = 1200
-MULT = 1.2
-sel = list(range(7 - N, 7))
-att_total_all = sum(ATTEND[i] for i in sel)
-att_total = att_total_all if BAND == "全体" else sum(ATT_BANDS[BAND][i] for i in sel)
-
-wb = load_workbook(XLSX, data_only=True)
+wb = load_workbook(a.xlsx, data_only=True)
 errors = []
 
 
@@ -36,83 +37,86 @@ def check(label, got, want, tol=0):
         errors.append(f"NG {label}: got={got!r} want={want!r}")
 
 
-def day_total(di, name):
-    return sum(QTY[(di, name, b)] for b in BANDS)
+def sales_by_name(csv_path):
+    total = {}
+    for row in read_csv_rows(csv_path):
+        name, qty = row[13], row[26]
+        if name is not None:
+            total[name] = total.get(name, 0) + (qty or 0)
+    return total
 
 
-def band_sum(name, band):
-    if band == "全体":
-        return sum(day_total(i, name) for i in sel)
-    return sum(QTY[(i, name, band)] for i in sel)
+pd = wb["期間データ"]
+m = wb["準備数計算"]
+pr = wb["印刷用"]
 
+if a.template:
+    for i in range(len(DEFAULT_PRODUCTS)):
+        r = 14 + i
+        check(f"期間データ!B{r}", pd[f"B{r}"].value, DEFAULT_PRODUCTS[i])
+        check(f"期間データ!C{r}(A販売=0)", pd[f"C{r}"].value, 0)
+        check(f"期間データ!D{r}(B販売=0)", pd[f"D{r}"].value, 0)
+    check("期間データ!G4(A未貼付表示)", "貼り付けてください" in (pd["G4"].value or ""), True)
+    check("準備数計算!E11(要確認)", m["E11"].value, "要確認")
+    check("準備数計算!F11(空欄)", m["F11"].value in (None, ""), True)
+    warn = m["B8"].value or ""
+    for kw in ("未貼付", "そろっていません", "ピーク動員数"):
+        check(f"B8警告[{kw}]", kw in warn, True)
+else:
+    sa = sales_by_name(a.csv_a)
+    sb = sales_by_name(a.csv_b)
+    att_a = [int(x) for x in a.att_a.split(",")]
+    att_b = [int(x) for x in a.att_b.split(",")]
+    att_sel = sum(att_a) if a.select == "A" else sum(att_b)
+    att_oth = sum(att_b) if a.select == "A" else sum(att_a)
+    sel_sales = sa if a.select == "A" else sb
+    oth_sales = sb if a.select == "A" else sa
 
-# ---- 日別データ ----
-ws = wb["日別データ"]
-for i, (name, _, _) in enumerate(PRODUCTS):
-    r = 13 + i
-    check(f"日別データ!B{r}", ws[f"B{r}"].value, name)
-    for j in range(7):
-        check(f"日別データ!{chr(67 + j)}{r}", ws.cell(row=r, column=3 + j).value, day_total(j, name))
-    check(f"日別データ!J{r}", ws[f"J{r}"].value, sum(day_total(j, name) for j in range(7)))
-check("日別データ!J6(動員7日計)", ws["J6"].value, sum(ATTEND))
-for k, b in enumerate(BANDS):
-    check(f"日別データ!J{7 + k}(動員{b}7日計)", ws[f"J{7 + k}"].value, sum(ATT_BANDS[b]))
-for j in range(7):
-    check(f"日別データ!{chr(67 + j)}11(CSV取込)", ws.cell(row=11, column=3 + j).value, "✔")
-for i in range(len(PRODUCTS), 20):
-    v = ws.cell(row=13 + i, column=3).value
-    if v not in (None, ""):
-        errors.append(f"NG 日別データ 空き枠 C{13 + i} が空でない: {v!r}")
+    check("期間データ!F6(A動員計)", pd["F6"].value, sum(att_a))
+    check("期間データ!J10(B動員計)", pd["J10"].value, sum(att_b))
+    check("期間データ!G4(✔一致)", "✔一致" in (pd["G4"].value or ""), True)
+    check("期間データ!J8(✔一致)", "✔一致" in (pd["J8"].value or ""), True)
 
-# ---- 準備数計算 ----
-ws = wb["準備数計算"]
-check("準備数計算!J4(参照日数)", ws["J4"].value, N)
-check("準備数計算!J5(動員合計)", ws["J5"].value, att_total)
-check("準備数計算!J8(期間内帯データ数)", ws["J8"].value, len(PRODUCTS) * len(BANDS) * N)
-check("準備数計算!J9(全体動員)", ws["J9"].value, att_total_all)
-check("準備数計算!J10(判定不能行)", ws["J10"].value, 0)
-warn = ws["B8"].value
-if warn not in (None, ""):
-    errors.append(f"NG 準備数計算!B8 警告が出ている: {warn!r}")
-for i, (name, _, _) in enumerate(PRODUCTS):
-    r = 11 + i
-    sales = band_sum(name, BAND)
-    rate = sales / att_total
-    sales_all = band_sum(name, "全体")
-    check(f"準備数計算!C{r}", ws[f"C{r}"].value, name)
-    check(f"準備数計算!D{r}(期間販売数)", ws[f"D{r}"].value, sales)
-    check(f"準備数計算!E{r}(購買率)", ws[f"E{r}"].value, rate, tol=1e-9)
-    check(f"準備数計算!F{r}(作る数)", ws[f"F{r}"].value,
-          math.ceil(PEAK * rate * MULT), tol=1)
-    check(f"準備数計算!G{r}(参考全体)", ws[f"G{r}"].value, sales_all / att_total_all, tol=1e-9)
-for i in range(len(PRODUCTS), 20):
-    r = 11 + i
+    for i, name in enumerate(DEFAULT_PRODUCTS):
+        r = 14 + i
+        check(f"期間データ!C{r}({name[:6]})", pd[f"C{r}"].value, sa.get(name, 0))
+        check(f"期間データ!D{r}", pd[f"D{r}"].value, sb.get(name, 0))
+
+    check("準備数計算!M4", m["M4"].value, 1 if a.select == "A" else 2)
+    check("準備数計算!M5", m["M5"].value, att_sel)
+    check("準備数計算!M6", m["M6"].value, att_oth)
+    check("準備数計算!D7(適用倍率)", m["D7"].value, a.mult, tol=1e-9)
+    for i, name in enumerate(DEFAULT_PRODUCTS):
+        r = 11 + i
+        s = sel_sales.get(name, 0)
+        rate = s / att_sel
+        check(f"準備数計算!D{r}", m[f"D{r}"].value, s)
+        check(f"準備数計算!E{r}", m[f"E{r}"].value, rate, tol=1e-9)
+        check(f"準備数計算!F{r}", m[f"F{r}"].value, math.ceil(a.peak * rate * a.mult), tol=1)
+        check(f"準備数計算!G{r}", m[f"G{r}"].value, oth_sales.get(name, 0) / att_oth, tol=1e-9)
+        check(f"印刷用!D{8 + i}", pr[f"D{8 + i}"].value, math.ceil(a.peak * rate * a.mult), tol=1)
+    warn = m["B8"].value
+    if warn not in (None, ""):
+        errors.append(f"NG B8警告が出ている: {warn!r}")
+
+    # 商品リスト(プルダウン)の中身
+    uniq_a = list(dict.fromkeys(r[13] for r in read_csv_rows(a.csv_a) if r[13]))
+    uniq_b = list(dict.fromkeys(r[13] for r in read_csv_rows(a.csv_b) if r[13]))
+    check("商品リスト先頭", pd["Q5"].value, uniq_a[0])
+    check("商品リストA件数目", pd[f"Q{4 + len(uniq_a)}"].value, uniq_a[-1])
+    check("商品リストB先頭", pd[f"Q{5 + len(uniq_a)}"].value, uniq_b[0])
+    check("商品リスト末尾", pd[f"Q{4 + len(uniq_a) + len(uniq_b)}"].value, uniq_b[-1])
+
+# 空き枠
+for i in range(len(DEFAULT_PRODUCTS), 20):
     for col in "CDEFG":
-        v = ws[f"{col}{r}"].value
+        v = m[f"{col}{11 + i}"].value
         if v not in (None, ""):
-            errors.append(f"NG 準備数計算 空き枠 {col}{r} が空でない: {v!r}")
-
-# ---- 印刷用 ----
-ws = wb["印刷用"]
-check("印刷用!B3(ヘッダー)", ("1日全体" if BAND == "全体" else BAND) in (ws["B3"].value or ""), True)
-for i, (name, _, _) in enumerate(PRODUCTS):
-    r = 8 + i
-    rate = band_sum(name, BAND) / att_total
-    check(f"印刷用!C{r}", ws[f"C{r}"].value, name)
-    check(f"印刷用!D{r}(作る数)", ws[f"D{r}"].value, math.ceil(PEAK * rate * MULT), tol=1)
-    check(f"印刷用!E{r}(チェック欄)", ws[f"E{r}"].value, "☐")
-
-# ---- CSV貼付 ----
-ws = wb["CSV貼付"]
-check("CSV貼付!L2(貼付行数)", ws["L2"].value, len(CSV_ROWS))
-check("CSV貼付!L3(未登録件数)", ws["L3"].value, 0)
-check("CSV貼付!I5(商品名チェック)", ws["I5"].value, "✔ OK")
-for r, want in [(5, "朝"), (6, "昼"), (7, "夕方"), (8, "夜")]:
-    check(f"CSV貼付!J{r}(時間帯判定)", ws[f"J{r}"].value, want)
+            errors.append(f"NG 準備数計算 空き枠 {col}{11 + i}: {v!r}")
 
 if errors:
-    print(f"FAILED ({len(errors)} errors, period={N}日, band={BAND})")
+    print(f"FAILED ({len(errors)}):")
     for e in errors[:40]:
         print(" ", e)
     sys.exit(1)
-print(f"ALL OK (period={N}日, band={BAND}, 動員合計={att_total})")
+print("ALL OK", "(template)" if a.template else f"(select={a.select}, 動員={att_sel})")
