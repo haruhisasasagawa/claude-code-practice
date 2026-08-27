@@ -182,6 +182,7 @@ EXC_END = EXC_TOP + EXC_SLOTS - 1
 
 SEL_A = "期間A（金土日）"
 SEL_B = "期間B（金〜木）"
+SEL_AVG = "期間平均（A+B）"
 
 WEEKDAY_JA = '"日","月","火","水","木","金","土"'
 
@@ -344,6 +345,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "・ドリンク類・調味料・ＳＥＴ作品コンボ・引換券・包材はプルダウンに出ません"
         "（期間データシート下部の除外リストで自由に変更できます）。",
         "・ピーク動員数には「これから準備する回」の合計動員数を入れます（例：1時間後のピークの回の計）。",
+        "・参照期間は3択です：期間A（直近の勢い重視）／期間B（1週間の平均的な売れ方）／期間平均（A+Bを合算した10日間。ブレをならした安全側の基準）。",
         "・倍率は二段構えです：時間帯係数（朝一0.8倍→昼ピーク1.2倍→夕方1.1倍→夜ピーク1.3倍→レイト0.9倍の5段階＋平常・右上の表で編集）×"
         "調整倍率（大作初日や雨など、その日の状況での上乗せ/控えめ）。どちらも 1.2 ＝ 1.2倍 の形で入力します。",
         "・貼り付けは必ずオレンジのA4セルを選択して『値の貼り付け』（右クリック→値のみ）。"
@@ -407,9 +409,11 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     # 計算用ヘルパー L3:M6
     chip(ws, "L3:M3", " ⚙ 計算用（さわらない）", "F7F8FA", GRAY, 8, False)
     helpers = [
-        ("L4", "選択期間", "M4", f'=IF(TRIM($D$4)="{SEL_B}",2,IF(TRIM($D$4)="{SEL_A}",1,0))'),
-        ("L5", "動員合計", "M5", "=IF($M$4=2,SUM(期間データ!$C$10:$I$10),SUM(期間データ!$C$6:$E$6))"),
-        ("L6", "他方動員", "M6", "=IF($M$4=2,SUM(期間データ!$C$6:$E$6),SUM(期間データ!$C$10:$I$10))"),
+        ("L4", "選択期間", "M4", f'=IF(TRIM($D$4)="{SEL_B}",2,IF(TRIM($D$4)="{SEL_A}",1,'
+         f'IF(TRIM($D$4)="{SEL_AVG}",3,0)))'),
+        ("L5", "動員合計", "M5", "=IF($M$4=2,SUM(期間データ!$C$10:$I$10),IF($M$4=3,"
+         "SUM(期間データ!$C$6:$E$6)+SUM(期間データ!$C$10:$I$10),SUM(期間データ!$C$6:$E$6)))"),
+        ("L6", "比較動員", "M6", "=IF($M$4=1,SUM(期間データ!$C$10:$I$10),SUM(期間データ!$C$6:$E$6))"),
         ("L7", "時間帯係数", "M7", "=IFERROR(INDEX($J$4:$J$10,MATCH($D$6,$I$4:$I$10,0)),1)"),
     ]
     for lref, ltext, vref, formula in helpers:
@@ -421,15 +425,18 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     # コントロール
     ws.row_dimensions[4].height = 24
     chip(ws, "B4:C4", "  ① 参照期間", CHIP_CORAL, INK, 10)
-    ws["D4"] = SEL_A if select == "A" else SEL_B
+    ws["D4"] = {"A": SEL_A, "B": SEL_B, "AVG": SEL_AVG}[select]
     style_range(ws, "D4", font=fnt(10.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT)
     ws.merge_cells("E4:H4")
-    ws["E4"] = ('=IF($M$4=2,'
+    ws["E4"] = ('=IF($M$4=3,'
+                '"参照: "&IF(期間データ!$C$8="","—",TEXT(期間データ!$C$8,"m/d"))&"〜"&'
+                'IF(期間データ!$E$4="","—",TEXT(期間データ!$E$4,"m/d"))&"（期間A+B 平均）",'
+                'IF($M$4=2,'
                 '"参照: "&IF(期間データ!$C$8="","—",TEXT(期間データ!$C$8,"m/d"))&"〜"&'
                 'IF(期間データ!$I$8="","—",TEXT(期間データ!$I$8,"m/d"))&"（期間B 金〜木）",'
                 '"参照: "&IF(期間データ!$C$4="","—",TEXT(期間データ!$C$4,"m/d"))&"〜"&'
-                'IF(期間データ!$E$4="","—",TEXT(期間データ!$E$4,"m/d"))&"（期間A 金土日）")'
+                'IF(期間データ!$E$4="","—",TEXT(期間データ!$E$4,"m/d"))&"（期間A 金土日）"))'
                 '&"｜動員合計 "&TEXT($M$5,"#,##0")&"人"')
     style_range(ws, "E4:H4", font=fnt(9.5, False, "5B6472"), alignment=align("left"))
 
@@ -469,21 +476,28 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.merge_cells("B8:H8")
     ws["B8"] = ('=TRIM('
                 'IF($M$4=0,"⚠ 参照期間の選択が不正です（現在は期間A扱い）。リストから選び直してください。","")&" "&'
-                'IF(IF($M$4=2,CSV貼付B!$N$5,CSV貼付A!$N$5)="",'
-                '"⚠ 選択した期間のCSVが未貼付です（CSV貼付"&IF($M$4=2,"B","A")&"シート）。","")&" "&'
-                'IF(ISNUMBER(SEARCH("⚠",IF($M$4=2,期間データ!$B$11,期間データ!$G$4))),'
+                'IF(OR(AND($M$4<>2,CSV貼付A!$N$5=""),AND($M$4<>1,CSV貼付B!$N$5="")),'
+                '"⚠ 参照に必要なCSVが未貼付です（CSV貼付"&IF(AND($M$4<>2,CSV貼付A!$N$5=""),"A","")&IF(AND($M$4<>1,CSV貼付B!$N$5=""),"B","")&"）。","")&" "&'
+                'IF(OR(AND($M$4<>2,ISNUMBER(SEARCH("⚠",期間データ!$G$4))),'
+                'AND($M$4<>1,ISNUMBER(SEARCH("⚠",期間データ!$B$11)))),'
                 '"⚠ 選択した期間のCSVに問題があります（期間データシートの表示を確認）。","")&" "&'
-                'IF(IF($M$4=2,COUNT(期間データ!$C$10:$I$10)<7,COUNT(期間データ!$C$6:$E$6)<3),'
+                'IF(OR(AND($M$4<>2,COUNT(期間データ!$C$6:$E$6)<3),'
+                'AND($M$4<>1,COUNT(期間データ!$C$10:$I$10)<7)),'
                 '"⚠ 選択した期間の動員数がそろっていません。","")&" "&'
-                'IF(AND(IF($M$4=2,COUNT(期間データ!$C$10:$I$10)=7,COUNT(期間データ!$C$6:$E$6)=3),$M$5<=0),'
+                'IF(AND(IF($M$4=2,COUNT(期間データ!$C$10:$I$10)=7,'
+                'IF($M$4=3,AND(COUNT(期間データ!$C$6:$E$6)=3,COUNT(期間データ!$C$10:$I$10)=7),'
+                'COUNT(期間データ!$C$6:$E$6)=3)),$M$5<=0),'
                 '"⚠ 参照期間の動員数合計が0です（期間データシートを確認）。","")&" "&'
                 'IF(SUMPRODUCT((期間データ!$B$14:$B$33<>"")*'
                 '(COUNTIF(期間データ!$B$14:$B$33,期間データ!$B$14:$B$33)>1))>0,'
                 '"⚠ 商品名が重複しています（集計が二重になります）。","")&" "&'
-                'IF(AND(IF($M$4=2,CSV貼付B!$N$5,CSV貼付A!$N$5)<>"",'
+                'IF(AND(IF($M$4=3,OR(CSV貼付A!$N$5<>"",CSV貼付B!$N$5<>""),'
+                'IF($M$4=2,CSV貼付B!$N$5<>"",CSV貼付A!$N$5<>"")),'
                 'SUMPRODUCT((期間データ!$B$14:$B$33<>"")*'
                 f'(IF($M$4=2,COUNTIF(CSV貼付B!$N$5:$N${CSV_END},期間データ!$B$14:$B$33),'
-                f'COUNTIF(CSV貼付A!$N$5:$N${CSV_END},期間データ!$B$14:$B$33))=0))>0),'
+                f'IF($M$4=3,COUNTIF(CSV貼付A!$N$5:$N${CSV_END},期間データ!$B$14:$B$33)+'
+                f'COUNTIF(CSV貼付B!$N$5:$N${CSV_END},期間データ!$B$14:$B$33),'
+                f'COUNTIF(CSV貼付A!$N$5:$N${CSV_END},期間データ!$B$14:$B$33)))=0))>0),'
                 '"⚠ 参照期間のCSVに無い商品名があります（別期間のみの商品か、表記を確認。期間販売数0扱い）。","")&" "&'
                 'IF(COUNTIF($D$11:$D$30,"<0")>0,'
                 '"⚠ 期間販売数がマイナスの商品があります（返品超過）。作る数は0扱いです。","")&" "&'
@@ -502,7 +516,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     # 表ヘッダー
     ws.row_dimensions[10].height = 34
     for ref, text in [("B10", "No."), ("C10", "商品名"), ("D10", "期間販売数"),
-                      ("E10", "購買率"), ("G10", "（参考）\nもう一方の期間")]:
+                      ("E10", "購買率"), ("G10", "（参考）\n比較期間")]:
         style_range(ws, ref, font=fnt(9.5, True, "FFFFFF"), fl=fill(NAVY),
                     alignment=align("center", "center", True), border=BORDER_LIGHT)
         ws[ref] = text
@@ -518,14 +532,15 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ws.row_dimensions[r].height = 21
         ws[f"B{r}"] = i + 1
         ws[f"C{r}"] = f'=IF(期間データ!B{dr}="","",期間データ!B{dr})'
-        ws[f"D{r}"] = f'=IF($C{r}="","",IF($M$4=2,期間データ!D{dr},期間データ!C{dr}))'
+        ws[f"D{r}"] = (f'=IF($C{r}="","",IF($M$4=2,期間データ!D{dr},'
+                       f'IF($M$4=3,期間データ!C{dr}+期間データ!D{dr},期間データ!C{dr})))')
         ws[f"E{r}"] = f'=IF($C{r}="","",IF($M$5<=0,"要確認",D{r}/$M$5))'
         ws[f"F{r}"] = (f'=IF(OR($C{r}="",NOT(ISNUMBER($D$5))),"",'
                        f'IF(ISNUMBER($E{r}),'
                        f'MAX(0,ROUNDUP($D$5*$E{r}*$M$7*IF(ISNUMBER($D$7),$D$7,1),0)),"—"))')
         ws[f"G{r}"] = (f'=IF($C{r}="","",'
-                       f'IF(ISNUMBER(SEARCH("⚠",IF($M$4=2,期間データ!$G$4,期間データ!$B$11))),"要確認",'
-                       f'IF($M$6<=0,"－",IF($M$4=2,期間データ!C{dr},期間データ!D{dr})/$M$6)))')
+                       f'IF(ISNUMBER(SEARCH("⚠",IF($M$4=1,期間データ!$B$11,期間データ!$G$4))),"要確認",'
+                       f'IF($M$6<=0,"－",IF($M$4=1,期間データ!D{dr},期間データ!C{dr})/$M$6)))')
         style_range(ws, f"B{r}", font=fnt(9, False, GRAY), alignment=align("center"))
         style_range(ws, f"C{r}", font=fnt(10.5), alignment=align("left"))
         style_range(ws, f"D{r}", font=fnt(10, False, "5B6472"), alignment=align("center"), num="#,##0")
@@ -544,7 +559,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws[f"F{last}"].border = Border(bottom=coral_side, left=coral_side, right=coral_side)
     ws.row_dimensions[last + 1].height = 18
     note(ws, f"B{last + 1}:H{last + 1}",
-         "※ 作る数 ＝ ピーク動員数 × 購買率 × 時間帯係数 × 調整倍率（小数点以下切り上げ）｜購買率 ＝ 参照期間の販売数 ÷ 動員数合計", 8.5)
+         "※ 作る数 ＝ ピーク動員数 × 購買率 × 時間帯係数 × 調整倍率（切り上げ）｜期間平均 ＝ A+B合算10日間の購買率｜参考列 ＝ A選択時は期間B、それ以外は期間A", 8.5)
 
     bar = DataBarRule(start_type="num", start_value=0, end_type="max", color=CORAL, showValue=True)
     ws.conditional_formatting.add(f"F{ROW_M0}:F{last}", bar)
@@ -555,9 +570,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                            font=Font(name=FONT_NAME, size=9, bold=True, color=RED))
     ws.conditional_formatting.add(f"G{ROW_M0}:G{last}", ref_warn)
 
-    dv_period = DataValidation(type="list", formula1=f'"{SEL_A},{SEL_B}"',
+    dv_period = DataValidation(type="list", formula1=f'"{SEL_A},{SEL_B},{SEL_AVG}"',
                                allow_blank=False, showErrorMessage=True)
-    dv_period.error = f"リストから選んでください（{SEL_A}／{SEL_B}）"
+    dv_period.error = f"リストから選んでください（{SEL_A}／{SEL_B}／{SEL_AVG}）"
     dv_period.errorTitle = "参照期間"
     ws.add_data_validation(dv_period)
     dv_period.add("D4")
@@ -604,7 +619,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
 
     ws.row_dimensions[3].height = 22
     ws.merge_cells("B3:E3")
-    ws["B3"] = ('="参照期間: "&IF(準備数計算!$M$4=2,"期間B（金〜木）","期間A（金土日）")&'
+    ws["B3"] = ('="参照期間: "&IF(準備数計算!$M$4=3,"期間平均（A+B）",'
+                'IF(準備数計算!$M$4=2,"期間B（金〜木）","期間A（金土日）"))&'
                 '"　｜　ピーク動員数: "&IF(準備数計算!$D$5="","（未入力）",'
                 'TEXT(準備数計算!$D$5,"#,##0")&"人")')
     style_range(ws, "B3:E3", font=fnt(11, True, INK), alignment=align("left"))
@@ -723,7 +739,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 'IF(SUMPRODUCT((CSV貼付A!$D$5:$D$' + str(CSV_END) + '<>"")*(CSV貼付A!$D$5:$D$' + str(CSV_END) + '<>CSV貼付A!$D$5))+'
                 'SUMPRODUCT((CSV貼付A!$E$5:$E$' + str(CSV_END) + '<>"")*(CSV貼付A!$E$5:$E$' + str(CSV_END) + '<>CSV貼付A!$E$5))>0,'
                 '"⚠ 別期間の行が混ざっています（前回分を削除して貼り直し）","")&" "&'
-                'IF(WEEKDAY($C$4)<>6,"※開始が金曜以外","")'
+                'IF(WEEKDAY($C$4)<>6,"※開始が金曜以外","")&" "&'
+                'IF(TODAY()-$E$4>9,"⚠ 古いデータの可能性（終了日が"&(TODAY()-$E$4)&"日前）","")'
                 '))))))')
     style_range(ws, "G4:K4", font=fnt(9, False, "5B6472"), alignment=align("left"))
     ws["C4"].comment = Comment("貼られたCSVの対象期間から自動表示されます（入力不要）。", "準備数ツール")
@@ -770,7 +787,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                  'IF(SUMPRODUCT((CSV貼付B!$D$5:$D$' + str(CSV_END) + '<>"")*(CSV貼付B!$D$5:$D$' + str(CSV_END) + '<>CSV貼付B!$D$5))+'
                  'SUMPRODUCT((CSV貼付B!$E$5:$E$' + str(CSV_END) + '<>"")*(CSV貼付B!$E$5:$E$' + str(CSV_END) + '<>CSV貼付B!$E$5))>0,'
                  '"⚠ 別期間の行が混ざっています（前回分を削除して貼り直し）","")&" "&'
-                 'IF(WEEKDAY($C$8)<>6,"※開始が金曜以外","")'
+                 'IF(WEEKDAY($C$8)<>6,"※開始が金曜以外","")&" "&'
+                 'IF(TODAY()-$I$8>9,"⚠ 古いデータの可能性（終了日が"&(TODAY()-$I$8)&"日前）","")'
                  '))))))')
     style_range(ws, "B11:K11", font=fnt(9, False, "5B6472"), alignment=align("left"))
 
@@ -991,7 +1009,7 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="/home/user/claude-code-practice/concession-prep/TOHO新宿_コンセッション準備数ツール.xlsx")
     ap.add_argument("--csv-a")
     ap.add_argument("--csv-b")
-    ap.add_argument("--select", choices=["A", "B"], default="A")
+    ap.add_argument("--select", choices=["A", "B", "AVG"], default="A")
     ap.add_argument("--att-a", help="期間Aの動員数3日分(カンマ区切り)")
     ap.add_argument("--att-b", help="期間Bの動員数7日分(カンマ区切り)")
     ap.add_argument("--peak", type=int)

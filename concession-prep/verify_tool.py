@@ -19,7 +19,7 @@ ap.add_argument("xlsx")
 ap.add_argument("--template", action="store_true")
 ap.add_argument("--csv-a")
 ap.add_argument("--csv-b")
-ap.add_argument("--select", choices=["A", "B"], default="A")
+ap.add_argument("--select", choices=["A", "B", "AVG"], default="A")
 ap.add_argument("--att-a")
 ap.add_argument("--att-b")
 ap.add_argument("--peak", type=int)
@@ -68,9 +68,14 @@ else:
     sb = sales_by_name(a.csv_b)
     att_a = [int(x) for x in a.att_a.split(",")]
     att_b = [int(x) for x in a.att_b.split(",")]
-    att_sel = sum(att_a) if a.select == "A" else sum(att_b)
+    if a.select == "AVG":
+        att_sel = sum(att_a) + sum(att_b)
+        sel_sales = {k: sa.get(k, 0) + sb.get(k, 0) for k in set(sa) | set(sb)}
+    else:
+        att_sel = sum(att_a) if a.select == "A" else sum(att_b)
+        sel_sales = sa if a.select == "A" else sb
+    # 参考列(比較期間): A選択時は期間B、それ以外は期間A
     att_oth = sum(att_b) if a.select == "A" else sum(att_a)
-    sel_sales = sa if a.select == "A" else sb
     oth_sales = sb if a.select == "A" else sa
 
     check("期間データ!F6(A動員計)", pd["F6"].value, sum(att_a))
@@ -89,7 +94,7 @@ else:
         check(f"期間データ!C{r}({name[:6]})", pd[f"C{r}"].value, sa.get(name, 0))
         check(f"期間データ!D{r}", pd[f"D{r}"].value, sb.get(name, 0))
 
-    check("準備数計算!M4", m["M4"].value, 1 if a.select == "A" else 2)
+    check("準備数計算!M4", m["M4"].value, {"A": 1, "B": 2, "AVG": 3}[a.select])
     check("準備数計算!M5", m["M5"].value, att_sel)
     check("準備数計算!M6", m["M6"].value, att_oth)
     check("準備数計算!M7(時間帯係数)", m["M7"].value, a.mult, tol=1e-9)
