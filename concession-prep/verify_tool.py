@@ -126,12 +126,12 @@ def check_r005(label, got, raw):
 
 
 def wave_coef(name, band):
-    """商品別係数(丸め前の生値)。使えないときはNone"""
+    """商品別係数(丸め前の生値)。使えないとき(帯個数0のフォールバック含む)はNone"""
     if n_weeks == 0 or band < 1 or band > 5:
         return None
     cs = prod_counts.get(name)
     total = sum(cs) if cs else 0
-    if total == 0 or total < a.wave_thr:
+    if total == 0 or total < a.wave_thr or cs[band - 1] == 0:
         return None
     return (cs[band - 1] / total) * (sum(DURS) / DURS[band - 1])
 

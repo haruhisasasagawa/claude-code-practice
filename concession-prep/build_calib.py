@@ -322,10 +322,11 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
             pcol = get_column_letter(16 + bi)
             ws[f"{ccol}{wr}"] = f'=IF($B{wr}="","",IF($H{wr}=0,"—",{pcol}{wr}/$H{wr}))'
             kcol = get_column_letter(9 + bi)
-            # 帯長が0以下(時間の区切りの逆転・同値)のときは"—"で全体係数へフォールバック
-            # (負の帯長だと個数0×負係数=0.00が数値として作る数に適用されてしまうため)
+            # 帯長が0以下(時間の区切りの逆転・同値)と帯個数0のときは"—"で全体係数へ
+            # フォールバック(負の帯長は0.00が数値として適用される事故、帯個数0は
+            # 「作らない→売れない→係数0→作らない」の自己成就と無警告の作る数0を防ぐ)
             ws[f"{kcol}{wr}"] = (f'=IF($B{wr}="","",IF($N{wr}<>"{JUDGE_USE}","—",'
-                                 f'IF(OR(係数算出!$I${7 + bi}<=0,係数算出!$I$12<=0),"—",'
+                                 f'IF(OR(係数算出!$I${7 + bi}<=0,係数算出!$I$12<=0,{pcol}{wr}=0),"—",'
                                  f'IFERROR(ROUND(({pcol}{wr}/$H{wr})*'
                                  f'(係数算出!$I$12/係数算出!$I${7 + bi})/0.05,0)*0.05,"—"))))')
         style_range(ws, f"B{wr}", font=fnt(9.5), alignment=align("left"))
@@ -352,7 +353,8 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
 
     ws.row_dimensions[last_w + 2].height = 16
     note(ws, f"B{last_w + 2}:N{last_w + 2}",
-         "※ 商品別係数 ＝ その商品の帯の1時間あたり個数 ÷ その商品の1日平均ペース。時間の区切り・帯の長さは係数算出シートに連動します。", 8.5)
+         "※ 商品別係数 ＝ その商品の帯の1時間あたり個数 ÷ その商品の1日平均ペース（係数算出シートの区切りに連動）。"
+         "個数0の帯は「—」＝全体の時間帯係数で計算します（作る数が無警告で0になるのを防ぐため）。", 8.5)
     ws.row_dimensions[last_w + 3].height = 16
     note(ws, f"B{last_w + 3}:N{last_w + 3}",
          "※ 「該当なし」はMSO側に同名の商品が無い場合です（商品名の表記が売上CSVと異なる可能性。その商品は全体の時間帯係数で計算されます）。", 8.5)
