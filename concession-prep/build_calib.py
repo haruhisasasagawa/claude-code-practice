@@ -67,6 +67,18 @@ def read_mso_rows(path):
     return out
 
 
+def mso_date_expr(x, fallback):
+    """売店売上日付セルを日付シリアルに解釈する式。数値セル・"2026/07/17"・
+    "2026/7/10"(ゼロ埋めなし。実データに存在する表記ゆれ)のいずれにも対応し、
+    解釈不能なら fallback を返す(DATEVALUEはロケール依存のため最後の砦のみ)"""
+    rest = f"MID({x},6,9)"
+    return (f'IF(ISNUMBER({x}),INT({x}),'
+            f'IFERROR(DATE(VALUE(LEFT({x},4)),'
+            f'VALUE(LEFT({rest},FIND("/",{rest})-1)),'
+            f'VALUE(MID({rest},FIND("/",{rest})+1,9))),'
+            f'IFERROR(DATEVALUE({x}),{fallback})))')
+
+
 def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
     """本体ワークブックへ「係数算出」「商品別の波」「係数貼付①〜④」を追加する。
     close: 閉店時刻の初期値(時/24。22:00なら22/24、26:00なら26/24)"""
@@ -476,9 +488,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
                     alignment=align("center"), border=BORDER_INPUT, num="m/d")
         # 2000〜2100年の範囲外(誤貼付で数値コード等が来た場合)は空欄に落とす。
         # AD2はm/d日付書式のため、範囲外シリアルを返すとLibreOfficeが#VALUE!で書き出す
-        ad2_inner = ('IF(ISNUMBER($K$5),INT($K$5),'
-                     'IFERROR(DATE(VALUE(LEFT($K$5,4)),VALUE(MID($K$5,6,2)),VALUE(MID($K$5,9,2))),'
-                     'DATEVALUE($K$5)))')
+        ad2_inner = mso_date_expr("$K$5", "-1")
         ws["AD2"] = (f'=IF($S$3<>"",$S$3,IF($K$5="","",'
                      f'IFERROR(IF(AND({ad2_inner}>=36526,{ad2_inner}<=73415),{ad2_inner},""),"")))')
         note(ws, "AD1", "⚙対象日", 8, GRAY)
@@ -506,9 +516,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
             ws[f"AE{rr}"] = (f'=IF($M{rr}="","",IFERROR(IF(ISNUMBER($M{rr}),MOD($M{rr},1),'
                              f'TIMEVALUE($M{rr})),""))')
             ws[f"AF{rr}"] = (f'=IF(OR($M{rr}="",$AE{rr}=""),0,'
-                             f'IF(IF(ISNUMBER($K{rr}),INT($K{rr}),'
-                             f'IFERROR(DATE(VALUE(LEFT($K{rr},4)),VALUE(MID($K{rr},6,2)),VALUE(MID($K{rr},9,2))),'
-                             f'IFERROR(DATEVALUE($K{rr}),-1)))<>$AD$2,0,'
+                             f'IF({mso_date_expr(f"$K{rr}", "-1")}<>$AD$2,0,'
                              f'IF(OR($AB{rr}="セット親",$S{rr}<>"提供済",$T{rr}<>"販売"),0,'
                              f'IF(ISNUMBER($Z{rr}),MAX(0,$Z{rr}),0))))')
 
