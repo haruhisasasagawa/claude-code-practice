@@ -343,7 +343,7 @@ def read_csv_rows(path):
 def build(out_path, csv_a=None, csv_b=None, select="A",
           att_a=None, att_b=None, peak=None, preset="平常（基準）", adjust=1.0,
           products=DEFAULT_PRODUCTS, mso_csvs=(None, None, None, None),
-          close="22:00"):
+          close="22:00", open_="08:00"):
     wb = Workbook()
 
     # ============================================================ 使い方 =====
@@ -1177,7 +1177,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     # ============================================== 係数算出・係数貼付①〜④ ==
     # 時間帯係数の較正シート群(実測候補は準備数計算のK列に連動)
     from build_calib import add_calib_sheets
-    add_calib_sheets(wb, mso_csvs, close=parse_clock(close))
+    add_calib_sheets(wb, mso_csvs, close=parse_clock(close), open_=parse_clock(open_))
 
     # ------------------------------------------------------------------ save -
     wb.properties.title = "コンセッション事前準備数ツール"
@@ -1201,6 +1201,8 @@ if __name__ == "__main__":
         ap.add_argument(f"--mso{k}", help=f"係数貼付{'①②③④'[k - 1]}に入れるMSO商品CSV(金曜1日分)")
     ap.add_argument("--close", default="22:00",
                     help="係数算出の閉店時刻(基本22:00。レイト日は 26:00 や 2:00=翌2時も可)")
+    ap.add_argument("--open", dest="open_", default="08:00",
+                    help="係数算出の開店時刻(基本08:00。早朝上映のある日は 06:00 等)")
     ap.add_argument("--show-notes", metavar="XLSX",
                     help="既存xlsxの仕上げ: フォント名の書き戻し+貼り付けメモの常時表示化(再計算後に実行)")
     a = ap.parse_args()
@@ -1213,4 +1215,4 @@ if __name__ == "__main__":
           att_a=[int(x) for x in a.att_a.split(",")] if a.att_a else None,
           att_b=[int(x) for x in a.att_b.split(",")] if a.att_b else None,
           peak=a.peak, preset=a.preset, adjust=a.adjust,
-          mso_csvs=(a.mso1, a.mso2, a.mso3, a.mso4), close=a.close)
+          mso_csvs=(a.mso1, a.mso2, a.mso3, a.mso4), close=a.close, open_=a.open_)

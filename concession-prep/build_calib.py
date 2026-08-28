@@ -79,9 +79,10 @@ def mso_date_expr(x, fallback):
             f'IFERROR(DATEVALUE({x}),{fallback})))')
 
 
-def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
+def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 / 24):
     """本体ワークブックへ「係数算出」「商品別の波」「係数貼付①〜④」を追加する。
-    close: 閉店時刻の初期値(時/24。22:00なら22/24、26:00なら26/24)"""
+    close: 閉店時刻の初期値(時/24。22:00なら22/24、26:00なら26/24)
+    open_: 開店時刻の初期値(時/24。早朝上映のある劇場は6:00等)"""
 
     # ========================================================== 係数算出 =====
     ws = wb.create_sheet("係数算出")
@@ -108,7 +109,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
     # 時間の区切り(編集OK)
     ws.row_dimensions[3].height = 20
     chip(ws, "B3", "  ⏰ 時間の区切り", CHIP_AMBER, INK, 9)
-    tb = [("C3", "開店", 8 / 24), ("D3", "朝→昼", 11 / 24), ("E3", "昼→夕", 15 / 24),
+    tb = [("C3", "開店", open_), ("D3", "朝→昼", 11 / 24), ("E3", "昼→夕", 15 / 24),
           ("F3", "夕→夜", 18 / 24), ("G3", "夜→レイト", 21 / 24), ("H3", "閉店", close)]
     ws.row_dimensions[4].height = 18
     for ref, label, val in tb:

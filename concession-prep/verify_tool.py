@@ -35,12 +35,16 @@ ap.add_argument("--band", type=int, default=0,
 ap.add_argument("--wave-thr", type=int, default=30, help="商品別係数を使う最低個数")
 ap.add_argument("--close", default="26:00",
                 help="係数算出H4と同じ閉店時刻(22:00=同日/26:00=翌2:00。既定26:00)")
+ap.add_argument("--open", dest="open_", default="08:00",
+                help="係数算出C4と同じ開店時刻(既定08:00)")
 a = ap.parse_args()
 
 wb = load_workbook(a.xlsx, data_only=True)
 errors = []
 
-# 閉店時刻→⑤レイト帯の窓と帯長(Excel側のN4/O4正規化と同じルール)
+# 開店・閉店時刻→帯①/⑤の窓と帯長(Excel側のC4/N4/O4と同じルール)
+_h, _m = a.open_.split(":")
+OPEN_H = int(_h) + int(_m) / 60
 _h, _m = a.close.split(":")
 _close_h = int(_h) + int(_m) / 60
 if _close_h >= 24:
@@ -49,7 +53,7 @@ elif _close_h >= 21:
     CAP5, ND5, DUR5 = _close_h / 24, 0.0, _close_h - 21
 else:                       # 翌側表記(2:00等)
     CAP5, ND5, DUR5 = 1.0, _close_h / 24, 3 + _close_h
-DURS = [3, 4, 3, 3, DUR5]
+DURS = [11 - OPEN_H, 4, 3, 3, DUR5]
 
 
 def check(label, got, want, tol=0):
@@ -101,7 +105,7 @@ def mso_rows_filtered(path):
 
 
 def band_of(tv):
-    windows = [(8 / 24, 11 / 24), (11 / 24, 15 / 24), (15 / 24, 18 / 24), (18 / 24, 21 / 24)]
+    windows = [(OPEN_H / 24, 11 / 24), (11 / 24, 15 / 24), (15 / 24, 18 / 24), (18 / 24, 21 / 24)]
     for bi, w in enumerate(windows):
         if w[0] <= tv < w[1]:
             return bi
