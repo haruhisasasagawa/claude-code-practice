@@ -110,9 +110,11 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
     # 閉店の正規化(印刷範囲外のN・O列): O4=同日側の上限、N4=翌日側の締めフラクション
     #   26:00/翌2:00 → O4=24:00・N4=2:00 / 22:00 → O4=22:00・N4=0 /
     #   開店とレイト開始の間(20:00等の設定ミス) → 空の帯になりB23に⚠
+    # 翌側の締めは開店時刻でクランプする(33:00等の打ち間違いで帯⑤の翌日側窓が
+    # 帯①と重なり二重計上になるのを構造的に防ぐ。B23に専用⚠も出す)
     note(ws, "N3", "⚙翌側締め", 8, GRAY, h="center")
     note(ws, "O3", "⚙同日上限", 8, GRAY, h="center")
-    ws["N4"] = ('=IF($H$4>=1,MOD($H$4,1),'
+    ws["N4"] = ('=IF($H$4>=1,MIN(MOD($H$4,1),$C$4),'
                 'IF($H$4>=$G$4,0,IF($H$4<=$C$4,$H$4,0)))')
     ws["O4"] = ('=IF($H$4>=1,1,'
                 'IF($H$4>=$G$4,$H$4,IF($H$4<=$C$4,1,$H$4)))')
@@ -230,10 +232,21 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
          9, INK, wrap=True)
     ws.row_dimensions[23].height = 16
     bad_any = "+".join(f"({s}!$AD$3=0)" for s in CALIB_SHEETS)
-    # 有効週の対象個数合計(帯内合計との差=営業時間の区切りの外の販売)
+    # N5=区切りの外の販売個数(有効週の対象個数合計−帯内合計)、
+    # O5=同日閉店疑いの週数(翌日閉店設定なのに22時以降の販売が0個の有効週)
     valid_total = "(" + "+".join(
         f"IF({s}!$AD$3=1,SUM({s}!$AF$5:$AF${MSO_END}),0)" for s in CALIB_SHEETS) + ")"
-    oob = f"{valid_total}-SUM($D$12:$G$12)"
+    note(ws, "M5", "⚙時刻チェック→", 8, GRAY, h="right")
+    ws["N5"] = f"={valid_total}-SUM($D$12:$G$12)"
+    susp_terms = []
+    for wi, s in enumerate(CALIB_SHEETS):
+        wcol = "DEFG"[wi]
+        late = (f'SUMIFS({s}!$AF$5:$AF${MSO_END},{s}!$AE$5:$AE${MSO_END},">="&TIME(22,0,0))'
+                f'+SUMIFS({s}!$AF$5:$AF${MSO_END},{s}!$AE$5:$AE${MSO_END},"<"&$N$4)')
+        susp_terms.append(f'IF(AND(${wcol}$12>0,{late}=0),1,0)')
+    ws["O5"] = f'=IF($N$4=0,0,{"+".join(susp_terms)})'
+    for ref in ("N5", "O5"):
+        style_range(ws, ref, font=fnt(8.5, False, GRAY), alignment=align("center"), num="#,##0")
     ws["B23"] = ('=TRIM('
                  'IF($H$13=0,"⚠ まだ有効なデータが貼られていません。係数貼付①〜④に金曜1日分の'
                  'MSO商品CSVを貼ってください（貼らなくても本体はプリセットの既定係数で使えます）。","")&" "&'
@@ -242,9 +255,15 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
                  f'IF(AND($H$4>$C$4,$H$4<$G$4),'
                  '"⚠ 閉店時刻がレイト開始（夜→レイトの区切り）より前になっています。'
                  '時間の区切りを確認してください。","")&" "&'
-                 f'IF({oob}>0,'
-                 f'"⚠ 時間の区切りの外の販売が "&TEXT({oob},"#,##0")&" 個あります'
-                 '（開店・閉店の時刻を確認。この分は係数の集計対象外です）。",""))')
+                 'IF(AND($H$4>=1,MOD($H$4,1)>$C$4),'
+                 '"⚠ 閉店（翌）が開店時刻を超えています。閉店の入力を確認してください'
+                 '（例: 26:00＝翌2時。翌側は開店までで打ち切って集計中）。","")&" "&'
+                 'IF($N$5>0,'
+                 '"⚠ 時間の区切りの外の販売が "&TEXT($N$5,"#,##0")&" 個あります'
+                 '（開店・閉店の時刻を確認。この分は係数の集計対象外です）。","")&" "&'
+                 'IF($O$5>0,'
+                 '"⚠ 22時以降の販売が0個の週が"&$O$5&"週あります（レイト営業の無い金曜（同日閉店）'
+                 'が混ざっている可能性。閉店の設定と貼付データを確認してください）。",""))')
     ws.merge_cells("B23:L23")
     style_range(ws, "B23:L23", font=fnt(8.5, True, "D14343"), alignment=align("left"))
 

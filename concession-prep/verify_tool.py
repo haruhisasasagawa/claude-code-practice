@@ -274,6 +274,8 @@ if any(mso_paths):
             check_r005(f"係数算出!L{7 + bi}(転記用)", lv, coef)
             check(f"準備数計算!K{4 + bi}(実測候補の連動)", m[f"K{4 + bi}"].value, lv, tol=1e-9)
         check("係数算出!B23(警告なし)", ks["B23"].value in (None, ""), True)
+        check("係数算出!N5(区切り外=0)", ks["N5"].value, 0)
+        check("係数算出!O5(同日疑い週=0)", ks["O5"].value, 0)
     for wi, p in enumerate(mso_paths):
         st = wb[CALIB_SHEETS[wi]]["A3"].value or ""
         if p:
@@ -306,6 +308,8 @@ if any(mso_paths):
         check(f"{WAVE_SHEET}!N{wr}(判定)", wv[f"N{wr}"].value, want_j)
 else:
     check("係数算出!H13(週数=0)", ks["H13"].value, 0)
+    check("係数算出!N5(区切り外=0)", ks["N5"].value, 0)
+    check("係数算出!O5(同日疑い週=0)", ks["O5"].value, 0)
     check("係数算出!L7(未算出=—)", ks["L7"].value, "—")
     check("係数算出!B23(未貼付警告)", "データが貼られていません" in (ks["B23"].value or ""), True)
     check("準備数計算!K4(実測候補=—)", m["K4"].value, "—")
