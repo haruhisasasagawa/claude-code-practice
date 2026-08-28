@@ -27,7 +27,6 @@ ap.add_argument("--att-a")
 ap.add_argument("--att-b")
 ap.add_argument("--peak", type=int)
 ap.add_argument("--mult", type=float, default=1.0, help="時間帯係数")
-ap.add_argument("--adjust", type=float, default=1.0, help="調整倍率")
 for k in range(1, 5):
     ap.add_argument(f"--mso{k}", help="係数貼付①〜④に入っているMSO商品CSV")
 ap.add_argument("--band", type=int, default=0,
@@ -142,14 +141,18 @@ def check_r005(label, got, raw):
 
 
 def wave_coef(name, band):
-    """商品別係数(丸め前の生値)。使えないとき(帯個数0のフォールバック含む)はNone"""
+    """商品別係数(丸め前の生値)。使えないとき(帯個数0や、0.05刻みの丸めで
+    0.00になる係数のフォールバック含む)はNone"""
     if n_weeks == 0 or band < 1 or band > 5:
         return None
     cs = prod_counts.get(name)
     total = sum(cs) if cs else 0
     if total == 0 or total < a.wave_thr or cs[band - 1] == 0:
         return None
-    return (cs[band - 1] / total) * (sum(DURS) / DURS[band - 1])
+    raw = (cs[band - 1] / total) * (sum(DURS) / DURS[band - 1])
+    if raw / 0.05 < 0.5 - 1e-9:     # Excel側はIF(ROUND(...)=0,"—",...)
+        return None
+    return raw
 
 
 pd = wb["期間データ"]
@@ -205,7 +208,6 @@ else:
     check("準備数計算!M5", m["M5"].value, att_sel)
     check("準備数計算!M6", m["M6"].value, att_oth)
     check("準備数計算!M7(時間帯係数)", m["M7"].value, a.mult, tol=1e-9)
-    check("準備数計算!D7(調整倍率)", m["D7"].value, a.adjust, tol=1e-9)
     wave_active = a.band >= 1 and a.band <= 5 and n_weeks > 0
     check("準備数計算!M9(商品別波の適用)", m["M9"].value, 1 if wave_active else 0)
     for i, name in enumerate(DEFAULT_PRODUCTS):
@@ -217,15 +219,16 @@ else:
         if cp is not None:
             # H列(0.05刻み)を生係数で検証し、作る数はExcelが実際に使った係数で突合
             check_r005(f"準備数計算!H{r}(商品係数)", hv, cp)
-            eff = hv if isinstance(hv, (int, float)) else a.mult
+            eff = hv if isinstance(hv, (int, float)) else 1.0
         else:
             check(f"準備数計算!H{r}(商品係数=—)", hv, "—")
-            eff = a.mult
+            # 波の適用中(M9=1)は時間帯係数を使わない排他設計: 係数の出ない商品は×1.0
+            eff = 1.0 if wave_active else a.mult
         check(f"準備数計算!D{r}", m[f"D{r}"].value, s)
         check(f"準備数計算!E{r}", m[f"E{r}"].value, rate, tol=1e-9)
-        check(f"準備数計算!F{r}", m[f"F{r}"].value, math.ceil(a.peak * rate * eff * a.adjust), tol=1)
+        check(f"準備数計算!F{r}", m[f"F{r}"].value, math.ceil(a.peak * rate * eff), tol=1)
         check(f"準備数計算!G{r}", m[f"G{r}"].value, oth_sales.get(name, 0) / att_oth, tol=1e-9)
-        check(f"印刷用!D{8 + i}", pr[f"D{8 + i}"].value, math.ceil(a.peak * rate * eff * a.adjust), tol=1)
+        check(f"印刷用!D{8 + i}", pr[f"D{8 + i}"].value, math.ceil(a.peak * rate * eff), tol=1)
     warn = m["B9"].value
     if warn not in (None, ""):
         errors.append(f"NG B9警告が出ている: {warn!r}")

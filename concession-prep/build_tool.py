@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-TOHOシネマズ新宿 コンセッション事前準備数ツール（v4）生成スクリプト
+TOHOシネマズ新宿 コンセッション事前準備数ツール（v5.2）生成スクリプト
 
 TOHOの営業週(金曜開始)に合わせ、本社集計「売上・在庫・原価」CSV(34列/cp932)を
 期間A(直近 金土日)・期間B(前週 金〜木)の2本貼り付けて使う構成。
 
 シート構成:
   使い方       … 3ステップの利用ガイド・凡例・注意点
-  準備数計算   … 参照期間(A/B)の購買率 × ピーク動員数 × 時間帯プリセット倍率 →「作る数」
+  準備数計算   … 参照期間(A/B)の購買率 × ピーク動員数 × 係数(時間帯/商品別の波) →「作る数」
   印刷用       … A4縦1枚の仕込み指示書(自動連動・チェック欄付き)
   期間データ   … 期間A/Bの日付・動員数を入力。商品別販売数はCSVから自動集計
   CSV貼付A/B   … 集計CSVをそのまま貼るだけの貼り付けシート(数式なし)
   係数算出     … 金曜4週分のMSO商品CSVから時間帯係数の実測候補を算出(月1回・任意)
   商品別の波   … 登録商品ごとの時間帯パターン(構成比・商品別係数)。作る数への適用は
-                 準備数計算の「⑤ 商品別の波」で切替(データ不足は全体係数へ自動フォールバック)
+                 準備数計算の「④ 商品別の波」(D7)で切替。適用中は時間帯係数と排他で、
+                 データ不足の商品は×1.0(その商品の平均ペース)で計算
   係数貼付①〜④ … MSO商品CSV(注文明細)を1週1日分ずつ貼る較正用シート(build_calib.py)
 
 使い方:
@@ -203,8 +204,8 @@ WAVE_ROW0 = 7                    # 商品1行目(7〜26。準備数計算11〜30
 WAVE_ON = "使う"
 WAVE_OFF = "使わない"
 JUDGE_USE = "✔ 商品別係数を使用"
-JUDGE_FEW = "⚠ 少データ → 全体係数"
-JUDGE_NONE = "該当なし → 全体係数"
+JUDGE_FEW = "⚠ 少データ → ×1.0"
+JUDGE_NONE = "該当なし → ×1.0"
 JUDGE_NODATA = "（MSO未貼付）"
 
 WEEKDAY_JA = '"日","月","火","水","木","金","土"'
@@ -348,7 +349,7 @@ def read_csv_rows(path):
 
 # ---------------------------------------------------------------- build ------
 def build(out_path, csv_a=None, csv_b=None, select="A",
-          att_a=None, att_b=None, peak=None, preset="平常（基準）", adjust=1.0,
+          att_a=None, att_b=None, peak=None, preset="平常（基準）",
           products=DEFAULT_PRODUCTS, mso_csvs=(None, None, None, None),
           close="22:00", open_="08:00"):
     wb = Workbook()
@@ -381,7 +382,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
          "日付は自動で入ります。｜担当：社員"),
         ("②", CORAL, "「期間データ」シートに 動員数 を入力",
          "期間A＝3日分、期間B＝7日分の動員数。日付・販売数は自動表示。CSVの行数・日数チェック（✔／⚠）も確認。｜担当：社員"),
-        ("③", TEAL, "「準備数計算」で 参照期間・ピーク動員数・時間帯・調整倍率 を選ぶ",
+        ("③", TEAL, "「準備数計算」で 参照期間・ピーク動員数・時間帯 を選ぶ",
          "ピーク動員数＝これから準備する回（例：1時間後のピーク）の合計動員数。「印刷用」をA4で刷って現場へ。｜担当：社員（確認：スタッフ）"),
     ]
     r = 6
@@ -416,7 +417,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     r += 1
     note(ws, f"C{r}:J{r}", "購買率 ＝ 参照期間の販売数（CSVの「売上数」列） ÷ 参照期間の動員数合計", 10, INK)
     r += 1
-    note(ws, f"C{r}:J{r}", "作る数 ＝ ピーク動員数 × 購買率 × 時間帯係数 × 調整倍率（小数点以下は切り上げ）", 10, INK)
+    note(ws, f"C{r}:J{r}", "作る数 ＝ ピーク動員数 × 購買率 × 係数（切り上げ）｜係数＝時間帯係数（商品別の波の適用中は商品ごとの実測係数）", 10, INK)
 
     r += 2
     ws.row_dimensions[r].height = 22
@@ -428,8 +429,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "（期間データシート下部の除外リストで自由に変更できます）。",
         "・ピーク動員数には「これから準備する回」の合計動員数を入れます（例：1時間後のピークの回の計）。",
         "・参照期間は3択です：期間A（直近の勢い重視）／期間B（1週間の平均的な売れ方）／期間平均（A+Bを合算した10日間。ブレをならした安全側の基準）。",
-        "・倍率は二段構えです：時間帯係数（朝一0.8倍→昼ピーク1.2倍→夕方1.1倍→夜ピーク1.3倍→レイト0.9倍の5段階＋平常・右上の表で編集）×"
-        "調整倍率（大作初日や雨など、その日の状況での上乗せ/控えめ）。どちらも 1.2 ＝ 1.2倍 の形で入力します。",
+        "・時間帯係数は5段階です（朝一0.8倍→昼ピーク1.2倍→夕方1.1倍→夜ピーク1.3倍→レイト0.9倍＋平常。右上の表で編集・"
+        "1.2 ＝ 1.2倍 の形で入力）。「④ 商品別の波」を使うと、この全体係数の代わりに商品ごとの実測係数がかかります"
+        "（そのあいだ時間帯係数は使われません）。",
         "・貼り付けは必ずオレンジのA4セルを選択して『値の貼り付け』（右クリック→値のみ）。"
         "通常の貼り付けだと色やメモが上書きされます。CSVは各期間1000行まで。",
         "・貼り替える前に、5行目以降のデータだけを選択して削除してください"
@@ -460,8 +462,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "採用するときはプリセット表の係数（J列）へ手で入力してください（自動では書き換わりません）。",
         "・集計ルール：セット親・注文取消・払戻は除外して実個数を数えます。複数日が混ざったCSVは先頭の日付だけを集計し、状態表示に⚠が出ます。",
         "・「商品別の波」シートには、登録商品ごとの時間帯パターン（構成比と商品別係数）が自動で出ます。"
-        "準備数計算の「⑤ 商品別の波」を『使う』にすると、作る数の係数が商品ごとの実測に置き換わります"
-        "（データ不足・該当なし・その帯の個数0の商品は自動で全体の時間帯係数。適用値は「商品係数」列で確認できます）。",
+        "準備数計算の「④ 商品別の波」を『使う』にすると、作る数の係数が商品ごとの実測に置き換わり、"
+        "全体の時間帯係数は使われません（データ不足・該当なし・その帯の個数0の商品は係数1.0＝その商品の"
+        "平均ペースで計算。適用値は「商品係数」列で確認できます）。",
         "・時間帯プリセット名の先頭の①〜⑤マークは商品別の波の帯対応キーです。"
         "名前を書き換えるときも先頭のマークは残してください（消すとその時間帯は全体係数になり、警告が出ます）。",
         "・閉店時刻（係数算出シートの時間の区切り）は基本 22:00。レイト営業日は 26:00（＝翌2:00。24時間超え表記OK）"
@@ -476,7 +479,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         note(ws, f"C{r}:J{r}", t, 9.5, INK, wrap=True)
 
     r += 2
-    note(ws, f"C{r}:J{r}", "雛形版 v5.1（2026/8）｜数式・レイアウトは自由に調整してください", 8.5)
+    note(ws, f"C{r}:J{r}", "雛形版 v5.2（2026/8）｜数式・レイアウトは自由に調整してください", 8.5)
 
     # ======================================================== 準備数計算 =====
     ws = wb.create_sheet("準備数計算")
@@ -498,7 +501,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[1].height = 34
     title_band(ws, "B1:H1", "　🍿 準備数計算｜ピーク前の仕込み数")
     ws.row_dimensions[2].height = 18
-    note(ws, "B2:H2", "参照期間(A/B)の購買率 × ピーク動員数 × 時間帯係数 × 調整倍率 で「作る数」を自動計算します", 9)
+    note(ws, "B2:H2", "参照期間(A/B)の購買率 × ピーク動員数 × 係数（時間帯／商品別の波） で「作る数」を自動計算します", 9)
     ws.row_dimensions[3].height = 6
 
     # 時間帯プリセット表(編集OK) I3:J10 + 実測候補列K — 5段階の時間帯+基準+空き枠
@@ -543,7 +546,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         # 適用されてしまうため、名前ベースにする。マーカーが無い名前は0=帯対象外)
         ("L8", "帯番号", "M8", '=IF(TRIM($D$6)="",0,'
          'IFERROR(FIND(LEFT(TRIM($D$6),1),"①②③④⑤"),0))'),
-        ("L9", "商品別波", "M9", f'=IF(AND(TRIM($D$8)="{WAVE_ON}",$M$8>=1,$M$8<=5,'
+        ("L9", "商品別波", "M9", f'=IF(AND(TRIM($D$7)="{WAVE_ON}",$M$8>=1,$M$8<=5,'
          '係数算出!$H$13>0),1,0)'),
     ]
     for _lref, _ltext, vref, formula in helpers:
@@ -585,38 +588,31 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     style_range(ws, "D6", font=fnt(10.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT)
     ws.merge_cells("E6:H6")
-    ws["E6"] = '="→ 時間帯係数 ×"&TEXT($M$7*100,"0")&"%（右上の表で名前・係数を編集できます）"'
+    ws["E6"] = ('="→ 時間帯係数 ×"&TEXT($M$7*100,"0")&"%"&IF($M$9=1,'
+                '"（商品別の波の適用中は使いません）","（右上の表で名前・係数を編集できます）")')
     style_range(ws, "E6:H6", font=fnt(9, False, GRAY), alignment=align("left"))
 
+    # ④ 商品別の波(MSO実測の商品別時間帯係数を作る数に使うか)。
+    # 適用中(M9=1)は全体の時間帯係数を一切使わない排他設計:
+    # 商品係数が出ない商品も×1.0(その商品の1日平均ペース)で計算する
     ws.row_dimensions[7].height = 24
-    chip(ws, "B7:C7", "  ④ 調整倍率", CHIP_CORAL, INK, 10)
-    ws["D7"] = adjust
-    ws["D7"].comment = mk_comment("その日の状況（大作初日・雨・イベント等）に合わせた上乗せ/控えめの調整です。"
-                               "時間帯係数に掛け合わされます。1.1 ＝ 1.1倍(×110%) の形で入力してください。")
+    chip(ws, "B7:C7", "  ④ 商品別の波", CHIP_CORAL, INK, 10)
+    ws["D7"] = WAVE_ON
+    ws["D7"].comment = mk_comment("『使う』にすると、係数貼付①〜④のMSO実測から算出した商品ごとの"
+                               "時間帯係数（商品別の波シート）で作る数を計算し、全体の時間帯係数は"
+                               "使いません。データが足りない商品は係数1.0（その商品の平均ペース）で"
+                               "計算します。『使わない』で全商品一律の時間帯係数です。")
     style_range(ws, "D7", font=fnt(10.5, True), fl=fill(F_INPUT),
-                alignment=align("center"), border=BORDER_INPUT, num='0.0"倍"')
-    ws.merge_cells("E7:H7")
-    ws["E7"] = ('="→ 合計適用倍率 ×"&TEXT($M$7*IF(ISNUMBER($D$7),$D$7,1)*100,"0")&'
-                '"%（時間帯係数 × 調整倍率）"')
-    style_range(ws, "E7:H7", font=fnt(9, True, "5B6472"), alignment=align("left"))
-
-    # ⑤ 商品別の波(MSO実測の商品別時間帯係数を作る数に使うか)
-    ws.row_dimensions[8].height = 24
-    chip(ws, "B8:C8", "  ⑤ 商品別の波", CHIP_CORAL, INK, 10)
-    ws["D8"] = WAVE_ON
-    ws["D8"].comment = mk_comment("『使う』にすると、係数貼付①〜④のMSO実測から算出した商品ごとの"
-                               "時間帯係数（商品別の波シート）で作る数を計算します。データが足りない商品は"
-                               "自動で全体の時間帯係数に戻ります。『使わない』で従来どおり全商品一律です。")
-    style_range(ws, "D8", font=fnt(10.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT)
-    ws.merge_cells("E8:H8")
-    ws["E8"] = ('="→ "&IF($M$9=1,'
+    ws.merge_cells("E7:H7")
+    ws["E7"] = ('="→ "&IF($M$9=1,'
                 '"商品別係数を適用中 "&SUMPRODUCT(ISNUMBER($H$11:$H$30)*1)&'
-                '"/"&SUMPRODUCT(($C$11:$C$30<>"")*1)&"商品（ほかは時間帯係数）",'
-                f'IF(TRIM($D$8)="{WAVE_ON}",'
+                '"/"&SUMPRODUCT(($C$11:$C$30<>"")*1)&"商品（ほかは×1.0）",'
+                f'IF(TRIM($D$7)="{WAVE_ON}",'
                 '"時間帯係数で計算中（MSO未貼付か時間帯が対象外）",'
                 '"時間帯係数で計算中（商品別の波オフ）"))')
-    style_range(ws, "E8:H8", font=fnt(9, False, GRAY), alignment=align("left"))
+    style_range(ws, "E7:H7", font=fnt(9, False, GRAY), alignment=align("left"))
+    ws.row_dimensions[8].height = 6
 
     ws.row_dimensions[9].height = 26
     ws.merge_cells("B9:H9")
@@ -650,16 +646,14 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 'IF(AND($D$6<>"",ISNA(MATCH($D$6,$I$4:$I$10,0))),'
                 '"⚠ 時間帯プリセット名が表にありません（係数100%扱い）。","")&" "&'
                 'IF(OR($D$5="",$D$5=0,NOT(ISNUMBER($D$5))),"⚠ ピーク動員数が未入力か数値ではありません。","")&" "&'
-                'IF($M$7=0,"⚠ 時間帯係数が0です。","")&" "&'
-                'IF(AND($D$7<>"",NOT(ISNUMBER($D$7))),"⚠ 調整倍率が数値ではありません（1倍扱いで計算します）。","")&" "&'
-                'IF(AND($D$7<>"",ISNUMBER($D$7),$D$7=0),"⚠ 調整倍率が0です。","")&" "&'
-                'IF(AND($M$7*IF(ISNUMBER($D$7),$D$7,1)>0,'
-                'OR($M$7*IF(ISNUMBER($D$7),$D$7,1)<0.5,$M$7*IF(ISNUMBER($D$7),$D$7,1)>5)),'
-                '"⚠ 合計適用倍率が×50%〜×500%の範囲外です。係数・調整倍率の入力を確認してください。","")&" "&'
-                f'IF(AND($D$8<>"",TRIM($D$8)<>"{WAVE_ON}",TRIM($D$8)<>"{WAVE_OFF}"),'
+                'IF(AND($M$9=0,$M$7=0),"⚠ 時間帯係数が0です。","")&" "&'
+                'IF(AND($M$9=0,$M$7>0,OR($M$7<0.5,$M$7>5)),'
+                '"⚠ 時間帯係数が×50%〜×500%の範囲外です。プリセット表の係数を確認してください。","")&" "&'
+                f'IF(AND($D$7<>"",TRIM($D$7)<>"{WAVE_ON}",TRIM($D$7)<>"{WAVE_OFF}"),'
                 '"⚠ 商品別の波の設定が不正です（使わない扱い）。","")&" "&'
-                f'IF(AND(TRIM($D$8)="{WAVE_ON}",係数算出!$H$13>0,$M$8=0,'
-                'IFERROR(MATCH($D$6,$I$4:$I$10,0),9)<=5),'
+                f'IF(AND(TRIM($D$7)="{WAVE_ON}",係数算出!$H$13>0,$M$8=0,'
+                'SUMPRODUCT((TRIM($I$4:$I$10)<>"")*'
+                'ISNUMBER(FIND(LEFT(TRIM($I$4:$I$10),1),"①②③④⑤")))<5),'
                 '"⚠ 時間帯名の先頭に①〜⑤のマークが無いため商品別の波を適用できません'
                 '（全体係数で計算中。プリセット名の先頭マークは消さないでください）。","")&" "&'
                 'IF(AND($M$9=1,OR('
@@ -693,18 +687,23 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ws[f"D{r}"] = (f'=IF($C{r}="","",IF($M$4=2,期間データ!D{dr},'
                        f'IF($M$4=3,期間データ!C{dr}+期間データ!D{dr},期間データ!C{dr})))')
         ws[f"E{r}"] = f'=IF($C{r}="","",IF($M$5<=0,"要確認",D{r}/$M$5))'
-        # 商品別の波が使えるとき(M9=1かつ商品別係数が数値)はその係数、なければ全体の時間帯係数M7
+        # 係数は排他: 商品別の波の適用中(M9=1)は商品係数(出ない商品は×1.0=平均ペース)、
+        # 適用外は全体の時間帯係数M7。両方が同時に掛かることはない
         wr = WAVE_ROW0 + i
         coef_p = f"INDEX({WAVE_SHEET}!$I${wr}:$M${wr},1,$M$8)"
-        eff = f'IF(AND($M$9=1,ISNUMBER({coef_p})),{coef_p},$M$7)'
+        # 係数<=0は×1.0へ(波シート側でも"—"にしているが、0が数値として掛かり
+        # 作る数が無警告で0になる事故への二重ガード)
+        eff = f'IF($M$9=1,IF(AND(ISNUMBER({coef_p}),{coef_p}>0),{coef_p},1),$M$7)'
         ws[f"F{r}"] = (f'=IF(OR($C{r}="",NOT(ISNUMBER($D$5))),"",'
                        f'IF(ISNUMBER($E{r}),'
-                       f'MAX(0,ROUNDUP($D$5*$E{r}*{eff}*IF(ISNUMBER($D$7),$D$7,1),0)),"—"))')
+                       f'MAX(0,ROUNDUP($D$5*$E{r}*{eff},0)),"—"))')
         ws[f"G{r}"] = (f'=IF($C{r}="","",'
                        f'IF(ISNUMBER(SEARCH("⚠",IF($M$4=1,期間データ!$B$11,期間データ!$G$4))),"要確認",'
                        f'IF($M$6<=0,"－",IF($M$4=1,期間データ!D{dr},期間データ!C{dr})/$M$6)))')
+        # {coef_p}はM8=0のときINDEX列0でエラーになる。ORは引数のエラーを伝播する
+        # ため、比較はIFERRORで包む(ISNUMBERはエラーを吸収するのでそのままでよい)
         ws[f"H{r}"] = (f'=IF($C{r}="","",'
-                       f'IF(OR($M$9=0,NOT(ISNUMBER({coef_p}))),"—",{coef_p}))')
+                       f'IF(OR($M$9=0,NOT(ISNUMBER({coef_p})),IFERROR({coef_p},0)<=0),"—",{coef_p}))')
         style_range(ws, f"B{r}", font=fnt(9, False, GRAY), alignment=align("center"))
         style_range(ws, f"C{r}", font=fnt(10.5), alignment=align("left"))
         style_range(ws, f"D{r}", font=fnt(10, False, "5B6472"), alignment=align("center"), num="#,##0")
@@ -725,8 +724,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[last + 1].height = 18
     ws.row_dimensions[last + 1].height = 30
     note(ws, f"B{last + 1}:H{last + 1}",
-         "※ 作る数 ＝ ピーク動員数 × 購買率 × 係数 × 調整倍率（切り上げ）｜係数 ＝ 商品係数（右列。商品別の波の実測）が"
-         "あればそれ、「—」の商品は時間帯係数｜参考列 ＝ A選択時は期間B、それ以外は期間A", 8.5, wrap=True)
+         "※ 作る数 ＝ ピーク動員数 × 購買率 × 係数（切り上げ）｜係数 ＝ 商品別の波の適用中は商品係数（右列。"
+         "「—」の商品は×1.0＝平均ペース）で時間帯係数は使わない。適用外のときは時間帯係数｜"
+         "参考列 ＝ A選択時は期間B、それ以外は期間A", 8.5, wrap=True)
 
     bar = DataBarRule(start_type="num", start_value=0, end_type="max", color=CORAL, showValue=True)
     ws.conditional_formatting.add(f"F{ROW_M0}:F{last}", bar)
@@ -756,19 +756,12 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.add_data_validation(dv_preset)
     dv_preset.add("D6")
 
-    dv_adjust = DataValidation(type="decimal", operator="between", formula1="0", formula2="5",
-                               showErrorMessage=True)
-    dv_adjust.error = "調整倍率は 0〜5 の数値で入力してください（1.1 ＝ 1.1倍・×110%）"
-    dv_adjust.errorTitle = "調整倍率"
-    ws.add_data_validation(dv_adjust)
-    dv_adjust.add("D7")
-
     dv_wave = DataValidation(type="list", formula1=f'"{WAVE_ON},{WAVE_OFF}"',
                              allow_blank=True, showErrorMessage=True)
     dv_wave.error = f"「{WAVE_ON}」か「{WAVE_OFF}」を選んでください"
     dv_wave.errorTitle = "商品別の波"
     ws.add_data_validation(dv_wave)
-    dv_wave.add("D8")
+    dv_wave.add("D7")
 
     ws.freeze_panes = "A11"
 
@@ -804,10 +797,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     style_range(ws, "B3:E3", font=fnt(11, True, INK), alignment=align("left"))
     ws.row_dimensions[4].height = 20
     ws.merge_cells("B4:E4")
-    ws["B4"] = ('="時間帯: "&準備数計算!$D$6&"（係数 ×"&TEXT(準備数計算!$M$7*100,"0")&'
-                '"% × 調整 ×"&TEXT(IF(ISNUMBER(準備数計算!$D$7),準備数計算!$D$7,1)*100,"0")&'
-                '"% ＝ ×"&TEXT(準備数計算!$M$7*IF(ISNUMBER(準備数計算!$D$7),準備数計算!$D$7,1)*100,"0")&"%）"&'
-                'IF(準備数計算!$M$9=1,"　｜　商品別の波 適用中","")')
+    ws["B4"] = ('="時間帯: "&準備数計算!$D$6&IF(準備数計算!$M$9=1,'
+                '"　｜　商品別の波 適用中（商品ごとの実測係数・時間帯係数は不使用）",'
+                '"（時間帯係数 ×"&TEXT(準備数計算!$M$7*100,"0")&"%）")')
     style_range(ws, "B4:E4", font=fnt(9.5, False, "5B6472"), alignment=align("left"))
     ws.row_dimensions[5].height = 22
     note(ws, "B5:E5", "日付・回：＿＿＿＿＿＿＿＿＿＿　　作成者：＿＿＿＿＿＿　　確認者：＿＿＿＿＿＿", 10, INK)
@@ -1215,7 +1207,6 @@ if __name__ == "__main__":
     ap.add_argument("--att-b", help="期間Bの動員数7日分(カンマ区切り)")
     ap.add_argument("--peak", type=int)
     ap.add_argument("--preset", default="平常（基準）")
-    ap.add_argument("--adjust", type=float, default=1.0)
     for k in range(1, 5):
         ap.add_argument(f"--mso{k}", help=f"係数貼付{'①②③④'[k - 1]}に入れるMSO商品CSV(金曜1日分)")
     ap.add_argument("--close", default="22:00",
@@ -1233,5 +1224,5 @@ if __name__ == "__main__":
     build(a.out, csv_a=a.csv_a, csv_b=a.csv_b, select=a.select,
           att_a=[int(x) for x in a.att_a.split(",")] if a.att_a else None,
           att_b=[int(x) for x in a.att_b.split(",")] if a.att_b else None,
-          peak=a.peak, preset=a.preset, adjust=a.adjust,
+          peak=a.peak, preset=a.preset,
           mso_csvs=(a.mso1, a.mso2, a.mso3, a.mso4), close=a.close, open_=a.open_)
