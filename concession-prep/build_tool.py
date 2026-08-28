@@ -209,6 +209,14 @@ def parse_clock(s):
     return (int(h) + int(m) / 60) / 24
 
 
+def mk_comment(text, width=300):
+    """内容量に応じた吹き出しサイズのメモ。文字は仕上げ(force_font)で
+    Meiryo UI 9ptに統一されるため、その字面を前提に高さを見積もる"""
+    import math
+    lines = sum(max(1, math.ceil(len(seg) / 24)) for seg in text.split("\n"))
+    return Comment(text, "準備数ツール", height=min(380, lines * 15 + 16), width=width)
+
+
 def parse_ymd(x):
     """yyyymmdd数値/文字列・日付型セルのどれでも日付シリアルに解釈する式。
     2000〜2100年の範囲外(0・空欄・壊れた値)は-1を返す。"""
@@ -240,6 +248,12 @@ def force_font(path, name=None):
             elif item.filename.startswith("xl/theme/"):
                 data = re.sub(rb'typeface="[^"]+"',
                               f'typeface="{name}"'.encode(), data)
+            elif re.fullmatch(r"xl/comments\d+\.xml", item.filename):
+                # メモ(コメント)本文もフォント名が代替に置換されるため書き戻し、
+                # 文字サイズを9ptに統一する
+                data = re.sub(rb'<rFont val="[^"]*"',
+                              f'<rFont val="{name}"'.encode(), data)
+                data = re.sub(rb'<sz val="[^"]*"', b'<sz val="9"', data)
             zout.writestr(item, data)
     os.replace(tmp, path)
 
@@ -284,6 +298,14 @@ def show_paste_comments(path, sheets=PASTE_SHEETS):
             data = zin.read(item.filename)
             if item.filename in vml_files and b"visibility:hidden" in data:
                 data = data.replace(b"visibility:hidden", b"visibility:visible")
+                # 常時表示メモがタイトル・貼付先A4を覆わないよう、位置を
+                # A4の右下(データ領域の上)へ移し、3行分の横長サイズに整える
+                data = re.sub(rb"<x:Anchor>[^<]*</x:Anchor>",
+                              b"<x:Anchor>3, 12, 4, 6, 8, 40, 8, 8</x:Anchor>", data)
+                data = re.sub(rb"margin-left:[^;'\"]*", b"margin-left:130pt", data)
+                data = re.sub(rb"margin-top:[^;'\"]*", b"margin-top:104pt", data)
+                data = re.sub(rb"width:[0-9.]+p[tx]", b"width:330pt", data)
+                data = re.sub(rb"height:[0-9.]+p[tx]", b"height:78pt", data)
                 patched += 1
             zout.writestr(item, data)
     os.replace(tmp, path)
@@ -357,7 +379,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     r = 6
     for mark, color, head, desc in steps:
         ws.row_dimensions[r].height = 24
-        ws.row_dimensions[r + 1].height = 20
+        # 説明が長い行は折り返して見切れを防ぐ(C〜J≒全角52字/行)
+        dl = max(1, -(-len(desc) // 52))
+        ws.row_dimensions[r + 1].height = 14 * dl + 6
         chip(ws, f"B{r}:B{r + 1}", mark, "FFFFFF", color, 16, True, "center")
         style_range(ws, f"B{r}:B{r + 1}", border=Border(left=Side(style="medium", color=color),
                                                         top=Side(style="medium", color=color),
@@ -365,7 +389,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ws.merge_cells(f"C{r}:J{r}")
         style_range(ws, f"C{r}:J{r}", font=fnt(11, True, INK), alignment=align("left", "bottom"))
         ws[f"C{r}"] = head
-        note(ws, f"C{r + 1}:J{r + 1}", desc, 9)
+        note(ws, f"C{r + 1}:J{r + 1}", desc, 9, wrap=True)
         r += 3
 
     r += 1
@@ -411,8 +435,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ]
     for t in notes:
         r += 1
-        ws.row_dimensions[r].height = 18
-        note(ws, f"C{r}:J{r}", t, 9.5, INK)
+        nl = max(1, -(-len(t) // 50))
+        ws.row_dimensions[r].height = 15 * nl + 5
+        note(ws, f"C{r}:J{r}", t, 9.5, INK, wrap=True)
 
     r += 2
     ws.row_dimensions[r].height = 22
@@ -435,8 +460,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ]
     for t in calib_notes:
         r += 1
-        ws.row_dimensions[r].height = 18
-        note(ws, f"C{r}:J{r}", t, 9.5, INK)
+        nl = max(1, -(-len(t) // 50))
+        ws.row_dimensions[r].height = 15 * nl + 5
+        note(ws, f"C{r}:J{r}", t, 9.5, INK, wrap=True)
 
     r += 2
     note(ws, f"C{r}:J{r}", "雛形版 v5.1（2026/8）｜数式・レイアウトは自由に調整してください", 8.5)
@@ -455,6 +481,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     for c, w in {"A": 2.5, "B": 6, "C": 32, "D": 22, "E": 11, "F": 16,
                  "G": 13, "H": 8, "I": 24, "J": 9, "K": 9, "L": 12, "M": 10}.items():
         ws.column_dimensions[c].width = w
+    for c in "LM":                        # ⚙計算用ヘルパー列は隠す(式は動作)
+        ws.column_dimensions[c].hidden = True
 
     ws.row_dimensions[1].height = 34
     title_band(ws, "B1:H1", "　🍿 準備数計算｜ピーク前の仕込み数")
@@ -482,16 +510,15 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ws[f"K{rr}"] = f"=係数算出!$L${7 + i}"
         style_range(ws, f"K{rr}", font=fnt(9, False, GRAY), fl=fill(F_AUTO),
                     alignment=align("center"), border=BORDER_HAIR, num='0.00"倍"')
-    ws["K4"].comment = Comment("「係数算出」シートで金曜4週分のMSO商品CSVから実測した係数候補です"
+    ws["K4"].comment = mk_comment("「係数算出」シートで金曜4週分のMSO商品CSVから実測した係数候補です"
                                "（①〜⑤の並び。未貼付のときは「—」）。採用するときは左のJ列へ手で"
-                               "入力してください（自動では書き換わりません）。", "準備数ツール")
-    ws["I4"].comment = Comment("時間帯の高低差は5段階(朝一→昼ピーク→夕方→夜ピーク→レイト)+基準の平常で"
+                               "入力してください（自動では書き換わりません）。")
+    ws["I4"].comment = mk_comment("時間帯の高低差は5段階(朝一→昼ピーク→夕方→夜ピーク→レイト)+基準の平常で"
                                "管理します。名前・時刻の目安・係数とも書き換えでき、空き枠に追加も"
                                "できます(最大7枠)。係数は 1.2 ＝ 1.2倍(×120%) の形で入力してください。"
                                "【重要】名前の先頭の①〜⑤マークは「商品別の波」の帯の対応キーです。"
                                "改名するときも先頭のマークは残してください(消すとその時間帯は全体係数に"
-                               "なります)。右の「実測候補」列には係数算出シートの実測値が自動表示されます。",
-                               "準備数ツール")
+                               "なります)。右の「実測候補」列には係数算出シートの実測値が自動表示されます。")
 
     # 計算用ヘルパー L3:M9
     chip(ws, "L3:M3", " ⚙ 計算用（さわらない）", "F7F8FA", GRAY, 8, False)
@@ -538,8 +565,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     chip(ws, "B5:C5", "  ② ピーク動員数", CHIP_CORAL, INK, 10)
     if peak is not None:
         ws["D5"] = peak
-    ws["D5"].comment = Comment("これから準備する回（例：1時間後のピークの回）の合計動員数を"
-                               "入力してください。", "準備数ツール")
+    ws["D5"].comment = mk_comment("これから準備する回（例：1時間後のピークの回）の合計動員数を"
+                               "入力してください。")
     style_range(ws, "D5", font=fnt(10.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT, num="#,##0")
     note(ws, "E5:H5", "← これから準備する回の合計動員数（例：1時間後のピークの回の計）", 9)
@@ -556,9 +583,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[7].height = 24
     chip(ws, "B7:C7", "  ④ 調整倍率", CHIP_CORAL, INK, 10)
     ws["D7"] = adjust
-    ws["D7"].comment = Comment("その日の状況（大作初日・雨・イベント等）に合わせた上乗せ/控えめの調整です。"
-                               "時間帯係数に掛け合わされます。1.1 ＝ 1.1倍(×110%) の形で入力してください。",
-                               "準備数ツール")
+    ws["D7"].comment = mk_comment("その日の状況（大作初日・雨・イベント等）に合わせた上乗せ/控えめの調整です。"
+                               "時間帯係数に掛け合わされます。1.1 ＝ 1.1倍(×110%) の形で入力してください。")
     style_range(ws, "D7", font=fnt(10.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT, num='0.0"倍"')
     ws.merge_cells("E7:H7")
@@ -570,19 +596,18 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[8].height = 24
     chip(ws, "B8:C8", "  ⑤ 商品別の波", CHIP_CORAL, INK, 10)
     ws["D8"] = WAVE_ON
-    ws["D8"].comment = Comment("『使う』にすると、係数貼付①〜④のMSO実測から算出した商品ごとの"
+    ws["D8"].comment = mk_comment("『使う』にすると、係数貼付①〜④のMSO実測から算出した商品ごとの"
                                "時間帯係数（商品別の波シート）で作る数を計算します。データが足りない商品は"
-                               "自動で全体の時間帯係数に戻ります。『使わない』で従来どおり全商品一律です。",
-                               "準備数ツール")
+                               "自動で全体の時間帯係数に戻ります。『使わない』で従来どおり全商品一律です。")
     style_range(ws, "D8", font=fnt(10.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT)
     ws.merge_cells("E8:H8")
     ws["E8"] = ('="→ "&IF($M$9=1,'
                 '"商品別係数を適用中 "&SUMPRODUCT(ISNUMBER($H$11:$H$30)*1)&'
-                '"/"&SUMPRODUCT(($C$11:$C$30<>"")*1)&"商品（ほかは時間帯係数。詳細は商品別の波シート）",'
+                '"/"&SUMPRODUCT(($C$11:$C$30<>"")*1)&"商品（ほかは時間帯係数）",'
                 f'IF(TRIM($D$8)="{WAVE_ON}",'
-                '"時間帯係数で計算中（MSO未貼付か、時間帯が①〜⑤の対象外）",'
-                '"時間帯係数で計算中（商品別の波は未使用）"))')
+                '"時間帯係数で計算中（MSO未貼付か時間帯が対象外）",'
+                '"時間帯係数で計算中（商品別の波オフ）"))')
     style_range(ws, "E8:H8", font=fnt(9, False, GRAY), alignment=align("left"))
 
     ws.row_dimensions[9].height = 18
@@ -645,8 +670,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         style_range(ws, ref, font=fnt(9.5, True, "FFFFFF"), fl=fill(NAVY),
                     alignment=align("center", "center", True), border=BORDER_LIGHT)
         ws[ref] = text
-    ws["C10"].comment = Comment("商品の選択・入れ替えは「期間データ」シートの商品名欄"
-                                "(B14〜B33)のプルダウンで行ってください。ここは自動表示です。", "準備数ツール")
+    ws["C10"].comment = mk_comment("商品の選択・入れ替えは「期間データ」シートの商品名欄"
+                                "(B14〜B33)のプルダウンで行ってください。ここは自動表示です。")
     style_range(ws, "F10", font=fnt(11, True, "FFFFFF"), fl=fill(CORAL),
                 alignment=align("center", "center", True), border=BORDER_LIGHT)
     ws["F10"] = "👉 作る数\n(この数を準備)"
@@ -690,9 +715,10 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     last = ROW_M0 + N_SLOTS - 1
     ws[f"F{last}"].border = Border(bottom=coral_side, left=coral_side, right=coral_side)
     ws.row_dimensions[last + 1].height = 18
+    ws.row_dimensions[last + 1].height = 30
     note(ws, f"B{last + 1}:H{last + 1}",
          "※ 作る数 ＝ ピーク動員数 × 購買率 × 係数 × 調整倍率（切り上げ）｜係数 ＝ 商品係数（右列。商品別の波の実測）が"
-         "あればそれ、「—」の商品は時間帯係数｜参考列 ＝ A選択時は期間B、それ以外は期間A", 8.5)
+         "あればそれ、「—」の商品は時間帯係数｜参考列 ＝ A選択時は期間B、それ以外は期間A", 8.5, wrap=True)
 
     bar = DataBarRule(start_type="num", start_value=0, end_type="max", color=CORAL, showValue=True)
     ws.conditional_formatting.add(f"F{ROW_M0}:F{last}", bar)
@@ -760,7 +786,11 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[3].height = 22
     ws.merge_cells("B3:E3")
     ws["B3"] = ('="参照期間: "&IF(準備数計算!$M$4=3,"期間平均（A+B）",'
-                'IF(準備数計算!$M$4=2,"期間B（金〜木）","期間A（金土日）"))&'
+                'IF(準備数計算!$M$4=2,"期間B（金〜木）","期間A（金土日）"))&" "&'
+                'IF(準備数計算!$M$4=1,'
+                'IF(期間データ!$C$4="","",TEXT(期間データ!$C$4,"m/d")&"〜"&TEXT(期間データ!$E$4,"m/d")),'
+                'IF(期間データ!$C$8="","",TEXT(期間データ!$C$8,"m/d")&"〜"&'
+                'IF(準備数計算!$M$4=2,TEXT(期間データ!$I$8,"m/d"),TEXT(期間データ!$E$4,"m/d"))))&'
                 '"　｜　ピーク動員数: "&IF(準備数計算!$D$5="","（未入力）",'
                 'TEXT(準備数計算!$D$5,"#,##0")&"人")')
     style_range(ws, "B3:E3", font=fnt(11, True, INK), alignment=align("left"))
@@ -769,8 +799,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws["B4"] = ('="時間帯: "&準備数計算!$D$6&"（係数 ×"&TEXT(準備数計算!$M$7*100,"0")&'
                 '"% × 調整 ×"&TEXT(IF(ISNUMBER(準備数計算!$D$7),準備数計算!$D$7,1)*100,"0")&'
                 '"% ＝ ×"&TEXT(準備数計算!$M$7*IF(ISNUMBER(準備数計算!$D$7),準備数計算!$D$7,1)*100,"0")&"%）"&'
-                'IF(準備数計算!$M$9=1,"｜商品別の波 適用中","")&'
-                '"　｜　"&準備数計算!$E$4')
+                'IF(準備数計算!$M$9=1,"　｜　商品別の波 適用中（商品ごとの実測係数）","")')
     style_range(ws, "B4:E4", font=fnt(9.5, False, "5B6472"), alignment=align("left"))
     ws.row_dimensions[5].height = 22
     note(ws, "B5:E5", "日付・回：＿＿＿＿＿＿＿＿＿＿　　作成者：＿＿＿＿＿＿　　確認者：＿＿＿＿＿＿", 10, INK)
@@ -884,7 +913,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 'IF(TODAY()-$E$4>9,"⚠ 古いデータの可能性（終了日が"&(TODAY()-$E$4)&"日前）","")'
                 '))))))')
     style_range(ws, "G4:K4", font=fnt(9, False, "5B6472"), alignment=align("left"))
-    ws["C4"].comment = Comment("貼られたCSVの対象期間から自動表示されます（入力不要）。", "準備数ツール")
+    ws["C4"].comment = mk_comment("貼られたCSVの対象期間から自動表示されます（入力不要）。")
 
     ws.row_dimensions[7].height = 6
     # 期間B(前週 金〜木) — 日付はCSVの対象期間から自動表示
@@ -944,11 +973,13 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
 
     ws.row_dimensions[12].height = 6
     ws.row_dimensions[13].height = 30
+    ws.merge_cells("E13:K13")
     for ref, text in [("A13", "No."), ("B13", "商品名（プルダウンで選択）"),
-                      ("C13", "期間A\n販売数"), ("D13", "期間B\n販売数"), ("K13", "メモ")]:
+                      ("C13", "期間A\n販売数"), ("D13", "期間B\n販売数"),
+                      ("E13:K13", "メモ（自由記入）")]:
         style_range(ws, ref, font=fnt(9.5, True, "FFFFFF"), fl=fill(NAVY),
                     alignment=align("center", "center", True), border=BORDER_LIGHT)
-        ws[ref] = text
+        ws[ref.split(":")[0]] = text
 
     for i in range(N_SLOTS):
         r = ROW_P0 + i
@@ -967,15 +998,16 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
             style_range(ws, f"{col}{r}", font=fnt(10, False, "5B6472"),
                         fl=fill(F_ZEBRA if zebra else F_AUTO),
                         alignment=align("center"), num="#,##0")
-        style_range(ws, f"K{r}", font=fnt(9), alignment=align("left"))
-        for col in "ABCDK":
+        ws.merge_cells(f"E{r}:K{r}")
+        style_range(ws, f"E{r}:K{r}", font=fnt(9), alignment=align("left"))
+        for col in "ABCDEFGHIJK":
             ws[f"{col}{r}"].border = Border(bottom=hair, left=hair, right=hair)
         ws[f"B{r}"].border = BORDER_INPUT
 
-    ws[f"B{ROW_P0}"].comment = Comment("商品は最大20枠(B14〜B33)まで登録できます。プルダウンには"
+    ws[f"B{ROW_P0}"].comment = mk_comment("商品は最大20枠(B14〜B33)まで登録できます。プルダウンには"
                                        "CSV貼付A/Bの商品名が自動で並びます(項目数の上限はありません)。"
                                        "ドリンク・包材などはシート下部の除外リストで検索対象外です。"
-                                       "手入力する場合はCSVの商品名と完全一致させてください。", "準備数ツール")
+                                       "手入力する場合はCSVの商品名と完全一致させてください。")
     dup_rule = FormulaRule(
         formula=[f'AND($B{ROW_P0}<>"",COUNTIF($B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1},$B{ROW_P0})>1)'],
         font=Font(name=FONT_NAME, bold=True, color=RED), fill=fill("FDECEC"))
@@ -1030,8 +1062,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
          "不要になった名前はセルの値をDeleteで消し、追加は空き枠に入力してください（最大12件）。"
          "行そのものの挿入・削除はしないでください（内部の自動計算が壊れます）。"
          "左の✔/⚠は、CSVに実在する小分類名かの照合結果です。", 8.5, GRAY, wrap=True)
-    ws[f"B{EXC_TOP}"].comment = Comment("既定: ドリンク類(コールド/コーヒー/アルコール/その他ドリンク/ホット)、"
-                                        "調味料類、ＳＥＴ作品コンボ、引換券、コンセ包材。", "準備数ツール")
+    ws[f"B{EXC_TOP}"].comment = mk_comment("既定: ドリンク類(コールド/コーヒー/アルコール/その他ドリンク/ホット)、"
+                                        "調味料類、ＳＥＴ作品コンボ、引換券、コンセ包材。")
 
     # 商品リスト抽出ヘルパー(非表示列 M〜Q)
     for ref, text in [("M4", "⚙A順"), ("N4", "⚙Aリスト"), ("O4", "⚙B順"),
@@ -1086,6 +1118,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         for c_idx in range(2, NCOL + 1):
             ws.column_dimensions[get_column_letter(c_idx)].width = 11
         ws.column_dimensions["N"].width = 28
+        # 商品コード(M)は13桁のためGeneralだと指数表記になる
+        ws.column_dimensions["M"].number_format = "0"
 
         ws.row_dimensions[1].height = 34
         title_band(ws, f"A1:{get_column_letter(NCOL)}1",
@@ -1116,10 +1150,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                     alignment=align("center"),
                     border=Border(left=coral_side, right=coral_side,
                                   top=coral_side, bottom=coral_side))
-        c = Comment("👉 貼り付けはここから！\n"
+        c = mk_comment("👉 貼り付けはここから！\n"
                     "CSV全体をコピー（Ctrl+A→Ctrl+C）して、このセル（A4）を選択し、\n"
-                    "右クリック→「値の貼り付け」。ヘッダー行ごと貼ってOKです。",
-                    "準備数ツール", height=95, width=270)
+                    "右クリック→「値の貼り付け」。ヘッダー行ごと貼ってOKです。")
         ws["A4"].comment = c
 
         for i in range(350):                     # 目安の枠線(貼付は1000行まで有効)
@@ -1128,6 +1161,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 cell = ws.cell(row=r, column=c_idx)
                 cell.border = BORDER_HAIR
                 cell.font = fnt(9)
+                if c_idx == 13:                  # セル書式が列書式に勝つため個別指定
+                    cell.number_format = "0"
 
         if csv_path:
             rows = read_csv_rows(csv_path)[:CSV_MAX]

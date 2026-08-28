@@ -12,7 +12,6 @@ build_tool.py の build() から add_calib_sheets(wb, csvs) として呼ばれ�
 """
 import csv
 
-from openpyxl.comments import Comment
 from openpyxl.formatting.rule import DataBarRule, FormulaRule
 from openpyxl.styles import Border, Font
 from openpyxl.utils import get_column_letter
@@ -24,7 +23,7 @@ from build_tool import (BORDER_HAIR, BORDER_INPUT, BORDER_LIGHT, CHIP_AMBER,
                         FONT_NAME, GRAY, GREEN, INK, JUDGE_FEW, JUDGE_NODATA,
                         JUDGE_NONE, JUDGE_USE, N_SLOTS, NAVY, RED, ROW_P0, TEAL,
                         WAVE_ROW0, WAVE_SHEET, WEEKDAY_JA, align, chip, coral_side,
-                        fill, fnt, note, style_range, title_band)
+                        fill, fnt, mk_comment, note, style_range, title_band)
 
 MSO_HEADERS = ["操作モード", "伝票番号", "伝票枝番", "サイトコード", "サイト名",
                "劇場コード", "劇場名", "販売場所コード", "販売場所名", "端末番号",
@@ -86,6 +85,8 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
     for c, w in {"A": 2.5, "B": 15, "C": 13, "D": 10, "E": 10, "F": 10, "G": 10,
                  "H": 11, "I": 10, "J": 11, "K": 11, "L": 13}.items():
         ws.column_dimensions[c].width = w
+    for c in "MNO":                       # ⚙内部ヘルパー列は隠す
+        ws.column_dimensions[c].hidden = True
 
     ws.row_dimensions[1].height = 34
     title_band(ws, "B1:L1", "　⏱ 係数算出｜金曜4週分の時間帯の波（月1回・任意）")
@@ -104,9 +105,9 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
         ws[vref] = val
         style_range(ws, vref, font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="h:mm")
-    ws["H3"].comment = Comment("閉店時刻。基本は 22:00。レイト営業日は 26:00 または 翌2:00 の"
+    ws["H3"].comment = mk_comment("閉店時刻。基本は 22:00。レイト営業日は 26:00 または 翌2:00 の"
                                "形で入力してください(24時間超え表記対応)。同日閉店(21時以降)と"
-                               "翌日閉店(24:00〜)は自動判別します。", "準備数ツール")
+                               "翌日閉店(24:00〜)は自動判別します。")
     # 閉店の正規化(印刷範囲外のN・O列): O4=同日側の上限、N4=翌日側の締めフラクション
     #   26:00/翌2:00 → O4=24:00・N4=2:00 / 22:00 → O4=22:00・N4=0 /
     #   開店とレイト開始の間(20:00等の設定ミス) → 空の帯になりB23に⚠
@@ -425,6 +426,9 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
         for c_idx in range(2, MSO_NCOL + 1):
             ws.column_dimensions[get_column_letter(c_idx)].width = 11
         ws.column_dimensions["X"].width = 26          # 商品名
+        # 伝票番号(B)・商品コード(W)は12桁超のためGeneralだと指数表記になる
+        for c in ("B", "W"):
+            ws.column_dimensions[c].number_format = "0"
         ws.column_dimensions["AC"].width = 2.5        # 緩衝
         ws.column_dimensions["AD"].width = 10
         ws.column_dimensions["AE"].width = 9
@@ -488,10 +492,9 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
                     alignment=align("center"),
                     border=Border(left=coral_side, right=coral_side,
                                   top=coral_side, bottom=coral_side))
-        ws["A4"].comment = Comment("👉 貼り付けはここから！\n"
+        ws["A4"].comment = mk_comment("👉 貼り付けはここから！\n"
                                    "金曜1日分のMSO商品CSVを全選択コピーして、このセル（A4）を選択し、\n"
-                                   "右クリック→「値の貼り付け」。ヘッダー行ごと貼ってOKです。",
-                                   "準備数ツール", height=95, width=270)
+                                   "右クリック→「値の貼り付け」。ヘッダー行ごと貼ってOKです。")
         for ref, text in [("AE4", "⚙時刻値"), ("AF4", "⚙対象個数")]:
             note(ws, ref, text, 8, GRAY, h="center")
 
@@ -513,6 +516,8 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
                 cell = ws.cell(row=rr, column=c_idx)
                 cell.border = BORDER_HAIR
                 cell.font = fnt(9)
+                if c_idx in (2, 23):              # セル書式が列書式に勝つため個別指定
+                    cell.number_format = "0"
 
         rows = read_mso_rows(csvs[si]) if csvs[si] else []
         for i, row in enumerate(rows[:MSO_MAX]):
