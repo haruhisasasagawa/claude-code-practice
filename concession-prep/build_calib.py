@@ -13,7 +13,7 @@ build_tool.py の build() から add_calib_sheets(wb, csvs) として呼ばれ�
 import csv
 
 from openpyxl.formatting.rule import DataBarRule, FormulaRule
-from openpyxl.styles import Border, Font
+from openpyxl.styles import Border, Font, Protection
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.properties import PageSetupProperties
@@ -39,6 +39,7 @@ BANDS = ["① 朝一", "② 昼ピーク", "③ 夕方", "④ 夜ピーク", "�
 
 PURPLE = "7C5CB0"                # 係数算出タブ
 PURPLE_L = "B9A3D6"              # 係数貼付タブ
+UNLOCKED = Protection(locked=False)
 
 
 def read_mso_rows(path):
@@ -118,6 +119,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         ws[vref] = val
         style_range(ws, vref, font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="h:mm")
+        ws[vref].protection = UNLOCKED
     ws["H3"].comment = mk_comment("閉店時刻。基本は 22:00。レイト営業日は 26:00 または 翌2:00 の"
                                "形で入力してください(24時間超え表記対応)。同日閉店(21時以降)と"
                                "翌日閉店(24:00〜)は自動判別します。")
@@ -280,6 +282,8 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
                  'が混ざっている可能性。閉店の設定と貼付データを確認してください）。",""))')
     ws.merge_cells("B23:L23")
     style_range(ws, "B23:L23", font=fnt(8.5, True, "D14343"), alignment=align("left"))
+    # 時間の区切り(C4:H4)以外は自動計算のためシート保護(パスワード無し)
+    ws.protection.sheet = True
 
     # ======================================================== 商品別の波 =====
     ws = wb.create_sheet(WAVE_SHEET)
@@ -317,6 +321,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
     ws["D3"] = 30
     style_range(ws, "D3", font=fnt(9, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT, num='#,##0"個"')
+    ws["D3"].protection = UNLOCKED
     note(ws, "E3:N3",
          "← 係数貼付①〜④の合計個数がこの数に満たない商品は、精度が低いため全体の時間帯係数で計算します（編集可）。", 8.5)
     dv_thr = DataValidation(type="whole", operator="between", formula1="1", formula2="999999",
@@ -420,8 +425,10 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
          "※ 「該当なし」はMSO側に同名の商品が無い場合です（商品名の表記が売上CSVと異なる可能性。その商品は全体の時間帯係数で計算されます）。", 8.5)
     ws.row_dimensions[last_w + 4].height = 16
     note(ws, f"B{last_w + 4}:N{last_w + 4}",
-         "※ このシートは全て自動計算です。行の挿入・削除・並べ替え・セルの移動はしないでください（準備数計算との行対応が崩れます）。", 8.5)
+         "※ このシートは全て自動計算です（最低個数D3のみ編集可・シート保護済み）。", 8.5)
     ws.freeze_panes = "A7"
+    # しきい値(D3)以外は自動計算のためシート保護(行対応が崩れる並べ替え等も防止)
+    ws.protection.sheet = True
 
     # ======================================================= 係数貼付①〜④ ===
     for si, sheet_name in enumerate(CALIB_SHEETS):
@@ -444,6 +451,10 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         for c in ("B", "W"):
             ws.column_dimensions[c].number_format = "0"
             ws.column_dimensions[c].width = 16
+        # シート保護: 貼り付け領域(A〜AB列)と対象日S3のみ編集可。AE/AF式・状態表示・
+        # 正常フラグはロックし、シート全体選択の貼り付けで式が消える事故をブロックする
+        for c_idx in range(1, MSO_NCOL + 1):
+            ws.column_dimensions[get_column_letter(c_idx)].protection = UNLOCKED
         ws.column_dimensions["AC"].width = 2.5        # 緩衝
         ws.column_dimensions["AD"].width = 10
         ws.column_dimensions["AE"].width = 9
@@ -487,6 +498,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         note(ws, "Q3:R3", "対象日(空欄=自動):", 8, GRAY, h="right")
         style_range(ws, "S3", font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="m/d")
+        ws["S3"].protection = UNLOCKED
         # 2000〜2100年の範囲外(誤貼付で数値コード等が来た場合)は空欄に落とす。
         # AD2はm/d日付書式のため、範囲外シリアルを返すとLibreOfficeが#VALUE!で書き出す
         ad2_inner = mso_date_expr("$K$5", "-1")
@@ -508,6 +520,8 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         ws["A4"].comment = mk_comment("👉 貼り付けはここから！\n"
                                    "金曜1日分のMSO商品CSVを全選択コピーして、このセル（A4）を選択し、\n"
                                    "右クリック→「値の貼り付け」。ヘッダー行ごと貼ってOKです。")
+        for c_idx in range(1, MSO_NCOL + 1):      # ヘッダー行ごと貼れるよう4行目も編集可
+            ws.cell(row=4, column=c_idx).protection = UNLOCKED
         for ref, text in [("AE4", "⚙時刻値"), ("AF4", "⚙対象個数")]:
             note(ws, ref, text, 8, GRAY, h="center")
 
@@ -527,7 +541,8 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
                 cell = ws.cell(row=rr, column=c_idx)
                 cell.border = BORDER_HAIR
                 cell.font = fnt(9)
-                if c_idx in (2, 23):              # セル書式が列書式に勝つため個別指定
+                cell.protection = UNLOCKED        # セル書式が列書式に勝つため個別指定
+                if c_idx in (2, 23):
                     cell.number_format = "0"
 
         rows = read_mso_rows(csvs[si]) if csvs[si] else []
@@ -537,3 +552,4 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
                 ws.cell(row=rr, column=c_idx).value = v
 
         ws.freeze_panes = "A5"
+        ws.protection.sheet = True

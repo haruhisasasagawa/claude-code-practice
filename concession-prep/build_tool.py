@@ -31,7 +31,7 @@ import datetime as dt
 from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import DataBarRule, FormulaRule
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -68,6 +68,7 @@ coral_side = Side(style="medium", color=CORAL)
 BORDER_LIGHT = Border(left=thin, right=thin, top=thin, bottom=thin)
 BORDER_HAIR = Border(left=hair, right=hair, top=hair, bottom=hair)
 BORDER_INPUT = Border(left=in_side, right=in_side, top=in_side, bottom=in_side)
+UNLOCKED = Protection(locked=False)
 
 
 def fnt(size=10.5, bold=False, color=INK):
@@ -426,6 +427,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "通常の貼り付けだと色やメモが上書きされます。CSVは各期間 最大1000行。",
         "・貼り替える前に、5行目以降のデータだけを選択して削除してください"
         "（1〜4行目の見出し・状態表示は消さないこと）。",
+        "・貼り付けシート（CSV貼付A/B・係数貼付①〜④）と係数算出・商品別の波はシート保護済みです（パスワード無し）。"
+        "オレンジの貼り付け領域と設定セル以外は書き換えできず、シート全体を選択した貼り付けで内部の計算式が"
+        "消える事故もブロックされます（必要な場合は「校閲＞シート保護の解除」で外せます）。",
         "・期間の日付は貼られたCSVの「対象期間」から自動表示されます。貼付後は「期間データ」の"
         "CSV行数・日数チェック（✔／⚠）を確認してください。日数違い・貼付位置ズレ・旧データ残存は⚠が出ます。",
         "・別の期間（連休比較など）を見たいときは、その期間で出力したCSVを貼り替えてください。"
@@ -1121,6 +1125,10 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         # 商品コード(M)は13桁のためGeneralだと指数表記になる(幅も13桁ぶん確保)
         ws.column_dimensions["M"].number_format = "0"
         ws.column_dimensions["M"].width = 15
+        # シート保護: 貼り付け領域(A〜AH列)のみ編集可。状態表示・見出しはロックし、
+        # シート全体選択の貼り付け事故をブロックする
+        for c_idx in range(1, NCOL + 1):
+            ws.column_dimensions[get_column_letter(c_idx)].protection = UNLOCKED
 
         ws.row_dimensions[1].height = 34
         title_band(ws, f"A1:{get_column_letter(NCOL)}1",
@@ -1155,6 +1163,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                     "CSV全体をコピー（Ctrl+A→Ctrl+C）して、このセル（A4）を選択し、\n"
                     "右クリック→「値の貼り付け」。ヘッダー行ごと貼ってOKです。")
         ws["A4"].comment = c
+        for c_idx in range(1, NCOL + 1):         # ヘッダー行ごと貼れるよう4行目も編集可
+            ws.cell(row=4, column=c_idx).protection = UNLOCKED
 
         for i in range(350):                     # 目安の枠線(貼付は1000行まで有効)
             r = 5 + i
@@ -1162,7 +1172,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 cell = ws.cell(row=r, column=c_idx)
                 cell.border = BORDER_HAIR
                 cell.font = fnt(9)
-                if c_idx == 13:                  # セル書式が列書式に勝つため個別指定
+                cell.protection = UNLOCKED       # セル書式が列書式に勝つため個別指定
+                if c_idx == 13:
                     cell.number_format = "0"
 
         if csv_path:
@@ -1173,6 +1184,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                     ws.cell(row=r, column=c_idx).value = v
 
         ws.freeze_panes = "A5"
+        ws.protection.sheet = True
 
     # ============================================== 係数算出・係数貼付①〜④ ==
     # 時間帯係数の較正シート群(実測候補は準備数計算のK列に連動)
