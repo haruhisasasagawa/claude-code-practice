@@ -131,6 +131,12 @@ def note(ws, ref, text, size=9, color=GRAY, wrap=False, h="left"):
     ws[ref.split(":")[0]] = text
 
 
+def disp_w(text):
+    """表示幅(全角=1、半角=0.5)。len()だと半角混じりの行数を過大に見積もり、
+    1行で収まる項目に2行分の高さが付いて縦のリズムが崩れる。"""
+    return sum(0.5 if ord(ch) < 256 else 1 for ch in text)
+
+
 # ------------------------------------------------------------- constants -----
 CSV_HEADERS = ["タイトル", "劇場コード", "劇場名", "対象期間開始", "対象期間終了",
                "大分類コード", "小分類コード", "小分類名", "作品コード", "作品名",
@@ -353,7 +359,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.sheet_properties.tabColor = NAVY
     ws.sheet_view.showGridLines = False
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
-    ws.page_setup.orientation = "landscape"
+    # 縦長の文章シートのため縦向き(横向きだと縮小されて右半分が空白になる)
+    ws.page_setup.orientation = "portrait"
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 1
     ws.page_setup.paperSize = 9
@@ -424,7 +431,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "・倍率は二段構えです：時間帯係数（朝一0.8倍→昼ピーク1.2倍→夕方1.1倍→夜ピーク1.3倍→レイト0.9倍の5段階＋平常・右上の表で編集）×"
         "調整倍率（大作初日や雨など、その日の状況での上乗せ/控えめ）。どちらも 1.2 ＝ 1.2倍 の形で入力します。",
         "・貼り付けは必ずオレンジのA4セルを選択して『値の貼り付け』（右クリック→値のみ）。"
-        "通常の貼り付けだと色やメモが上書きされます。CSVは各期間 最大1000行。",
+        "通常の貼り付けだと色やメモが上書きされます。CSVは各期間1000行まで。",
         "・貼り替える前に、5行目以降のデータだけを選択して削除してください"
         "（1〜4行目の見出し・状態表示は消さないこと）。",
         "・貼り付けシート（CSV貼付A/B・係数貼付①〜④）と係数算出・商品別の波はシート保護済みです（パスワード無し）。"
@@ -439,7 +446,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ]
     for t in notes:
         r += 1
-        nl = max(1, -(-len(t) // 50))
+        nl = max(1, -(-int(disp_w(t) * 2) // 100))    # 1行≒全角50字
         ws.row_dimensions[r].height = 15 * nl + 5
         note(ws, f"C{r}:J{r}", t, 9.5, INK, wrap=True)
 
@@ -464,7 +471,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ]
     for t in calib_notes:
         r += 1
-        nl = max(1, -(-len(t) // 50))
+        nl = max(1, -(-int(disp_w(t) * 2) // 100))    # 1行≒全角50字
         ws.row_dimensions[r].height = 15 * nl + 5
         note(ws, f"C{r}:J{r}", t, 9.5, INK, wrap=True)
 
@@ -494,8 +501,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     note(ws, "B2:H2", "参照期間(A/B)の購買率 × ピーク動員数 × 時間帯係数 × 調整倍率 で「作る数」を自動計算します", 9)
     ws.row_dimensions[3].height = 6
 
-    # 時間帯プリセット表(編集OK) I3:J10 — 5段階の時間帯+基準+空き枠
-    chip(ws, "I3:J3", " ⏰ 時間帯プリセット（5段階・編集OK）", CHIP_AMBER, INK, 8.5)
+    # 時間帯プリセット表(編集OK) I3:J10 + 実測候補列K — 5段階の時間帯+基準+空き枠
+    chip(ws, "I3:J3", " ⏰ 時間帯プリセット（編集OK）", CHIP_AMBER, INK, 8.5)
+    chip(ws, "K3", "実測候補", CHIP_AMBER, GRAY, 8, False, "center")
     for i in range(PRESET_SLOTS):
         rr = 4 + i
         ws.row_dimensions[rr].height = 18
@@ -507,11 +515,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         # ％を含む表示形式だとExcelの「パーセント自動入力」で 1.2 が 1.2% になるため「倍」表記にする
         style_range(ws, f"J{rr}", font=fnt(9, True, CORAL), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num='0.0"倍"')
-    # 実測候補(係数算出シートの転記用①〜⑤を参照表示。採用はJ列へ手入力)
-    note(ws, "K3", "実測候補", 8, GRAY, h="center")
-    for i in range(5):
-        rr = 4 + i
-        ws[f"K{rr}"] = f"=係数算出!$L${7 + i}"
+        # 実測候補(係数算出シートの転記用①〜⑤を参照表示。採用はJ列へ手入力)。
+        # ①〜⑤以外の行は「—」を置き、表の右端が欠けて見えないように揃える
+        ws[f"K{rr}"] = f"=係数算出!$L${7 + i}" if i < 5 else "—"
         style_range(ws, f"K{rr}", font=fnt(9, False, GRAY), fl=fill(F_AUTO),
                     alignment=align("center"), border=BORDER_HAIR, num='0.00"倍"')
     ws["K4"].comment = mk_comment("「係数算出」シートで金曜4週分のMSO商品CSVから実測した係数候補です"
@@ -524,8 +530,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                                "改名するときも先頭のマークは残してください(消すとその時間帯は全体係数に"
                                "なります)。右の「実測候補」列には係数算出シートの実測値が自動表示されます。")
 
-    # 計算用ヘルパー L3:M9
-    chip(ws, "L3:M3", " ⚙ 計算用（さわらない）", "F7F8FA", GRAY, 8, False)
+    # 計算用ヘルパー M4:M9（L/M列は非表示。ラベルは印刷ににじむため置かない）
     helpers = [
         ("L4", "選択期間", "M4", f'=IF(TRIM($D$4)="{SEL_B}",2,IF(TRIM($D$4)="{SEL_A}",1,'
          f'IF(TRIM($D$4)="{SEL_AVG}",3,0)))'),
@@ -541,8 +546,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ("L9", "商品別波", "M9", f'=IF(AND(TRIM($D$8)="{WAVE_ON}",$M$8>=1,$M$8<=5,'
          '係数算出!$H$13>0),1,0)'),
     ]
-    for lref, ltext, vref, formula in helpers:
-        note(ws, lref, ltext, 8.5, GRAY, h="right")
+    for _lref, _ltext, vref, formula in helpers:
         ws[vref] = formula
         style_range(ws, vref, font=fnt(8.5, False, GRAY), alignment=align("left"), num="#,##0")
     style_range(ws, "L3:M9", border=BORDER_HAIR)
@@ -614,7 +618,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 '"時間帯係数で計算中（商品別の波オフ）"))')
     style_range(ws, "E8:H8", font=fnt(9, False, GRAY), alignment=align("left"))
 
-    ws.row_dimensions[9].height = 18
+    ws.row_dimensions[9].height = 26
     ws.merge_cells("B9:H9")
     ws["B9"] = ('=TRIM('
                 'IF($M$4=0,"⚠ 参照期間の選択が不正です（現在は期間A扱い）。リストから選び直してください。","")&" "&'
@@ -664,7 +668,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 '係数算出!$N$5>0,係数算出!$O$5>0)),'
                 '"⚠ 係数算出シートに時間の区切りの警告があります'
                 '（商品別係数が不正確な可能性。係数算出シートを確認してください）。",""))')
-    style_range(ws, "B9:H9", font=fnt(8.5, True, RED), alignment=align("left"))
+    style_range(ws, "B9:H9", font=fnt(8.5, True, RED), alignment=align("left", wrap=True))
 
     # 表ヘッダー
     ws.row_dimensions[10].height = 34
@@ -866,19 +870,20 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[1].height = 34
     title_band(ws, "A1:K1", "　📅 期間データ（動員数・販売実績）")
     ws.row_dimensions[2].height = 20
+    # 凡例チップは1列空けて分離(密着させると1つの帯が色変わりして見える)
     note(ws, "A2", "凡例:", 8.5, GRAY, h="right")
     chip(ws, "B2", "✏️ 入力セル", F_INPUT, INK, 8.5, False, "center")
     style_range(ws, "B2", border=BORDER_INPUT)
-    chip(ws, "C2:D2", "🔒 自動計算", F_AUTO, "5B6472", 8.5, False, "center")
-    style_range(ws, "C2:D2", border=BORDER_LIGHT)
-    note(ws, "F2:K2", "販売数は「CSV貼付A/B」から自動集計。商品名はプルダウンで選択（手入力も可）。", 8.5)
+    chip(ws, "D2:E2", "🔒 自動計算", F_AUTO, "5B6472", 8.5, False, "center")
+    style_range(ws, "D2:E2", border=BORDER_LIGHT)
+    note(ws, "F2:K2", "販売数はCSV貼付A/Bから自動集計。商品名はプルダウンで選択。", 8.5)
     ws.row_dimensions[3].height = 6
 
     # 期間A(金土日) — 日付はCSVの対象期間から自動表示
     pa_s = parse_ymd("CSV貼付A!$D$5")
     pa_e = parse_ymd("CSV貼付A!$E$5")
     ws.row_dimensions[4].height = 22
-    chip(ws, "B4", "  期間A（直近 金土日）｜日付(自動)", CHIP_TEAL, INK, 10)
+    chip(ws, "B4", "  期間A（金土日）｜日付は自動", CHIP_TEAL, INK, 10)
     ws.row_dimensions[5].height = 16
     note(ws, "B5", "  曜日", 8.5, GRAY)
     ws.row_dimensions[6].height = 22
@@ -896,13 +901,13 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
             ws[f"{col}6"] = att_a[j]
         style_range(ws, f"{col}6", font=fnt(10.5), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="#,##0")
-    ws["F6"] = '=IF(COUNT(C6:E6)=0,"",SUM(C6:E6))'
-    style_range(ws, "F6", font=fnt(10.5, True, TEAL), fl=fill(F_AUTO),
+    ws["J6"] = '=IF(COUNT(C6:E6)=0,"",SUM(C6:E6))'
+    style_range(ws, "J6", font=fnt(10.5, True, TEAL), fl=fill(F_AUTO),
                 alignment=align("center"), border=BORDER_LIGHT, num="#,##0")
-    note(ws, "F5", "A計", 8, GRAY, h="center")
+    note(ws, "J5", "A計", 8, GRAY, h="center")
     ws.merge_cells("G4:K4")
     ws["G4"] = ('=IF(CSV貼付A!$N$5="","（CSV貼付Aにデータを貼り付けてください）",'
-                '"CSV "&COUNTA(CSV貼付A!$N$5:$N$' + str(CSV_END) + ')&"行｜"&'
+                '"CSV貼付A: "&COUNTA(CSV貼付A!$N$5:$N$' + str(CSV_END) + ')&"行｜"&'
                 'IF(CSV貼付A!$N$4<>"商品名","⚠ 貼付位置がずれています（ヘッダーごとならA4、データのみならA5から）",'
                 'IF(CSV貼付A!$A$5="タイトル","⚠ 貼付開始セルがずれています（A4から貼り直してください）",'
                 'IF(OR($C$4="",$E$4=""),"⚠ 対象期間を読み取れません（CSVのD/E列を確認）",'
@@ -924,7 +929,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     pb_s = parse_ymd("CSV貼付B!$D$5")
     pb_e = parse_ymd("CSV貼付B!$E$5")
     ws.row_dimensions[8].height = 22
-    chip(ws, "B8", "  期間B（前週 金〜木）｜日付(自動)", CHIP_TEAL, INK, 10)
+    chip(ws, "B8", "  期間B（前週 金〜木）｜日付は自動", CHIP_TEAL, INK, 10)
     ws.row_dimensions[9].height = 16
     note(ws, "B9", "  曜日", 8.5, GRAY)
     ws.row_dimensions[10].height = 22
@@ -1121,7 +1126,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ws.column_dimensions["A"].width = 13
         for c_idx in range(2, NCOL + 1):
             ws.column_dimensions[get_column_letter(c_idx)].width = 11
-        ws.column_dimensions["N"].width = 28
+        ws.column_dimensions["N"].width = 34      # 商品名(全角16字まで見切れなし)
+        ws.column_dimensions["J"].width = 41      # 作品名(元データが全角20字で切られている)
+        ws.column_dimensions["L"].width = 35      # 支払先名(「本社　番組編成部　マーケティング室」等)
         # 商品コード(M)は13桁のためGeneralだと指数表記になる(幅も13桁ぶん確保)
         ws.column_dimensions["M"].number_format = "0"
         ws.column_dimensions["M"].width = 15

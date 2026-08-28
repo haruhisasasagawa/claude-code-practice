@@ -128,8 +128,6 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
     #   開店とレイト開始の間(20:00等の設定ミス) → 空の帯になりB23に⚠
     # 翌側の締めは開店時刻でクランプする(33:00等の打ち間違いで帯⑤の翌日側窓が
     # 帯①と重なり二重計上になるのを構造的に防ぐ。B23に専用⚠も出す)
-    note(ws, "N3", "⚙翌側締め", 8, GRAY, h="center")
-    note(ws, "O3", "⚙同日上限", 8, GRAY, h="center")
     ws["N4"] = ('=IF($H$4>=1,MIN(MOD($H$4,1),$C$4),'
                 'IF($H$4>=$G$4,0,IF($H$4<=$C$4,$H$4,0)))')
     ws["O4"] = ('=IF($H$4>=1,1,'
@@ -201,8 +199,10 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         for col in "BCDEFGHIJ":
             ws[f"{col}{r}"].border = Border(bottom=BORDER_HAIR.bottom, left=BORDER_HAIR.left,
                                             right=BORDER_HAIR.right)
-        ws[f"K{r}"].border = Border(left=coral_side, right=BORDER_HAIR.right, bottom=BORDER_HAIR.bottom)
-        ws[f"L{r}"].border = Border(right=coral_side, bottom=BORDER_HAIR.bottom)
+        # 最下行(⑤レイト)は下辺もコーラルにして強調枠を閉じる
+        k_bottom = coral_side if bi == len(BANDS) - 1 else BORDER_HAIR.bottom
+        ws[f"K{r}"].border = Border(left=coral_side, right=BORDER_HAIR.right, bottom=k_bottom)
+        ws[f"L{r}"].border = Border(right=coral_side, bottom=k_bottom)
 
     # 合計行・全日ペース
     ws.row_dimensions[12].height = 20
@@ -218,11 +218,13 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
     style_range(ws, "H12", font=fnt(9.5, True, "5B6472"), alignment=align("center"), num="#,##0.0")
     style_range(ws, "I12", font=fnt(9.5, True, GRAY), alignment=align("center"), num='0.0"h"')
     style_range(ws, "J12", font=fnt(9.5, True, "5B6472"), alignment=align("center"), num="#,##0.0")
-    style_range(ws, "B12:L12", border=Border(top=BORDER_LIGHT.top))
+    style_range(ws, "B12:J12", border=Border(top=BORDER_LIGHT.top))
+    style_range(ws, "K12:L12", border=Border(top=coral_side))
 
     # 使った週数
     ws.row_dimensions[13].height = 16
-    note(ws, "B13", "集計に使った週数", 8.5, GRAY)
+    # ラベルは値(H13)の左隣まで伸ばして右寄せ(離れているとどの値のラベルか読めない)
+    note(ws, "B13:G13", "集計に使った週数", 8.5, GRAY, h="right")
     ws["H13"] = "=SUMPRODUCT((D12:G12>0)*1)"
     style_range(ws, "H13", font=fnt(9, True, TEAL), alignment=align("center"), num='0"週"')
 
@@ -252,7 +254,6 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
     # O5=同日閉店疑いの週数(翌日閉店設定なのに22時以降の販売が0個の有効週)
     valid_total = "(" + "+".join(
         f"IF({s}!$AD$3=1,SUM({s}!$AF$5:$AF${MSO_END}),0)" for s in CALIB_SHEETS) + ")"
-    note(ws, "M5", "⚙時刻チェック→", 8, GRAY, h="right")
     ws["N5"] = f"={valid_total}-SUM($D$12:$G$12)"
     susp_terms = []
     for wi, s in enumerate(CALIB_SHEETS):
@@ -317,7 +318,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
          "構成比で1日の売れ方の推移が見え、商品別係数は準備数計算「⑤ 商品別の波」で作る数に適用できます。", 9)
 
     ws.row_dimensions[3].height = 20
-    chip(ws, "B3", "  ⚙ 係数を使う最低個数", CHIP_AMBER, INK, 9)
+    chip(ws, "B3:C3", "  ⚙ 係数を使う最低個数", CHIP_AMBER, INK, 9)
     ws["D3"] = 30
     style_range(ws, "D3", font=fnt(9, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT, num='#,##0"個"')
@@ -349,9 +350,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         ws[ref] = text
         style_range(ws, ref, font=fnt(9, True, "FFFFFF"), fl=fill(NAVY),
                     alignment=align("center", "center", True), border=BORDER_LIGHT)
-    for bi in range(5):
-        note(ws, f"{get_column_letter(16 + bi)}6", f"⚙個数{'①②③④⑤'[bi]}", 8, GRAY)
-
+    # 非表示のP〜T列に帯別個数を置く(印刷ににじむためラベルは置かない)
     starts5 = ["$C$4", "$D$4", "$E$4", "$F$4", "$G$4"]
     ends5 = ["$D$4", "$E$4", "$F$4", "$G$4", None]
     thr = 'IF(ISNUMBER($D$3),$D$3,30)'
@@ -400,7 +399,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         style_range(ws, f"H{wr}", font=fnt(9, True, "5B6472"), alignment=align("center"), num="#,##0")
         style_range(ws, f"I{wr}:M{wr}", font=fnt(9.5, True, CORAL), fl=fill("FFF1EE"),
                     alignment=align("center"), num='0.00"倍"')
-        style_range(ws, f"N{wr}", font=fnt(8.5, False, GRAY), alignment=align("left"))
+        style_range(ws, f"N{wr}", font=fnt(8.5, False, GRAY), alignment=align("center"))
         if i % 2:
             for c in "BCDEFGHN":
                 ws[f"{c}{wr}"].fill = fill(F_ZEBRA)
@@ -445,7 +444,9 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         ws.column_dimensions["A"].width = 11
         for c_idx in range(2, MSO_NCOL + 1):
             ws.column_dimensions[get_column_letter(c_idx)].width = 11
-        ws.column_dimensions["X"].width = 26          # 商品名
+        ws.column_dimensions["X"].width = 34          # 商品名(全角16字まで見切れなし)
+        ws.column_dimensions["G"].width = 21          # 劇場名(ＴＯＨＯシネマズ新宿)
+        ws.column_dimensions["I"].width = 17          # 販売場所名(モバイルオーダー)
         # 伝票番号(B)・商品コード(W)は12桁超のためGeneralだと指数表記になる。
         # 14桁が収まるよう幅も広げる(幅不足だと###表示)
         for c in ("B", "W"):
@@ -464,9 +465,10 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
         title_band(ws, f"A1:{get_column_letter(MSO_NCOL)}1",
                    f"　⏱ {sheet_name}｜{si + 1}週目の金曜のMSO商品CSV（時間帯係数の較正用）")
         ws.row_dimensions[2].height = 30
+        # 折り返し位置は自前の改行で制御(自動折返しだと閉じ括弧が行頭に落ちる)
         note(ws, "A2:N2",
              "① 金曜1日分で出力したMSO商品CSVを開いて全選択→コピー（Ctrl+A → Ctrl+C）　"
-             "② 下のオレンジのセル（A4）を選択　③ 右クリック→『値の貼り付け』。"
+             "② 下のオレンジのセル（A4）を選択　③ 右クリック→『値の貼り付け』\n"
              f"ヘッダー行ごと貼ってOKです（最大{MSO_MAX:,}行）。貼り替えるときは、前回のデータ"
              "（5行目以降のA〜AB列）だけを選択してDeleteで消してください（行ごと削除しないこと）。",
              9, GRAY, wrap=True)
