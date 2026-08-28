@@ -220,6 +220,30 @@ def parse_ymd(x):
 PASTE_SHEETS = ("CSV貼付A", "CSV貼付B", "係数貼付①", "係数貼付②", "係数貼付③", "係数貼付④")
 
 
+def force_font(path, name=None):
+    """ワークブック内の全フォント名を指定フォントへ書き戻す。
+    LibreOfficeでの再計算保存時にセルのフォント名が環境の代替フォント
+    (WenQuanYi Zen Hei等)へ置換されるため、styles.xml(セル・条件付き書式)と
+    テーマのフォント名をzipレベルで一括修正する。再計算後の仕上げに呼ぶこと。"""
+    import os
+    import re
+    import zipfile
+
+    name = name or FONT_NAME
+    tmp = path + ".tmpf"
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "xl/styles.xml":
+                data = re.sub(rb'<name val="[^"]*"',
+                              f'<name val="{name}"'.encode(), data)
+            elif item.filename.startswith("xl/theme/"):
+                data = re.sub(rb'typeface="[^"]+"',
+                              f'typeface="{name}"'.encode(), data)
+            zout.writestr(item, data)
+    os.replace(tmp, path)
+
+
 def show_paste_comments(path, sheets=PASTE_SHEETS):
     """指定シートのコメント(A4の貼り付け案内)を常時表示にする。
     openpyxl/LibreOfficeはコメントを非表示で書き出すため、xlsx内のVMLを直接
@@ -1142,11 +1166,12 @@ if __name__ == "__main__":
     ap.add_argument("--close", default="22:00",
                     help="係数算出の閉店時刻(基本22:00。レイト日は 26:00 や 2:00=翌2時も可)")
     ap.add_argument("--show-notes", metavar="XLSX",
-                    help="既存xlsxの貼り付けシートのメモを常時表示化して終了(再計算後に実行)")
+                    help="既存xlsxの仕上げ: フォント名の書き戻し+貼り付けメモの常時表示化(再計算後に実行)")
     a = ap.parse_args()
     if a.show_notes:
+        force_font(a.show_notes)
         n = show_paste_comments(a.show_notes)
-        print(f"notes patched: {n} vml file(s) in {a.show_notes}")
+        print(f"finalized: font={FONT_NAME}, notes patched: {n} vml file(s) in {a.show_notes}")
         raise SystemExit(0)
     build(a.out, csv_a=a.csv_a, csv_b=a.csv_b, select=a.select,
           att_a=[int(x) for x in a.att_a.split(",")] if a.att_a else None,
