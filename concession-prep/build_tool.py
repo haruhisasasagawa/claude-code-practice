@@ -203,6 +203,12 @@ JUDGE_NODATA = "（MSO未貼付）"
 WEEKDAY_JA = '"日","月","火","水","木","金","土"'
 
 
+def parse_clock(s):
+    """"22:00"/"26:00"/"2:00" → 時刻シリアル値(時/24)。24時間超え表記も可"""
+    h, m = s.split(":")
+    return (int(h) + int(m) / 60) / 24
+
+
 def parse_ymd(x):
     """yyyymmdd数値/文字列・日付型セルのどれでも日付シリアルに解釈する式。
     2000〜2100年の範囲外(0・空欄・壊れた値)は-1を返す。"""
@@ -290,7 +296,8 @@ def read_csv_rows(path):
 # ---------------------------------------------------------------- build ------
 def build(out_path, csv_a=None, csv_b=None, select="A",
           att_a=None, att_b=None, peak=None, preset="平常（基準）", adjust=1.0,
-          products=DEFAULT_PRODUCTS, mso_csvs=(None, None, None, None)):
+          products=DEFAULT_PRODUCTS, mso_csvs=(None, None, None, None),
+          close="22:00"):
     wb = Workbook()
 
     # ============================================================ 使い方 =====
@@ -397,6 +404,8 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         "（データ不足・該当なし・その帯の個数0の商品は自動で全体の時間帯係数。適用値は「商品係数」列で確認できます）。",
         "・時間帯プリセット名の先頭の①〜⑤マークは商品別の波の帯対応キーです。"
         "名前を書き換えるときも先頭のマークは残してください（消すとその時間帯は全体係数になり、警告が出ます）。",
+        "・閉店時刻（係数算出シートの時間の区切り）は基本 22:00。レイト営業日は 26:00（＝翌2:00。24時間超え表記OK）"
+        "まで対応します。同日閉店・翌日閉店は自動判別。区切りの外に販売があると係数算出に⚠が出ます。",
         "・貼らなくても本体はプリセットの既定係数のまま使えます。",
     ]
     for t in calib_notes:
@@ -1101,7 +1110,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     # ============================================== 係数算出・係数貼付①〜④ ==
     # 時間帯係数の較正シート群(実測候補は準備数計算のK列に連動)
     from build_calib import add_calib_sheets
-    add_calib_sheets(wb, mso_csvs)
+    add_calib_sheets(wb, mso_csvs, close=parse_clock(close))
 
     # ------------------------------------------------------------------ save -
     wb.properties.title = "コンセッション事前準備数ツール"
@@ -1123,6 +1132,8 @@ if __name__ == "__main__":
     ap.add_argument("--adjust", type=float, default=1.0)
     for k in range(1, 5):
         ap.add_argument(f"--mso{k}", help=f"係数貼付{'①②③④'[k - 1]}に入れるMSO商品CSV(金曜1日分)")
+    ap.add_argument("--close", default="22:00",
+                    help="係数算出の閉店時刻(基本22:00。レイト日は 26:00 や 2:00=翌2時も可)")
     ap.add_argument("--show-notes", metavar="XLSX",
                     help="既存xlsxの貼り付けシートのメモを常時表示化して終了(再計算後に実行)")
     a = ap.parse_args()
@@ -1134,4 +1145,4 @@ if __name__ == "__main__":
           att_a=[int(x) for x in a.att_a.split(",")] if a.att_a else None,
           att_b=[int(x) for x in a.att_b.split(",")] if a.att_b else None,
           peak=a.peak, preset=a.preset, adjust=a.adjust,
-          mso_csvs=(a.mso1, a.mso2, a.mso3, a.mso4))
+          mso_csvs=(a.mso1, a.mso2, a.mso3, a.mso4), close=a.close)

@@ -68,8 +68,9 @@ def read_mso_rows(path):
     return out
 
 
-def add_calib_sheets(wb, csvs=(None, None, None, None)):
-    """本体ワークブックへ「係数算出」「係数貼付①〜④」を追加する"""
+def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
+    """本体ワークブックへ「係数算出」「商品別の波」「係数貼付①〜④」を追加する。
+    close: 閉店時刻の初期値(時/24。22:00なら22/24、26:00なら26/24)"""
 
     # ========================================================== 係数算出 =====
     ws = wb.create_sheet("係数算出")
@@ -95,7 +96,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
     ws.row_dimensions[3].height = 20
     chip(ws, "B3", "  ⏰ 時間の区切り", CHIP_AMBER, INK, 9)
     tb = [("C3", "開店", 8 / 24), ("D3", "朝→昼", 11 / 24), ("E3", "昼→夕", 15 / 24),
-          ("F3", "夕→夜", 18 / 24), ("G3", "夜→レイト", 21 / 24), ("H3", "閉店(翌)", 2 / 24)]
+          ("F3", "夕→夜", 18 / 24), ("G3", "夜→レイト", 21 / 24), ("H3", "閉店", close)]
     ws.row_dimensions[4].height = 18
     for ref, label, val in tb:
         note(ws, ref, label, 8, GRAY, h="center")
@@ -103,8 +104,20 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
         ws[vref] = val
         style_range(ws, vref, font=fnt(9, True), fl=fill(F_INPUT),
                     alignment=align("center"), border=BORDER_INPUT, num="h:mm")
-    ws["H3"].comment = Comment("最終レイトの終わり(翌日側)。翌2:00なら 2:00 と入力"
-                               "(26:00 と入力しても翌2:00として扱います)。", "準備数ツール")
+    ws["H3"].comment = Comment("閉店時刻。基本は 22:00。レイト営業日は 26:00 または 翌2:00 の"
+                               "形で入力してください(24時間超え表記対応)。同日閉店(21時以降)と"
+                               "翌日閉店(24:00〜)は自動判別します。", "準備数ツール")
+    # 閉店の正規化(印刷範囲外のN・O列): O4=同日側の上限、N4=翌日側の締めフラクション
+    #   26:00/翌2:00 → O4=24:00・N4=2:00 / 22:00 → O4=22:00・N4=0 /
+    #   開店とレイト開始の間(20:00等の設定ミス) → 空の帯になりB23に⚠
+    note(ws, "N3", "⚙翌側締め", 8, GRAY, h="center")
+    note(ws, "O3", "⚙同日上限", 8, GRAY, h="center")
+    ws["N4"] = ('=IF($H$4>=1,MOD($H$4,1),'
+                'IF($H$4>=$G$4,0,IF($H$4<=$C$4,$H$4,0)))')
+    ws["O4"] = ('=IF($H$4>=1,1,'
+                'IF($H$4>=$G$4,$H$4,IF($H$4<=$C$4,1,$H$4)))')
+    for ref in ("N4", "O4"):
+        style_range(ws, ref, font=fnt(8.5, False, GRAY), alignment=align("center"), num="h:mm")
 
     # 帯ごとの窓: ①[開店,朝→昼) ②[朝→昼,昼→夕) ③[昼→夕,夕→夜) ④[夕→夜,夜→レイト)
     #             ⑤[夜→レイト,24:00)+[0:00,閉店)
@@ -128,25 +141,28 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
         ws.row_dimensions[r].height = 20
         ws[f"B{r}"] = name
         ws[f"C{r}"] = (f'=TEXT({starts[bi]},"h:mm")&"〜"&' +
-                       (f'TEXT({ends[bi]},"h:mm")' if ends[bi] else 'TEXT($H$4,"h:mm")&"(翌)"'))
+                       (f'TEXT({ends[bi]},"h:mm")' if ends[bi]
+                        else 'TEXT($H$4,"h:mm")&IF(OR($H$4>=1,$H$4<=$C$4),"(翌)","")'))
         for wi, sheet in enumerate(CALIB_SHEETS):
             col = get_column_letter(4 + wi)
             rng_t = f"{sheet}!$AE$5:$AE${MSO_END}"
             rng_q = f"{sheet}!$AF$5:$AF${MSO_END}"
             # 貼付シートの正常フラグ(AD3)が0の週(別CSVの誤貼付・式の破損)は集計しない
             ok = f"{sheet}!$AD$3=1"
-            # 閉店時刻はMODで正規化(26:00=1.083等の24時間超え表記でも翌2:00として扱う)
+            # ⑤レイト帯は正規化済みの閉店(O4=同日上限・N4=翌日側締め)で区切る。
+            # 22:00(同日)と26:00=翌2:00(翌日)のどちらの閉店にも同じ式で対応
             if ends[bi]:
                 ws[f"{col}{r}"] = (f'=IF({ok},SUMIFS({rng_q},{rng_t},">="&{starts[bi]},'
                                    f'{rng_t},"<"&{ends[bi]}),0)')
             else:
-                ws[f"{col}{r}"] = (f'=IF({ok},SUMIFS({rng_q},{rng_t},">="&{starts[bi]})'
-                                   f'+SUMIFS({rng_q},{rng_t},"<"&MOD($H$4,1)),0)')
+                ws[f"{col}{r}"] = (f'=IF({ok},SUMIFS({rng_q},{rng_t},">="&{starts[bi]},'
+                                   f'{rng_t},"<"&$O$4)'
+                                   f'+SUMIFS({rng_q},{rng_t},"<"&$N$4),0)')
         ws[f"H{r}"] = f'=IF($H$13=0,"",SUM(D{r}:G{r})/$H$13)'
         if ends[bi]:
             ws[f"I{r}"] = f'=({ends[bi]}-{starts[bi]})*24'
         else:
-            ws[f"I{r}"] = f'=(1-{starts[bi]})*24+MOD($H$4,1)*24'
+            ws[f"I{r}"] = f'=($O$4-{starts[bi]})*24+$N$4*24'
         ws[f"J{r}"] = f'=IF(OR($H{r}="",$I{r}<=0),"",$H{r}/$I{r})'
         ws[f"K{r}"] = f'=IF(OR($J{r}="",$J$12=""),"",IF($J$12<=0,"",$J{r}/$J$12))'
         ws[f"L{r}"] = f'=IF($K{r}="","—",ROUND($K{r}/0.05,0)*0.05)'
@@ -214,11 +230,21 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
          9, INK, wrap=True)
     ws.row_dimensions[23].height = 16
     bad_any = "+".join(f"({s}!$AD$3=0)" for s in CALIB_SHEETS)
+    # 有効週の対象個数合計(帯内合計との差=営業時間の区切りの外の販売)
+    valid_total = "(" + "+".join(
+        f"IF({s}!$AD$3=1,SUM({s}!$AF$5:$AF${MSO_END}),0)" for s in CALIB_SHEETS) + ")"
+    oob = f"{valid_total}-SUM($D$12:$G$12)"
     ws["B23"] = ('=TRIM('
                  'IF($H$13=0,"⚠ まだ有効なデータが貼られていません。係数貼付①〜④に金曜1日分の'
                  'MSO商品CSVを貼ってください（貼らなくても本体はプリセットの既定係数で使えます）。","")&" "&'
                  f'IF(({bad_any})>0,'
-                 '"⚠ 貼付シートに問題があり集計から除外した週があります（上の貼付状況を確認）。",""))')
+                 '"⚠ 貼付シートに問題があり集計から除外した週があります（上の貼付状況を確認）。","")&" "&'
+                 f'IF(AND($H$4>$C$4,$H$4<$G$4),'
+                 '"⚠ 閉店時刻がレイト開始（夜→レイトの区切り）より前になっています。'
+                 '時間の区切りを確認してください。","")&" "&'
+                 f'IF({oob}>0,'
+                 f'"⚠ 時間の区切りの外の販売が "&TEXT({oob},"#,##0")&" 個あります'
+                 '（開店・閉店の時刻を確認。この分は係数の集計対象外です）。",""))')
     ws.merge_cells("B23:L23")
     style_range(ws, "B23:L23", font=fnt(8.5, True, "D14343"), alignment=align("left"))
 
@@ -308,8 +334,9 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
                     s = (f'IF({sheet}!$AD$3=1,SUMIFS({q},{x},$B{wr},'
                          f'{t},">="&係数算出!{starts5[bi]},{t},"<"&係数算出!{ends5[bi]}),0)')
                 else:
-                    s = (f'IF({sheet}!$AD$3=1,SUMIFS({q},{x},$B{wr},{t},">="&係数算出!$G$4)'
-                         f'+SUMIFS({q},{x},$B{wr},{t},"<"&MOD(係数算出!$H$4,1)),0)')
+                    s = (f'IF({sheet}!$AD$3=1,SUMIFS({q},{x},$B{wr},'
+                         f'{t},">="&係数算出!$G$4,{t},"<"&係数算出!$O$4)'
+                         f'+SUMIFS({q},{x},$B{wr},{t},"<"&係数算出!$N$4),0)')
                 terms.append(s)
             ws[f"{col}{wr}"] = f'=IF($B{wr}="","",{"+".join(terms)})'
             style_range(ws, f"{col}{wr}", font=fnt(8.5, False, GRAY), alignment=align("center"))

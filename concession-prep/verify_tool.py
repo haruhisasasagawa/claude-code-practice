@@ -33,11 +33,23 @@ for k in range(1, 5):
 ap.add_argument("--band", type=int, default=0,
                 help="選択中プリセットの帯番号1〜5(商品別の波の適用検証用。0=適用なし)")
 ap.add_argument("--wave-thr", type=int, default=30, help="商品別係数を使う最低個数")
+ap.add_argument("--close", default="26:00",
+                help="係数算出H4と同じ閉店時刻(22:00=同日/26:00=翌2:00。既定26:00)")
 a = ap.parse_args()
 
 wb = load_workbook(a.xlsx, data_only=True)
 errors = []
-DURS = [3, 4, 3, 3, 5]
+
+# 閉店時刻→⑤レイト帯の窓と帯長(Excel側のN4/O4正規化と同じルール)
+_h, _m = a.close.split(":")
+_close_h = int(_h) + int(_m) / 60
+if _close_h >= 24:
+    CAP5, ND5, DUR5 = 1.0, (_close_h - 24) / 24, 3 + (_close_h - 24)
+elif _close_h >= 21:
+    CAP5, ND5, DUR5 = _close_h / 24, 0.0, _close_h - 21
+else:                       # 翌側表記(2:00等)
+    CAP5, ND5, DUR5 = 1.0, _close_h / 24, 3 + _close_h
+DURS = [3, 4, 3, 3, DUR5]
 
 
 def check(label, got, want, tol=0):
@@ -93,7 +105,7 @@ def band_of(tv):
     for bi, w in enumerate(windows):
         if w[0] <= tv < w[1]:
             return bi
-    if tv >= 21 / 24 or tv < 2 / 24:
+    if (21 / 24 <= tv < CAP5) or tv < ND5:
         return 4
     return None
 
