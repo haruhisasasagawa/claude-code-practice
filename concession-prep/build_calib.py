@@ -322,9 +322,12 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
             pcol = get_column_letter(16 + bi)
             ws[f"{ccol}{wr}"] = f'=IF($B{wr}="","",IF($H{wr}=0,"—",{pcol}{wr}/$H{wr}))'
             kcol = get_column_letter(9 + bi)
+            # 帯長が0以下(時間の区切りの逆転・同値)のときは"—"で全体係数へフォールバック
+            # (負の帯長だと個数0×負係数=0.00が数値として作る数に適用されてしまうため)
             ws[f"{kcol}{wr}"] = (f'=IF($B{wr}="","",IF($N{wr}<>"{JUDGE_USE}","—",'
+                                 f'IF(OR(係数算出!$I${7 + bi}<=0,係数算出!$I$12<=0),"—",'
                                  f'IFERROR(ROUND(({pcol}{wr}/$H{wr})*'
-                                 f'(係数算出!$I$12/係数算出!$I${7 + bi})/0.05,0)*0.05,"—")))')
+                                 f'(係数算出!$I$12/係数算出!$I${7 + bi})/0.05,0)*0.05,"—"))))')
         style_range(ws, f"B{wr}", font=fnt(9.5), alignment=align("left"))
         style_range(ws, f"C{wr}:G{wr}", font=fnt(9, False, "5B6472"),
                     alignment=align("center"), num="0%")
@@ -353,6 +356,9 @@ def add_calib_sheets(wb, csvs=(None, None, None, None)):
     ws.row_dimensions[last_w + 3].height = 16
     note(ws, f"B{last_w + 3}:N{last_w + 3}",
          "※ 「該当なし」はMSO側に同名の商品が無い場合です（商品名の表記が売上CSVと異なる可能性。その商品は全体の時間帯係数で計算されます）。", 8.5)
+    ws.row_dimensions[last_w + 4].height = 16
+    note(ws, f"B{last_w + 4}:N{last_w + 4}",
+         "※ このシートは全て自動計算です。行の挿入・削除・並べ替え・セルの移動はしないでください（準備数計算との行対応が崩れます）。", 8.5)
     ws.freeze_panes = "A7"
 
     # ======================================================= 係数貼付①〜④ ===

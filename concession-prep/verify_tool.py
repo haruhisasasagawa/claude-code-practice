@@ -57,19 +57,34 @@ def sales_by_name(csv_path):
 
 
 def mso_rows_filtered(path):
-    """Excel側AF列と同じ対象行(先頭行の日付・提供済・販売・セット親以外・数量>0)"""
+    """Excel側AF列と同じ対象行(先頭行の日付・提供済・販売・セット親以外・数量>0)。
+    時刻はAE式と同じくMOD/TIMEVALUE相当で24時間にラップし、解釈不能な行は除外"""
     rows = read_mso_rows(path)[:MSO_MAX]
     target = rows[0][10] if rows else None
     out = []
     for r in rows:
         if (r[10] != target or r[18] != "提供済" or r[19] != "販売"
-                or r[27] == "セット親" or not isinstance(r[12], str)):
+                or r[27] == "セット親"):
             continue
         q = r[25] or 0
         if not isinstance(q, (int, float)) or q <= 0:
             continue
-        h, mi, s = map(int, r[12].split(":"))
-        out.append(((h * 3600 + mi * 60 + s) / 86400, q, r[23]))
+        t = r[12]
+        if isinstance(t, (int, float)):
+            tv = t % 1.0
+        elif isinstance(t, str):
+            try:
+                parts = [int(x) for x in t.split(":")]
+            except ValueError:
+                continue
+            if len(parts) == 2:
+                parts.append(0)
+            if len(parts) != 3:
+                continue
+            tv = ((parts[0] * 3600 + parts[1] * 60 + parts[2]) / 86400) % 1.0
+        else:
+            continue
+        out.append((tv, q, r[23]))
     return out
 
 
@@ -273,7 +288,8 @@ if any(mso_paths):
             else:
                 check_r005(f"{WAVE_SHEET}!{kcol}{wr}(係数)", wv[f"{kcol}{wr}"].value, cexp)
         check(f"{WAVE_SHEET}!H{wr}(合計)", wv[f"H{wr}"].value, total)
-        want_j = (JUDGE_NONE if total == 0 else
+        want_j = (JUDGE_NODATA if n_weeks == 0 else
+                  JUDGE_NONE if total == 0 else
                   JUDGE_FEW if total < a.wave_thr else JUDGE_USE)
         check(f"{WAVE_SHEET}!N{wr}(判定)", wv[f"N{wr}"].value, want_j)
 else:
