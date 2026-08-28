@@ -38,7 +38,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.properties import PageSetupProperties
 
 # ---------------------------------------------------------------- palette ----
-FONT_NAME = "BIZ UDPゴシック"   # Win10以降標準のUDフォント。無い環境では自動代替
+FONT_NAME = "Meiryo UI"          # 全シート共通フォント。無い環境では自動代替
 
 NAVY = "2E3A59"
 INK = "333B4A"
