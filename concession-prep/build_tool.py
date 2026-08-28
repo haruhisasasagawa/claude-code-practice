@@ -799,7 +799,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws["B4"] = ('="時間帯: "&準備数計算!$D$6&"（係数 ×"&TEXT(準備数計算!$M$7*100,"0")&'
                 '"% × 調整 ×"&TEXT(IF(ISNUMBER(準備数計算!$D$7),準備数計算!$D$7,1)*100,"0")&'
                 '"% ＝ ×"&TEXT(準備数計算!$M$7*IF(ISNUMBER(準備数計算!$D$7),準備数計算!$D$7,1)*100,"0")&"%）"&'
-                'IF(準備数計算!$M$9=1,"　｜　商品別の波 適用中（商品ごとの実測係数）","")')
+                'IF(準備数計算!$M$9=1,"　｜　商品別の波 適用中","")')
     style_range(ws, "B4:E4", font=fnt(9.5, False, "5B6472"), alignment=align("left"))
     ws.row_dimensions[5].height = 22
     note(ws, "B5:E5", "日付・回：＿＿＿＿＿＿＿＿＿＿　　作成者：＿＿＿＿＿＿　　確認者：＿＿＿＿＿＿", 10, INK)
@@ -1118,8 +1118,9 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         for c_idx in range(2, NCOL + 1):
             ws.column_dimensions[get_column_letter(c_idx)].width = 11
         ws.column_dimensions["N"].width = 28
-        # 商品コード(M)は13桁のためGeneralだと指数表記になる
+        # 商品コード(M)は13桁のためGeneralだと指数表記になる(幅も13桁ぶん確保)
         ws.column_dimensions["M"].number_format = "0"
+        ws.column_dimensions["M"].width = 15
 
         ws.row_dimensions[1].height = 34
         title_band(ws, f"A1:{get_column_letter(NCOL)}1",

@@ -426,9 +426,11 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24):
         for c_idx in range(2, MSO_NCOL + 1):
             ws.column_dimensions[get_column_letter(c_idx)].width = 11
         ws.column_dimensions["X"].width = 26          # 商品名
-        # 伝票番号(B)・商品コード(W)は12桁超のためGeneralだと指数表記になる
+        # 伝票番号(B)・商品コード(W)は12桁超のためGeneralだと指数表記になる。
+        # 14桁が収まるよう幅も広げる(幅不足だと###表示)
         for c in ("B", "W"):
             ws.column_dimensions[c].number_format = "0"
+            ws.column_dimensions[c].width = 16
         ws.column_dimensions["AC"].width = 2.5        # 緩衝
         ws.column_dimensions["AD"].width = 10
         ws.column_dimensions["AE"].width = 9
