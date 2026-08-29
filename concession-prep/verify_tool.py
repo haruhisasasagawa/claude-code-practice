@@ -219,11 +219,11 @@ else:
         if cp is not None:
             # H列(0.05刻み)を生係数で検証し、作る数はExcelが実際に使った係数で突合
             check_r005(f"準備数計算!H{r}(商品係数)", hv, cp)
-            eff = hv if isinstance(hv, (int, float)) else 1.0
+            eff = hv if isinstance(hv, (int, float)) else a.mult
         else:
+            # 商品係数が出ない商品は全体の時間帯係数で計算(商品ごとの置き換え)
             check(f"準備数計算!H{r}(商品係数=—)", hv, "—")
-            # 波の適用中(M9=1)は時間帯係数を使わない排他設計: 係数の出ない商品は×1.0
-            eff = 1.0 if wave_active else a.mult
+            eff = a.mult
         check(f"準備数計算!D{r}", m[f"D{r}"].value, s)
         check(f"準備数計算!E{r}", m[f"E{r}"].value, rate, tol=1e-9)
         check(f"準備数計算!F{r}", m[f"F{r}"].value, math.ceil(a.peak * rate * eff), tol=1)

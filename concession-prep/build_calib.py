@@ -324,7 +324,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
                 alignment=align("center"), border=BORDER_INPUT, num='#,##0"個"')
     ws["D3"].protection = UNLOCKED
     note(ws, "E3:N3",
-         "← 係数貼付①〜④の合計個数がこの数に満たない商品は、精度が低いため係数1.0（その商品の平均ペース）で計算します（編集可）。", 8.5)
+         "← 係数貼付①〜④の合計個数がこの数に満たない商品は、精度が低いため全体の時間帯係数で計算します（編集可）。", 8.5)
     dv_thr = DataValidation(type="whole", operator="between", formula1="1", formula2="999999",
                             showErrorMessage=True)
     dv_thr.error = "最低個数は 1〜999,999 の整数で入力してください"
@@ -386,7 +386,7 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
             pcol = get_column_letter(16 + bi)
             ws[f"{ccol}{wr}"] = f'=IF($B{wr}="","",IF($H{wr}=0,"—",{pcol}{wr}/$H{wr}))'
             kcol = get_column_letter(9 + bi)
-            # 帯長が0以下(時間の区切りの逆転・同値)と帯個数0のときは"—"で係数1.0へ
+            # 帯長が0以下(時間の区切りの逆転・同値)と帯個数0のときは"—"で全体係数へ
             # フォールバック(負の帯長は0.00が数値として適用される事故、帯個数0は
             # 「作らない→売れない→係数0→作らない」の自己成就と無警告の作る数0を防ぐ)。
             # 生係数が0.025未満で0.05刻みの丸め結果が0.00になる帯も同様に"—"
@@ -421,10 +421,10 @@ def add_calib_sheets(wb, csvs=(None, None, None, None), close=22 / 24, open_=8 /
     ws.row_dimensions[last_w + 2].height = 16
     note(ws, f"B{last_w + 2}:N{last_w + 2}",
          "※ 商品別係数 ＝ 帯の1h当たり個数 ÷ その商品の1日平均ペース（係数算出の区切りに連動）。"
-         "「—」（個数0・データ不足・丸めて0.00）は波の適用中は係数1.0で計算（作る数が黙って0になるのを防ぐため）。", 8.5)
+         "「—」（個数0・データ不足・丸めて0.00）は全体の時間帯係数で計算（作る数が黙って0になるのを防ぐため）。", 8.5)
     ws.row_dimensions[last_w + 3].height = 16
     note(ws, f"B{last_w + 3}:N{last_w + 3}",
-         "※ 「該当なし」はMSO側に同名の商品が無い場合です（商品名の表記が売上CSVと異なる可能性。その商品は波の適用中は係数1.0で計算されます）。", 8.5)
+         "※ 「該当なし」はMSO側に同名の商品が無い場合です（商品名の表記が売上CSVと異なる可能性。その商品は全体の時間帯係数で計算されます）。", 8.5)
     ws.row_dimensions[last_w + 4].height = 16
     note(ws, f"B{last_w + 4}:N{last_w + 4}",
          "※ このシートは全て自動計算です（最低個数D3のみ編集可・シート保護済み）。", 8.5)
