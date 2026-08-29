@@ -3,7 +3,7 @@
 TOHOシネマズ新宿 コンセッション事前準備数ツール（v5.2）生成スクリプト
 
 TOHOの営業週(金曜開始)に合わせ、本社集計「売上・在庫・原価」CSV(34列/cp932)を
-期間A(直近 金土日)・期間B(前週 金〜木)の2本貼り付けて使う構成。
+期間A(直近金土日)・期間B(前週 金〜木)の2本貼り付けて使う構成。
 
 シート構成:
   使い方       … 3ステップの利用ガイド・凡例・注意点
@@ -194,7 +194,7 @@ EXC_SLOTS = 12                   # 除外リストの枠数(期間データ!B37:
 EXC_TOP = 37
 EXC_END = EXC_TOP + EXC_SLOTS - 1
 
-SEL_A = "期間A（金土日）"
+SEL_A = "期間A（直近金土日）"
 SEL_B = "期間B（金〜木）"
 SEL_AVG = "期間平均（A+B）"
 
@@ -372,7 +372,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[1].height = 38
     title_band(ws, "A1:J1", "　🍿 コンセッション 事前準備数ツール")
     ws.row_dimensions[2].height = 20
-    note(ws, "B2:J2", "TOHOシネマズ新宿｜期間A(直近 金土日)・期間B(前週 金〜木)の購買率から、ピーク前の仕込み数を自動計算", 9.5)
+    note(ws, "B2:J2", "TOHOシネマズ新宿｜期間A(直近金土日)・期間B(前週 金〜木)の購買率から、ピーク前の仕込み数を自動計算", 9.5)
 
     ws.row_dimensions[4].height = 22
     chip(ws, "B4:D4", "  つかいかた（3ステップ）", CHIP_NAVY, NAVY)
@@ -567,7 +567,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
                 '"参照: "&IF(期間データ!$C$8="","—",TEXT(期間データ!$C$8,"m/d"))&"〜"&'
                 'IF(期間データ!$I$8="","—",TEXT(期間データ!$I$8,"m/d"))&"（期間B 金〜木）",'
                 '"参照: "&IF(期間データ!$C$4="","—",TEXT(期間データ!$C$4,"m/d"))&"〜"&'
-                'IF(期間データ!$E$4="","—",TEXT(期間データ!$E$4,"m/d"))&"（期間A 金土日）"))'
+                'IF(期間データ!$E$4="","—",TEXT(期間データ!$E$4,"m/d"))&"（期間A 直近金土日）"))'
                 '&"｜動員合計 "&TEXT($M$5,"#,##0")&"人"')
     style_range(ws, "E4:H4", font=fnt(9.5, False, "5B6472"), alignment=align("left"))
 
@@ -786,12 +786,12 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[3].height = 22
     ws.merge_cells("B3:E3")
     ws["B3"] = ('="参照期間: "&IF(準備数計算!$M$4=3,"期間平均（A+B）",'
-                'IF(準備数計算!$M$4=2,"期間B（金〜木）","期間A（金土日）"))&" "&'
+                'IF(準備数計算!$M$4=2,"期間B（金〜木）","期間A（直近金土日）"))&" "&'
                 'IF(準備数計算!$M$4=1,'
                 'IF(期間データ!$C$4="","",TEXT(期間データ!$C$4,"m/d")&"〜"&TEXT(期間データ!$E$4,"m/d")),'
                 'IF(期間データ!$C$8="","",TEXT(期間データ!$C$8,"m/d")&"〜"&'
                 'IF(準備数計算!$M$4=2,TEXT(期間データ!$I$8,"m/d"),TEXT(期間データ!$E$4,"m/d"))))&'
-                '"　｜　ピーク動員数: "&IF(準備数計算!$D$5="","（未入力）",'
+                '" ｜ ピーク動員数: "&IF(準備数計算!$D$5="","（未入力）",'
                 'TEXT(準備数計算!$D$5,"#,##0")&"人")')
     style_range(ws, "B3:E3", font=fnt(11, True, INK), alignment=align("left"))
     ws.row_dimensions[4].height = 20
@@ -869,11 +869,11 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     note(ws, "F2:K2", "販売数はCSV貼付A/Bから自動集計。商品名はプルダウンで選択。", 8.5)
     ws.row_dimensions[3].height = 6
 
-    # 期間A(金土日) — 日付はCSVの対象期間から自動表示
+    # 期間A(直近金土日) — 日付はCSVの対象期間から自動表示
     pa_s = parse_ymd("CSV貼付A!$D$5")
     pa_e = parse_ymd("CSV貼付A!$E$5")
     ws.row_dimensions[4].height = 22
-    chip(ws, "B4", "  期間A（金土日）｜日付は自動", CHIP_TEAL, INK, 10)
+    chip(ws, "B4", "  期間A（直近金土日）｜日付は自動", CHIP_TEAL, INK, 10)
     ws.row_dimensions[5].height = 16
     note(ws, "B5", "  曜日", 8.5, GRAY)
     ws.row_dimensions[6].height = 22
@@ -1101,7 +1101,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
 
     # ======================================================== CSV貼付A/B =====
     for sheet_name, tab, label, csv_path in [
-            ("CSV貼付A", AMBER, "期間A（直近 金土日）", csv_a),
+            ("CSV貼付A", AMBER, "期間A（直近金土日）", csv_a),
             ("CSV貼付B", AMBER2, "期間B（前週 金〜木）", csv_b)]:
         ws = wb.create_sheet(sheet_name)
         ws.sheet_properties.tabColor = tab
