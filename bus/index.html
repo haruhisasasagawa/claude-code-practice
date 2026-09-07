@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>京王バス リアルタイムマップ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --accent: #d70029; /* 京王バスの赤 */
+    --bg: #ffffff;
+    --panel: #f7f7f8;
+    --text: #1a1a1a;
+    --muted: #666;
+    --border: #ddd;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--accent);
+    color: #fff;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    z-index: 1100;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; white-space: nowrap; }
+  #status { font-size: 12px; opacity: .92; flex: 1; min-width: 140px; }
+  header button {
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.5);
+    color: #fff;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  header button:hover { background: rgba(255,255,255,.28); }
+  #toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  #toolbar label { font-size: 12px; color: var(--muted); }
+  #routeFilter {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 13px;
+    width: 180px;
+  }
+  .chip {
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 999px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  #map { flex: 1; min-height: 0; }
+  #banner {
+    display: none;
+    background: #fff3cd;
+    color: #664d03;
+    border-bottom: 1px solid #ffe69c;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  /* バスのマーカー */
+  .bus-marker { filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+  .bus-marker .body {
+    position: relative;
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .bus-marker .arrow {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .bus-marker .label {
+    position: relative;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 2px 5px;
+    border: 1.5px solid #fff;
+    white-space: nowrap;
+  }
+  .bus-marker.stale .label { background: #999; }
+  .stop-marker {
+    background: #1d4ed8;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 6px;
+    padding: 2px 6px;
+    border: 1.5px solid #fff;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  .leaflet-popup-content { font-size: 13px; line-height: 1.7; margin: 10px 14px; }
+  .leaflet-popup-content .rt-route { font-size: 15px; font-weight: 700; color: var(--accent); }
+  .leaflet-popup-content .delay-late { color: #c02626; font-weight: 700; }
+  .leaflet-popup-content .delay-ontime { color: #15803d; font-weight: 700; }
+  /* 設定モーダル */
+  #modalBack {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 2000;
+    align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  #modal {
+    background: #fff;
+    border-radius: 12px;
+    max-width: 560px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px 22px;
+  }
+  #modal h2 { margin: 0 0 4px; font-size: 17px; }
+  #modal p { font-size: 13px; color: var(--muted); line-height: 1.7; margin: 8px 0; }
+  #modal label { display: block; font-size: 12.5px; font-weight: 600; margin: 14px 0 4px; }
+  #modal input[type=text], #modal input[type=password] {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  #modal details { margin-top: 14px; font-size: 12.5px; }
+  #modal details input { margin-bottom: 8px; }
+  #modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+  #modal .actions button {
+    border-radius: 8px; padding: 8px 18px; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--border); background: #fff;
+  }
+  #modal .actions button.primary {
+    background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
+  }
+  #modal a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚌 京王バス リアルタイムマップ</h1>
+  <div id="status">初期化中…</div>
+  <button id="btnRefresh" title="今すぐ更新">↻ 更新</button>
+  <button id="btnSettings">⚙ 設定</button>
+</header>
+
+<div id="toolbar">
+  <label for="routeFilter">系統で絞り込み:</label>
+  <input id="routeFilter" type="text" placeholder="例: 宿41,宿33 (空欄で全便)">
+  <button class="chip" data-route="宿41">宿41</button>
+  <button class="chip" data-route="">すべて表示</button>
+  <button class="chip" id="btnHome" style="margin-left:auto">🏠 新宿西口⇔新山通りへ</button>
+</div>
+
+<div id="banner"></div>
+<div id="map"></div>
+
+<div id="modalBack">
+  <div id="modal">
+    <h2>設定</h2>
+    <p>
+      バスの位置情報は「公共交通オープンデータセンター(ODPT)」の京王バス GTFS
+      リアルタイムデータを利用します。利用には無料のアクセストークン(APIキー)が必要です。<br>
+      <a href="https://developer.odpt.org/" target="_blank" rel="noopener">developer.odpt.org</a>
+      で開発者登録をすると発行されます。キーはこのブラウザ内(localStorage)にのみ保存されます。
+    </p>
+    <label for="inpKey">ODPT アクセストークン</label>
+    <input id="inpKey" type="password" placeholder="acl:consumerKey に渡すトークン" autocomplete="off">
+    <details>
+      <summary>詳細設定(データURL)</summary>
+      <label>車両位置 (VehiclePosition)</label>
+      <input id="inpVpUrl" type="text">
+      <label>遅延情報 (TripUpdate)</label>
+      <input id="inpTuUrl" type="text">
+      <label>静的GTFS (時刻表zip)</label>
+      <input id="inpGtfsUrl" type="text">
+      <label>更新間隔(秒)</label>
+      <input id="inpInterval" type="text">
+    </details>
+    <div class="actions">
+      <button id="btnCancel">閉じる</button>
+      <button id="btnSave" class="primary">保存して開始</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/index.umd.min.js"></script>
+<script src="gtfs-rt.js"></script>
+<script>
+"use strict";
+
+/* ---------------- 設定 ---------------- */
+const DEFAULTS = {
+  vpUrl:   "https://api.odpt.org/api/v4/gtfs/realtime/odpt_KeioBus_AllLines_vehicle",
+  tuUrl:   "https://api.odpt.org/api/v4/gtfs/realtime/odpt_KeioBus_AllLines_trip_update",
+  gtfsUrl: "https://api.odpt.org/api/v4/files/odpt/KeioBus/AllLines.zip",
+  interval: 15,
+};
+const LS = {
+  key: "odpt_api_key",
+  vpUrl: "odpt_vp_url",
+  tuUrl: "odpt_tu_url",
+  gtfsUrl: "odpt_gtfs_url",
+  interval: "odpt_interval",
+  filter: "route_filter",
+};
+// 新宿駅西口と新山通り(宿41沿線)の間あたり
+const HOME_CENTER = [35.6885, 139.6805];
+const HOME_ZOOM = 14;
+const FAVORITE_STOPS = ["新宿駅西口", "新山通り"];
+const STALE_SEC = 180;         // これより古い位置情報はグレー表示
+const GTFS_CACHE_HOURS = 24;   // 静的GTFSのキャッシュ期間
+
+const store = {
+  get key() { return localStorage.getItem(LS.key) || ""; },
+  get vpUrl() { return localStorage.getItem(LS.vpUrl) || DEFAULTS.vpUrl; },
+  get tuUrl() { return localStorage.getItem(LS.tuUrl) || DEFAULTS.tuUrl; },
+  get gtfsUrl() { return localStorage.getItem(LS.gtfsUrl) || DEFAULTS.gtfsUrl; },
+  get interval() {
+    const v = parseInt(localStorage.getItem(LS.interval), 10);
+    return Number.isFinite(v) && v >= 5 ? v : DEFAULTS.interval;
+  },
+  get filter() {
+    const v = localStorage.getItem(LS.filter);
+    return v === null ? "宿41" : v;
+  },
+};
+
+function withKey(url) {
+  return url + (url.includes("?") ? "&" : "?") + "acl:consumerKey=" + encodeURIComponent(store.key);
+}
+
+/* ---------------- 地図 ---------------- */
+const map = L.map("map").setView(HOME_CENTER, HOME_ZOOM);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+}).addTo(map);
+
+const busLayer = L.layerGroup().addTo(map);
+const stopLayer = L.layerGroup().addTo(map);
+const busMarkers = new Map(); // entity id -> marker
+
+/* ---------------- 静的GTFS (trip_id → 系統・行き先) ---------------- */
+let gtfsIndex = null; // { trips: {trip_id: {routeId, headsign}}, routes: {route_id: {shortName, longName}}, stops: [...] }
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQ = false;
+      } else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else if (c !== "\r") field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function indexCsv(u8, wanted) {
+  const rows = parseCsv(new TextDecoder("utf-8").decode(u8).replace(/^\uFEFF/, ""));
+  const header = rows[0] || [];
+  const idx = {};
+  for (const name of wanted) idx[name] = header.indexOf(name);
+  return { rows: rows.slice(1), idx };
+}
+
+async function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("keio-bus-map", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("kv");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(k) {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const req = db.transaction("kv").objectStore("kv").get(k);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return undefined; }
+}
+async function idbSet(k, v) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").put(v, k);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* キャッシュ失敗は無視 */ }
+}
+
+async function loadGtfsIndex() {
+  const cached = await idbGet("gtfsIndex");
+  if (cached && Date.now() - cached.fetchedAt < GTFS_CACHE_HOURS * 3600e3) {
+    gtfsIndex = cached.data;
+    renderFavoriteStops();
+    return;
+  }
+  setStatus("時刻表データ(GTFS)を取得中…(初回のみ・数十MB)");
+  const res = await fetch(withKey(store.gtfsUrl));
+  if (!res.ok) throw new Error("GTFS取得に失敗: HTTP " + res.status);
+  const zip = new Uint8Array(await res.arrayBuffer());
+  const files = fflate.unzipSync(zip, {
+    filter: f => ["routes.txt", "trips.txt", "stops.txt"].includes(f.name.split("/").pop()),
+  });
+  const byName = {};
+  for (const [path, data] of Object.entries(files)) byName[path.split("/").pop()] = data;
+
+  const routes = {};
+  if (byName["routes.txt"]) {
+    const { rows, idx } = indexCsv(byName["routes.txt"], ["route_id", "route_short_name", "route_long_name"]);
+    for (const r of rows) {
+      if (!r[idx.route_id]) continue;
+      routes[r[idx.route_id]] = {
+        shortName: idx.route_short_name >= 0 ? r[idx.route_short_name] : "",
+        longName: idx.route_long_name >= 0 ? r[idx.route_long_name] : "",
+      };
+    }
+  }
+  const trips = {};
+  if (byName["trips.txt"]) {
+    const { rows, idx } = indexCsv(byName["trips.txt"], ["trip_id", "route_id", "trip_headsign"]);
+    for (const r of rows) {
+      if (!r[idx.trip_id]) continue;
+      trips[r[idx.trip_id]] = {
+        routeId: r[idx.route_id],
+        headsign: idx.trip_headsign >= 0 ? r[idx.trip_headsign] : "",
+      };
+    }
+  }
+  const stops = [];
+  if (byName["stops.txt"]) {
+    const { rows, idx } = indexCsv(byName["stops.txt"], ["stop_id", "stop_name", "stop_lat", "stop_lon"]);
+    for (const r of rows) {
+      const name = r[idx.stop_name];
+      if (name && FAVORITE_STOPS.some(f => name.includes(f))) {
+        stops.push({ id: r[idx.stop_id], name, lat: +r[idx.stop_lat], lon: +r[idx.stop_lon] });
+      }
+    }
+  }
+  gtfsIndex = { routes, trips, stops };
+  await idbSet("gtfsIndex", { fetchedAt: Date.now(), data: gtfsIndex });
+  renderFavoriteStops();
+}
+
+function renderFavoriteStops() {
+  stopLayer.clearLayers();
+  if (!gtfsIndex) return;
+  const seen = new Set();
+  for (const s of gtfsIndex.stops) {
+    if (!Number.isFinite(s.lat) || !Number.isFinite(s.lon)) continue;
+    const k = s.name + "|" + s.lat.toFixed(4) + "|" + s.lon.toFixed(4);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    L.marker([s.lat, s.lon], {
+      icon: L.divIcon({ className: "", html: `<div class="stop-marker">🚏 ${escapeHtml(s.name)}</div>`, iconAnchor: [0, 10] }),
+      interactive: false,
+    }).addTo(stopLayer);
+  }
+}
+
+/* ---------------- リアルタイム取得・描画 ---------------- */
+let delayByTrip = new Map(); // trip_id -> 遅れ秒
+let pollTimer = null;
+let lastError = "";
+
+function tripInfo(trip) {
+  const out = { routeName: "", headsign: "", startTime: trip && trip.startTime || "" };
+  if (!trip) return out;
+  let routeId = trip.routeId;
+  if (gtfsIndex && trip.tripId && gtfsIndex.trips[trip.tripId]) {
+    const t = gtfsIndex.trips[trip.tripId];
+    routeId = routeId || t.routeId;
+    out.headsign = t.headsign || "";
+  }
+  if (gtfsIndex && routeId && gtfsIndex.routes[routeId]) {
+    const r = gtfsIndex.routes[routeId];
+    out.routeName = r.shortName || r.longName || routeId;
+    if (!out.headsign) out.headsign = r.longName || "";
+  } else if (routeId) {
+    out.routeName = routeId;
+  }
+  return out;
+}
+
+function routeMatchesFilter(routeName, filterList) {
+  if (!filterList.length) return true;
+  if (!routeName) return false;
+  return filterList.some(f => routeName.includes(f));
+}
+
+function fmtDelay(sec) {
+  if (sec === undefined || sec === null) return "";
+  if (Math.abs(sec) < 60) return '<span class="delay-ontime">ほぼ定刻</span>';
+  const m = Math.round(sec / 60);
+  return m > 0
+    ? `<span class="delay-late">約${m}分遅れ</span>`
+    : `<span class="delay-ontime">約${-m}分早発</span>`;
+}
+
+function fmtStartTime(s) {
+  if (!s) return "";
+  const m = s.match(/^(\d+):(\d+)/);
+  if (!m) return s;
+  return `${parseInt(m[1], 10) % 24}:${m[2]}`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function busIcon(routeName, bearing, stale) {
+  const rot = Number.isFinite(bearing) ? bearing : null;
+  const arrow = rot === null ? "" :
+    `<div class="arrow" style="transform:rotate(${rot}deg)">
+       <svg width="34" height="34" viewBox="0 0 34 34">
+         <polygon points="17,0 22,9 12,9" fill="${stale ? "#999" : "#d70029"}" stroke="#fff" stroke-width="1"/>
+       </svg>
+     </div>`;
+  return L.divIcon({
+    className: "bus-marker" + (stale ? " stale" : ""),
+    html: `<div class="body">${arrow}<div class="label">${escapeHtml(routeName || "?")}</div></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  });
+}
+
+async function fetchFeed(url) {
+  const res = await fetch(withKey(url), { cache: "no-store" });
+  if (!res.ok) throw new Error("HTTP " + res.status + " (" + url.split("/").pop().split("?")[0] + ")");
+  return GtfsRt.decodeFeedMessage(await res.arrayBuffer());
+}
+
+async function refresh() {
+  if (!store.key) return;
+  try {
+    const [vpFeed, tuFeed] = await Promise.all([
+      fetchFeed(store.vpUrl),
+      fetchFeed(store.tuUrl).catch(() => null), // 遅延情報は取れなくても続行
+    ]);
+
+    if (tuFeed) {
+      delayByTrip = new Map();
+      for (const e of tuFeed.entities) {
+        const tu = e.tripUpdate;
+        if (!tu || !tu.trip || !tu.trip.tripId) continue;
+        let delay = tu.delay;
+        if (delay === undefined) {
+          for (const stu of tu.stopTimeUpdates) {
+            const ev = stu.arrival || stu.departure;
+            if (ev && ev.delay !== undefined) { delay = ev.delay; break; }
+          }
+        }
+        if (delay !== undefined) delayByTrip.set(tu.trip.tripId, delay);
+      }
+    }
+
+    const filterList = document.getElementById("routeFilter").value
+      .split(/[,、\s]+/).map(s => s.trim()).filter(Boolean);
+    const now = Math.floor(Date.now() / 1000);
+    const alive = new Set();
+    let shown = 0;
+
+    for (const e of vpFeed.entities) {
+      const vp = e.vehicle;
+      if (!vp || !vp.position || e.isDeleted) continue;
+      const { latitude: lat, longitude: lon, bearing } = vp.position;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+      const info = tripInfo(vp.trip);
+      if (!routeMatchesFilter(info.routeName, filterList)) continue;
+
+      const id = e.id || (vp.vehicle && vp.vehicle.id) || (vp.trip && vp.trip.tripId);
+      if (!id) continue;
+      alive.add(id);
+      shown++;
+
+      const stale = vp.timestamp ? (now - vp.timestamp) > STALE_SEC : false;
+      const delay = vp.trip && vp.trip.tripId ? delayByTrip.get(vp.trip.tripId) : undefined;
+      const ageStr = vp.timestamp ? `${Math.max(0, now - vp.timestamp)}秒前の位置` : "取得時刻不明";
+      const popup = `
+        <div class="rt-route">${escapeHtml(info.routeName || "系統不明")}</div>
+        ${info.headsign ? escapeHtml(info.headsign) + " ゆき<br>" : ""}
+        ${info.startTime ? "🕐 始発地 " + escapeHtml(fmtStartTime(info.startTime)) + " 発の便<br>" : ""}
+        ${fmtDelay(delay)}${delay !== undefined ? "<br>" : ""}
+        <span style="color:#888;font-size:11px">
+          ${vp.vehicle && (vp.vehicle.label || vp.vehicle.id) ? "車両: " + escapeHtml(vp.vehicle.label || vp.vehicle.id) + " / " : ""}${ageStr}
+        </span>`;
+
+      let m = busMarkers.get(id);
+      if (!m) {
+        m = L.marker([lat, lon], { icon: busIcon(info.routeName, bearing, stale) }).addTo(busLayer);
+        busMarkers.set(id, m);
+      } else {
+        m.setLatLng([lat, lon]);
+        m.setIcon(busIcon(info.routeName, bearing, stale));
+      }
+      m.bindPopup(popup);
+    }
+
+    for (const [id, m] of busMarkers) {
+      if (!alive.has(id)) { busLayer.removeLayer(m); busMarkers.delete(id); }
+    }
+
+    lastError = "";
+    hideBanner();
+    const t = vpFeed.header && vpFeed.header.timestamp
+      ? new Date(vpFeed.header.timestamp * 1000).toLocaleTimeString("ja-JP")
+      : new Date().toLocaleTimeString("ja-JP");
+    setStatus(`運行中 ${shown} 台を表示中 (フィード ${t} 時点 / ${store.interval}秒ごとに自動更新)`);
+  } catch (err) {
+    lastError = String(err && err.message || err);
+    setStatus("取得エラー");
+    showBanner(
+      "バス位置の取得に失敗しました: " + lastError + "\n" +
+      "・APIキー(アクセストークン)が正しいか「⚙ 設定」で確認してください。\n" +
+      "・file:// で開いている場合はブラウザの制限で失敗します。GitHub Pages などの https 上か、ローカルでは `python3 -m http.server` 等で開いてください。\n" +
+      "・それでも失敗する場合は CORS 制限の可能性があります(bus/README.md 参照)。"
+    );
+  }
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  refresh();
+  pollTimer = setInterval(refresh, store.interval * 1000);
+}
+
+/* ---------------- UI ---------------- */
+function setStatus(msg) { document.getElementById("status").textContent = msg; }
+function showBanner(msg) {
+  const b = document.getElementById("banner");
+  b.textContent = msg;
+  b.style.display = "block";
+}
+function hideBanner() { document.getElementById("banner").style.display = "none"; }
+
+const modalBack = document.getElementById("modalBack");
+function openSettings() {
+  document.getElementById("inpKey").value = store.key;
+  document.getElementById("inpVpUrl").value = store.vpUrl;
+  document.getElementById("inpTuUrl").value = store.tuUrl;
+  document.getElementById("inpGtfsUrl").value = store.gtfsUrl;
+  document.getElementById("inpInterval").value = store.interval;
+  modalBack.style.display = "flex";
+}
+function closeSettings() { modalBack.style.display = "none"; }
+
+document.getElementById("btnSettings").addEventListener("click", openSettings);
+document.getElementById("btnCancel").addEventListener("click", closeSettings);
+document.getElementById("btnRefresh").addEventListener("click", refresh);
+document.getElementById("btnSave").addEventListener("click", async () => {
+  localStorage.setItem(LS.key, document.getElementById("inpKey").value.trim());
+  localStorage.setItem(LS.vpUrl, document.getElementById("inpVpUrl").value.trim() || DEFAULTS.vpUrl);
+  localStorage.setItem(LS.tuUrl, document.getElementById("inpTuUrl").value.trim() || DEFAULTS.tuUrl);
+  localStorage.setItem(LS.gtfsUrl, document.getElementById("inpGtfsUrl").value.trim() || DEFAULTS.gtfsUrl);
+  localStorage.setItem(LS.interval, document.getElementById("inpInterval").value.trim());
+  closeSettings();
+  await boot();
+});
+
+const routeFilterInput = document.getElementById("routeFilter");
+routeFilterInput.value = store.filter;
+routeFilterInput.addEventListener("change", () => {
+  localStorage.setItem(LS.filter, routeFilterInput.value);
+  refresh();
+});
+document.querySelectorAll(".chip").forEach(btn => {
+  btn.addEventListener("click", () => {
+    routeFilterInput.value = btn.dataset.route;
+    localStorage.setItem(LS.filter, btn.dataset.route);
+    refresh();
+  });
+});
+document.getElementById("btnHome").addEventListener("click", () => {
+  map.setView(HOME_CENTER, HOME_ZOOM);
+});
+
+/* ---------------- 起動 ---------------- */
+async function boot() {
+  if (!store.key) {
+    setStatus("APIキー未設定");
+    openSettings();
+    return;
+  }
+  try {
+    await loadGtfsIndex();
+  } catch (err) {
+    // 時刻表なしでも位置表示は続行(系統名は route_id 表示になる)
+    showBanner("時刻表データ(GTFS)の取得に失敗しました: " + String(err && err.message || err) +
+      "\n系統名・行き先の表示が不完全になりますが、バス位置の表示は続行します。");
+  }
+  startPolling();
+}
+boot();
+</script>
+</body>
+</html>
