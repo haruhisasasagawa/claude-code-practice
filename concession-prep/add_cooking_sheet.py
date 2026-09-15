@@ -4,7 +4,8 @@
 調理マニュアル(調理時間一覧: 商品/調理機器/条件/1個〜10個の時間/備考)を読み込み、
 登録商品(期間データ!B14:B33)と売上CSVの食品名にマニュアルの項目を名寄せして転記する。
 商品ごとの行には 調理機器・条件・一度に最大・回転の間隔・個数別の時間(秒) を値で持たせ(手修正OK)、
-準備数計算の作る数から 回数・所要時間(分) を自動計算し、保持時間(期間データ)と並べて見せる。
+準備数計算の作る数から 回数・所要時間(分・1台) を自動計算し、保持時間(期間データ)と並べて見せる。
+機器ごとの合計は劇場ごとの台数(レンジ・ブラウナー等)を入力して割る。
 名寄せの確からしさは 照合・備考 に「名前一致」「❓ キーワード推定」「⚠ 先頭文字の推定」で示す。
 マニュアルの原本は同じシートの下段に参考として転記する。再実行するとシートは作り直される(手修正は消える)。
 
@@ -241,7 +242,7 @@ def build_sheet(wb, manual, candidates, sample_label=False):
     hr = ROW_C0 - 1
     hdr = {"A": "No.", COL_NAME: "商品名（プルダウンで選択）", COL_LABEL: "マニュアルの項目\n（参考・計算には使いません）",
            COL_MACH: "調理機器", COL_COND: "条件", COL_MAX: "一度に最大\n(個・本)", COL_GAP: "回転の\n間隔(秒)",
-           COL_NEED: "作る数\n(自動)", COL_RUNS: "回数\n(自動)", COL_MIN: "所要時間\n(分・自動)",
+           COL_NEED: "作る数\n(自動)", COL_RUNS: "回数\n(自動)", COL_MIN: "所要時間\n(分・1台)",
            COL_HOLD: "保持時間\n(分・参考)", COL_MEMO: "照合・備考（手修正OK）"}
     for k in range(1, COUNTS + 1):
         hdr[get_column_letter(C_T0 - 1 + k)] = str(k)
@@ -339,32 +340,51 @@ def build_sheet(wb, manual, candidates, sample_label=False):
     style_range(ws, f"{COL_NAME}{tr}:{COL_GAP}{tr}", font=fnt(9.5, True), alignment=align("right"))
     style_range(ws, f"{COL_NEED}{tr}", font=fnt(9.5, True), alignment=align("center"), num="0")
     style_range(ws, f"{COL_MIN}{tr}", font=fnt(10, True, CORAL), alignment=align("center"), num='0.0"分"')
-    # 機器ごとの合計(同じ機器の商品は順番に作るので、こちらが実際の目安)
+    # 機器ごとの合計(同じ機器の商品は順番に作るので、こちらが実際の目安)。台数は劇場ごとに入力
     machines = list(dict.fromkeys(rec["machine"] for rec in manual if rec["machine"]))
     mr0 = tr + 2
-    chip(ws, f"{COL_NAME}{mr0}:{COL_COND}{mr0}", "  ⏱ 機器ごとの合計所要時間（同じ機器の商品は順番に作るため、こちらが実際の目安）", CHIP_NAVY, INK, 9.5)
-    mr = mr0
+    chip(ws, f"{COL_NAME}{mr0}:{COL_COND}{mr0}",
+         "  ⏱ 機器ごとの合計所要時間（同じ機器の商品は順番に作るため、こちらが実際の目安。台数は劇場ごとに入力）",
+         CHIP_NAVY, INK, 9.5)
+    hmr = mr0 + 1
+    ws[f"{COL_MACH}{hmr}"] = "調理機器"
+    ws[f"{COL_MAX}{hmr}"] = "台数"
+    ws[f"{COL_NEED}{hmr}"] = "作る数\n(自動)"
+    ws[f"{COL_MIN}{hmr}"] = "所要時間\n(分・台数で割る)"
+    style_range(ws, f"{COL_MACH}{hmr}:{COL_MIN}{hmr}", font=fnt(9, True, "FFFFFF"), fl=fill(NAVY),
+                alignment=align("center", "center", True), border=BORDER_LIGHT)
+    ws.row_dimensions[hmr].height = 28
+    MACH_ROW0 = hmr + 1
+    mr = hmr
     for mach in machines + [None]:
         mr += 1
         ws[f"{COL_MACH}{mr}"] = mach
+        ws[f"{COL_MAX}{mr}"] = 1 if mach else None
         ws[f"{COL_NAME}{mr}"] = "機器（上の表の調理機器と同じ表記）" if mach is None else None
+        units = f'MAX(1,IF(ISNUMBER(${COL_MAX}{mr}),${COL_MAX}{mr},1))'
         ws[f"{COL_MIN}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",IF(COUNTIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr})=0,"—",'
-                                f'SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},${COL_MIN}${first}:${COL_MIN}${lastrow})))')
+                                f'SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},${COL_MIN}${first}:${COL_MIN}${lastrow})'
+                                f'/{units}))')
         ws[f"{COL_NEED}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},'
                                  f'${COL_NEED}${first}:${COL_NEED}${lastrow}))')
         style_range(ws, f"{COL_NAME}{mr}", font=fnt(8.5, False, GRAY), alignment=align("right"))
         style_range(ws, f"{COL_MACH}{mr}:{COL_COND}{mr}", font=fnt(9.5), fl=fill(F_INPUT), alignment=align("left"), border=BORDER_LIGHT)
+        style_range(ws, f"{COL_MAX}{mr}", font=fnt(9.5), fl=fill(F_INPUT), alignment=align("center"), border=BORDER_LIGHT, num='0"台"')
         style_range(ws, f"{COL_NEED}{mr}", font=fnt(9.5), fl=fill(F_AUTO), alignment=align("center"), border=BORDER_LIGHT, num="0")
         style_range(ws, f"{COL_MIN}{mr}", font=fnt(10, True, CORAL), fl=fill(F_AUTO), alignment=align("center"), border=BORDER_LIGHT, num='0.0"分"')
-    ws[f"{COL_HOLD}{mr0 + 1}"] = "← 1台あたり。複数台なら台数で割る"
-    style_range(ws, f"{COL_HOLD}{mr0 + 1}:{COL_MEMO}{mr0 + 1}", font=fnt(8.5, False, GRAY), alignment=align("left"))
-    MACH_ROW0 = mr0 + 1
+    ws[f"{COL_HOLD}{MACH_ROW0}"] = "← 同じ機器の商品を順番に作り、台数で割った目安"
+    style_range(ws, f"{COL_HOLD}{MACH_ROW0}:{COL_MEMO}{MACH_ROW0}", font=fnt(8.5, False, GRAY), alignment=align("left"))
+    dv_units = DataValidation(type="whole", operator="greaterThanOrEqual", formula1="1", allow_blank=True,
+                              showErrorMessage=True, errorTitle="台数", error="1以上の整数で入力してください（1台なら1）")
+    ws.add_data_validation(dv_units)
+    dv_units.add(f"{COL_MAX}{MACH_ROW0}:{COL_MAX}{mr}")
     nr = mr + 1
-    lines = ["※ 所要時間は「一度に最大」の個数で回し続けた場合の調理時間です（仕込み・盛り付けの手間は含みません）。"
+    lines = ["※ 商品ごとの所要時間は1台で作りきる場合の調理時間です（仕込み・盛り付けの手間は含みません）。"
+             "機器の台数は下の「機器ごとの合計」で劇場ごとに入力してください（合計を台数で割ります）。"
              "同じ商品でも機器で時間が違うので、備考の他機種の時間（下段の原本にも）を見て使う機器に合わせて "
              "調理機器・時間・一度に最大・備考 を書き換えてください。名寄せの ❓⚠ は確認したら消してOKです。",
              "※ 所要時間が保持時間より長い商品（赤い背景）は、1台で作り切るとピーク前に最初の分が保持時間を超えます。"
-             "台数を増やすか、何回かに分けてピークに向けて作る目安にしてください。"]
+             "台数を増やすか、何回かに分けてピークに向けて作る目安にしてください（印刷用の「調理の目安」も1台の分数です）。"]
     if unmatched:
         lines.append("※ マニュアルに項目が無いCSVの食品（必要なら商品名を選んで手入力）: " + "、".join(unmatched))
     if dropped:
@@ -447,8 +467,10 @@ def build_sheet(wb, manual, candidates, sample_label=False):
 
 
 GUIDE_LINE = ("・調理時間（シート）：調理マニュアルの機器・個数別の時間・一度に最大を商品ごとに転記した表です（手修正OK）。"
-              "準備数計算の作る数から 回数と所要時間（分）を自動で出し、保持時間と比べられます。新商品は商品名をプルダウンで選び、"
-              "下段のマニュアル原本を見て時間を入れてください。備考の ❓⚠ は名寄せや機器の要確認です。")
+              "準備数計算の作る数から 回数と所要時間（分・1台）を自動で出し、保持時間と比べられます。"
+              "「機器ごとの合計」に機器の台数（レンジ・ブラウナーなど）を入れると、台数で割った目安が出ます。"
+              "新商品は商品名をプルダウンで選び、下段のマニュアル原本を見て時間を入れてください。"
+              "備考の ❓⚠ は名寄せや機器の要確認です。")
 
 
 def add_guide_line(wb):

@@ -455,11 +455,20 @@ if "調理時間" in wb.sheetnames:
         check(f"調理時間!{CK.COL_MIN}{tr}(単純合計)", ck[f"{CK.COL_MIN}{tr}"].value, tot_p, tol=1e-6)
     else:
         check(f"調理時間!{CK.COL_MIN}{tr}(単純合計=空)", ck[f"{CK.COL_MIN}{tr}"].value in (None, ""), True)
-    r = tr + 3                                  # 機器ごとの合計(空欄のDまで)
+    # 機器ごとの合計 = 同じ機器の所要時間の合計 ÷ 台数(1未満・未入力は1台扱い)
+    r = tr + 1
+    while r < tr + 8 and ck[f"{CK.COL_MACH}{r}"].value != "調理機器":
+        r += 1
+    check("調理時間!機器ごとの合計の見出し", ck[f"{CK.COL_MACH}{r}"].value, "調理機器")
+    r += 1
     while ck[f"{CK.COL_MACH}{r}"].value:
         mach = ck[f"{CK.COL_MACH}{r}"].value
-        want = by_mach.get(mach, "—")
-        check(f"調理時間!{CK.COL_MIN}{r}(機器合計 {mach[:12]})", ck[f"{CK.COL_MIN}{r}"].value, want, tol=1e-6 if want != "—" else 0)
+        units = ck[f"{CK.COL_MAX}{r}"].value
+        units = units if isinstance(units, (int, float)) and units >= 1 else 1
+        want = by_mach.get(mach)
+        want = "—" if want is None else want / units
+        check(f"調理時間!{CK.COL_MIN}{r}(機器合計 {mach[:12]}/{units}台)", ck[f"{CK.COL_MIN}{r}"].value, want,
+              tol=1e-6 if want != "—" else 0)
         r += 1
 
 warn = m["B9"].value or ""
