@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 v2.0(upgrade_v2.py で更新した店舗版)の再計算結果を、CSVからPythonで独立計算した
-期待値と突合する。事前準備率・保持時間/優先・印刷用の表示切替を検証する。
+期待値と突合する。事前準備率・保持時間/作るタイミング・印刷用の表示切替を検証する。
   python verify_v2.py <再計算済みxlsx> --csv-a A.csv --csv-b B.csv --att-a 9000,13000,12000 \
-      --att-b ... --peak 1200 --mult 0.6 --rate 80 --view 優先:高のみ \
-      --ht 10,45,,30,... --manual 1:高,5:低 --thr 30 [--expect-warn 文字列] [--mso]
+      --att-b ... --peak 1200 --mult 0.6 --rate 80 --view 直前に作るもの \
+      --ht 10,45,,30,... --manual 1:直前,5:先に --thr 30 [--expect-warn 文字列] [--mso]
   --products auto : 商品名を期間データ!B14:B33 から読む(店舗版・サンプル用。既定はテンプレートの商品。
                     枠はB14から詰めて登録されている前提。途中に空きがあるとNG)
   --mso1〜4 CSV   : 係数貼付①〜④に貼ったMSO商品CSV。係数算出・商品別の波・係数の適用まで厳密に突合
                     (--mso は貼付ありの近似検証のみ)。指定時は --mult 不要(実測係数を期待値にする)
-  --manual        : 手動優先。添字は0始まり(0＝期間データB14の1商品目)。例 --manual 0:高,4:低
+  --manual        : 手動のタイミング。添字は0始まり(0＝期間データB14の1商品目)。例 --manual 0:直前,4:先に
+                    旧表記の 高/低 を渡すと 直前/先に に読み替えて期待値にする(後方互換の確認用)
   --peak-start    : ⑥ピーク開始(準備数計算!O5)。既定 17:30。O5が未入力のブックは --peak-start "" (仕込み開始=—)
   ※ 商品名の突合はPython側は完全一致。シートのSUMIFSは大文字小文字を区別せず *?~ をワイルドカードに
     するため、そのような商品名は結果が食い違う(NGとして出る)
@@ -18,11 +19,15 @@ import argparse
 import math
 import sys
 
+import re as _re
+
 from openpyxl import load_workbook
 
 from build_calib import CALIB_SHEETS, MSO_MAX, read_mso_rows
 from build_tool import (DEFAULT_PRODUCTS, JUDGE_FEW, JUDGE_NODATA, JUDGE_NONE, JUDGE_USE, N_SLOTS,
                         ROW_M0, WAVE_ROW0, WAVE_SHEET, read_csv_rows)
+from upgrade_v2 import (PRI_HI, PRI_LO, PRI_OLD, RATE, VIEW_CELL, VIEW_HI, VIEW_LO,  # noqa: E402
+                        ftext)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("xlsx")
@@ -35,7 +40,8 @@ ap.add_argument("--mult", type=float, default=None, help="期待する時間帯�
 ap.add_argument("--rate", default="100", help="事前準備率(整数%) か 'blank'(=100扱い+⚠)")
 ap.add_argument("--view", default="すべて")
 ap.add_argument("--ht", required=True, help="保持時間(商品順・空欄は空文字)")
-ap.add_argument("--manual", default="", help="手動優先: 添字(0始まり・0＝期間データB14の1商品目):高/低 をカンマ区切り(例 0:高,4:低)")
+ap.add_argument("--manual", default="",
+                help="手動のタイミング: 添字(0始まり・0＝期間データB14の1商品目):直前/先に をカンマ区切り(旧 高/低 も可)")
 ap.add_argument("--thr", type=int, default=30)
 ap.add_argument("--expect-warn", action="append", default=[])
 ap.add_argument("--mso", action="store_true", help="MSO貼付あり(商品係数で販売予測数が変わるため近似検証。厳密は --mso1〜4)")
@@ -109,7 +115,8 @@ for r in read_csv_rows(a.csv_a):
 att = sum(int(x) for x in a.att_a.split(","))
 ht = [None if s == "" else int(s) for s in a.ht.split(",")]
 ht += [None] * (NP - len(ht))
-manual = {int(k): v for k, v in (kv.split(":") for kv in a.manual.split(",") if kv)}
+_pri_norm = {PRI_HI: PRI_HI, PRI_LO: PRI_LO, PRI_OLD[PRI_HI]: PRI_HI, PRI_OLD[PRI_LO]: PRI_LO}
+manual = {int(k): _pri_norm[v] for k, v in (kv.split(":") for kv in a.manual.split(",") if kv)}
 rate = 100 if a.rate == "blank" or int(a.rate) <= 0 else int(a.rate)   # 0以下は100%扱い(⚠つき)
 peak = None
 if a.peak_start:
@@ -117,8 +124,6 @@ if a.peak_start:
     peak = (int(_ph) * 60 + int(_pm)) / 1440
 
 # ---- 数式レベル: G列はF列の式に率を掛けただけ(端数処理・係数条件は同一)、参照の付け替え
-import re as _re
-from upgrade_v2 import RATE, VIEW_CELL, ftext
 for i in range(N_SLOTS):
     r = ROW_M0 + i
     f_txt, g_txt = ftext(mf[f"F{r}"]), ftext(mf[f"G{r}"])
@@ -327,8 +332,8 @@ for i, name in enumerate(PRODUCTS):
         check(f"G{r}(作る数)", g_got, fl(a.peak * rt * a.mult * rate / 100), tol=1)
     h = ht[i]
     check(f"O{r}(保持時間)", m[f"O{r}"].value, "—" if h is None else h)
-    want_p = manual.get(i) or ("—" if h is None else ("高" if h <= a.thr else "低"))
-    check(f"P{r}(優先)", m[f"P{r}"].value, want_p)
+    want_p = manual.get(i) or ("—" if h is None else (PRI_HI if h <= a.thr else PRI_LO))
+    check(f"P{r}(作るタイミング)", m[f"P{r}"].value, want_p)
     pri.append(want_p)
     # 仕込み開始の目安(Q)= MOD(ピーク開始 − 保持時間, 1)。K(非表示)は未補正
     if peak is not None and h is not None:
@@ -342,10 +347,10 @@ for i, name in enumerate(PRODUCTS):
     # 並び順キー(非表示L列): 保持時間の長い順、未入力は最後(ピーク入力の有無によらない)
     k = i + 1
     hkey = (9999900 + k) if h is None else (10000 - max(0, min(9999, h))) * 100 + k
-    if a.view == "優先:高のみ":
-        want_l = "" if want_p == "低" else hkey
-    elif a.view == "優先:低のみ":
-        want_l = hkey if want_p == "低" else ""
+    if a.view == VIEW_HI:
+        want_l = "" if want_p == PRI_LO else hkey
+    elif a.view == VIEW_LO:
+        want_l = hkey if want_p == PRI_LO else ""
     else:
         want_l = hkey
     got_l = m[f"L{r}"].value
@@ -371,10 +376,10 @@ if "調理時間" in wb.sheetnames:
             cook_min[_n] = math.ceil(_v - 1e-9)
 
 # 印刷用: 表示切替どおりの絞り込みと並び(作る順＝保持時間の長い順、未入力は最後)
-if a.view == "優先:高のみ":
-    included = [i for i in range(NP) if pri[i] != "低"]
-elif a.view == "優先:低のみ":
-    included = [i for i in range(NP) if pri[i] == "低"]
+if a.view == VIEW_HI:
+    included = [i for i in range(NP) if pri[i] != PRI_LO]
+elif a.view == VIEW_LO:
+    included = [i for i in range(NP) if pri[i] == PRI_LO]
 else:
     included = list(range(NP))
 order = [i + 1 for i in sorted(included, key=lambda i: (ht[i] is None, -(ht[i] or 0), i))]
@@ -386,7 +391,7 @@ for k in range(N_SLOTS):
         check(f"印刷用!C{r}(商品名)", pr[f"C{r}"].value, PRODUCTS[idx - 1])
         check(f"印刷用!D{r}(開始目安=準備数計算Q)", as_serial(pr[f"D{r}"].value), as_serial(m[f"Q{ROW_M0 + idx - 1}"].value))
         check(f"印刷用!E{r}(調理の目安)", pr[f"E{r}"].value, cook_min.get(PRODUCTS[idx - 1], "—"))
-        check(f"印刷用!F{r}(優先)", pr[f"F{r}"].value, pri[idx - 1])
+        check(f"印刷用!F{r}(作るタイミング)", pr[f"F{r}"].value, pri[idx - 1])
         check(f"印刷用!G{r}(作る数=準備数計算G)", pr[f"G{r}"].value, m[f"G{ROW_M0 + idx - 1}"].value)
         check(f"印刷用!H{r}(☐)", pr[f"H{r}"].value, "☐")
     else:
