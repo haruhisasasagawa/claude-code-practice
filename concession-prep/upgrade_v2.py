@@ -20,6 +20,8 @@ import zipfile
 from copy import copy
 
 from openpyxl import load_workbook
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.formatting.rule import DataBarRule, FormulaRule
 from openpyxl.styles import Border, Font
@@ -37,6 +39,9 @@ VIEW_ALL, VIEW_HI, VIEW_LO = "すべて", "優先:高のみ", "優先:低のみ"
 HT_THR_DEFAULT = 30          # 優先「高」とみなす保持時間(分)の既定値
 EXPLODE_MAX = 40             # 列書式の束を1列ずつに分解する上限列(AN列まで)
 RATE = 'IF(AND(ISNUMBER($D$8),$D$8>0),$D$8,100)'   # 事前準備率(未入力・0以下は100%扱い)
+VIEW_CELL = '印刷用!$G$2'                             # 印刷用の表示切替セル
+PEAK_START, PEAK_END = '$O$5', '$O$6'                 # ⑥ ピーク時間(準備数計算)
+CALC_LAST_COL = 'Q'                                   # 準備数計算の表の右端列
 
 
 def ftext(cell):
@@ -74,6 +79,38 @@ def explode_column_groups(ws):
         ws.sheet_format.outlineLevelCol = max(dd.outlineLevel or 0 for dd in cd.values())
 
 
+def _col_px(ws, ci):
+    """0始まり列番号 → 表示幅(px)の見積もり"""
+    w = ws.column_dimensions[get_column_letter(ci + 1)].width or 8.43
+    return int(w * 7 + 5)
+
+
+def move_title_logo(ws, target_col, right_edge_col):
+    """行1(タイトル帯)の画像(店舗ロゴ)を帯の新しい右端へ寄せる。
+    2セルアンカーは列幅に追従して伸縮するため、現在の表示サイズを見積もって
+    1セルアンカー(固定サイズ)に置き換える"""
+    for im in getattr(ws, "_images", []):
+        a = im.anchor
+        fr = getattr(a, "_from", None)
+        if fr is None or fr.row != 0:
+            continue
+        to = getattr(a, "to", None)
+        if to is not None:
+            width_px = (sum(_col_px(ws, c) for c in range(fr.col, to.col))
+                        - fr.colOff / 9525 + to.colOff / 9525)
+            height_px = (to.rowOff - fr.rowOff) / 9525
+            if to.row > fr.row:
+                height_px += sum((ws.row_dimensions[r + 1].height or 15) * 96 / 72
+                                 for r in range(fr.row, to.row))
+        else:
+            width_px, height_px = a.ext.width / 9525, a.ext.height / 9525
+        avail = sum(_col_px(ws, c) for c in range(target_col, right_edge_col + 1))
+        off_px = max(0, avail - width_px - 6)
+        im.anchor = OneCellAnchor(
+            _from=AnchorMarker(col=target_col, colOff=int(off_px * 9525), row=0, rowOff=fr.rowOff),
+            ext=XDRPositiveSize2D(int(width_px * 9525), int(height_px * 9525)))
+
+
 def navy_header(ws, ref, text, size=9.5):
     style_range(ws, ref, font=fnt(size, True, "FFFFFF"), fl=fill(NAVY),
                 alignment=align("center", "center", True), border=BORDER_LIGHT)
@@ -84,6 +121,14 @@ def navy_header(ws, ref, text, size=9.5):
 def upgrade_calc(ws):
     explode_column_groups(ws)
     ws["B1"] = "　🍿 準備数計算｜ピーク前の仕込み数（販売予測数 × 事前準備率）"
+    # 表が右へ広がるので、タイトル帯・説明行も同じ幅に(帯の右端のロゴも右端へ)。
+    # 警告行(B9:H9)は塗りが無いので伸ばさない(非表示M列のヘルパーM9が結合に飲まれるため)
+    for r_ in (1, 2):
+        ws.unmerge_cells(f"B{r_}:H{r_}")
+        ws.merge_cells(f"B{r_}:{CALC_LAST_COL}{r_}")
+    style_range(ws, f"B1:{CALC_LAST_COL}1", fl=fill(NAVY))
+    style_range(ws, "B9:H9", font=fnt(8.5, True, RED), alignment=align("left", wrap=True))
+    move_title_logo(ws, 14, 16)                   # O〜Q列の右端へ
     ws["B2"] = ("参照期間(A/B)の購買率 × ピーク動員数 × 係数（時間帯／商品別の波）で「販売予測数」を出し、"
                 "⑤事前準備率を掛けた「👉 仕込み数」を自動計算します")
 
@@ -111,6 +156,27 @@ def upgrade_calc(ws):
     # 配列数式で保存されていた表示式は通常の数式に戻す(動作は同じ)
     ws["E7"] = ftext(ws["E7"])
 
+    # ⑥ ピーク時間(入力ブロックの右・新列の上)。保持時間と組み合わせて
+    # 「仕込み開始の目安 ＝ ピーク開始 − 保持時間」を商品ごとに出す
+    chip(ws, "N4:Q4", "  ⑥ ピーク時間", CHIP_CORAL, INK, 10)
+    note(ws, "N5", "開始", 9, GRAY, h="right")
+    note(ws, "N6", "終了", 9, GRAY, h="right")
+    for ref in ("O5", "O6"):
+        style_range(ws, ref, font=fnt(10.5, True), fl=fill(F_INPUT),
+                    alignment=align("center"), border=BORDER_INPUT, num="h:mm")
+    note(ws, "P5:Q5", "← 17:30 のように", 8, GRAY)
+    note(ws, "P6:Q6", "（終了は目安表示用）", 8, GRAY)
+    note(ws, "N7:Q7", "→ 仕込み開始の目安 ＝ 開始 − 保持時間（右端の列）", 8, GRAY)
+    ws["O5"].comment = mk_comment("これから準備するピークの開始時刻を 17:30 のように入力します。"
+                                  "商品ごとの「仕込み開始(目安)」＝この時刻 − 保持時間 になり、"
+                                  "印刷用は開始の早い順に並びます。未入力なら優先 高→低 の並びです。")
+    dv_time = DataValidation(type="decimal", operator="between", formula1="0", formula2="2",
+                             showErrorMessage=True)
+    dv_time.error = "17:30 のように時刻で入力してください（翌日は 25:30 のように24時間超えも可）"
+    dv_time.errorTitle = "ピーク時間"
+    ws.add_data_validation(dv_time)
+    dv_time.add("O5:O6")
+
     # 期間A状態表示の参照ズレ修正(店舗版はG4→B7へ移動済みだが参照が旧G4のまま)
     b9 = (ftext(ws["B9"]).replace("期間データ!$G$4", "期間データ!$B$7")
           .replace("G列「比較期間（参考）」", "N列「比較期間（参考）」")
@@ -120,7 +186,9 @@ def upgrade_calc(ws):
           '&" "&IF(OR($D$8="",NOT(ISNUMBER($D$8)),$D$8<=0),'
           '"⚠ 事前準備率が未入力か0以下です（100%扱い）。","")'
           '&" "&IF(AND(ISNUMBER($D$8),$D$8>0,OR($D$8>200,$D$8<>INT($D$8))),'
-          '"⚠ 事前準備率が想定外の値です（1〜200の整数で入力。入力値のまま計算中）。",""))')
+          '"⚠ 事前準備率が想定外の値です（1〜200の整数で入力。入力値のまま計算中）。","")'
+          f'&" "&IF(AND({PEAK_START}<>"",NOT(ISNUMBER({PEAK_START}))),'
+          '"⚠ ピーク時間（開始）が時刻ではありません（17:30 のように入力）。",""))')
     ws["B9"] = b9
     if ws["D7"].comment and "作る数を計算" in ws["D7"].comment.text:
         ws["D7"].comment = mk_comment(ws["D7"].comment.text.replace("作る数を計算", "販売予測数を計算"))
@@ -135,7 +203,8 @@ def upgrade_calc(ws):
     navy_header(ws, "N10", "比較期間\n（参考）")
     navy_header(ws, "O10", "保持時間\n(分)")
     navy_header(ws, "P10", "優先")
-    for c, w in {"F": 14, "G": 16, "N": 13, "O": 9, "P": 8}.items():
+    navy_header(ws, "Q10", "仕込み開始\n(目安)")
+    for c, w in {"F": 14, "G": 16, "N": 13, "O": 9, "P": 8, "Q": 9}.items():
         ws.column_dimensions[c].width = w
 
     for i in range(N_SLOTS):
@@ -156,11 +225,20 @@ def upgrade_calc(ws):
                        f'IF(NOT(ISNUMBER(期間データ!E{dr})),"—",'
                        f'IF(期間データ!E{dr}<=IF(ISNUMBER(期間データ!$E$12),期間データ!$E$12,'
                        f'{HT_THR_DEFAULT}),"高","低")))))')
-        # 印刷用の並び順キー(非表示L列): 表示切替に応じて 高→低 / 高のみ / 低のみ
+        # 仕込み開始の目安: K列(非表示)に未補正の時刻シリアル(前日側なら負)、Q列に表示用(h:mm)
+        ws[f"K{r}"] = (f'=IF(OR($C{r}="",{PEAK_START}="",NOT(ISNUMBER({PEAK_START})),'
+                       f'NOT(ISNUMBER(期間データ!E{dr}))),"",{PEAK_START}-期間データ!E{dr}/1440)')
+        style_range(ws, f"K{r}", font=fnt(8.5, False, GRAY), alignment=align("center"))
+        ws[f"Q{r}"] = f'=IF($C{r}="","",IF($K{r}="","—",MOD($K{r},1)))'
+        # 印刷用の並び順キー(非表示L列): ピーク入力時は仕込み開始の早い順(未定は最後)、
+        # 未入力時は 高→低。高のみ/低のみは絞り込み(高のみには未入力の—も含む)
         k = i + 1
-        ws[f"L{r}"] = (f'=IF($C{r}="","",IF(印刷用!$F$2="{VIEW_HI}",IF($P{r}="低","",{k}),'
-                       f'IF(印刷用!$F$2="{VIEW_LO}",IF($P{r}="低",{k},""),'
-                       f'IF($P{r}="低",100+{k},{k}))))')
+        tkey = f'IF($K{r}="",9999900+{k},(ROUND($K{r}*1440,0)+10000)*100+{k})'
+        no_peak = f'OR({PEAK_START}="",NOT(ISNUMBER({PEAK_START})))'
+        ws[f"L{r}"] = (f'=IF($C{r}="","",IF({VIEW_CELL}="{VIEW_HI}",'
+                       f'IF($P{r}="低","",IF({no_peak},{k},{tkey})),'
+                       f'IF({VIEW_CELL}="{VIEW_LO}",IF($P{r}="低",IF({no_peak},{k},{tkey}),""),'
+                       f'IF({no_peak},IF($P{r}="低",100+{k},{k}),{tkey}))))')
         style_range(ws, f"L{r}", font=fnt(8.5, False, GRAY), alignment=align("center"))
 
         zebra = fill(F_ZEBRA) if i % 2 else None
@@ -175,6 +253,8 @@ def upgrade_calc(ws):
                     alignment=align("center"), num='0"分"', border=BORDER_HAIR)
         style_range(ws, f"P{r}", font=fnt(9.5, True, INK), fl=zebra,
                     alignment=align("center"), border=BORDER_HAIR)
+        style_range(ws, f"Q{r}", font=fnt(9.5, True, INK), fl=zebra,
+                    alignment=align("center"), border=BORDER_HAIR, num="h:mm")
     last = ROW_M0 + N_SLOTS - 1
     ws[f"G{last}"].border = Border(bottom=coral_side, left=coral_side, right=coral_side)
 
@@ -183,10 +263,11 @@ def upgrade_calc(ws):
                 "切り上げ" if "ROUNDUP(" in f11 else "四捨五入")
     ws.unmerge_cells(f"B{last + 1}:H{last + 1}")
     ws.row_dimensions[last + 1].height = 30
-    note(ws, f"B{last + 1}:P{last + 1}",
+    note(ws, f"B{last + 1}:{CALC_LAST_COL}{last + 1}",
          f"※ 販売予測数 ＝ ピーク動員数 × 購買率 × 係数（{rounding}）｜👉 仕込み数 ＝ 販売予測数 × ⑤事前準備率（{rounding}）｜"
-         "係数 ＝ 商品係数（右列）があればそれ、「—」の商品は時間帯係数｜"
-         "優先 ＝ 保持時間が基準（期間データE12）以下なら高・長ければ低（期間データで手動上書き可。未入力の—は高側に並びます）｜"
+         "係数 ＝ 商品係数があればそれ、「—」の商品は時間帯係数｜"
+         "優先 ＝ 保持時間が基準（期間データE12）以下なら高・長ければ低（手動上書き可・未入力は—）｜"
+         "仕込み開始(目安) ＝ ⑥ピーク開始 − 保持時間（印刷用はこの早い順。ピーク未入力なら高→低）｜"
          "比較期間 ＝ A選択時は期間B、それ以外は期間A", 8.5, wrap=True)
 
     # 条件付き書式を作り直し(データバーは仕込み数へ、要確認は比較期間の新位置へ、優先の色分け)
@@ -202,7 +283,7 @@ def upgrade_calc(ws):
         formula=[f'P{ROW_M0}="高"'], font=Font(name=FONT_NAME, size=9.5, bold=True, color=CORAL)))
     ws.conditional_formatting.add(f"P{ROW_M0}:P{last}", FormulaRule(
         formula=[f'P{ROW_M0}="低"'], font=Font(name=FONT_NAME, size=9.5, bold=False, color=GRAY)))
-    ws.print_area = f"A1:P{last + 1}"
+    ws.print_area = f"A1:{CALC_LAST_COL}{last + 1}"
 
 
 # ============================================================ 期間データ =====
@@ -269,61 +350,78 @@ def upgrade_period(ws):
 # ============================================================== 印刷用 =======
 def upgrade_print(ws):
     explode_column_groups(ws)
-    for c, w in {"D": 7, "E": 17.7, "F": 10, "G": 2.4}.items():
+    for c, w in {"D": 9, "E": 7, "F": 17.7, "G": 11, "H": 2.4}.items():
         ws.column_dimensions[c].width = w
-    ws.column_dimensions["H"].hidden = True         # 並び順ヘルパー
+    ws.column_dimensions["I"].hidden = True         # 並び順ヘルパー
     for r in (1, 3, 4, 5, 6, 28):
         ws.unmerge_cells(f"B{r}:E{r}")
-        ws.merge_cells(f"B{r}:F{r}")
-    style_range(ws, "B1:F1", fl=fill(NAVY))
+        ws.merge_cells(f"B{r}:G{r}")
+    ws.unmerge_cells("B2:E2")
+    ws.merge_cells("B2:F2")
+    style_range(ws, "B1:G1", fl=fill(NAVY))
+    move_title_logo(ws, 5, 6)                       # F〜G列の右端へ
 
     ws["B2"] = ('="  👇 この数を作ってください（販売予測数の"&'
                 + RATE.replace("$D$8", "準備数計算!$D$8") + '&"%）"')
-    ws["F2"] = VIEW_ALL
-    style_range(ws, "F2", font=fnt(9.5, True), fl=fill(F_INPUT),
+    ws["G2"] = VIEW_ALL
+    style_range(ws, "G2", font=fnt(9.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT)
-    ws["F2"].comment = mk_comment("印刷するリストの切替。「すべて」は優先 高→低 の順に並びます。"
-                                  "「優先:高のみ」「優先:低のみ」で絞り込み（保持時間が未入力の「—」は"
-                                  "高側に含めます）。")
+    ws["G2"].comment = mk_comment("印刷するリストの切替。「すべて」は仕込み開始(目安)の早い順"
+                                  "（ピーク時間が未入力なら優先 高→低）。「優先:高のみ」「優先:低のみ」で"
+                                  "絞り込み（保持時間が未入力の「—」は高側に含めます）。")
     dv_view = DataValidation(type="list", formula1=f'"{VIEW_ALL},{VIEW_HI},{VIEW_LO}"',
                              allow_blank=True, showErrorMessage=True)
     dv_view.error = f"「{VIEW_ALL}」「{VIEW_HI}」「{VIEW_LO}」から選んでください"
     dv_view.errorTitle = "表示"
     ws.add_data_validation(dv_view)
-    dv_view.add("F2")
+    dv_view.add("G2")
+    ws["B4"] = (ftext(ws["B4"]).rstrip()
+                + f'&IF(ISNUMBER(準備数計算!{PEAK_START}),"　｜　ピーク "&TEXT(準備数計算!{PEAK_START},"h:mm")'
+                + f'&IF(ISNUMBER(準備数計算!{PEAK_END}),"〜"&TEXT(準備数計算!{PEAK_END},"h:mm"),""),"")')
 
     navy_header(ws, "B7", "No.", 10)
     navy_header(ws, "C7", "商品名", 10)
-    navy_header(ws, "D7", "優先", 10)
-    style_range(ws, "E7", font=fnt(11, True, "FFFFFF"), fl=fill(CORAL),
+    navy_header(ws, "D7", "開始目安", 10)
+    navy_header(ws, "E7", "優先", 10)
+    style_range(ws, "F7", font=fnt(11, True, "FFFFFF"), fl=fill(CORAL),
                 alignment=align("center"), border=BORDER_LIGHT)
-    ws["E7"] = "仕込み数"
-    navy_header(ws, "F7", "できたら✓", 10)
+    ws["F7"] = "仕込み数"
+    navy_header(ws, "G7", "できたら✓", 10)
 
+    rng = f"準備数計算!${{}}${ROW_M0}:${{}}${ROW_M0 + N_SLOTS - 1}"
     for i in range(N_SLOTS):
         r = 8 + i
         k = i + 1
-        ws[f"H{r}"] = f'=IFERROR(MOD(SMALL(準備数計算!$L${ROW_M0}:$L${ROW_M0 + N_SLOTS - 1},{k}),100),"")'
-        ws[f"B{r}"] = f'=IF($H{r}="","",$H{r})'
-        ws[f"C{r}"] = f'=IF($H{r}="","",INDEX(準備数計算!$C${ROW_M0}:$C${ROW_M0 + N_SLOTS - 1},$H{r}))'
-        ws[f"D{r}"] = f'=IF($H{r}="","",INDEX(準備数計算!$P${ROW_M0}:$P${ROW_M0 + N_SLOTS - 1},$H{r}))'
-        ws[f"E{r}"] = f'=IF($H{r}="","",INDEX(準備数計算!$G${ROW_M0}:$G${ROW_M0 + N_SLOTS - 1},$H{r}))'
-        ws[f"F{r}"] = f'=IF($H{r}="","","☐")'
+        ws[f"I{r}"] = f'=IFERROR(MOD(SMALL({rng.format("L", "L")},{k}),100),"")'
+        ws[f"B{r}"] = f'=IF($I{r}="","",$I{r})'
+        ws[f"C{r}"] = f'=IF($I{r}="","",INDEX({rng.format("C", "C")},$I{r}))'
+        ws[f"D{r}"] = f'=IF($I{r}="","",INDEX({rng.format("Q", "Q")},$I{r}))'
+        ws[f"E{r}"] = f'=IF($I{r}="","",INDEX({rng.format("P", "P")},$I{r}))'
+        ws[f"F{r}"] = f'=IF($I{r}="","",INDEX({rng.format("G", "G")},$I{r}))'
+        ws[f"G{r}"] = f'=IF($I{r}="","","☐")'
         style_range(ws, f"B{r}", font=fnt(14, False, GRAY), alignment=align("center"), border=BORDER_LIGHT)
         style_range(ws, f"C{r}", font=fnt(14), alignment=align("left"), border=BORDER_LIGHT)
-        style_range(ws, f"D{r}", font=fnt(12, True), alignment=align("center"), border=BORDER_LIGHT)
-        style_range(ws, f"E{r}", font=fnt(14, True, CORAL), fl=fill(F_BASE),
+        style_range(ws, f"D{r}", font=fnt(12, True), alignment=align("center"), border=BORDER_LIGHT, num="h:mm")
+        style_range(ws, f"E{r}", font=fnt(12, True), alignment=align("center"), border=BORDER_LIGHT)
+        style_range(ws, f"F{r}", font=fnt(14, True, CORAL), fl=fill(F_BASE),
                     alignment=align("center"), num="#,##0",
                     border=Border(bottom=thin, top=thin, left=coral_side, right=coral_side))
-        style_range(ws, f"F{r}", font=fnt(12, False, "B9C0CC"), alignment=align("center"), border=BORDER_LIGHT)
-        style_range(ws, f"H{r}", font=fnt(8, False, GRAY))
+        style_range(ws, f"G{r}", font=fnt(12, False, "B9C0CC"), alignment=align("center"), border=BORDER_LIGHT)
+        style_range(ws, f"I{r}", font=fnt(8, False, GRAY))
     ws.conditional_formatting = ConditionalFormattingList()
-    ws.conditional_formatting.add("D8:D27", FormulaRule(
-        formula=['D8="高"'], font=Font(name=FONT_NAME, size=12, bold=True, color=CORAL)))
-    ws.conditional_formatting.add("D8:D27", FormulaRule(
-        formula=['D8="低"'], font=Font(name=FONT_NAME, size=12, bold=False, color=GRAY)))
-    ws["B28"] = "※ 数字は「準備数計算」シートから自動で入ります｜表示の切替は右上のプルダウン｜A4縦・1ページ印刷"
-    ws.print_area = "A1:G28"
+    ws.conditional_formatting.add("E8:E27", FormulaRule(
+        formula=['E8="高"'], font=Font(name=FONT_NAME, size=12, bold=True, color=CORAL)))
+    ws.conditional_formatting.add("E8:E27", FormulaRule(
+        formula=['E8="低"'], font=Font(name=FONT_NAME, size=12, bold=False, color=GRAY)))
+    ws["B28"] = ("※ 数字は「準備数計算」シートから自動で入ります｜開始目安＝ピーク開始−保持時間｜"
+                 "表示の切替は右上のプルダウン｜A4縦・1ページ印刷")
+    # A4縦1枚に必ず収める(店舗版の設定を明示的に固定)
+    ws.print_area = "A1:H28"
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.paperSize = 9
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
 
 
 # ============================================================== 使い方 =======
@@ -349,14 +447,17 @@ def upgrade_guide(ws):
         if rng.startswith("C45:"):
             ws.unmerge_cells(rng)
     ws.row_dimensions[r].height = 22
-    chip(ws, f"B{r}:E{r}", "  🆕 v2.0 の追加機能（事前準備率・優先順位）", CHIP_NAVY, NAVY)
+    chip(ws, f"B{r}:E{r}", "  🆕 v2.0 の追加機能（事前準備率・保持時間・ピーク時間）", CHIP_NAVY, NAVY)
     lines = [
         "・⑤ 事前準備率（準備数計算）：販売予測数の何％を仕込むかを整数で入力します（100＝予測どおり／80で控えめ／"
         "120で多め。1〜200）。「👉 仕込み数」列と印刷用に反映され、販売予測数そのものは変わりません。",
         "・保持時間（期間データ）：商品ごとに「作ってから何分まで提供できるか」を分で入力すると、基準（既定30分以下）で"
         "優先「高」、それより長いと「低」に自動判定します。判定を変えたい商品は「優先(手動)」で高／低を選べます（未入力は「—」で、印刷用では高側に並びます）。",
-        "・印刷用の右上のプルダウンで「すべて（高→低の順）」「優先:高のみ」「優先:低のみ」を切り替えられます。"
-        "保持時間の短い商品ほど作るタイミングに注意が必要なので「高」、長い商品は先に作り置きできるので「低」という考え方です。",
+        "・⑥ ピーク時間（準備数計算・入力ブロックの右）：これから準備するピークの開始（と終了）を 17:30 のように入力すると、"
+        "商品ごとの「仕込み開始(目安)」＝ピーク開始 − 保持時間 が出ます（保持時間が長い商品ほど早く、短い商品ほど直前）。",
+        "・印刷用の右上のプルダウンで「すべて」「優先:高のみ」「優先:低のみ」を切り替えられます。「すべて」は仕込み開始の早い順"
+        "（ピーク時間が未入力なら優先 高→低）。保持時間の短い商品ほど作るタイミングに注意が必要なので「高」、長い商品は先に"
+        "作り置きできるので「低」という考え方です。",
     ]
     for t in lines:
         r += 1
@@ -503,7 +604,7 @@ def check_hidden_cols(path):
                     mx = int(re.search(r'max="(\d+)"', c).group(1))
                     hidden.update(range(mn, mx + 1))
             out[nm] = hidden
-    ok = {9, 10, 11, 12, 13} <= out.get("準備数計算", set()) and 8 in out.get("印刷用", set())
+    ok = {9, 10, 11, 12, 13} <= out.get("準備数計算", set()) and 9 in out.get("印刷用", set())
     return ok, out
 
 
