@@ -647,6 +647,13 @@ def upgrade(src, dst):
     upgrade_period(wb["期間データ"])
     upgrade_print(wb["印刷用"])
     upgrade_guide(wb["使い方"])
+    # 店舗版に残る旧称(v2.0初期の「仕込み数」)を全シートの固定文から置き換える。
+    # 「仕込み開始」「仕込み指示書」は別の語なので影響しない
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                if isinstance(c.value, str) and not c.value.startswith("=") and "仕込み数" in c.value:
+                    c.value = c.value.replace("仕込み数", "作る数")
     wv = wb["商品別の波"]                        # 「作る数」→「販売予測数」(v2.0の名称)
     for ref in ("B2", "B28"):
         if isinstance(wv[ref].value, str):
