@@ -70,6 +70,10 @@ MATCH_RULES = [
     ("チョコクリームチュリトス", [["チュリトス"], ["チョコ"]], []),
     ("チュリトス プレーン", [["チュリトス"]], ["チョコ"]),
 ]
+# 「電子レンジ 1500W」の出力は機器の違いではなく設定なので、機器名から外して条件へ回す
+# (同じレンジで作る商品が1つの機器としてまとまり、台数を1か所で入れられる)
+MACH_SETTING_RE = re.compile(r"[\s　]*(\d+\s*[wWＷ])[\s　]*$")
+
 TIER_TEXT = {"exact": "名寄せ: 名前一致", "rule": "❓ 名寄せ: キーワード推定（要確認）",
              "stem": "⚠ 名寄せ: 先頭文字の推定（要確認）"}
 
@@ -137,7 +141,13 @@ def parse_manual(path):
         if len(vs) == 1 and vs[0] != group and any(w in vs[0] for w in COND_WORDS):
             cond = f"{vs[0]}｜{cond}" if cond else vs[0]        # 「（イレギュラー時）」は同じ商品の別機器
             group = base
-        rec = {"group": group, "machine": str(row[col["調理機器"]] or "").strip(), "cond": cond,
+        mach = str(row[col["調理機器"]] or "").strip()
+        ms = MACH_SETTING_RE.search(mach)
+        if ms:                                   # 出力(W)は機器名から条件へ
+            setting = re.sub(r"\s+", "", ms.group(1)).upper()
+            mach = MACH_SETTING_RE.sub("", mach).strip()
+            cond = f"{cond}／{setting}" if cond else setting
+        rec = {"group": group, "machine": mach, "cond": cond,
                "times": {}, "raw": {}, "remarks": []}
         for k in range(1, COUNTS + 1):
             key = f"{k}個"
@@ -389,8 +399,8 @@ def build_sheet(wb, manual, candidates, sample_label=False):
              "台数を増やすか、何回かに分けてピークに向けて作る目安にしてください（印刷用の「調理の目安」も1台の分数です）。"]
     lines.append("※ 台数は「同じように使える台数」です。専用機があるときは台数をまとめず、機器名を分けて1台ずつにしてください"
                  "（例：チョコの行の調理機器を「専用チュリトスオーブン（チョコ専用）」に書き換え、下の空き行に同じ名前を足す）。"
-                 "逆に、同じ機械で設定だけ違うとき（電子レンジの1500W／1800Wなど）は機器名を同じにまとめて台数を入れると、"
-                 "合計を台数で割ります。別の機器で作る商品どうしは同時に進められるので、順番に作る前提の合計は機器ごとに出しています。")
+                 "同じ機械で設定だけ違うとき（電子レンジの出力など）は機器名を同じにまとめて台数を入れると、合計を台数で割ります"
+                 "（出力Wは機器名ではなく条件の列に入れてあります）。別の機器で作る商品どうしは同時に進められるので、順番に作る前提の合計は機器ごとに出しています。")
     if unmatched:
         lines.append("※ マニュアルに項目が無いCSVの食品（必要なら商品名を選んで手入力）: " + "、".join(unmatched))
     if dropped:
