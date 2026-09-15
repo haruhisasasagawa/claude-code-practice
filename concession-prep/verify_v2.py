@@ -135,15 +135,15 @@ for i, name in enumerate(DEFAULT_PRODUCTS):
     else:
         check(f"Q{r}(開始目安=—)", m[f"Q{r}"].value, "—")
         starts.append(None)
-    # 並び順キー(非表示L列)
+    # 並び順キー(非表示L列): 保持時間の長い順、未入力は最後(ピーク入力の有無によらない)
     k = i + 1
-    tkey = (9999900 + k) if starts[-1] is None else (starts[-1] + 10000) * 100 + k
+    hkey = (9999900 + k) if h is None else (10000 - max(0, min(9999, h))) * 100 + k
     if a.view == "優先:高のみ":
-        want_l = "" if want_p == "低" else (k if peak is None else tkey)
+        want_l = "" if want_p == "低" else hkey
     elif a.view == "優先:低のみ":
-        want_l = (k if peak is None else tkey) if want_p == "低" else ""
+        want_l = hkey if want_p == "低" else ""
     else:
-        want_l = (100 + k if want_p == "低" else k) if peak is None else tkey
+        want_l = hkey
     got_l = m[f"L{r}"].value
     check(f"L{r}(並び順キー)", "" if got_l in (None, "") else got_l, want_l)
 
@@ -155,17 +155,12 @@ elif a.view == "優先:低のみ":
     included = [i for i in range(NP) if pri[i] == "低"]
 else:
     included = list(range(NP))
-if peak is None:
-    order = [i + 1 for i in included if pri[i] != "低"] + [i + 1 for i in included if pri[i] == "低"]
-    if a.view != "すべて":
-        order = [i + 1 for i in included]
-else:
-    order = [i + 1 for i in sorted(included, key=lambda i: (starts[i] is None, starts[i] or 0, i))]
+order = [i + 1 for i in sorted(included, key=lambda i: (ht[i] is None, -(ht[i] or 0), i))]
 for k in range(20):
     r = 8 + k
     if k < len(order):
         idx = order[k]
-        check(f"印刷用!B{r}(No.)", pr[f"B{r}"].value, idx)
+        check(f"印刷用!B{r}(作る順)", pr[f"B{r}"].value, k + 1)
         check(f"印刷用!C{r}(商品名)", pr[f"C{r}"].value, DEFAULT_PRODUCTS[idx - 1])
         check(f"印刷用!D{r}(開始目安=準備数計算Q)", as_serial(pr[f"D{r}"].value), as_serial(m[f"Q{ROW_M0 + idx - 1}"].value))
         check(f"印刷用!E{r}(優先)", pr[f"E{r}"].value, pri[idx - 1])

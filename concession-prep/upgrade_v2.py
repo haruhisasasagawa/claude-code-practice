@@ -168,8 +168,8 @@ def upgrade_calc(ws):
     note(ws, "P6:Q6", "（終了は目安表示用）", 8, GRAY)
     note(ws, "N7:Q7", "→ 仕込み開始の目安 ＝ 開始 − 保持時間（右端の列）", 8, GRAY)
     ws["O5"].comment = mk_comment("これから準備するピークの開始時刻を 17:30 のように入力します。"
-                                  "商品ごとの「仕込み開始(目安)」＝この時刻 − 保持時間 になり、"
-                                  "印刷用は開始の早い順に並びます。未入力なら優先 高→低 の並びです。")
+                                  "商品ごとの「仕込み開始(目安)」＝この時刻 − 保持時間 が表示されます"
+                                  "（印刷用の並び＝作る順は保持時間の長い順で、この入力が無くても同じです）。")
     dv_time = DataValidation(type="decimal", operator="between", formula1="0", formula2="2",
                              showErrorMessage=True)
     dv_time.error = "17:30 のように時刻で入力してください（翌日は 25:30 のように24時間超えも可）"
@@ -230,15 +230,14 @@ def upgrade_calc(ws):
                        f'NOT(ISNUMBER(期間データ!E{dr}))),"",{PEAK_START}-期間データ!E{dr}/1440)')
         style_range(ws, f"K{r}", font=fnt(8.5, False, GRAY), alignment=align("center"))
         ws[f"Q{r}"] = f'=IF($C{r}="","",IF($K{r}="","—",MOD($K{r},1)))'
-        # 印刷用の並び順キー(非表示L列): ピーク入力時は仕込み開始の早い順(未定は最後)、
-        # 未入力時は 高→低。高のみ/低のみは絞り込み(高のみには未入力の—も含む)
+        # 印刷用の並び順キー(非表示L列): 作る順 ＝ 保持時間の長い順(先に作って持たせられる
+        # ものから。短いものはピーク直前)。未入力は最後。高のみ/低のみは絞り込み
+        # (高のみには未入力の—も含む)。ピーク時間の有無に関係なく同じ順
         k = i + 1
-        tkey = f'IF($K{r}="",9999900+{k},(ROUND($K{r}*1440,0)+10000)*100+{k})'
-        no_peak = f'OR({PEAK_START}="",NOT(ISNUMBER({PEAK_START})))'
-        ws[f"L{r}"] = (f'=IF($C{r}="","",IF({VIEW_CELL}="{VIEW_HI}",'
-                       f'IF($P{r}="低","",IF({no_peak},{k},{tkey})),'
-                       f'IF({VIEW_CELL}="{VIEW_LO}",IF($P{r}="低",IF({no_peak},{k},{tkey}),""),'
-                       f'IF({no_peak},IF($P{r}="低",100+{k},{k}),{tkey}))))')
+        hkey = (f'IF(ISNUMBER(期間データ!E{dr}),(10000-MAX(0,MIN(9999,期間データ!E{dr})))*100+{k},'
+                f'9999900+{k})')
+        ws[f"L{r}"] = (f'=IF($C{r}="","",IF({VIEW_CELL}="{VIEW_HI}",IF($P{r}="低","",{hkey}),'
+                       f'IF({VIEW_CELL}="{VIEW_LO}",IF($P{r}="低",{hkey},""),{hkey})))')
         style_range(ws, f"L{r}", font=fnt(8.5, False, GRAY), alignment=align("center"))
 
         zebra = fill(F_ZEBRA) if i % 2 else None
@@ -267,7 +266,7 @@ def upgrade_calc(ws):
          f"※ 販売予測数 ＝ ピーク動員数 × 購買率 × 係数（{rounding}）｜👉 仕込み数 ＝ 販売予測数 × ⑤事前準備率（{rounding}）｜"
          "係数 ＝ 商品係数があればそれ、「—」の商品は時間帯係数｜"
          "優先 ＝ 保持時間が基準（期間データE12）以下なら高・長ければ低（手動上書き可・未入力は—）｜"
-         "仕込み開始(目安) ＝ ⑥ピーク開始 − 保持時間（印刷用はこの早い順。ピーク未入力なら高→低）｜"
+         "仕込み開始(目安) ＝ ⑥ピーク開始 − 保持時間｜印刷用は保持時間の長い順（先に作れるものから）に「作る順」を付けて並びます｜"
          "比較期間 ＝ A選択時は期間B、それ以外は期間A", 8.5, wrap=True)
 
     # 条件付き書式を作り直し(データバーは仕込み数へ、要確認は比較期間の新位置へ、優先の色分け)
@@ -366,9 +365,10 @@ def upgrade_print(ws):
     ws["G2"] = VIEW_ALL
     style_range(ws, "G2", font=fnt(9.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT)
-    ws["G2"].comment = mk_comment("印刷するリストの切替。「すべて」は仕込み開始(目安)の早い順"
-                                  "（ピーク時間が未入力なら優先 高→低）。「優先:高のみ」「優先:低のみ」で"
-                                  "絞り込み（保持時間が未入力の「—」は高側に含めます）。")
+    ws["G2"].comment = mk_comment("印刷するリストの切替。並びは常に作る順＝保持時間の長い順"
+                                  "（先に作って持たせられるものから。短いものはピーク直前）。"
+                                  "「優先:高のみ」「優先:低のみ」で絞り込み（保持時間が未入力の「—」は"
+                                  "高側に含め、最後に並びます）。")
     dv_view = DataValidation(type="list", formula1=f'"{VIEW_ALL},{VIEW_HI},{VIEW_LO}"',
                              allow_blank=True, showErrorMessage=True)
     dv_view.error = f"「{VIEW_ALL}」「{VIEW_HI}」「{VIEW_LO}」から選んでください"
@@ -379,7 +379,7 @@ def upgrade_print(ws):
                 + f'&IF(ISNUMBER(準備数計算!{PEAK_START}),"　｜　ピーク "&TEXT(準備数計算!{PEAK_START},"h:mm")'
                 + f'&IF(ISNUMBER(準備数計算!{PEAK_END}),"〜"&TEXT(準備数計算!{PEAK_END},"h:mm"),""),"")')
 
-    navy_header(ws, "B7", "No.", 10)
+    navy_header(ws, "B7", "作る順", 10)
     navy_header(ws, "C7", "商品名", 10)
     navy_header(ws, "D7", "開始目安", 10)
     navy_header(ws, "E7", "優先", 10)
@@ -393,7 +393,7 @@ def upgrade_print(ws):
         r = 8 + i
         k = i + 1
         ws[f"I{r}"] = f'=IFERROR(MOD(SMALL({rng.format("L", "L")},{k}),100),"")'
-        ws[f"B{r}"] = f'=IF($I{r}="","",$I{r})'
+        ws[f"B{r}"] = f'=IF($I{r}="","",{k})'
         ws[f"C{r}"] = f'=IF($I{r}="","",INDEX({rng.format("C", "C")},$I{r}))'
         ws[f"D{r}"] = f'=IF($I{r}="","",INDEX({rng.format("Q", "Q")},$I{r}))'
         ws[f"E{r}"] = f'=IF($I{r}="","",INDEX({rng.format("P", "P")},$I{r}))'
@@ -413,8 +413,8 @@ def upgrade_print(ws):
         formula=['E8="高"'], font=Font(name=FONT_NAME, size=12, bold=True, color=CORAL)))
     ws.conditional_formatting.add("E8:E27", FormulaRule(
         formula=['E8="低"'], font=Font(name=FONT_NAME, size=12, bold=False, color=GRAY)))
-    ws["B28"] = ("※ 数字は「準備数計算」シートから自動で入ります｜開始目安＝ピーク開始−保持時間｜"
-                 "表示の切替は右上のプルダウン｜A4縦・1ページ印刷")
+    ws["B28"] = ("※ 上から順に作ります（保持時間の長いものが先・短いものはピーク直前）｜開始目安＝ピーク開始−保持時間｜"
+                 "数字は「準備数計算」から自動｜表示の切替は右上のプルダウン｜A4縦・1ページ印刷")
     # A4縦1枚に必ず収める(店舗版の設定を明示的に固定)
     ws.print_area = "A1:H28"
     ws.page_setup.orientation = "portrait"
@@ -455,9 +455,9 @@ def upgrade_guide(ws):
         "優先「高」、それより長いと「低」に自動判定します。判定を変えたい商品は「優先(手動)」で高／低を選べます（未入力は「—」で、印刷用では高側に並びます）。",
         "・⑥ ピーク時間（準備数計算・入力ブロックの右）：これから準備するピークの開始（と終了）を 17:30 のように入力すると、"
         "商品ごとの「仕込み開始(目安)」＝ピーク開始 − 保持時間 が出ます（保持時間が長い商品ほど早く、短い商品ほど直前）。",
-        "・印刷用の右上のプルダウンで「すべて」「優先:高のみ」「優先:低のみ」を切り替えられます。「すべて」は仕込み開始の早い順"
-        "（ピーク時間が未入力なら優先 高→低）。保持時間の短い商品ほど作るタイミングに注意が必要なので「高」、長い商品は先に"
-        "作り置きできるので「低」という考え方です。",
+        "・印刷用は「作る順」＝保持時間の長い順に上から並びます（長く持つものは先に作っておき、短いものはピークに合わせて作る）。"
+        "右上のプルダウンで「優先:高のみ」「優先:低のみ」に絞り込めます。保持時間の短い商品ほど作るタイミングに注意が必要なので「高」、"
+        "長い商品は先に作り置きできるので「低」という考え方です。",
     ]
     for t in lines:
         r += 1
