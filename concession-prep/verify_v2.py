@@ -5,9 +5,14 @@ v2.0(upgrade_v2.py で更新した店舗版)の再計算結果を、CSVからPyt
   python verify_v2.py <再計算済みxlsx> --csv-a A.csv --csv-b B.csv --att-a 9000,13000,12000 \
       --att-b ... --peak 1200 --mult 0.6 --rate 80 --view 優先:高のみ \
       --ht 10,45,,30,... --manual 1:高,5:低 --thr 30 [--expect-warn 文字列] [--mso]
-  --products auto : 商品名を期間データ!B14:B33 から読む(店舗版・サンプル用。既定はテンプレートの商品)
+  --products auto : 商品名を期間データ!B14:B33 から読む(店舗版・サンプル用。既定はテンプレートの商品。
+                    枠はB14から詰めて登録されている前提。途中に空きがあるとNG)
   --mso1〜4 CSV   : 係数貼付①〜④に貼ったMSO商品CSV。係数算出・商品別の波・係数の適用まで厳密に突合
-                    (--mso は貼付ありの近似検証のみ)
+                    (--mso は貼付ありの近似検証のみ)。指定時は --mult 不要(実測係数を期待値にする)
+  --manual        : 手動優先。添字は0始まり(0＝期間データB14の1商品目)。例 --manual 0:高,4:低
+  --peak-start    : ⑥ピーク開始(準備数計算!O5)。既定 17:30。O5が未入力のブックは --peak-start "" (仕込み開始=—)
+  ※ 商品名の突合はPython側は完全一致。シートのSUMIFSは大文字小文字を区別せず *?~ をワイルドカードに
+    するため、そのような商品名は結果が食い違う(NGとして出る)
 """
 import argparse
 import math
@@ -26,14 +31,14 @@ ap.add_argument("--csv-b", required=True)
 ap.add_argument("--att-a", required=True)
 ap.add_argument("--att-b", required=True)
 ap.add_argument("--peak", type=int, required=True)
-ap.add_argument("--mult", type=float, required=True, help="期待する時間帯係数(M7)。--mso1〜4指定時は無視")
+ap.add_argument("--mult", type=float, default=None, help="期待する時間帯係数(M7)。--mso1〜4指定時は不要(実測係数を期待)")
 ap.add_argument("--rate", default="100", help="事前準備率(整数%) か 'blank'(=100扱い+⚠)")
 ap.add_argument("--view", default="すべて")
 ap.add_argument("--ht", required=True, help="保持時間(商品順・空欄は空文字)")
-ap.add_argument("--manual", default="", help="index:高/低 をカンマ区切り")
+ap.add_argument("--manual", default="", help="手動優先: 添字(0始まり・0＝期間データB14の1商品目):高/低 をカンマ区切り(例 0:高,4:低)")
 ap.add_argument("--thr", type=int, default=30)
 ap.add_argument("--expect-warn", action="append", default=[])
-ap.add_argument("--mso", action="store_true", help="MSO貼付あり(商品係数で作る数が変わるため近似検証)")
+ap.add_argument("--mso", action="store_true", help="MSO貼付あり(商品係数で販売予測数が変わるため近似検証。厳密は --mso1〜4)")
 for _k in range(1, 5):
     ap.add_argument(f"--mso{_k}", help=f"係数貼付{'①②③④'[_k - 1]}に貼ったMSO商品CSV(厳密検証)")
 ap.add_argument("--peak-start", default="17:30", help="⑥ピーク開始(空文字=未入力)")
@@ -58,8 +63,9 @@ def as_serial(v):
     """時刻書式のセルは datetime.time/datetime で読めるので日のシリアル値へ"""
     import datetime as _d
     if isinstance(v, _d.datetime):
-        # openpyxlは1900/3/1より前のシリアル値を1899/12/31起点で変換する(1900年閏年バグの扱い)
-        epoch = _d.datetime(1899, 12, 31) if v < _d.datetime(1900, 3, 1) else _d.datetime(1899, 12, 30)
+        # openpyxlは 0<シリアル<60 を1899/12/31起点で変換する(1900年閏年バグの扱い)。負や60以上は1899/12/30起点
+        epoch = (_d.datetime(1899, 12, 31) if _d.datetime(1900, 1, 1) <= v < _d.datetime(1900, 3, 1)
+                 else _d.datetime(1899, 12, 30))
         return (v - epoch).total_seconds() / 86400
     if isinstance(v, _d.time):
         return (v.hour * 3600 + v.minute * 60 + v.second) / 86400
@@ -82,13 +88,16 @@ m, pr, pd = wb["準備数計算"], wb["印刷用"], wb["期間データ"]
 mf = wf["準備数計算"]
 
 if a.products == "auto":
-    PRODUCTS = []
-    for i in range(N_SLOTS):
-        v = wf["期間データ"][f"B{ROW_M0 + 3 + i}"].value
-        if isinstance(v, str) and v.strip():
-            PRODUCTS.append(v)
-        else:
-            break
+    slots = [wf["期間データ"][f"B{14 + i}"].value for i in range(N_SLOTS)]
+    slots = [v if isinstance(v, str) and v.strip() else None for v in slots]
+    PRODUCTS = [v for v in slots if v]
+    if slots[:len(PRODUCTS)] != PRODUCTS:
+        gap = next(i for i, v in enumerate(slots) if v is None)
+        print(f"FAILED (1):\n  NG 期間データの商品枠に空きがあります（B{14 + gap} が空欄で、その後に商品があります）")
+        sys.exit(1)
+    if not PRODUCTS:
+        print("FAILED (1):\n  NG 期間データ!B14:B33 に商品がありません")
+        sys.exit(1)
 else:
     PRODUCTS = list(DEFAULT_PRODUCTS)
 NP = len(PRODUCTS)
@@ -133,6 +142,8 @@ check("印刷用 印刷範囲", pp.print_area, "'印刷用'!$A$1:$H$28")
 # ---- MSO(係数算出・商品別の波)の厳密検証: 帯の区切りは係数算出シートの設定から読む
 mso_paths = [getattr(a, f"mso{k}") for k in range(1, 5)]
 exact_mso = any(mso_paths)
+if not exact_mso and a.mult is None:
+    ap.error("--mult は --mso1〜4 を指定しないときに必要です")
 eff = {}                       # 商品名 → 販売予測数に掛かる係数(商品係数 or 全体係数)
 if exact_mso:
     ks, wv = wb["係数算出"], wb[WAVE_SHEET]
@@ -149,6 +160,10 @@ if exact_mso:
     check("係数算出!O4", as_serial(ks["O4"].value), o4, tol=1e-9)
     DURS = [(d4 - c4) * 24, (e4 - d4) * 24, (f4 - e4) * 24, (g4 - f4) * 24, (o4 - g4) * 24 + n4 * 24]
     windows = [(c4, d4), (d4, e4), (e4, f4), (f4, g4)]
+    if any(d <= 0 for d in DURS) or sum(DURS) <= 0:
+        # シート側は帯長0以下を"—"/⚠で扱う。ここでは厳密検証の前提が崩れているのでNGにして止める
+        print(f"FAILED (1):\n  NG 係数算出!C4:H4 の時間の区切りが不正です(帯の長さ {DURS})。厳密検証は区切りが正しいブックのみ")
+        sys.exit(1)
 
     def band_of(tv):
         for bi, w in enumerate(windows):
@@ -216,6 +231,9 @@ if exact_mso:
             check(f"{CALIB_SHEETS[wi]}!A3(未貼付表示)", "未貼付" in st, True)
     check("係数算出!H13(週数)", ks["H13"].value, n_weeks)
     band_coef = [None] * 5
+    # 店舗版はJ列(係数)が =IF(ISNUMBER(K),K,既定) で係数算出の実測を自動採用する。テンプレート系は
+    # J列が定数(手で転記)なので、J式がK列を参照するときだけ「J=実測」を要求する
+    j_linked = all("K" in ftext(mf[f"J{4 + bi}"]) for bi in range(5))
     if n_weeks:
         avgs = [sum(wcs[bi] for wcs in week_counts) / n_weeks for bi in range(5)]
         day_pace = sum(avgs) / sum(DURS)
@@ -225,7 +243,8 @@ if exact_mso:
             lv = ks[f"L{7 + bi}"].value
             check_r005(f"係数算出!L{7 + bi}(転記用)", lv, coef)
             check(f"準備数計算!K{4 + bi}(実測候補の連動)", m[f"K{4 + bi}"].value, lv, tol=1e-9)
-            check(f"準備数計算!J{4 + bi}(係数=実測)", m[f"J{4 + bi}"].value, lv, tol=1e-9)
+            if j_linked:
+                check(f"準備数計算!J{4 + bi}(係数=実測)", m[f"J{4 + bi}"].value, lv, tol=1e-9)
             band_coef[bi] = lv
         check("係数算出!B23(警告なし)", ks["B23"].value in (None, ""), True)
         check("係数算出!N5(区切り外=0)", ks["N5"].value, 0)
@@ -233,8 +252,15 @@ if exact_mso:
     sel = m["M8"].value
     check("準備数計算!M8(選択帯1〜5)", isinstance(sel, (int, float)) and 1 <= sel <= 5, True)
     sel = int(sel) if isinstance(sel, (int, float)) else 1
-    mult = band_coef[sel - 1] if n_weeks else a.mult
-    check("準備数計算!M7(選択帯の実測係数)", m["M7"].value, mult, tol=1e-9)
+    d6 = str(m["D6"].value or "").strip()
+    check("準備数計算!M8(D6の先頭マークと一致)", sel, "①②③④⑤".find(d6[:1]) + 1 if d6 else 0)
+    if n_weeks and j_linked:
+        mult = band_coef[sel - 1]
+    else:                                        # 実測なし or J列が定数: シートのJ(選択帯)がそのまま係数
+        jv = m[f"J{3 + sel}"].value
+        check(f"準備数計算!J{3 + sel}(選択帯の係数が数値)", isinstance(jv, (int, float)), True)
+        mult = jv if isinstance(jv, (int, float)) else (a.mult or 1)
+    check("準備数計算!M7(選択帯の係数)", m["M7"].value, mult, tol=1e-9)
     check("準備数計算!M9(波の適用)", m["M9"].value, 1 if n_weeks else 0)
     for i, name in enumerate(PRODUCTS):
         wr = WAVE_ROW0 + i
@@ -325,9 +351,13 @@ for i, name in enumerate(PRODUCTS):
     check(f"L{r}(並び順キー)", "" if got_l in (None, "") else got_l, want_l)
 for i in range(NP, N_SLOTS):                   # 未登録の枠は空
     r = ROW_M0 + i
-    for c in "CDEFGOPQ":
+    for c in "CDEFGHNOPQ":
         check(f"{c}{r}(空枠)", m[f"{c}{r}"].value in (None, ""), True)
     check(f"L{r}(空枠キー)", m[f"L{r}"].value in (None, ""), True)
+    if exact_mso:
+        wr = WAVE_ROW0 + i
+        for c in "BCDEFGHIJKLMNPQRST":
+            check(f"{WAVE_SHEET}!{c}{wr}(空枠)", wb[WAVE_SHEET][f"{c}{wr}"].value in (None, ""), True)
 
 # 印刷用: 表示切替どおりの絞り込みと並び(作る順＝保持時間の長い順、未入力は最後)
 if a.view == "優先:高のみ":
