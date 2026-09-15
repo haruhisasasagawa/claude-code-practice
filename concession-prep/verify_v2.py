@@ -383,43 +383,72 @@ for k in range(N_SLOTS):
 if peak is not None:
     check("印刷用!B4にピーク表示", "ピーク " in (pr["B4"].value or ""), True)
 
-# ---- 調理時間シート(あれば): 仕込み数の連動、回数=ROUNDUP(仕込み数/最大)、所要時間=回数×最大個数の時間/60
+# ---- 調理時間シート(あれば): 仕込み数の連動、回数=ROUNDUP(仕込み数/最大)、所要時間=(回数×最大個数の時間+(回数-1)×間隔)/60、
+#      保持時間の連動、単純合計、機器ごとの合計
 if "調理時間" in wb.sheetnames:
-    from add_cooking_sheet import COUNTS as CK_N, C_T0 as CK_T0, COL_MAX as CK_MAX, COL_N as CK_QN, COL_O as CK_QO, \
-        COL_P as CK_QP, N_ROWS as CK_ROWS, ROW_C0 as CK_R0
+    import add_cooking_sheet as CK
     ck = wb["調理時間"]
     g_by_name = {m[f"C{ROW_M0 + i}"].value: m[f"G{ROW_M0 + i}"].value for i in range(N_SLOTS) if m[f"C{ROW_M0 + i}"].value}
-    tot_p, seen = 0.0, 0
-    for k in range(CK_ROWS):
-        r = CK_R0 + k
-        name = ck[f"B{r}"].value
+    hold_by_name = {pd[f"B{14 + i}"].value: pd[f"E{14 + i}"].value for i in range(N_SLOTS) if pd[f"B{14 + i}"].value}
+    tot_n, tot_p, seen, by_mach = 0, 0.0, 0, {}
+    first, lastrow = CK.ROW_C0, CK.ROW_C0 + CK.N_ROWS - 1
+    for r in range(first, lastrow + 1):
+        k = r - first
+        name = ck[f"{CK.COL_NAME}{r}"].value
         if k < NP:
-            check(f"調理時間!B{r}(登録商品の順)", name, PRODUCTS[k])
+            check(f"調理時間!{CK.COL_NAME}{r}(登録商品の順)", name, PRODUCTS[k])
         if not name:
-            for c in (CK_QN, CK_QO, CK_QP):
+            for c in (CK.COL_NEED, CK.COL_RUNS, CK.COL_MIN, CK.COL_HOLD):
                 check(f"調理時間!{c}{r}(空)", ck[f"{c}{r}"].value in (None, ""), True)
             continue
-        want_n = g_by_name.get(name, "—")
-        check(f"調理時間!{CK_QN}{r}(仕込み数)", ck[f"{CK_QN}{r}"].value, want_n)
-        mx = ck[f"{CK_MAX}{r}"].value
-        if isinstance(want_n, (int, float)) and isinstance(mx, (int, float)):
-            if mx <= 0:
-                check(f"調理時間!{CK_QO}{r}(最大0)", ck[f"{CK_QO}{r}"].value, "⚠ 最大")
+        want_n = g_by_name.get(name, "未登録")
+        if want_n in (None, ""):
+            want_n = ""
+        check(f"調理時間!{CK.COL_NEED}{r}(仕込み数)", ck[f"{CK.COL_NEED}{r}"].value in (None, "") if want_n == "" else ck[f"{CK.COL_NEED}{r}"].value,
+              True if want_n == "" else want_n)
+        hv = hold_by_name.get(name)
+        check(f"調理時間!{CK.COL_HOLD}{r}(保持時間)", ck[f"{CK.COL_HOLD}{r}"].value, hv if isinstance(hv, (int, float)) else "—")
+        mx = ck[f"{CK.COL_MAX}{r}"].value
+        gap = ck[f"{CK.COL_GAP}{r}"].value
+        gap = gap if isinstance(gap, (int, float)) else 0
+        if isinstance(want_n, (int, float)):
+            tot_n += want_n
+            if not isinstance(mx, (int, float)):
+                check(f"調理時間!{CK.COL_RUNS}{r}(最大未入力)", ck[f"{CK.COL_RUNS}{r}"].value, "⚠ 最大未入力")
+                check(f"調理時間!{CK.COL_MIN}{r}(空)", ck[f"{CK.COL_MIN}{r}"].value in (None, ""), True)
+                continue
+            if mx <= 0 or mx > CK.COUNTS:
+                check(f"調理時間!{CK.COL_RUNS}{r}(最大の⚠)", str(ck[f"{CK.COL_RUNS}{r}"].value).startswith("⚠"), True)
+                check(f"調理時間!{CK.COL_MIN}{r}(空)", ck[f"{CK.COL_MIN}{r}"].value in (None, ""), True)
                 continue
             want_o = math.ceil(want_n / mx - 1e-9)
-            check(f"調理時間!{CK_QO}{r}(回数)", ck[f"{CK_QO}{r}"].value, want_o)
-            t = ck.cell(row=r, column=CK_T0 - 1 + int(min(CK_N, max(1, mx)))).value
+            check(f"調理時間!{CK.COL_RUNS}{r}(回数)", ck[f"{CK.COL_RUNS}{r}"].value, want_o)
+            t = ck.cell(row=r, column=CK.C_T0 - 1 + int(mx)).value
             if isinstance(t, (int, float)):
-                check(f"調理時間!{CK_QP}{r}(所要時間)", ck[f"{CK_QP}{r}"].value, want_o * t / 60, tol=1e-6)
-                tot_p += want_o * t / 60
+                want_p = (want_o * t + max(0, want_o - 1) * gap) / 60
+                check(f"調理時間!{CK.COL_MIN}{r}(所要時間)", ck[f"{CK.COL_MIN}{r}"].value, want_p, tol=1e-6)
+                tot_p += want_p
                 seen += 1
+                mach = ck[f"{CK.COL_MACH}{r}"].value
+                if mach:
+                    by_mach[mach] = by_mach.get(mach, 0) + want_p
             else:
-                check(f"調理時間!{CK_QP}{r}(時間未入力⚠)", ck[f"{CK_QP}{r}"].value, "⚠ 時間未入力")
+                check(f"調理時間!{CK.COL_MIN}{r}(不可⚠)", ck[f"{CK.COL_MIN}{r}"].value, "⚠ その個数は不可／時間なし")
         else:
-            check(f"調理時間!{CK_QO}{r}(空)", ck[f"{CK_QO}{r}"].value in (None, ""), True)
-            check(f"調理時間!{CK_QP}{r}(空)", ck[f"{CK_QP}{r}"].value in (None, ""), True)
+            check(f"調理時間!{CK.COL_RUNS}{r}(空)", ck[f"{CK.COL_RUNS}{r}"].value in (None, ""), True)
+            check(f"調理時間!{CK.COL_MIN}{r}(空)", ck[f"{CK.COL_MIN}{r}"].value in (None, ""), True)
+    tr = lastrow + 1
+    check(f"調理時間!{CK.COL_NEED}{tr}(仕込み数の合計)", ck[f"{CK.COL_NEED}{tr}"].value, tot_n if tot_n else "", tol=0)
     if seen:
-        check(f"調理時間!{CK_QP}{CK_R0 + CK_ROWS}(合計所要時間)", ck[f"{CK_QP}{CK_R0 + CK_ROWS}"].value, tot_p, tol=1e-6)
+        check(f"調理時間!{CK.COL_MIN}{tr}(単純合計)", ck[f"{CK.COL_MIN}{tr}"].value, tot_p, tol=1e-6)
+    else:
+        check(f"調理時間!{CK.COL_MIN}{tr}(単純合計=空)", ck[f"{CK.COL_MIN}{tr}"].value in (None, ""), True)
+    r = tr + 3                                  # 機器ごとの合計(空欄のDまで)
+    while ck[f"{CK.COL_MACH}{r}"].value:
+        mach = ck[f"{CK.COL_MACH}{r}"].value
+        want = by_mach.get(mach, "—")
+        check(f"調理時間!{CK.COL_MIN}{r}(機器合計 {mach[:12]})", ck[f"{CK.COL_MIN}{r}"].value, want, tol=1e-6 if want != "—" else 0)
+        r += 1
 
 warn = m["B9"].value or ""
 # 店舗版は「古いデータ」を※通知(計算は継続)として出すため、警告有無の判定から除く
