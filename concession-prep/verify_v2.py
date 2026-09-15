@@ -383,6 +383,44 @@ for k in range(N_SLOTS):
 if peak is not None:
     check("印刷用!B4にピーク表示", "ピーク " in (pr["B4"].value or ""), True)
 
+# ---- 調理時間シート(あれば): 仕込み数の連動、回数=ROUNDUP(仕込み数/最大)、所要時間=回数×最大個数の時間/60
+if "調理時間" in wb.sheetnames:
+    from add_cooking_sheet import COUNTS as CK_N, C_T0 as CK_T0, COL_MAX as CK_MAX, COL_N as CK_QN, COL_O as CK_QO, \
+        COL_P as CK_QP, N_ROWS as CK_ROWS, ROW_C0 as CK_R0
+    ck = wb["調理時間"]
+    g_by_name = {m[f"C{ROW_M0 + i}"].value: m[f"G{ROW_M0 + i}"].value for i in range(N_SLOTS) if m[f"C{ROW_M0 + i}"].value}
+    tot_p, seen = 0.0, 0
+    for k in range(CK_ROWS):
+        r = CK_R0 + k
+        name = ck[f"B{r}"].value
+        if k < NP:
+            check(f"調理時間!B{r}(登録商品の順)", name, PRODUCTS[k])
+        if not name:
+            for c in (CK_QN, CK_QO, CK_QP):
+                check(f"調理時間!{c}{r}(空)", ck[f"{c}{r}"].value in (None, ""), True)
+            continue
+        want_n = g_by_name.get(name, "—")
+        check(f"調理時間!{CK_QN}{r}(仕込み数)", ck[f"{CK_QN}{r}"].value, want_n)
+        mx = ck[f"{CK_MAX}{r}"].value
+        if isinstance(want_n, (int, float)) and isinstance(mx, (int, float)):
+            if mx <= 0:
+                check(f"調理時間!{CK_QO}{r}(最大0)", ck[f"{CK_QO}{r}"].value, "⚠ 最大")
+                continue
+            want_o = math.ceil(want_n / mx - 1e-9)
+            check(f"調理時間!{CK_QO}{r}(回数)", ck[f"{CK_QO}{r}"].value, want_o)
+            t = ck.cell(row=r, column=CK_T0 - 1 + int(min(CK_N, max(1, mx)))).value
+            if isinstance(t, (int, float)):
+                check(f"調理時間!{CK_QP}{r}(所要時間)", ck[f"{CK_QP}{r}"].value, want_o * t / 60, tol=1e-6)
+                tot_p += want_o * t / 60
+                seen += 1
+            else:
+                check(f"調理時間!{CK_QP}{r}(時間未入力⚠)", ck[f"{CK_QP}{r}"].value, "⚠ 時間未入力")
+        else:
+            check(f"調理時間!{CK_QO}{r}(空)", ck[f"{CK_QO}{r}"].value in (None, ""), True)
+            check(f"調理時間!{CK_QP}{r}(空)", ck[f"{CK_QP}{r}"].value in (None, ""), True)
+    if seen:
+        check(f"調理時間!{CK_QP}{CK_R0 + CK_ROWS}(合計所要時間)", ck[f"{CK_QP}{CK_R0 + CK_ROWS}"].value, tot_p, tol=1e-6)
+
 warn = m["B9"].value or ""
 # 店舗版は「古いデータ」を※通知(計算は継続)として出すため、警告有無の判定から除く
 warn_core = warn.replace("※ CSVの対象期間が古い可能性があります（計算は継続。期間データシートで日付を確認）。", "")
