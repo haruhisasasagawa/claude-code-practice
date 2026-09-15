@@ -42,6 +42,7 @@ EXCLUDE_NAME = ("ＴＣ用", "テナント用", "廃棄計上用")      # 販売
 COND_WORDS = ("イレギュラー", "緊急", "代替", "予備")        # 括弧内がこれなら味ではなく条件(同じ商品の別機器)
 TAB_COLOR = "3AA981"
 TAG = "【サンプル：数値はすべて仮の値です】"
+MACH_BLANKS = 3                   # 機器ごとの合計に用意する空き行(専用機・追加の機器用)
 AMBER = "B7791F"
 
 # 列の役割(左から): No. 商品名 項目(参考) 機器 条件 最大 間隔 作る数 回数 所要時間 保持時間 備考 1..10個
@@ -356,11 +357,12 @@ def build_sheet(wb, manual, candidates, sample_label=False):
     ws.row_dimensions[hmr].height = 28
     MACH_ROW0 = hmr + 1
     mr = hmr
-    for mach in machines + [None]:
+    n_mach = len(machines)
+    for k, mach in enumerate(machines + [None] * MACH_BLANKS):      # 空き行は専用機・追加機器用
         mr += 1
         ws[f"{COL_MACH}{mr}"] = mach
         ws[f"{COL_MAX}{mr}"] = 1 if mach else None
-        ws[f"{COL_NAME}{mr}"] = "機器（上の表の調理機器と同じ表記）" if mach is None else None
+        ws[f"{COL_NAME}{mr}"] = "機器（上の表の調理機器と同じ表記）" if k == n_mach else None
         units = f'MAX(1,IF(ISNUMBER(${COL_MAX}{mr}),${COL_MAX}{mr},1))'
         ws[f"{COL_MIN}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",IF(COUNTIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr})=0,"—",'
                                 f'SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},${COL_MIN}${first}:${COL_MIN}${lastrow})'
@@ -385,6 +387,10 @@ def build_sheet(wb, manual, candidates, sample_label=False):
              "調理機器・時間・一度に最大・備考 を書き換えてください。名寄せの ❓⚠ は確認したら消してOKです。",
              "※ 所要時間が保持時間より長い商品（赤い背景）は、1台で作り切るとピーク前に最初の分が保持時間を超えます。"
              "台数を増やすか、何回かに分けてピークに向けて作る目安にしてください（印刷用の「調理の目安」も1台の分数です）。"]
+    lines.append("※ 台数は「同じように使える台数」です。専用機があるときは台数をまとめず、機器名を分けて1台ずつにしてください"
+                 "（例：チョコの行の調理機器を「専用チュリトスオーブン（チョコ専用）」に書き換え、下の空き行に同じ名前を足す）。"
+                 "逆に、同じ機械で設定だけ違うとき（電子レンジの1500W／1800Wなど）は機器名を同じにまとめて台数を入れると、"
+                 "合計を台数で割ります。別の機器で作る商品どうしは同時に進められるので、順番に作る前提の合計は機器ごとに出しています。")
     if unmatched:
         lines.append("※ マニュアルに項目が無いCSVの食品（必要なら商品名を選んで手入力）: " + "、".join(unmatched))
     if dropped:
