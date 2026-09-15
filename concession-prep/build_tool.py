@@ -278,14 +278,20 @@ def show_paste_comments(path, sheets=PASTE_SHEETS):
         names = set(z.namelist())
         wbxml = z.read("xl/workbook.xml").decode("utf-8")
         rels = z.read("xl/_rels/workbook.xml.rels").decode("utf-8")
-        rid_target = dict(re.findall(r'Id="([^"]+)"[^>]*?Target="([^"]+)"', rels))
+        # 属性の並び(Id/Type/Target)は保存元アプリで異なるためタグ単位で拾う
+        rid_target = {}
+        for tag in re.findall(r"<Relationship [^>]*/>", rels):
+            i_ = re.search(r'\bId="([^"]+)"', tag)
+            t_ = re.search(r'\bTarget="([^"]+)"', tag)
+            if i_ and t_:
+                rid_target[i_.group(1)] = t_.group(1)
         sheet_files = {}
         for tag in re.findall(r"<sheet [^>]*/>", wbxml):
             nm = re.search(r'name="([^"]+)"', tag)
             rid = re.search(r'r:id="([^"]+)"', tag)
             if nm and rid and rid.group(1) in rid_target:
-                tgt = rid_target[rid.group(1)]
-                sheet_files[nm.group(1)] = tgt if tgt.startswith("xl/") else "xl/" + tgt.lstrip("/")
+                tgt = rid_target[rid.group(1)].lstrip("/")     # openpyxlは絶対パスで書く
+                sheet_files[nm.group(1)] = tgt if tgt.startswith("xl/") else "xl/" + tgt
         vml_files = set()
         for s in sheets:
             sf = sheet_files.get(s)
@@ -296,7 +302,10 @@ def show_paste_comments(path, sheets=PASTE_SHEETS):
             if rel not in names:
                 continue
             for t in re.findall(r'Target="([^"]+\.vml)"', z.read(rel).decode("utf-8")):
-                vml_files.add(os.path.normpath(os.path.join(d, t)).replace("\\", "/"))
+                if t.startswith("/"):                 # openpyxlは絶対パスで書く
+                    vml_files.add(t.lstrip("/"))
+                else:
+                    vml_files.add(os.path.normpath(os.path.join(d, t)).replace("\\", "/"))
     if not vml_files:
         return 0
     patched = 0

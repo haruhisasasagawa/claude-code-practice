@@ -198,6 +198,12 @@ else:
     check("期間データ!C8(自動日付)", pd["C8"].value, _dt.datetime(2026, 8, 14))
     check("期間データ!I8(自動日付)", pd["I8"].value, _dt.datetime(2026, 8, 20))
     check("期間データ!C37(除外リスト照合✔)", pd["C37"].value, "✔")
+    # 終了日が9日以上前のCSVは仕様どおり「古いデータ⚠」が出て比較期間が要確認になる
+    # (検証用CSVは固定日付のため、実行日によってこの状態になる)
+    stale_a = (_dt.date.today() - _dt.date(2026, 8, 23)).days > 9
+    stale_b = (_dt.date.today() - _dt.date(2026, 8, 20)).days > 9
+    stale_sel = stale_b if a.select == "B" else stale_a if a.select == "A" else (stale_a or stale_b)
+    stale_oth = stale_a if a.select == "B" else stale_b
 
     for i, name in enumerate(DEFAULT_PRODUCTS):
         r = 14 + i
@@ -227,10 +233,15 @@ else:
         check(f"準備数計算!D{r}", m[f"D{r}"].value, s)
         check(f"準備数計算!E{r}", m[f"E{r}"].value, rate, tol=1e-9)
         check(f"準備数計算!F{r}", m[f"F{r}"].value, math.ceil(a.peak * rate * eff), tol=1)
-        check(f"準備数計算!G{r}", m[f"G{r}"].value, oth_sales.get(name, 0) / att_oth, tol=1e-9)
+        if stale_oth:
+            check(f"準備数計算!G{r}(古いデータ→要確認)", m[f"G{r}"].value, "要確認")
+        else:
+            check(f"準備数計算!G{r}", m[f"G{r}"].value, oth_sales.get(name, 0) / att_oth, tol=1e-9)
         check(f"印刷用!D{8 + i}", pr[f"D{8 + i}"].value, math.ceil(a.peak * rate * eff), tol=1)
     warn = m["B9"].value
-    if warn not in (None, ""):
+    if stale_sel:
+        check("B9警告[古いデータ→CSVに問題]", "CSVに問題" in (warn or ""), True)
+    elif warn not in (None, ""):
         errors.append(f"NG B9警告が出ている: {warn!r}")
 
     # 商品リスト(プルダウン)の中身: 除外小分類を除いた先出順
