@@ -24,7 +24,7 @@ from openpyxl import load_workbook
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_calib import CALIB_SHEETS, MSO_HEADERS, MSO_MAX, MSO_NCOL, read_mso_rows  # noqa: E402
 from build_tool import CSV_HEADERS, CSV_MAX, NCOL, N_SLOTS, read_csv_rows            # noqa: E402
-from upgrade_v2 import VIEW_ALL, check_hidden_cols, restore_comment_vml               # noqa: E402
+from upgrade_v2 import VIEW_ADDR, VIEW_ALL, check_hidden_cols, restore_comment_vml               # noqa: E402
 
 SEED = 20260913
 ROW_P0 = 14                                   # 期間データ: 商品1行目
@@ -351,7 +351,7 @@ def build(src, dst, csv_dir, sunday, label=True):
     m["D8"] = RATE
     m["O5"] = serial_time(*PEAK_START)
     m["O6"] = serial_time(*PEAK_END)
-    wb["印刷用"]["G2"] = VIEW_ALL
+    wb["印刷用"][VIEW_ADDR] = VIEW_ALL
     if label:                                    # 実データと取り違えないよう全シートに明記
         guide = (f"このサンプルは①〜③まで入力済みです（期間A {a_start.month}/{a_start.day}〜{a_end.month}/{a_end.day}・"
                  f"期間B {b_start.month}/{b_start.day}〜{b_end.month}/{b_end.day}・MSO金曜4週・動員数・保持時間・"

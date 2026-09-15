@@ -39,7 +39,11 @@ VIEW_ALL, VIEW_HI, VIEW_LO = "すべて", "優先:高のみ", "優先:低のみ"
 HT_THR_DEFAULT = 30          # 優先「高」とみなす保持時間(分)の既定値
 EXPLODE_MAX = 40             # 列書式の束を1列ずつに分解する上限列(AN列まで)
 RATE = 'IF(AND(ISNUMBER($D$8),$D$8>0),$D$8,100)'   # 事前準備率(未入力・0以下は100%扱い)
-VIEW_CELL = '印刷用!$G$2'                             # 印刷用の表示切替セル
+VIEW_ADDR = "H2"                                      # 印刷用の表示切替セル(シート内アドレス)
+VIEW_CELL = f'印刷用!${VIEW_ADDR[0]}${VIEW_ADDR[1:]}'
+# add_cooking_sheet.py が作る「調理時間」シートの位置(印刷用から所要時間を引くために共有)
+CK_SHEET, CK_ROW0, CK_ROWS = "調理時間", 6, 30
+CK_NAME_COL, CK_MIN_COL = "B", "J"                    # 商品名 / 所要時間(分)
 PEAK_START, PEAK_END = '$O$5', '$O$6'                 # ⑥ ピーク時間(準備数計算)
 CALC_LAST_COL = 'Q'                                   # 準備数計算の表の右端列
 
@@ -349,23 +353,24 @@ def upgrade_period(ws):
 # ============================================================== 印刷用 =======
 def upgrade_print(ws):
     explode_column_groups(ws)
-    for c, w in {"D": 9, "E": 7, "F": 17.7, "G": 11, "H": 2.4}.items():
+    for c, w in {"C": 61, "D": 9, "E": 8, "F": 7, "G": 17.7, "H": 11, "I": 2.4}.items():
         ws.column_dimensions[c].width = w
-    ws.column_dimensions["I"].hidden = True         # 並び順ヘルパー
+    ws.column_dimensions["I"].hidden = False
+    ws.column_dimensions["J"].hidden = True         # 並び順ヘルパー
     for r in (1, 3, 4, 5, 6, 28):
         ws.unmerge_cells(f"B{r}:E{r}")
-        ws.merge_cells(f"B{r}:G{r}")
+        ws.merge_cells(f"B{r}:H{r}")
     ws.unmerge_cells("B2:E2")
-    ws.merge_cells("B2:F2")
-    style_range(ws, "B1:G1", fl=fill(NAVY))
-    move_title_logo(ws, 5, 6)                       # F〜G列の右端へ
+    ws.merge_cells("B2:G2")
+    style_range(ws, "B1:H1", fl=fill(NAVY))
+    move_title_logo(ws, 6, 7)                       # G〜H列の右端へ
 
     ws["B2"] = ('="  👇 この数を作ってください（販売予測数の"&'
                 + RATE.replace("$D$8", "準備数計算!$D$8") + '&"%）"')
-    ws["G2"] = VIEW_ALL
-    style_range(ws, "G2", font=fnt(9.5, True), fl=fill(F_INPUT),
+    ws[VIEW_ADDR] = VIEW_ALL
+    style_range(ws, VIEW_ADDR, font=fnt(9.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT)
-    ws["G2"].comment = mk_comment("印刷するリストの切替。並びは常に作る順＝保持時間の長い順"
+    ws[VIEW_ADDR].comment = mk_comment("印刷するリストの切替。並びは常に作る順＝保持時間の長い順"
                                   "（先に作って持たせられるものから。短いものはピーク直前）。"
                                   "「優先:高のみ」「優先:低のみ」で絞り込み（保持時間が未入力の「—」は"
                                   "高側に含め、最後に並びます）。")
@@ -374,7 +379,7 @@ def upgrade_print(ws):
     dv_view.error = f"「{VIEW_ALL}」「{VIEW_HI}」「{VIEW_LO}」から選んでください"
     dv_view.errorTitle = "表示"
     ws.add_data_validation(dv_view)
-    dv_view.add("G2")
+    dv_view.add(VIEW_ADDR)
     ws["B4"] = (ftext(ws["B4"]).rstrip()
                 + f'&IF(ISNUMBER(準備数計算!{PEAK_START}),"　｜　ピーク "&TEXT(準備数計算!{PEAK_START},"h:mm")'
                 + f'&IF(ISNUMBER(準備数計算!{PEAK_END}),"〜"&TEXT(準備数計算!{PEAK_END},"h:mm"),""),"")')
@@ -382,41 +387,52 @@ def upgrade_print(ws):
     navy_header(ws, "B7", "作る順", 10)
     navy_header(ws, "C7", "商品名", 10)
     navy_header(ws, "D7", "開始目安", 10)
-    navy_header(ws, "E7", "優先", 10)
-    style_range(ws, "F7", font=fnt(11, True, "FFFFFF"), fl=fill(CORAL),
+    navy_header(ws, "E7", "調理の\n目安", 9.5)
+    navy_header(ws, "F7", "優先", 10)
+    style_range(ws, "G7", font=fnt(11, True, "FFFFFF"), fl=fill(CORAL),
                 alignment=align("center"), border=BORDER_LIGHT)
-    ws["F7"] = "仕込み数"
-    navy_header(ws, "G7", "できたら✓", 10)
+    ws["G7"] = "仕込み数"
+    navy_header(ws, "H7", "できたら✓", 10)
 
     rng = f"準備数計算!${{}}${ROW_M0}:${{}}${ROW_M0 + N_SLOTS - 1}"
+    # 調理の目安: 「調理時間」シートの所要時間(分)を商品名で引く。シートが無い間も
+    # INDIRECT+IFERROR で #REF! にならず「—」になる(add_cooking_sheet.py で追加したら数字が出る)
+    ck_last = CK_ROW0 + CK_ROWS - 1
+    ck_min = f'INDIRECT("{CK_SHEET}!${CK_MIN_COL}${CK_ROW0}:${CK_MIN_COL}${ck_last}")'
+    ck_name = f'INDIRECT("{CK_SHEET}!${CK_NAME_COL}${CK_ROW0}:${CK_NAME_COL}${ck_last}")'
     for i in range(N_SLOTS):
         r = 8 + i
         k = i + 1
-        ws[f"I{r}"] = f'=IFERROR(MOD(SMALL({rng.format("L", "L")},{k}),100),"")'
-        ws[f"B{r}"] = f'=IF($I{r}="","",{k})'
-        ws[f"C{r}"] = f'=IF($I{r}="","",INDEX({rng.format("C", "C")},$I{r}))'
-        ws[f"D{r}"] = f'=IF($I{r}="","",INDEX({rng.format("Q", "Q")},$I{r}))'
-        ws[f"E{r}"] = f'=IF($I{r}="","",INDEX({rng.format("P", "P")},$I{r}))'
-        ws[f"F{r}"] = f'=IF($I{r}="","",INDEX({rng.format("G", "G")},$I{r}))'
-        ws[f"G{r}"] = f'=IF($I{r}="","","☐")'
+        ck_val = f'INDEX({ck_min},MATCH($C{r},{ck_name},0))'
+        ws[f"J{r}"] = f'=IFERROR(MOD(SMALL({rng.format("L", "L")},{k}),100),"")'
+        ws[f"B{r}"] = f'=IF($J{r}="","",{k})'
+        ws[f"C{r}"] = f'=IF($J{r}="","",INDEX({rng.format("C", "C")},$J{r}))'
+        ws[f"D{r}"] = f'=IF($J{r}="","",INDEX({rng.format("Q", "Q")},$J{r}))'
+        ws[f"E{r}"] = (f'=IF($J{r}="","",IFERROR(IF(ISNUMBER({ck_val}),ROUNDUP({ck_val},0),"—"),"—"))')
+        ws[f"F{r}"] = f'=IF($J{r}="","",INDEX({rng.format("P", "P")},$J{r}))'
+        ws[f"G{r}"] = f'=IF($J{r}="","",INDEX({rng.format("G", "G")},$J{r}))'
+        ws[f"H{r}"] = f'=IF($J{r}="","","☐")'
         style_range(ws, f"B{r}", font=fnt(14, False, GRAY), alignment=align("center"), border=BORDER_LIGHT)
         style_range(ws, f"C{r}", font=fnt(14), alignment=align("left"), border=BORDER_LIGHT)
         style_range(ws, f"D{r}", font=fnt(12, True), alignment=align("center"), border=BORDER_LIGHT, num="h:mm")
-        style_range(ws, f"E{r}", font=fnt(12, True), alignment=align("center"), border=BORDER_LIGHT)
-        style_range(ws, f"F{r}", font=fnt(14, True, CORAL), fl=fill(F_BASE),
+        style_range(ws, f"E{r}", font=fnt(11, False, "5B6472"), alignment=align("center"),
+                    border=BORDER_LIGHT, num='0"分"')
+        style_range(ws, f"F{r}", font=fnt(12, True), alignment=align("center"), border=BORDER_LIGHT)
+        style_range(ws, f"G{r}", font=fnt(14, True, CORAL), fl=fill(F_BASE),
                     alignment=align("center"), num="#,##0",
                     border=Border(bottom=thin, top=thin, left=coral_side, right=coral_side))
-        style_range(ws, f"G{r}", font=fnt(12, False, "B9C0CC"), alignment=align("center"), border=BORDER_LIGHT)
-        style_range(ws, f"I{r}", font=fnt(8, False, GRAY))
+        style_range(ws, f"H{r}", font=fnt(12, False, "B9C0CC"), alignment=align("center"), border=BORDER_LIGHT)
+        style_range(ws, f"J{r}", font=fnt(8, False, GRAY))
     ws.conditional_formatting = ConditionalFormattingList()
-    ws.conditional_formatting.add("E8:E27", FormulaRule(
-        formula=['E8="高"'], font=Font(name=FONT_NAME, size=12, bold=True, color=CORAL)))
-    ws.conditional_formatting.add("E8:E27", FormulaRule(
-        formula=['E8="低"'], font=Font(name=FONT_NAME, size=12, bold=False, color=GRAY)))
+    ws.conditional_formatting.add("F8:F27", FormulaRule(
+        formula=['F8="高"'], font=Font(name=FONT_NAME, size=12, bold=True, color=CORAL)))
+    ws.conditional_formatting.add("F8:F27", FormulaRule(
+        formula=['F8="低"'], font=Font(name=FONT_NAME, size=12, bold=False, color=GRAY)))
     ws["B28"] = ("※ 上から順に作ります（保持時間の長いものが先・短いものはピーク直前）｜開始目安＝ピーク開始−保持時間｜"
+                 "調理の目安＝「調理時間」シートの所要時間（1台で作った場合。—は未設定）｜"
                  "数字は「準備数計算」から自動｜表示の切替は右上のプルダウン｜A4縦・1ページ印刷")
     # A4縦1枚に必ず収める(店舗版の設定を明示的に固定)
-    ws.print_area = "A1:H28"
+    ws.print_area = "A1:I28"
     ws.page_setup.orientation = "portrait"
     ws.page_setup.paperSize = 9
     ws.page_setup.fitToWidth = 1
@@ -460,6 +476,7 @@ def upgrade_guide(ws):
         "・⑥ ピーク時間（準備数計算・入力ブロックの右）：これから準備するピークの開始（と終了）を 17:30 のように入力すると、"
         "商品ごとの「仕込み開始(目安)」＝ピーク開始 − 保持時間 が出ます（保持時間が長い商品ほど早く、短い商品ほど直前）。",
         "・印刷用は「作る順」＝保持時間の長い順に上から並びます（長く持つものは先に作っておき、短いものはピークに合わせて作る）。"
+        "「調理時間」シートを入れると「調理の目安」（1台で作りきる分数）も並びます。"
         "右上のプルダウンで「優先:高のみ」「優先:低のみ」に絞り込めます。保持時間の短い商品ほど作るタイミングに注意が必要なので「高」、"
         "長い商品は先に作り置きできるので「低」という考え方です。",
     ]
@@ -585,7 +602,7 @@ def restore_comment_vml(src, dst, hide=()):
 
 
 def check_hidden_cols(path):
-    """openpyxl保存後も 準備数計算!I:M と 印刷用!H が非表示のままか(zipのXMLで確認)"""
+    """openpyxl保存後も 準備数計算!I:M と 印刷用!J が非表示のままか(zipのXMLで確認)"""
     with zipfile.ZipFile(path) as z:
         wbxml = z.read("xl/workbook.xml").decode()
         rels = z.read("xl/_rels/workbook.xml.rels").decode()
@@ -608,7 +625,7 @@ def check_hidden_cols(path):
                     mx = int(re.search(r'max="(\d+)"', c).group(1))
                     hidden.update(range(mn, mx + 1))
             out[nm] = hidden
-    ok = {9, 10, 11, 12, 13} <= out.get("準備数計算", set()) and 9 in out.get("印刷用", set())
+    ok = {9, 10, 11, 12, 13} <= out.get("準備数計算", set()) and 10 in out.get("印刷用", set())
     return ok, out
 
 

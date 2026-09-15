@@ -137,7 +137,8 @@ pp = wf["印刷用"]
 check("印刷用 A4縦1枚(fitToPage)", bool(pp.sheet_properties.pageSetUpPr and pp.sheet_properties.pageSetUpPr.fitToPage), True)
 check("印刷用 fitToWidth/Height=1", (pp.page_setup.fitToWidth, pp.page_setup.fitToHeight), (1, 1))
 check("印刷用 A4/縦", (pp.page_setup.paperSize, pp.page_setup.orientation), (9, "portrait"))
-check("印刷用 印刷範囲", pp.print_area, "'印刷用'!$A$1:$H$28")
+check("印刷用 印刷範囲", pp.print_area, "'印刷用'!$A$1:$I$28")
+check("印刷用!E列(調理の目安)がINDIRECTで調理時間を参照", "調理時間" in ftext(wf["印刷用"]["E8"]), True)
 
 # ---- MSO(係数算出・商品別の波)の厳密検証: 帯の区切りは係数算出シートの設定から読む
 mso_paths = [getattr(a, f"mso{k}") for k in range(1, 5)]
@@ -359,6 +360,16 @@ for i in range(NP, N_SLOTS):                   # 未登録の枠は空
         for c in "BCDEFGHIJKLMNPQRST":
             check(f"{WAVE_SHEET}!{c}{wr}(空枠)", wb[WAVE_SHEET][f"{c}{wr}"].value in (None, ""), True)
 
+# 印刷用「調理の目安」= 調理時間シートの所要時間(分)を切り上げ。シートが無い/該当なしは「—」
+cook_min = {}
+if "調理時間" in wb.sheetnames:
+    import add_cooking_sheet as _CK
+    _ck = wb["調理時間"]
+    for _r in range(_CK.ROW_C0, _CK.ROW_C0 + _CK.N_ROWS):
+        _n, _v = _ck[f"{_CK.COL_NAME}{_r}"].value, _ck[f"{_CK.COL_MIN}{_r}"].value
+        if _n and isinstance(_v, (int, float)):
+            cook_min[_n] = math.ceil(_v - 1e-9)
+
 # 印刷用: 表示切替どおりの絞り込みと並び(作る順＝保持時間の長い順、未入力は最後)
 if a.view == "優先:高のみ":
     included = [i for i in range(NP) if pri[i] != "低"]
@@ -374,11 +385,12 @@ for k in range(N_SLOTS):
         check(f"印刷用!B{r}(作る順)", pr[f"B{r}"].value, k + 1)
         check(f"印刷用!C{r}(商品名)", pr[f"C{r}"].value, PRODUCTS[idx - 1])
         check(f"印刷用!D{r}(開始目安=準備数計算Q)", as_serial(pr[f"D{r}"].value), as_serial(m[f"Q{ROW_M0 + idx - 1}"].value))
-        check(f"印刷用!E{r}(優先)", pr[f"E{r}"].value, pri[idx - 1])
-        check(f"印刷用!F{r}(仕込み数=準備数計算G)", pr[f"F{r}"].value, m[f"G{ROW_M0 + idx - 1}"].value)
-        check(f"印刷用!G{r}(☐)", pr[f"G{r}"].value, "☐")
+        check(f"印刷用!E{r}(調理の目安)", pr[f"E{r}"].value, cook_min.get(PRODUCTS[idx - 1], "—"))
+        check(f"印刷用!F{r}(優先)", pr[f"F{r}"].value, pri[idx - 1])
+        check(f"印刷用!G{r}(仕込み数=準備数計算G)", pr[f"G{r}"].value, m[f"G{ROW_M0 + idx - 1}"].value)
+        check(f"印刷用!H{r}(☐)", pr[f"H{r}"].value, "☐")
     else:
-        for c in "BCDEFG":
+        for c in "BCDEFGH":
             check(f"印刷用!{c}{r}(空)", pr[f"{c}{r}"].value in (None, ""), True)
 if peak is not None:
     check("印刷用!B4にピーク表示", "ピーク " in (pr["B4"].value or ""), True)

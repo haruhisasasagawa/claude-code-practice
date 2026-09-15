@@ -29,11 +29,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_tool import (BORDER_LIGHT, CHIP_NAVY, CORAL, F_AUTO, F_INPUT, F_ZEBRA, GRAY, INK,  # noqa: E402
                         NAVY, N_SLOTS, ROW_M0, ROW_P0, align, chip, disp_w, fill, fnt, note,
                         read_csv_rows, style_range, title_band)
-from upgrade_v2 import check_hidden_cols, restore_comment_vml                                   # noqa: E402
+from upgrade_v2 import (CK_MIN_COL, CK_NAME_COL, CK_ROW0, CK_ROWS, CK_SHEET,                     # noqa: E402
+                        check_hidden_cols, restore_comment_vml)
 
-SHEET = "調理時間"
-ROW_C0 = 6                        # 商品1行目
-N_ROWS = 30                       # 商品行数(登録20枠+候補・新規用)
+SHEET = CK_SHEET
+ROW_C0 = CK_ROW0                  # 商品1行目
+N_ROWS = CK_ROWS                  # 商品行数(登録20枠+候補・新規用)
 COUNTS = 10                       # 1〜10個(本)。マニュアルの列に合わせる
 FOOD_CATS = {"ホットドッグ", "軽食系フード", "調理系スイーツ", "その他フード"}
 EXCLUDE_NAME = ("ＴＣ用", "テナント用", "廃棄計上用")      # 販売商品でない振替・計上用の名前は候補から外す
@@ -45,6 +46,7 @@ AMBER = "B7791F"
 # 列の役割(左から): No. 商品名 項目(参考) 機器 条件 最大 間隔 仕込み数 回数 所要時間 保持時間 備考 1..10個
 COL_NAME, COL_LABEL, COL_MACH, COL_COND = "B", "C", "D", "E"
 COL_MAX, COL_GAP, COL_NEED, COL_RUNS, COL_MIN, COL_HOLD, COL_MEMO = "F", "G", "H", "I", "J", "K", "L"
+assert (COL_NAME, COL_MIN) == (CK_NAME_COL, CK_MIN_COL)   # 印刷用「調理の目安」が参照する位置
 C_T0 = 13                                                        # 1個の列(M)
 COL_T1, COL_TN = get_column_letter(C_T0), get_column_letter(C_T0 + COUNTS - 1)   # M..V
 LAST = COL_TN
