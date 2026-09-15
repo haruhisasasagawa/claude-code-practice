@@ -316,7 +316,7 @@ for i, name in enumerate(PRODUCTS):
     f_got, g_got = m[f"F{r}"].value, m[f"G{r}"].value
     if exact_mso:
         check(f"F{r}(販売予測数・係数{eff[name]:.2f})", f_got, fl(a.peak * rt * eff[name]), tol=1)
-        check(f"G{r}(仕込み数)", g_got, fl(a.peak * rt * eff[name] * rate / 100), tol=1)
+        check(f"G{r}(作る数)", g_got, fl(a.peak * rt * eff[name] * rate / 100), tol=1)
     elif a.mso:
         # 商品係数は商品別の波(別途検証済み)に依存するため、率の掛かり方だけ確認
         check(f"F{r}数値", isinstance(f_got, (int, float)), True)
@@ -324,7 +324,7 @@ for i, name in enumerate(PRODUCTS):
             check(f"G{r}=F×率", g_got, fl(f_got * rate / 100), tol=1)
     else:
         check(f"F{r}(販売予測数)", f_got, fl(a.peak * rt * a.mult), tol=1)
-        check(f"G{r}(仕込み数)", g_got, fl(a.peak * rt * a.mult * rate / 100), tol=1)
+        check(f"G{r}(作る数)", g_got, fl(a.peak * rt * a.mult * rate / 100), tol=1)
     h = ht[i]
     check(f"O{r}(保持時間)", m[f"O{r}"].value, "—" if h is None else h)
     want_p = manual.get(i) or ("—" if h is None else ("高" if h <= a.thr else "低"))
@@ -387,7 +387,7 @@ for k in range(N_SLOTS):
         check(f"印刷用!D{r}(開始目安=準備数計算Q)", as_serial(pr[f"D{r}"].value), as_serial(m[f"Q{ROW_M0 + idx - 1}"].value))
         check(f"印刷用!E{r}(調理の目安)", pr[f"E{r}"].value, cook_min.get(PRODUCTS[idx - 1], "—"))
         check(f"印刷用!F{r}(優先)", pr[f"F{r}"].value, pri[idx - 1])
-        check(f"印刷用!G{r}(仕込み数=準備数計算G)", pr[f"G{r}"].value, m[f"G{ROW_M0 + idx - 1}"].value)
+        check(f"印刷用!G{r}(作る数=準備数計算G)", pr[f"G{r}"].value, m[f"G{ROW_M0 + idx - 1}"].value)
         check(f"印刷用!H{r}(☐)", pr[f"H{r}"].value, "☐")
     else:
         for c in "BCDEFGH":
@@ -395,7 +395,7 @@ for k in range(N_SLOTS):
 if peak is not None:
     check("印刷用!B4にピーク表示", "ピーク " in (pr["B4"].value or ""), True)
 
-# ---- 調理時間シート(あれば): 仕込み数の連動、回数=ROUNDUP(仕込み数/最大)、所要時間=(回数×最大個数の時間+(回数-1)×間隔)/60、
+# ---- 調理時間シート(あれば): 作る数の連動、回数=ROUNDUP(作る数/最大)、所要時間=(回数×最大個数の時間+(回数-1)×間隔)/60、
 #      保持時間の連動、単純合計、機器ごとの合計
 if "調理時間" in wb.sheetnames:
     import add_cooking_sheet as CK
@@ -416,7 +416,7 @@ if "調理時間" in wb.sheetnames:
         want_n = g_by_name.get(name, "未登録")
         if want_n in (None, ""):
             want_n = ""
-        check(f"調理時間!{CK.COL_NEED}{r}(仕込み数)", ck[f"{CK.COL_NEED}{r}"].value in (None, "") if want_n == "" else ck[f"{CK.COL_NEED}{r}"].value,
+        check(f"調理時間!{CK.COL_NEED}{r}(作る数)", ck[f"{CK.COL_NEED}{r}"].value in (None, "") if want_n == "" else ck[f"{CK.COL_NEED}{r}"].value,
               True if want_n == "" else want_n)
         hv = hold_by_name.get(name)
         check(f"調理時間!{CK.COL_HOLD}{r}(保持時間)", ck[f"{CK.COL_HOLD}{r}"].value, hv if isinstance(hv, (int, float)) else "—")
@@ -450,7 +450,7 @@ if "調理時間" in wb.sheetnames:
             check(f"調理時間!{CK.COL_RUNS}{r}(空)", ck[f"{CK.COL_RUNS}{r}"].value in (None, ""), True)
             check(f"調理時間!{CK.COL_MIN}{r}(空)", ck[f"{CK.COL_MIN}{r}"].value in (None, ""), True)
     tr = lastrow + 1
-    check(f"調理時間!{CK.COL_NEED}{tr}(仕込み数の合計)", ck[f"{CK.COL_NEED}{tr}"].value, tot_n if tot_n else "", tol=0)
+    check(f"調理時間!{CK.COL_NEED}{tr}(作る数の合計)", ck[f"{CK.COL_NEED}{tr}"].value, tot_n if tot_n else "", tol=0)
     if seen:
         check(f"調理時間!{CK.COL_MIN}{tr}(単純合計)", ck[f"{CK.COL_MIN}{tr}"].value, tot_p, tol=1e-6)
     else:

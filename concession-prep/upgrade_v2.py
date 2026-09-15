@@ -4,8 +4,8 @@
 店舗側のカスタマイズ(時間帯設定の自動化・営業時間・切り捨て・商品登録・文言)は
 そのまま残し、以下だけを追加する。
 
-  ⑤ 事前準備率     … 準備数計算!D8(整数%・既定100)。仕込み数 ＝ 販売予測数 × 率
-  販売予測数/仕込み数 … 準備数計算のF列(予測)とG列(👉 仕込み数)に分離。印刷用は仕込み数
+  ⑤ 事前準備率     … 準備数計算!D8(整数%・既定100)。作る数 ＝ 販売予測数 × 率
+  販売予測数/作る数 … 準備数計算のF列(予測)とG列(👉 作る数)に分離。印刷用は作る数
   保持時間・優先     … 期間データに 保持時間(分)・優先(手動) の入力列と基準値(E12)。
                        準備数計算に 保持時間・優先 列(自動)。印刷用に表示切替
                        (すべて/優先:高のみ/優先:低のみ)と優先マーク列
@@ -124,7 +124,7 @@ def navy_header(ws, ref, text, size=9.5):
 # ============================================================ 準備数計算 =====
 def upgrade_calc(ws):
     explode_column_groups(ws)
-    ws["B1"] = "　🍿 準備数計算｜ピーク前の仕込み数（販売予測数 × 事前準備率）"
+    ws["B1"] = "　🍿 準備数計算｜ピーク前の作る数（販売予測数 × 事前準備率）"
     # 表が右へ広がるので、タイトル帯・説明行も同じ幅に(帯の右端のロゴも右端へ)。
     # 警告行(B9:H9)は塗りが無いので伸ばさない(非表示M列のヘルパーM9が結合に飲まれるため)
     for r_ in (1, 2):
@@ -134,7 +134,7 @@ def upgrade_calc(ws):
     style_range(ws, "B9:H9", font=fnt(8.5, True, RED), alignment=align("left", wrap=True))
     move_title_logo(ws, 14, 16)                   # O〜Q列の右端へ
     ws["B2"] = ("参照期間(A/B)の購買率 × ピーク動員数 × 係数（時間帯／商品別の波）で「販売予測数」を出し、"
-                "⑤事前準備率を掛けた「👉 仕込み数」を自動計算します")
+                "⑤事前準備率を掛けた「👉 作る数」を自動計算します")
 
     # ⑤ 事前準備率(既定100%)。行8は空き行だったのでそのまま使う
     ws.row_dimensions[8].height = 24
@@ -142,12 +142,12 @@ def upgrade_calc(ws):
     ws["D8"] = 100
     style_range(ws, "D8", font=fnt(10.5, True), fl=fill(F_INPUT),
                 alignment=align("center"), border=BORDER_INPUT, num='0"%"')
-    ws["D8"].comment = mk_comment("販売予測数の何％を仕込むかを整数で入力します（100＝予測どおり）。"
+    ws["D8"].comment = mk_comment("販売予測数の何％を作るかを整数で入力します（100＝予測どおり）。"
                                   "控えめにしたい日は80、先週より動員が多い日は120のように。"
-                                  "1〜200の範囲。「👉 仕込み数」列と印刷用に反映され、"
+                                  "1〜200の範囲。「👉 作る数」列と印刷用に反映され、"
                                   "販売予測数そのものは変わりません。")
     ws.merge_cells("E8:H8")
-    ws["E8"] = (f'="→ 販売予測数 × "&{RATE}&"% ＝ 仕込み数'
+    ws["E8"] = (f'="→ 販売予測数 × "&{RATE}&"% ＝ 作る数'
                 '（80で控えめ／120で多め）"')
     style_range(ws, "E8:H8", font=fnt(9, False, GRAY), alignment=align("left"))
     dv_rate = DataValidation(type="whole", operator="between", formula1="1", formula2="200",
@@ -184,7 +184,7 @@ def upgrade_calc(ws):
     # 期間A状態表示の参照ズレ修正(店舗版はG4→B7へ移動済みだが参照が旧G4のまま)
     b9 = (ftext(ws["B9"]).replace("期間データ!$G$4", "期間データ!$B$7")
           .replace("G列「比較期間（参考）」", "N列「比較期間（参考）」")
-          .replace("作る数は0扱いです", "販売予測数・仕込み数は0扱いです"))
+          .replace("作る数は0扱いです", "販売予測数・作る数は0扱いです"))
     assert b9.rstrip().endswith("))"), "B9の末尾が想定外"
     b9 = (b9.rstrip()[:-1] +
           '&" "&IF(OR($D$8="",NOT(ISNUMBER($D$8)),$D$8<=0),'
@@ -199,11 +199,11 @@ def upgrade_calc(ws):
     if ws["M10"].value:
         ws["M10"] = ftext(ws["M10"]).replace("期間データ!$G$4", "期間データ!$B$7")
 
-    # 表ヘッダー: F=販売予測数 / G=👉仕込み数(強調) / H=商品係数 / N=比較期間 / O=保持時間 / P=優先
+    # 表ヘッダー: F=販売予測数 / G=👉作る数(強調) / H=商品係数 / N=比較期間 / O=保持時間 / P=優先
     navy_header(ws, "F10", "販売予測数")
     style_range(ws, "G10", font=fnt(11, True, "FFFFFF"), fl=fill(CORAL),
                 alignment=align("center", "center", True), border=BORDER_LIGHT)
-    ws["G10"] = "👉 仕込み数\n(この数を準備)"
+    ws["G10"] = "👉 作る数\n(この数を作る)"
     navy_header(ws, "N10", "比較期間\n（参考）")
     navy_header(ws, "O10", "保持時間\n(分)")
     navy_header(ws, "P10", "優先")
@@ -216,7 +216,7 @@ def upgrade_calc(ws):
         dr = ROW_P0 + i
         f_formula = ftext(ws[f"F{r}"])
         cmp_formula = ftext(ws[f"G{r}"])            # 旧G=比較期間(参考) → N列へ
-        # 仕込み数 ＝ 販売予測数の式に事前準備率を掛ける(端数処理は店舗設定のまま)
+        # 作る数 ＝ 販売予測数の式に事前準備率を掛ける(端数処理は店舗設定のまま)
         g_formula, n_sub = re.subn(r"(ROUND(?:UP|DOWN)?\(\$D\$5\*\$E\d+\*)",
                                    lambda mo: mo.group(1) + RATE + "/100*", f_formula)
         assert n_sub == 1, f"F{r}の式に想定の形が見つかりません"
@@ -267,13 +267,13 @@ def upgrade_calc(ws):
     ws.unmerge_cells(f"B{last + 1}:H{last + 1}")
     ws.row_dimensions[last + 1].height = 30
     note(ws, f"B{last + 1}:{CALC_LAST_COL}{last + 1}",
-         f"※ 販売予測数 ＝ ピーク動員数 × 購買率 × 係数（{rounding}）｜👉 仕込み数 ＝ 販売予測数 × ⑤事前準備率（{rounding}）｜"
+         f"※ 販売予測数 ＝ ピーク動員数 × 購買率 × 係数（{rounding}）｜👉 作る数 ＝ 販売予測数 × ⑤事前準備率（{rounding}）｜"
          "係数 ＝ 商品係数があればそれ、「—」の商品は時間帯係数｜"
          "優先 ＝ 保持時間が基準（期間データE12）以下なら高・長ければ低（手動上書き可・未入力は—）｜"
          "仕込み開始(目安) ＝ ⑥ピーク開始 − 保持時間｜印刷用は保持時間の長い順（先に作れるものから）に「作る順」を付けて並びます｜"
          "比較期間 ＝ A選択時は期間B、それ以外は期間A", 8.5, wrap=True)
 
-    # 条件付き書式を作り直し(データバーは仕込み数へ、要確認は比較期間の新位置へ、優先の色分け)
+    # 条件付き書式を作り直し(データバーは作る数へ、要確認は比較期間の新位置へ、優先の色分け)
     ws.conditional_formatting = ConditionalFormattingList()
     ws.conditional_formatting.add(f"E{ROW_M0}:E{last}", FormulaRule(
         formula=[f"ISTEXT(E{ROW_M0})"], font=Font(name=FONT_NAME, size=9, bold=True, color=RED)))
@@ -391,7 +391,7 @@ def upgrade_print(ws):
     navy_header(ws, "F7", "優先", 10)
     style_range(ws, "G7", font=fnt(11, True, "FFFFFF"), fl=fill(CORAL),
                 alignment=align("center"), border=BORDER_LIGHT)
-    ws["G7"] = "仕込み数"
+    ws["G7"] = "作る数"
     navy_header(ws, "H7", "できたら✓", 10)
 
     rng = f"準備数計算!${{}}${ROW_M0}:${{}}${ROW_M0 + N_SLOTS - 1}"
@@ -428,9 +428,11 @@ def upgrade_print(ws):
         formula=['F8="高"'], font=Font(name=FONT_NAME, size=12, bold=True, color=CORAL)))
     ws.conditional_formatting.add("F8:F27", FormulaRule(
         formula=['F8="低"'], font=Font(name=FONT_NAME, size=12, bold=False, color=GRAY)))
-    ws["B28"] = ("※ 上から順に作ります（保持時間の長いものが先・短いものはピーク直前）｜開始目安＝ピーク開始−保持時間｜"
-                 "調理の目安＝「調理時間」シートの所要時間（1台で作った場合。—は未設定）｜"
+    ws["B28"] = ("※ 上から順に作ります（保持時間の長いものが先・短いものはピーク直前）｜開始目安 ＝ ピーク開始 − 保持時間｜"
+                 "調理の目安 ＝「調理時間」シートの所要時間（1台で作りきる分数。「—」は未設定）｜"
                  "数字は「準備数計算」から自動｜表示の切替は右上のプルダウン｜A4縦・1ページ印刷")
+    style_range(ws, "B28", font=fnt(8.5, False, GRAY), alignment=align("left", "center", True))
+    ws.row_dimensions[28].height = 28
     # A4縦1枚に必ず収める(店舗版の設定を明示的に固定)
     ws.print_area = "A1:I28"
     ws.page_setup.orientation = "portrait"
@@ -446,7 +448,7 @@ def upgrade_guide(ws):
     repl = [
         ("参照期間・ピーク動員数・時間帯 を選ぶ", "参照期間・ピーク動員数・時間帯・事前準備率 を選ぶ"),
         ("作る数 ＝ ピーク動員数 × 購買率 × 係数（切り上げ）｜係数＝時間帯係数（商品別の係数に置き換え可）",
-         "販売予測数 ＝ ピーク動員数 × 購買率 × 係数（切り捨て）｜仕込み数 ＝ 販売予測数 × 事前準備率｜係数＝時間帯係数（商品別の係数に置き換え可）"),
+         "販売予測数 ＝ ピーク動員数 × 購買率 × 係数（切り捨て）｜作る数 ＝ 販売予測数 × 事前準備率｜係数＝時間帯係数（商品別の係数に置き換え可）"),
         ("作る数の係数が商品ごとの実測に置き換わります", "販売予測数の係数が商品ごとの実測に置き換わります"),
         ("期間B＝前週金～土の7日分", "期間B＝前週金〜木の7日分"),
         # 店舗版はプリセット表が非表示列にあり、係数算出の実測値を自動採用する(手入力の案内は誤り)
@@ -468,8 +470,8 @@ def upgrade_guide(ws):
     ws.row_dimensions[r].height = 22
     chip(ws, f"B{r}:E{r}", "  🆕 v2.0 の追加機能（事前準備率・保持時間・ピーク時間）", CHIP_NAVY, NAVY)
     lines = [
-        "・⑤ 事前準備率（準備数計算）：販売予測数の何％を仕込むかを整数で入力します（100＝予測どおり／80で控えめ／"
-        "120で多め。1〜200）。「👉 仕込み数」列と印刷用に反映され、販売予測数そのものは変わりません。",
+        "・⑤ 事前準備率（準備数計算）：販売予測数の何％を作るかを整数で入力します（100＝予測どおり／80で控えめ／"
+        "120で多め。1〜200）。「👉 作る数」列と印刷用に反映され、販売予測数そのものは変わりません。",
         "・保持時間（期間データ）：商品ごとに「作ってから何分まで提供できるか」を分で入力すると、基準（既定30分以下）で"
         "優先「高」、それより長いと「低」に自動判定します。判定を変えたい商品は「優先(手動)」で高／低を選べます（未入力は「—」。"
         "「優先:高のみ」の表示には含まれますが、作る順では最後に並びます）。",

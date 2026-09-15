@@ -381,7 +381,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
     ws.row_dimensions[1].height = 38
     title_band(ws, "A1:J1", "　🍿 コンセッション 事前準備数ツール")
     ws.row_dimensions[2].height = 20
-    note(ws, "B2:J2", "TOHOシネマズ新宿｜期間A(直近金土日)・期間B(前週 金〜木)の購買率から、ピーク前の仕込み数を自動計算", 9.5)
+    note(ws, "B2:J2", "TOHOシネマズ新宿｜期間A(直近金土日)・期間B(前週 金〜木)の購買率から、ピーク前の作る数を自動計算", 9.5)
 
     ws.row_dimensions[4].height = 22
     chip(ws, "B4:D4", "  つかいかた（3ステップ）", CHIP_NAVY, NAVY)
@@ -507,7 +507,7 @@ def build(out_path, csv_a=None, csv_b=None, select="A",
         ws.column_dimensions[c].hidden = True
 
     ws.row_dimensions[1].height = 34
-    title_band(ws, "B1:H1", "　🍿 準備数計算｜ピーク前の仕込み数")
+    title_band(ws, "B1:H1", "　🍿 準備数計算｜ピーク前の作る数")
     ws.row_dimensions[2].height = 18
     note(ws, "B2:H2", "参照期間(A/B)の購買率 × ピーク動員数 × 係数（時間帯／商品別の波） で「作る数」を自動計算します", 9)
     ws.row_dimensions[3].height = 6
