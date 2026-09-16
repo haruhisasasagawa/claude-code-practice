@@ -31,7 +31,7 @@ from build_tool import (BORDER_LIGHT, CHIP_NAVY, CORAL, F_AUTO, F_INPUT, F_ZEBRA
                         NAVY, N_SLOTS, ROW_M0, ROW_P0, align, chip, disp_w, fill, fnt, note,
                         read_csv_rows, style_range, title_band)
 from upgrade_v2 import (CK_MIN_COL, CK_NAME_COL, CK_ROW0, CK_ROWS, CK_SHEET,                     # noqa: E402
-                        check_hidden_cols, restore_comment_vml)
+                        check_hidden_cols, lock_workbook, restore_comment_vml)
 
 SHEET = CK_SHEET
 ROW_C0 = CK_ROW0                  # 商品1行目
@@ -508,8 +508,15 @@ def build_sheet(wb, manual, candidates, sample_label=False):
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
+    # 入力できるセル(ここ以外はロックする): 商品名・機器・条件・最大・間隔・個数別の時間、
+    # 備考(名寄せの結果を手で直せるように)、機器ごとの台数と機器名、マニュアル原本(参考・書き換え可)
+    inputs = [f"{COL_NAME}{first}:{COL_NAME}{lastrow}", f"{COL_MACH}{first}:{COL_GAP}{lastrow}",
+              f"{COL_MEMO}{first}:{COL_MEMO}{lastrow}",
+              f"{COL_T1}{first}:{COL_TN}{lastrow}", f"{COL_MACH}{MACH_ROW0}:{COL_MACH}{mr}",
+              f"{COL_MAX}{MACH_ROW0}:{COL_MAX}{mr}", f"{COL_NAME}{hr2 + 1}:{LAST}{rr}"]
     return {"rows": len(rows), "matched": sum(1 for n, _ in rows if n in matched), "extra": [n for n, _ in rows if n not in reg_names],
-            "unmatched": unmatched, "dropped": dropped, "flagged": n_flag, "machines": machines, "mach_row0": MACH_ROW0}
+            "unmatched": unmatched, "dropped": dropped, "flagged": n_flag, "machines": machines,
+            "mach_row0": MACH_ROW0, "inputs": inputs}
 
 
 GUIDE_LINE = ("・調理時間（シート）：調理マニュアルの機器・個数別の時間・一度に最大を商品ごとに転記した表です（手修正OK）。"
@@ -544,6 +551,7 @@ def main():
     ap.add_argument("dst")
     ap.add_argument("--csv", nargs="+", action="extend", default=[], help="名寄せ候補の売上CSV(商品名のみ使用。複数可)")
     ap.add_argument("--sample-label", action="store_true", help="説明行にサンプルの表記を入れる")
+    ap.add_argument("--password", help="シート保護の解除パスワード(省略時は保護のみ・パスワード無し)")
     a = ap.parse_args()
     manual, warns = parse_manual(a.manual)
     for w in warns:
@@ -563,6 +571,7 @@ def main():
                     cands.append(name)
     info = build_sheet(wb, manual, cands, sample_label=a.sample_label)
     add_guide_line(wb)
+    lock_workbook(wb, a.password, extra={SHEET: info["inputs"]})
     wb.save(a.dst)
     n = restore_comment_vml(a.src, a.dst)
     ok, hidden = check_hidden_cols(a.dst)

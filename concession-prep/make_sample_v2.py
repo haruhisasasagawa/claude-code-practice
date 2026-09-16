@@ -24,7 +24,7 @@ from openpyxl import load_workbook
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_calib import CALIB_SHEETS, MSO_HEADERS, MSO_MAX, MSO_NCOL, read_mso_rows  # noqa: E402
 from build_tool import CSV_HEADERS, CSV_MAX, NCOL, N_SLOTS, read_csv_rows            # noqa: E402
-from upgrade_v2 import VIEW_ADDR, VIEW_ALL, check_hidden_cols, restore_comment_vml               # noqa: E402
+from upgrade_v2 import VIEW_ADDR, VIEW_ALL, check_hidden_cols, lock_workbook, restore_comment_vml               # noqa: E402
 
 SEED = 20260913
 ROW_P0 = 14                                   # 期間データ: 商品1行目
@@ -290,7 +290,7 @@ def paste(ws, rows, ncol, max_rows):
             ws.cell(row=5 + i, column=c_idx).value = v
 
 
-def build(src, dst, csv_dir, sunday, label=True):
+def build(src, dst, csv_dir, sunday, label=True, password=None):
     rng = random.Random(SEED)
     os.makedirs(csv_dir, exist_ok=True)
     a_end = sunday
@@ -375,6 +375,7 @@ def build(src, dst, csv_dir, sunday, label=True):
         ws["B3"].alignment = Alignment(wrap_text=True, vertical="top")
         ws["B3"].font = Font(size=9, color="7A4A00")
         ws.row_dimensions[3].height = 42
+    lock_workbook(wb, password)                  # 元ファイルと同じ保護状態で保存する
     wb.save(dst)
     n = restore_comment_vml(src, dst)
     ok, hidden = check_hidden_cols(dst)
@@ -418,9 +419,10 @@ if __name__ == "__main__":
     ap.add_argument("--csv-dir", default=None, help="合成CSVと検証引数の出力先(既定: 出力xlsxと同じフォルダの sample_csv)")
     ap.add_argument("--sunday", default=None, help="期間Aの最終日(日曜)。省略時は直近の日曜")
     ap.add_argument("--no-label", action="store_true", help="「サンプル」の表記を入れない")
+    ap.add_argument("--password", help="シート保護の解除パスワード")
     a = ap.parse_args()
     sun = dt.date.fromisoformat(a.sunday) if a.sunday else latest_sunday(dt.date.today())
     if sun.weekday() != 6:
         raise SystemExit("--sunday は日曜の日付を指定してください")
     build(a.src, a.dst, a.csv_dir or os.path.join(os.path.dirname(os.path.abspath(a.dst)), "sample_csv"), sun,
-          label=not a.no_label)
+          label=not a.no_label, password=a.password)

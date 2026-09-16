@@ -20,6 +20,7 @@ import math
 import sys
 
 import re as _re
+from openpyxl.utils import column_index_from_string as _cifs
 
 from openpyxl import load_workbook
 
@@ -480,6 +481,44 @@ if "調理時間" in wb.sheetnames:
         check(f"調理時間!{CK.COL_MIN}{r}(機器合計 {mach[:12]}/{units}台)", ck[f"{CK.COL_MIN}{r}"].value, want,
               tol=1e-6 if want != "—" else 0)
         r += 1
+
+# ---- 保護: 全シート保護・ブック構成ロック・入力セルだけ編集可
+check("ブック構成のロック", bool(wf.security and wf.security.lockStructure), True)
+for _ws in wf.worksheets:
+    check(f"{_ws.title}(シート保護)", _ws.protection.sheet, True)
+for _sh, _cell, _locked in [("期間データ", "C6", False), ("期間データ", "E12", False), ("期間データ", "B14", False),
+                            ("期間データ", "E14", False), ("期間データ", "F14", False), ("期間データ", "G14", False),
+                            ("期間データ", "C14", True), ("期間データ", "J6", True),
+                            ("準備数計算", "D4", False), ("準備数計算", "D8", False), ("準備数計算", "O5", False),
+                            ("準備数計算", "F11", True), ("準備数計算", "G11", True), ("準備数計算", "B9", True),
+                            ("印刷用", "H2", False), ("印刷用", "C8", True), ("印刷用", "G8", True),
+                            ("係数算出", "C4", False), ("商品別の波", "D3", False), ("使い方", "C10", True)]:
+    check(f"{_sh}!{_cell}({'ロック' if _locked else '入力可'})", wf[_sh][_cell].protection.locked, _locked)
+if "調理時間" in wf.sheetnames:
+    for _cell, _locked in [("B6", False), ("D6", False), ("F6", False), ("L6", False), ("M6", False),
+                           ("H6", True), ("I6", True), ("J6", True), ("K6", True)]:
+        check(f"調理時間!{_cell}({'ロック' if _locked else '入力可'})", wf["調理時間"][_cell].protection.locked, _locked)
+# 貼り付け領域は「列のスタイル」で解放してある(セル単位ではないのでopenpyxlのセル読みでは分からない)。
+# ここが閉じるとCSVの貼り付けが保護に弾かれるので、列スタイルのロック状態を直接見る
+def _col_locked(ws, col):
+    """<col min max> の束から、その列を含む定義を探してロック状態を返す(未定義はNone)"""
+    ci = _cifs(col)
+    for d in ws.column_dimensions.values():
+        if d.min and d.max and d.min <= ci <= d.max:
+            return d.protection.locked
+    return None
+
+
+for _sh, _open_cols, _locked_col in [("CSV貼付A", ("A", "N", "AH"), "AI"), ("CSV貼付B", ("A", "N", "AH"), "AI"),
+                                     ("係数貼付①", ("A", "B", "AB"), "AE"), ("係数貼付④", ("A", "B", "AB"), "AE")]:
+    if _sh not in wf.sheetnames:
+        continue
+    for _c in _open_cols:
+        check(f"{_sh}!{_c}列(貼付領域が編集可)", _col_locked(wf[_sh], _c), False)
+    check(f"{_sh}!{_locked_col}列(内部列はロック)", _col_locked(wf[_sh], _locked_col) is not False, True)
+
+# 計算どおりか(数式が手入力の値に置き換えられていないか)
+check("準備数計算!M12(計算どおり)", m["M12"].value, 0)
 
 warn = m["B9"].value or ""
 # 「※」で始まる節は通知(計算は継続)なので、警告有無の判定から除く。「⚠」だけを警告として見る

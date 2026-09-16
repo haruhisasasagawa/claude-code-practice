@@ -26,7 +26,9 @@ from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.formatting.rule import DataBarRule, FormulaRule
 from openpyxl.styles import Border, Font, Protection
 from openpyxl.utils import get_column_letter
+from openpyxl.workbook.protection import WorkbookProtection
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.protection import SheetProtection
 from openpyxl.worksheet.dimensions import ColumnDimension
 
 from build_tool import (BORDER_HAIR, BORDER_INPUT, BORDER_LIGHT, CHIP_CORAL, CHIP_NAVY,
@@ -42,6 +44,21 @@ HT_THR_DEFAULT = 30          # 「直前」とみなす保持時間(分)の既�
 EXPLODE_MAX = 40             # 列書式の束を1列ずつに分解する上限列(AN列まで)
 RATE = 'IF(AND(ISNUMBER($D$8),$D$8>0),$D$8,100)'   # 事前準備率(未入力・0以下は100%扱い)
 UNLOCKED = Protection(locked=False)
+# シート保護の内容。True＝その操作を禁止。seal_protection.py が再計算後に同じ内容を書き戻す
+SHEET_PROTECTION = dict(
+    sheet=True, objects=False, scenarios=False,
+    formatCells=True, formatColumns=True, formatRows=True,
+    insertColumns=True, insertRows=True, insertHyperlinks=True,
+    deleteColumns=True, deleteRows=True, sort=True, autoFilter=True,
+    pivotTables=True, selectLockedCells=False, selectUnlockedCells=False)
+# 入力できるセル。ここ以外はロックし、全シートを保護する(貼付シートは列ごと解放済み)
+INPUT_CELLS = {
+    "期間データ": ["C6:E6", "C10:I10", "E12", "B14:B33", "E14:F33", "G14:K33", "B37:B48"],
+    "準備数計算": ["D4:D8", "O5:O6"],
+    "印刷用": ["H2"],
+    "係数算出": ["C4:H4"],
+    "商品別の波": ["D3"],
+}
 VIEW_ADDR = "H2"                                      # 印刷用の表示切替セル(シート内アドレス)
 VIEW_CELL = f'印刷用!${VIEW_ADDR[0]}${VIEW_ADDR[1:]}'
 # add_cooking_sheet.py が作る「調理時間」シートの位置(印刷用から所要時間を引くために共有)
@@ -179,6 +196,11 @@ def upgrade_calc(ws):
             "【重要】名前の先頭の①〜⑤マークは「商品別の波」の帯の対応キーです。"
             "改名するときも先頭のマークは残してください(消すとその時間帯は全体係数になります)。")
 
+    # 改ざん検知: 販売予測数・作る数が計算どおりかを行ごとに突き合わせる(非表示のI列)。
+    # 数式を手入力の値で上書きされると数が合わなくなるので件数をM12に出す
+    ws["M12"] = f"=SUMPRODUCT($I${ROW_M0}:$I${ROW_M0 + N_SLOTS - 1})"
+    style_range(ws, "M12", font=fnt(8, False, GRAY), alignment=align("center"))
+
     # ⑥ ピーク時間(入力ブロックの右・新列の上)。保持時間と組み合わせて
     # 「仕込み開始の目安 ＝ ピーク開始 − 保持時間」を商品ごとに出す
     chip(ws, "N4:Q4", "  ⑥ ピーク時間", CHIP_CORAL, INK, 10)
@@ -208,6 +230,8 @@ def upgrade_calc(ws):
     b9 = (b9.rstrip()[:-1] +
           '&" "&IF(OR($D$8="",NOT(ISNUMBER($D$8)),$D$8<=0),'
           '"⚠ 事前準備率が未入力か0以下です（100%扱い）。","")'
+          '&" "&IF($M$12>0,"⚠ 販売予測数・作る数が計算どおりでない行があります（"&$M$12&"件）。'
+          '数式が手で書き換えられた可能性があります（元のファイルで確認してください）。","")'
           '&" "&IF($D$6="","⚠ ③時間帯が選ばれていません（係数×100%で計算中）。","")'
           '&" "&IF(AND(ISNUMBER($D$8),$D$8>0,OR($D$8>200,$D$8<>INT($D$8))),'
           '"⚠ 事前準備率が想定外の値です（1〜200の整数で入力。入力値のまま計算中）。","")'
@@ -250,6 +274,12 @@ def upgrade_calc(ws):
         ws[f"G{r}"] = (f'=IF(OR($C{r}="",NOT(ISNUMBER($D$5))),"",'
                        f'IF(ISNUMBER($F{r}),MAX(0,{rnd.group(0)}($F{r}*{RATE}/100,0)),"—"))')
         ws[f"N{r}"] = cmp_formula
+        # 計算どおりか(非表示I列・0=一致 / 1以上=手入力で書き換えられた可能性)
+        coef = f'IF(ISNUMBER($H{r}),$H{r},$M$7)'
+        ws[f"I{r}"] = (f'=IF($C{r}="","",IF(NOT(ISNUMBER($F{r})),0,'
+                       f'(($F{r}<>MAX(0,{rnd.group(0)}($D$5*$E{r}*{coef},0)))'
+                       f'+IF(ISNUMBER($G{r}),($G{r}<>MAX(0,{rnd.group(0)}($F{r}*{RATE}/100,0))),0))*1))')
+        style_range(ws, f"I{r}", font=fnt(8, False, GRAY), alignment=align("center"))
         ws[f"O{r}"] = f'=IF($C{r}="","",IF(ISNUMBER(期間データ!E{dr}),期間データ!E{dr},"—"))'
         # 手動は 直前/先に だけを受け付け(前後の空白は無視・旧「高/低」も可)、それ以外は自動判定へ
         man = f'TRIM(期間データ!F{dr})'
@@ -381,6 +411,30 @@ def upgrade_period(ws):
     ws["A34"] = ("※ 販売数のセルは自動計算です（CSVの「売上数」列を商品名で集計）。"
                  f"保持時間(分)を入れると準備数計算・印刷用に作るタイミング（{PRI_HI}／{PRI_LO}）が"
                  "出ます（基準は上のE12）。")
+
+
+# ================================================================ 保護 =======
+def lock_workbook(wb, password=None, extra=None):
+    """必要な入力セル以外をロックし、全シートとブック構成を保護する。
+    パスワードを付けると、保護の解除(＝数式やレイアウトの書き換え)にパスワードが要る。
+    貼り付けシートは列スタイルで貼付領域が解放済みなので、CSVの貼り付けはこれまでどおり動く"""
+    ranges = {k: list(v) for k, v in INPUT_CELLS.items()}
+    for k, v in (extra or {}).items():
+        ranges.setdefault(k, []).extend(v)
+    for ws in wb.worksheets:
+        for ref in ranges.get(ws.title, []):
+            rng = ws[ref]
+            rows = [(rng,)] if hasattr(rng, "value") else rng      # 単一セルの指定にも対応
+            for row in rows:
+                for c in row:
+                    c.protection = UNLOCKED
+        ws.protection = SheetProtection(**SHEET_PROTECTION)
+        if password:
+            ws.protection.set_password(password)
+    wb.security = WorkbookProtection(lockStructure=True)
+    if password:
+        wb.security.set_workbook_password(password)
+    return sum(len(v) for v in ranges.values())
 
 
 # ============================================================== 印刷用 =======
@@ -519,6 +573,21 @@ def upgrade_guide(ws):
         ("・毎週の作業は「CSV2本の貼り替え」と「動員数の入力」だけです。",
          "・毎週の作業は「CSV2本の貼り替え」「動員数の入力」「②ピーク動員数・③時間帯・⑥ピーク時間の入れ替え」です。"
          "保持時間（期間データE列）は最初に一度入れれば、あとはそのまま使えます。"),
+        # 保護の説明を実態に合わせる(全シート保護・入力セルだけ編集可)
+        ("・貼り付けシート（CSV貼付A/B・係数貼付①〜④）と係数算出・商品別の波はシート保護済みです（パスワード無し）。"
+         "オレンジの貼り付け領域と設定セル以外は書き換えできず、シート全体を選択した貼り付けで内部の計算式が消える事故もブロックされます。",
+         "・すべてのシートを保護しています。入力できるのは、CSVの貼り付け領域／動員数／商品名／保持時間／"
+         "タイミング(手動)／メモ／①〜⑥の設定／印刷用の表示切替／調理時間シートの入力欄（機器・条件・一度に最大・"
+         "回転の間隔・個数別の時間・台数）／時間の区切り／係数を使う最低個数 だけです。"
+         "それ以外のセルを書き換えようとすると「保護されているシートにあります」と表示され、"
+         "数式やレイアウトは変更できません（シート全体を選択した貼り付けで計算式が消える事故も防げます）。"
+         "Excel上で動くAIアシスタント（Copilotなど）も同じ扱いで、保護されたセルは書き換えられません。"
+         "変更が必要なときは 校閲 → シート保護の解除（パスワードを設定している場合はパスワードが必要）。"
+         "なお、シート保護の外（ファイルを直接書き換える方法）で数式がすり替えられた場合に備えて、"
+         "準備数計算は毎回その場で計算をやり直して表示値と突き合わせており、ズレた行があると"
+         "状態表示に「⚠ 販売予測数・作る数が計算どおりでない行があります」と出ます。"),
+        ("（期間データシート下部の除外リストで自由に変更できます）",
+         "（期間データシートの非表示行にある除外リストで変更できます。行の再表示とシート保護の解除が必要）"),
         # 係数の例をこのブックの既定値に合わせる(テンプレートの例のままだった)
         ("例：朝一0.8倍→昼ピーク1.2倍→夕方1.1倍→夜ピーク1.3倍→レイト0.9倍＋平常。",
          "例：朝一0.6倍→昼ピーク1.1倍→夕方1.35倍→夜ピーク1.8倍→レイト0.5倍＋平常1.0倍（当店の既定値）。"),
@@ -703,7 +772,7 @@ def check_hidden_cols(path):
     return ok, out
 
 
-def upgrade(src, dst):
+def upgrade(src, dst, password=None):
     wb = load_workbook(src)
     upgrade_calc(wb["準備数計算"])
     upgrade_period(wb["期間データ"])
@@ -722,6 +791,7 @@ def upgrade(src, dst):
         if isinstance(wv[ref].value, str):
             wv[ref] = wv[ref].value.replace("作る数に適用できます", "販売予測数に適用できます").replace(
                 "作る数が黙って0になる", "販売予測数が黙って0になる")
+    lock_workbook(wb, password)
     wb.save(dst)
     # 店舗がExcelで整えたメモの見た目(位置・サイズ・常時表示)を元ファイルから復元。
     # 準備数計算!D7の常時表示メモは新設した⑤の行に重なるため通常のメモ(非表示)に戻す
@@ -735,4 +805,10 @@ def upgrade(src, dst):
 
 
 if __name__ == "__main__":
-    upgrade(sys.argv[1], sys.argv[2])
+    import argparse
+    _ap = argparse.ArgumentParser()
+    _ap.add_argument("src")
+    _ap.add_argument("dst")
+    _ap.add_argument("--password", help="シート保護の解除パスワード(省略時は保護のみ・パスワード無し)")
+    _a = _ap.parse_args()
+    upgrade(_a.src, _a.dst, _a.password)
