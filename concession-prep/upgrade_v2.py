@@ -342,7 +342,7 @@ def upgrade_period(ws):
 
     ws.unmerge_cells("E13:K13")
     navy_header(ws, "E13", "保持時間\n(分)")
-    navy_header(ws, "F13", "タイミング\n(手動)")
+    navy_header(ws, "F13", "タイミング\n(手動)", 8.5)   # 列幅10.4に収める
     ws.merge_cells("G13:K13")
     navy_header(ws, "G13:K13", "メモ（自由記入）")
     ws["E13"].comment = mk_comment("ホールディングタイム＝作ってから何分まで提供できるか。"
