@@ -482,8 +482,8 @@ if "調理時間" in wb.sheetnames:
         r += 1
 
 warn = m["B9"].value or ""
-# 店舗版は「古いデータ」を※通知(計算は継続)として出すため、警告有無の判定から除く
-warn_core = warn.replace("※ CSVの対象期間が古い可能性があります（計算は継続。期間データシートで日付を確認）。", "")
+# 「※」で始まる節は通知(計算は継続)なので、警告有無の判定から除く。「⚠」だけを警告として見る
+warn_core = _re.sub(r"※[^⚠※]*", "", warn)
 if a.expect_warn or a.rate == "blank" or int(a.rate) <= 0:
     for w in a.expect_warn + (["事前準備率が未入力か0以下"] if (a.rate == "blank" or int(a.rate) <= 0) else []):
         check(f"B9警告[{w}]", w in warn, True)

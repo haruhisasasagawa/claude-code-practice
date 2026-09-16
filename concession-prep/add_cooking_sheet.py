@@ -345,7 +345,7 @@ def build_sheet(wb, manual, candidates, sample_label=False):
         style_range(ws, f"{COL_MEMO}{r}", font=fnt(8.5, False, "5B6472"), fl=fill("FFFBEB"), alignment=align("left", "center", True), border=BORDER_LIGHT)
         style_range(ws, f"{COL_T1}{r}:{COL_TN}{r}", font=fnt(9.5), fl=fill(F_INPUT), alignment=align("center"), border=BORDER_LIGHT, num='0"秒"')
     tr = lastrow + 1
-    ws[f"{COL_NAME}{tr}"] = "単純合計（機器が違えば並行して作れる／所要時間が出ている行のみ）"
+    ws[f"{COL_NAME}{tr}"] = "単純合計（所要時間が出ている行のみ）"
     ws[f"{COL_MEMO}{tr}"] = (f'=IF(SUMPRODUCT((${COL_NAME}${first}:${COL_NAME}${lastrow}<>"")*'
                              f'(COUNTIF(${COL_NAME}${first}:${COL_NAME}${lastrow},${COL_NAME}${first}:${COL_NAME}${lastrow})>1))>0,'
                              f'"⚠ 商品名が重複しています（作る数・所要時間が二重に計上されます）","")')
@@ -399,7 +399,7 @@ def build_sheet(wb, manual, candidates, sample_label=False):
                                  f'"⚠ この機器で作り切る時間が、一番持ちの短い商品の保持時間を超えています（台数を増やすか分けて作る）","")))')
         style_range(ws, f"{COL_HOLD}{mr}:{COL_MEMO}{mr}", font=fnt(8.5, False, CORAL), alignment=align("left"))
     # 機器ごとの合計に入っていない作る数(機器名が空欄・表記違い)を可視化する
-    ws[f"{COL_NAME}{mr + 1}"] = "機器ごとの合計に入っていない作る数"
+    ws[f"{COL_NAME}{mr + 1}"] = "機器ごとの合計に入っていない作る数 →"
     ws[f"{COL_NEED}{mr + 1}"] = (f'=IF(NOT(ISNUMBER(${COL_NEED}{tr})),"",'
                                  f'${COL_NEED}{tr}-SUMPRODUCT(SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},'
                                  f'${COL_MACH}${MACH_ROW0}:${COL_MACH}{mr},${COL_NEED}${first}:${COL_NEED}${lastrow})))')
