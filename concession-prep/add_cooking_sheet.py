@@ -345,7 +345,11 @@ def build_sheet(wb, manual, candidates, sample_label=False):
         style_range(ws, f"{COL_MEMO}{r}", font=fnt(8.5, False, "5B6472"), fl=fill("FFFBEB"), alignment=align("left", "center", True), border=BORDER_LIGHT)
         style_range(ws, f"{COL_T1}{r}:{COL_TN}{r}", font=fnt(9.5), fl=fill(F_INPUT), alignment=align("center"), border=BORDER_LIGHT, num='0"秒"')
     tr = lastrow + 1
-    ws[f"{COL_NAME}{tr}"] = "単純合計（機器が違えば並行して作れる）"
+    ws[f"{COL_NAME}{tr}"] = "単純合計（機器が違えば並行して作れる／所要時間が出ている行のみ）"
+    ws[f"{COL_MEMO}{tr}"] = (f'=IF(SUMPRODUCT((${COL_NAME}${first}:${COL_NAME}${lastrow}<>"")*'
+                             f'(COUNTIF(${COL_NAME}${first}:${COL_NAME}${lastrow},${COL_NAME}${first}:${COL_NAME}${lastrow})>1))>0,'
+                             f'"⚠ 商品名が重複しています（作る数・所要時間が二重に計上されます）","")')
+    style_range(ws, f"{COL_MEMO}{tr}", font=fnt(8.5, True, CORAL), alignment=align("left"))
     ws[f"{COL_NEED}{tr}"] = f'=IF(COUNT({COL_NEED}{first}:{COL_NEED}{lastrow})=0,"",SUM({COL_NEED}{first}:{COL_NEED}{lastrow}))'
     ws[f"{COL_MIN}{tr}"] = f'=IF(COUNT({COL_MIN}{first}:{COL_MIN}{lastrow})=0,"",SUM({COL_MIN}{first}:{COL_MIN}{lastrow}))'
     style_range(ws, f"{COL_NAME}{tr}:{COL_GAP}{tr}", font=fnt(9.5, True), alignment=align("right"))
@@ -374,7 +378,9 @@ def build_sheet(wb, manual, candidates, sample_label=False):
         ws[f"{COL_MAX}{mr}"] = 1 if mach else None
         ws[f"{COL_NAME}{mr}"] = "機器（上の表の調理機器と同じ表記）" if k == n_mach else None
         units = f'MAX(1,IF(ISNUMBER(${COL_MAX}{mr}),${COL_MAX}{mr},1))'
-        ws[f"{COL_MIN}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",IF(COUNTIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr})=0,"—",'
+        has_min = (f'SUMPRODUCT((${COL_MACH}${first}:${COL_MACH}${lastrow}={COL_MACH}{mr})'
+                   f'*ISNUMBER(${COL_MIN}${first}:${COL_MIN}${lastrow}))')
+        ws[f"{COL_MIN}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",IF({has_min}=0,"—",'
                                 f'SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},${COL_MIN}${first}:${COL_MIN}${lastrow})'
                                 f'/{units}))')
         ws[f"{COL_NEED}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},'
@@ -384,13 +390,32 @@ def build_sheet(wb, manual, candidates, sample_label=False):
         style_range(ws, f"{COL_MAX}{mr}", font=fnt(9.5), fl=fill(F_INPUT), alignment=align("center"), border=BORDER_LIGHT, num='0"台"')
         style_range(ws, f"{COL_NEED}{mr}", font=fnt(9.5), fl=fill(F_AUTO), alignment=align("center"), border=BORDER_LIGHT, num="0")
         style_range(ws, f"{COL_MIN}{mr}", font=fnt(10, True, CORAL), fl=fill(F_AUTO), alignment=align("center"), border=BORDER_LIGHT, num='0.0"分"')
-    ws[f"{COL_HOLD}{MACH_ROW0}"] = "← 同じ機器の商品を順番に作り、台数で割った目安"
-    style_range(ws, f"{COL_HOLD}{MACH_ROW0}:{COL_MEMO}{MACH_ROW0}", font=fnt(8.5, False, GRAY), alignment=align("left"))
+        ws[f"{COL_HOLD}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",'
+                                 f'IF(OR(${COL_MAX}{mr}="",NOT(ISNUMBER(${COL_MAX}{mr})),${COL_MAX}{mr}<1),'
+                                 f'"⚠ 台数が未入力/数値でないため1台で計算",'
+                                 f'IF(AND(ISNUMBER(${COL_MIN}{mr}),'
+                                 f'COUNTIFS(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},'
+                                 f'${COL_HOLD}${first}:${COL_HOLD}${lastrow},"<"&${COL_MIN}{mr})>0),'
+                                 f'"⚠ この機器で作り切る時間が、一番持ちの短い商品の保持時間を超えています（台数を増やすか分けて作る）","")))')
+        style_range(ws, f"{COL_HOLD}{mr}:{COL_MEMO}{mr}", font=fnt(8.5, False, CORAL), alignment=align("left"))
+    # 機器ごとの合計に入っていない作る数(機器名が空欄・表記違い)を可視化する
+    ws[f"{COL_NAME}{mr + 1}"] = "機器ごとの合計に入っていない作る数"
+    ws[f"{COL_NEED}{mr + 1}"] = (f'=IF(NOT(ISNUMBER(${COL_NEED}{tr})),"",'
+                                 f'${COL_NEED}{tr}-SUMPRODUCT(SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},'
+                                 f'${COL_MACH}${MACH_ROW0}:${COL_MACH}{mr},${COL_NEED}${first}:${COL_NEED}${lastrow})))')
+    ws[f"{COL_MIN}{mr + 1}"] = (f'=IF(NOT(ISNUMBER(${COL_NEED}{mr + 1})),"",'
+                                f'IF(${COL_NEED}{mr + 1}=0,"OK","⚠ 調理機器が空欄か表記違いの商品があります"))')
+    style_range(ws, f"{COL_NAME}{mr + 1}:{COL_GAP}{mr + 1}", font=fnt(8.5, False, GRAY), alignment=align("right"))
+    style_range(ws, f"{COL_NEED}{mr + 1}", font=fnt(9.5, True), alignment=align("center"), num="0")
+    style_range(ws, f"{COL_MIN}{mr + 1}:{COL_MEMO}{mr + 1}", font=fnt(8.5, True, CORAL), alignment=align("left"))
+    ws[f"{COL_HOLD}{hmr}"] = "← 同じ機器の商品を順番に作り、台数で割った目安"
+    style_range(ws, f"{COL_HOLD}{hmr}:{COL_MEMO}{hmr}", font=fnt(8.5, False, GRAY), fl=fill("FFFFFF"),
+                alignment=align("left"))
     dv_units = DataValidation(type="whole", operator="greaterThanOrEqual", formula1="1", allow_blank=True,
                               showErrorMessage=True, errorTitle="台数", error="1以上の整数で入力してください（1台なら1）")
     ws.add_data_validation(dv_units)
     dv_units.add(f"{COL_MAX}{MACH_ROW0}:{COL_MAX}{mr}")
-    nr = mr + 1
+    nr = mr + 2                                  # mr+1 は上の照合行
     lines = ["※ 商品ごとの所要時間は1台で作りきる場合の調理時間です（仕込み・盛り付けの手間は含みません）。"
              "機器の台数は下の「機器ごとの合計」で劇場ごとに入力してください（合計を台数で割ります）。"
              "同じ商品でも機器で時間が違うので、備考の他機種の時間（下段の原本にも）を見て使う機器に合わせて "
@@ -416,7 +441,9 @@ def build_sheet(wb, manual, candidates, sample_label=False):
     ws.add_data_validation(dv)
     dv.add(f"{COL_NAME}{first}:{COL_NAME}{lastrow}")
     dv2 = DataValidation(type="whole", operator="greaterThanOrEqual", formula1="0", allow_blank=True,
-                         showErrorMessage=True, errorTitle="時間／個数", error="秒または個数を整数で入力してください（1分10秒 → 70）。調理不可の個数は空欄か「—」")
+                         showErrorMessage=True, errorTitle="一度に最大／回転の間隔",
+                         error="一度に最大は個数、回転の間隔は秒を整数で入力してください（5分空ける → 300）。"
+                               "連続で作れるなら間隔は空欄のままでOKです。")
     ws.add_data_validation(dv2)
     dv2.add(f"{COL_MAX}{first}:{COL_GAP}{lastrow}")
     dv3 = DataValidation(type="custom", formula1=f'OR(ISNUMBER({COL_T1}{first}),{COL_T1}{first}="—",{COL_T1}{first}="")',
@@ -428,6 +455,9 @@ def build_sheet(wb, manual, candidates, sample_label=False):
                                   FormulaRule(formula=[f'OR(LEFT(${COL_NEED}{first},1)="—",${COL_NEED}{first}="未登録")'], font=Font(color=GRAY)))
     ws.conditional_formatting.add(f"{COL_RUNS}{first}:{COL_MEMO}{lastrow}",
                                   FormulaRule(formula=[f'ISNUMBER(SEARCH("⚠",{COL_RUNS}{first}))'], font=Font(color=CORAL, bold=True)))
+    ws.conditional_formatting.add(f"{COL_NAME}{first}:{COL_NAME}{lastrow}",
+                                  FormulaRule(formula=[f'AND(${COL_NAME}{first}<>"",COUNTIF(${COL_NAME}${first}:${COL_NAME}${lastrow},${COL_NAME}{first})>1)'],
+                                              font=Font(color=CORAL, bold=True)))
     ws.conditional_formatting.add(f"{COL_MEMO}{first}:{COL_MEMO}{lastrow}",
                                   FormulaRule(formula=[f'ISNUMBER(SEARCH("❓",{COL_MEMO}{first}))'], font=Font(color=AMBER, bold=True)))
     ws.conditional_formatting.add(f"{COL_MIN}{first}:{COL_MIN}{lastrow}",

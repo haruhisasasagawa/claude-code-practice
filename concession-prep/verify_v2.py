@@ -127,8 +127,10 @@ if a.peak_start:
 for i in range(N_SLOTS):
     r = ROW_M0 + i
     f_txt, g_txt = ftext(mf[f"F{r}"]), ftext(mf[f"G{r}"])
-    want_g = _re.sub(r"(ROUND(?:UP|DOWN)?\(\$D\$5\*\$E\d+\*)", lambda mo: mo.group(1) + RATE + "/100*", f_txt)
-    check(f"G{r}式=F式×率(端数処理同一)", g_txt, want_g)
+    rnd = _re.search(r"ROUND(?:UP|DOWN)?", f_txt).group(0)
+    want_g = (f'=IF(OR($C{r}="",NOT(ISNUMBER($D$5))),"",'
+              f'IF(ISNUMBER($F{r}),MAX(0,{rnd}($F{r}*{RATE}/100,0)),"—"))')
+    check(f"G{r}式=表示中の販売予測数×率", g_txt, want_g)
     check(f"P{r}式(手動はTRIM判定)", "TRIM(期間データ!F" in ftext(mf[f"P{r}"]), True)
 b9f = ftext(mf["B9"])
 check("B9式に旧G4参照なし", "期間データ!$G$4" in b9f, False)
@@ -320,16 +322,19 @@ for i, name in enumerate(PRODUCTS):
     check(f"D{r}(期間販売数)", m[f"D{r}"].value, sales.get(name, 0))
     f_got, g_got = m[f"F{r}"].value, m[f"G{r}"].value
     if exact_mso:
-        check(f"F{r}(販売予測数・係数{eff[name]:.2f})", f_got, fl(a.peak * rt * eff[name]), tol=1)
-        check(f"G{r}(作る数)", g_got, fl(a.peak * rt * eff[name] * rate / 100), tol=1)
+        want_f = fl(a.peak * rt * eff[name])
+        check(f"F{r}(販売予測数・係数{eff[name]:.2f})", f_got, want_f, tol=1)
+        check(f"G{r}(作る数=販売予測数×率)", g_got,
+              fl(f_got * rate / 100) if isinstance(f_got, (int, float)) else want_f)
     elif a.mso:
         # 商品係数は商品別の波(別途検証済み)に依存するため、率の掛かり方だけ確認
         check(f"F{r}数値", isinstance(f_got, (int, float)), True)
         if isinstance(f_got, (int, float)):
-            check(f"G{r}=F×率", g_got, fl(f_got * rate / 100), tol=1)
+            check(f"G{r}=F×率", g_got, fl(f_got * rate / 100))
     else:
         check(f"F{r}(販売予測数)", f_got, fl(a.peak * rt * a.mult), tol=1)
-        check(f"G{r}(作る数)", g_got, fl(a.peak * rt * a.mult * rate / 100), tol=1)
+        check(f"G{r}(作る数=販売予測数×率)", g_got,
+              fl(f_got * rate / 100) if isinstance(f_got, (int, float)) else fl(a.peak * rt * a.mult * rate / 100))
     h = ht[i]
     check(f"O{r}(保持時間)", m[f"O{r}"].value, "—" if h is None else h)
     want_p = manual.get(i) or ("—" if h is None else (PRI_HI if h <= a.thr else PRI_LO))

@@ -24,7 +24,7 @@ from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.formatting.rule import DataBarRule, FormulaRule
-from openpyxl.styles import Border, Font
+from openpyxl.styles import Border, Font, Protection
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.dimensions import ColumnDimension
@@ -41,6 +41,7 @@ PRI_OLD = {PRI_HI: "高", PRI_LO: "低"}   # v2.0初期の呼び方。手入力�
 HT_THR_DEFAULT = 30          # 「直前」とみなす保持時間(分)の既定値
 EXPLODE_MAX = 40             # 列書式の束を1列ずつに分解する上限列(AN列まで)
 RATE = 'IF(AND(ISNUMBER($D$8),$D$8>0),$D$8,100)'   # 事前準備率(未入力・0以下は100%扱い)
+UNLOCKED = Protection(locked=False)
 VIEW_ADDR = "H2"                                      # 印刷用の表示切替セル(シート内アドレス)
 VIEW_CELL = f'印刷用!${VIEW_ADDR[0]}${VIEW_ADDR[1:]}'
 # add_cooking_sheet.py が作る「調理時間」シートの位置(印刷用から所要時間を引くために共有)
@@ -162,6 +163,22 @@ def upgrade_calc(ws):
     # 配列数式で保存されていた表示式は通常の数式に戻す(動作は同じ)
     ws["E7"] = ftext(ws["E7"])
 
+    # 時間帯プリセットの案内を実態に合わせる(表は非表示・実測は自動採用)
+    if isinstance(ws["E6"].value, str):
+        ws["E6"] = ftext(ws["E6"]).replace("（右上の表で名前・係数を編集できます）",
+                                           "（係数は係数算出シートの実測を自動採用。実測が無い帯は既定値）")
+    if ws["K4"].comment:
+        ws["K4"].comment = mk_comment("「係数算出」シートで金曜4週分のMSO商品CSVから実測した係数候補です"
+                                      "（①〜⑤の並び。未貼付のときは「—」）。左のJ列へ自動で採用されます"
+                                      "（手入力は不要。手で数字を入れると自動更新が止まります）。")
+    if ws["I4"].comment:
+        ws["I4"].comment = mk_comment(
+            "時間帯の高低差は5段階(朝一→昼ピーク→夕方→夜ピーク→レイト)+基準の平常で管理します。"
+            "係数は係数算出シートの実測値を自動採用し、実測が無い帯は既定値のままです"
+            "（この表は非表示のI〜K列にあります）。"
+            "【重要】名前の先頭の①〜⑤マークは「商品別の波」の帯の対応キーです。"
+            "改名するときも先頭のマークは残してください(消すとその時間帯は全体係数になります)。")
+
     # ⑥ ピーク時間(入力ブロックの右・新列の上)。保持時間と組み合わせて
     # 「仕込み開始の目安 ＝ ピーク開始 − 保持時間」を商品ごとに出す
     chip(ws, "N4:Q4", "  ⑥ ピーク時間", CHIP_CORAL, INK, 10)
@@ -191,10 +208,18 @@ def upgrade_calc(ws):
     b9 = (b9.rstrip()[:-1] +
           '&" "&IF(OR($D$8="",NOT(ISNUMBER($D$8)),$D$8<=0),'
           '"⚠ 事前準備率が未入力か0以下です（100%扱い）。","")'
+          '&" "&IF($D$6="","⚠ ③時間帯が選ばれていません（係数×100%で計算中）。","")'
           '&" "&IF(AND(ISNUMBER($D$8),$D$8>0,OR($D$8>200,$D$8<>INT($D$8))),'
           '"⚠ 事前準備率が想定外の値です（1〜200の整数で入力。入力値のまま計算中）。","")'
           f'&" "&IF(AND({PEAK_START}<>"",NOT(ISNUMBER({PEAK_START}))),'
-          '"⚠ ピーク時間（開始）が時刻ではありません（17:30 のように入力）。",""))')
+          '"⚠ ピーク時間（開始）が時刻ではありません（17:30 のように入力）。","")'
+          f'&" "&IF(SUMPRODUCT((期間データ!$B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1}<>"")'
+          f'*(NOT(ISNUMBER(期間データ!$E${ROW_P0}:$E${ROW_P0 + N_SLOTS - 1}))*1))'
+          f'=SUMPRODUCT((期間データ!$B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1}<>"")*1),'
+          '"⚠ 保持時間が未入力です（作る順・開始目安・作るタイミングが出ません。期間データE列に分で入力）。",'
+          f'IF(SUMPRODUCT((期間データ!$B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1}<>"")'
+          f'*(NOT(ISNUMBER(期間データ!$E${ROW_P0}:$E${ROW_P0 + N_SLOTS - 1}))*1))>0,'
+          '"※ 保持時間が未入力の商品があります（その商品は作る順の最後・開始目安は「—」）。","")))')
     ws["B9"] = b9
     if ws["D7"].comment and "作る数を計算" in ws["D7"].comment.text:
         ws["D7"].comment = mk_comment(ws["D7"].comment.text.replace("作る数を計算", "販売予測数を計算"))
@@ -218,11 +243,12 @@ def upgrade_calc(ws):
         dr = ROW_P0 + i
         f_formula = ftext(ws[f"F{r}"])
         cmp_formula = ftext(ws[f"G{r}"])            # 旧G=比較期間(参考) → N列へ
-        # 作る数 ＝ 販売予測数の式に事前準備率を掛ける(端数処理は店舗設定のまま)
-        g_formula, n_sub = re.subn(r"(ROUND(?:UP|DOWN)?\(\$D\$5\*\$E\d+\*)",
-                                   lambda mo: mo.group(1) + RATE + "/100*", f_formula)
-        assert n_sub == 1, f"F{r}の式に想定の形が見つかりません"
-        ws[f"G{r}"] = g_formula
+        # 作る数 ＝ 表示中の販売予測数 × 事前準備率(端数処理は店舗設定のまま)。
+        # F列の丸め前の値から計算すると、画面の販売予測数×率と1個ずれて見えるため F を参照する
+        rnd = re.search(r"ROUND(?:UP|DOWN)?", f_formula)
+        assert rnd, f"F{r}の式に丸め関数が見つかりません"
+        ws[f"G{r}"] = (f'=IF(OR($C{r}="",NOT(ISNUMBER($D$5))),"",'
+                       f'IF(ISNUMBER($F{r}),MAX(0,{rnd.group(0)}($F{r}*{RATE}/100,0)),"—"))')
         ws[f"N{r}"] = cmp_formula
         ws[f"O{r}"] = f'=IF($C{r}="","",IF(ISNUMBER(期間データ!E{dr}),期間データ!E{dr},"—"))'
         # 手動は 直前/先に だけを受け付け(前後の空白は無視・旧「高/低」も可)、それ以外は自動判定へ
@@ -358,6 +384,24 @@ def upgrade_period(ws):
 
 
 # ============================================================== 印刷用 =======
+def upgrade_calib(ws):
+    """係数算出: 使い方に「保護済み」と書いてあるとおりに保護する(時間の区切りC4:H4のみ編集可)。
+    実測値は準備数計算のJ列へ自動採用されるので、手入力を促す案内文も置き換える"""
+    for ref in ("B22",):
+        v = ws[ref].value
+        if isinstance(v, str) and "手で入力してください" in v:
+            ws[ref] = ("上の表の「転記用(丸め)」①〜⑤は、準備数計算の時間帯プリセット（非表示のI〜K列）へ"
+                       "自動で採用されます（手入力は不要。手で数字を入れると、そのあと自動更新されなくなります）。"
+                       "実測が無い帯は既定の係数のままです。平常（基準）は 1.0倍 のままでOKです。")
+    for row in ws["C4:H4"]:
+        for c in row:
+            c.protection = UNLOCKED
+    for ref in ("Q3", "S3"):
+        if ws[ref].value is not None or ref == "S3":
+            ws[ref].protection = UNLOCKED
+    ws.protection.sheet = True
+
+
 def upgrade_print(ws):
     explode_column_groups(ws)
     for c, w in {"C": 58, "D": 9, "E": 8, "F": 10, "G": 17.7, "H": 11, "I": 2.4}.items():
@@ -437,9 +481,12 @@ def upgrade_print(ws):
     ws.conditional_formatting.add("F8:F27", FormulaRule(
         formula=[f'F8="{PRI_LO}"'], font=Font(name=FONT_NAME, size=12, bold=False, color=GRAY)))
     ws["B28"] = ("※ 上から順に作ります（保持時間の長いものが先・短いものはピーク直前）｜開始目安 ＝ ピーク開始 − 保持時間｜"
-                 "調理の目安 ＝「調理時間」シートの所要時間（1台で作りきる分数。「—」は未設定）｜"
+                 "調理の目安 ＝「調理時間」シートの所要時間を分に切り上げた値（1台で作りきる分数。"
+                 "「—」＝調理時間シートに未登録・条件未入力・その個数は調理不可のいずれか）｜"
                  f"作るタイミング ＝「{PRI_HI}」は持ちが短くピーク直前・「{PRI_LO}」は先に作っておける｜"
-                 "数字は「準備数計算」から自動｜表示の切替は右上のプルダウン｜A4縦・1ページ印刷")
+                 "数字は「準備数計算」から自動｜表示の切替は右上のプルダウン｜"
+                 "作る順と開始目安は保持時間で決まります（タイミングを手動で変えても順番は変わりません）｜"
+                 "同じ機器の商品は順番待ちになります（調理時間シートの「機器ごとの合計」で確認）｜A4縦・1ページ印刷")
     style_range(ws, "B28", font=fnt(8.5, False, GRAY), alignment=align("left", "center", True))
     ws.row_dimensions[28].height = 28
     # A4縦1枚に必ず収める(店舗版の設定を明示的に固定)
@@ -460,6 +507,21 @@ def upgrade_guide(ws):
          "販売予測数 ＝ ピーク動員数 × 購買率 × 係数（切り捨て）｜作る数 ＝ 販売予測数 × 事前準備率｜係数＝時間帯係数（商品別の係数に置き換え可）"),
         ("作る数の係数が商品ごとの実測に置き換わります", "販売予測数の係数が商品ごとの実測に置き換わります"),
         ("期間B＝前週金～土の7日分", "期間B＝前週金〜木の7日分"),
+        # ピーク動員数の定義を⑥ピーク時間に合わせて1つにする(準備数計算の注記と食い違っていた)
+        ("ピーク動員数＝次回ピーク帯の合計動員数。",
+         "ピーク動員数＝⑥ピーク時間に入れた時間帯に始まる回の合計動員数（これから準備するピークのお客さまの合計）。"),
+        ("・ピーク動員数には次回ピーク帯の合計動員数を入れます。",
+         "・ピーク動員数には、⑥ピーク時間に入れた時間帯に始まる回の合計動員数を入れます"
+         "（これから準備するピークのお客さまの合計）。"),
+        # 手順に ④商品別の波 と ⑥ピーク時間 を含める
+        ("「準備数計算」で 参照期間・ピーク動員数・時間帯・事前準備率 を選ぶ",
+         "「準備数計算」で ①参照期間・②ピーク動員数・③時間帯・⑤事前準備率 を選び、⑥ピーク時間を入れる"),
+        ("・毎週の作業は「CSV2本の貼り替え」と「動員数の入力」だけです。",
+         "・毎週の作業は「CSV2本の貼り替え」「動員数の入力」「②ピーク動員数・③時間帯・⑥ピーク時間の入れ替え」です。"
+         "保持時間（期間データE列）は最初に一度入れれば、あとはそのまま使えます。"),
+        # 係数の例をこのブックの既定値に合わせる(テンプレートの例のままだった)
+        ("例：朝一0.8倍→昼ピーク1.2倍→夕方1.1倍→夜ピーク1.3倍→レイト0.9倍＋平常。",
+         "例：朝一0.6倍→昼ピーク1.1倍→夕方1.35倍→夜ピーク1.8倍→レイト0.5倍＋平常1.0倍（当店の既定値）。"),
         # 店舗版はプリセット表が非表示列にあり、係数算出の実測値を自動採用する(手入力の案内は誤り)
         ("右上の表で編集・1.2 ＝ 1.2倍 の形で入力）",
          "係数貼付①〜④を貼ると係数算出の実測値が自動で採用され、実測の無い帯は既定値。表は非表示のI〜K列）"),
@@ -645,6 +707,7 @@ def upgrade(src, dst):
     wb = load_workbook(src)
     upgrade_calc(wb["準備数計算"])
     upgrade_period(wb["期間データ"])
+    upgrade_calib(wb["係数算出"])
     upgrade_print(wb["印刷用"])
     upgrade_guide(wb["使い方"])
     # 店舗版に残る旧称(v2.0初期の「仕込み数」)を全シートの固定文から置き換える。
