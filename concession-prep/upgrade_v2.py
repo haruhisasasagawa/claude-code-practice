@@ -496,25 +496,30 @@ def when_header(ws):
 
 def when_row(ws, r):
     """「いつ作る」1行ぶん。⑦が空欄なら全部空になり、これまでと何も変わらない。
-    時刻の引き算は MOD で折り返さない(折り返すと『遅れ』が『あと19時間』に化ける)。
-    翌日のピークは ⑥ に 25:30 のように24時間超えで入れる運用(既存の閉店時刻と同じ)"""
+
+    ・時刻の引き算は MOD で折り返さない(折り返すと『30分の遅れ』が『あと23時間30分』に化ける)。
+      翌日のピークは ⑥ に 25:30 のように24時間超えで入れる運用(既存の閉店時刻と同じ)
+    ・AND() は引数を両方とも先に計算するので、「—」の行で 数値-"" になり #VALUE! になる。
+      そのため未設定は空文字ではなく -1 で表し、条件は IF の入れ子(必要な側しか計算しない)で書く"""
     now = f"準備数計算!{NOW_CELL}"
     peak = f"準備数計算!{PEAK_START}"
     hold = f'INDEX(準備数計算!$O${ROW_M0}:$O${ROW_M0 + N_SLOTS - 1},$J{r})'
-    # L=ピークまで何分(符号つき) / M=保持時間(数値でなければ空) / N=調理の目安(数値でなければ空)
+    # L=ピークまで何分(符号つき。出せないときは空) / M=保持時間 / N=調理の目安 (どちらも未設定は -1)
     ws[f"L{r}"] = (f'=IF(OR($J{r}="",NOT(ISNUMBER({now})),NOT(ISNUMBER({peak}))),"",'
                    f'ROUND(({peak}-{now})*1440,0))')
-    ws[f"M{r}"] = f'=IF($J{r}="","",IF(ISNUMBER({hold}),{hold},""))'
-    ws[f"N{r}"] = f'=IF($J{r}="","",IF(ISNUMBER($E{r}),$E{r},""))'
-    early = f"($L{r}-$M{r})"                      # 開始目安まで何分
+    ws[f"M{r}"] = f'=IF($J{r}="",-1,IF(ISNUMBER({hold}),{hold},-1))'
+    ws[f"N{r}"] = f'=IF($J{r}="",-1,IF(ISNUMBER($E{r}),$E{r},-1))'
+    early = f"($L{r}-$M{r})"                      # 開始目安(ピーク開始−保持時間)まで何分
     slack = f"($L{r}-$N{r})"                      # 今から作り始めたときの余裕
     ws[f"{WHEN_COL}{r}"] = (
         f'=IF(OR($J{r}="",$L{r}=""),"",'
         f'IF(ABS($L{r})>720,"⚠ ⑦ いまの時刻を確認",'
         f'IF($L{r}<0,"⚠ ピーク開始を過ぎています",'
-        f'IF(AND($N{r}<>"",{slack}<0),"⚠ ' + '"&' + mins_text(f"-{slack}") + '&" 足りません",'
-        f'IF(AND($M{r}<>"",{early}>0),"⏳ あと"&' + mins_text(early) + ','
-        f'IF($M{r}="","余裕 "&' + mins_text(f"MAX(0,{slack})") + ',"▶ 今すぐ"))))))')
+        f'IF($N{r}<0,'
+        f'  IF($M{r}<0,"—","⏳ あと"&' + mins_text(f"MAX(0,{early})") + '),'
+        f'  IF({slack}<0,"⚠ "&' + mins_text(f"-{slack}") + '&" 足りません",'
+        f'  IF($M{r}<0,"余裕 "&' + mins_text(f"MAX(0,{slack})") + ','
+        f'  IF({early}>0,"⏳ あと"&' + mins_text(early) + ',"▶ 今すぐ")))))))')
     style_range(ws, f"{WHEN_COL}{r}", font=fnt(10.5, True, "5B6472"),
                 alignment=align("center"), border=BORDER_LIGHT)
     for c in ("L", "M", "N"):
