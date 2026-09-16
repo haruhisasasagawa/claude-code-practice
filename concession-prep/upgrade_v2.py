@@ -54,7 +54,7 @@ SHEET_PROTECTION = dict(
 # 入力できるセル。ここ以外はロックし、全シートを保護する(貼付シートは列ごと解放済み)
 INPUT_CELLS = {
     "期間データ": ["C6:E6", "C10:I10", "E12", "B14:B33", "E14:F33", "G14:K33", "B37:B48"],
-    "準備数計算": ["D4:D8", "O5:O6"],
+    "準備数計算": ["D4:D8", "O5:O6", "O8"],
     "印刷用": ["H2"],
     "係数算出": ["C4:H4"],
     "商品別の波": ["D3"],
@@ -65,6 +65,8 @@ VIEW_CELL = f'印刷用!${VIEW_ADDR[0]}${VIEW_ADDR[1:]}'
 CK_SHEET, CK_ROW0, CK_ROWS = "調理時間", 6, 30
 CK_NAME_COL, CK_MIN_COL = "B", "J"                    # 商品名 / 所要時間(分)
 PEAK_START, PEAK_END = '$O$5', '$O$6'                 # ⑥ ピーク時間(準備数計算)
+NOW_CELL = '$O$8'                                     # ⑦ いま(現在時刻・空欄可)
+WHEN_COL = 'K'                                        # 印刷用「いつ作る」(画面のみ・印刷範囲の外)
 CALC_LAST_COL = 'Q'                                   # 準備数計算の表の右端列
 
 
@@ -222,6 +224,18 @@ def upgrade_calc(ws):
     ws.add_data_validation(dv_time)
     dv_time.add("O5:O6")
 
+    # ⑦ いま(現在時刻)。空欄でもこれまでどおり動く。入れると印刷用の「いつ作る」が出る。
+    # NOW() は使わない: 揮発性で開くたびに変わり、刷った紙が何時の状態か分からなくなるため
+    note(ws, "N8", "⑦ いま", 9, INK, h="right")
+    style_range(ws, "O8", font=fnt(10.5, True), fl=fill(F_INPUT),
+                alignment=align("center"), border=BORDER_INPUT, num="h:mm")
+    note(ws, "P8:Q8", "← 17:05 のように（空欄でもOK）", 8, GRAY)
+    ws["O8"].comment = mk_comment("いまの時刻を 17:05 のように入力します（Ctrl+; ではなく手入力。"
+                                  "空欄でもこれまでどおり使えます）。入れると印刷用の画面に"
+                                  "「いつ作る」（あと何分／間に合わない）が出て、紙には"
+                                  "「いま ○:○○ 時点」と刷られます。刷る直前に入れ直してください。")
+    dv_time.add("O8")
+
     # 期間A状態表示の参照ズレ修正(店舗版はG4→B7へ移動済みだが参照が旧G4のまま)
     b9 = (ftext(ws["B9"]).replace("期間データ!$G$4", "期間データ!$B$7")
           .replace("G列「比較期間（参考）」", "N列「比較期間（参考）」")
@@ -232,6 +246,11 @@ def upgrade_calc(ws):
           '"⚠ 事前準備率が未入力か0以下です（100%扱い）。","")'
           '&" "&IF($M$12>0,"⚠ 販売予測数・作る数が計算どおりでない行があります（"&$M$12&"件）。'
           '数式が手で書き換えられた可能性があります（元のファイルで確認してください）。","")'
+          '&" "&IF(AND(ISNUMBER($O$8),ISNUMBER($O$5),ABS($O$5-$O$8)*1440>720),'
+          '"※ ⑦ いまの時刻とピーク開始が12時間以上離れています'
+          '（前回入力した時刻が残っていませんか）。","")'
+          '&" "&IF(AND(ISNUMBER($O$8),ISNUMBER($O$5),$O$5-$O$8<0,ABS($O$5-$O$8)*1440<=720),'
+          '"※ ⑥ ピーク開始の時刻を過ぎています（翌日のピークは 25:30 のように入力します）。","")'
           '&" "&IF($D$6="","⚠ ③時間帯が選ばれていません（係数×100%で計算中）。","")'
           '&" "&IF(AND(ISNUMBER($D$8),$D$8>0,OR($D$8>200,$D$8<>INT($D$8))),'
           '"⚠ 事前準備率が想定外の値です（1〜200の整数で入力。入力値のまま計算中）。","")'
@@ -456,6 +475,52 @@ def upgrade_calib(ws):
     ws.protection.sheet = True
 
 
+def mins_text(x):
+    """分(正の数)を「90分」「1時間30分」の形に組み立てるExcel式を返す"""
+    return (f'IF({x}>=60,INT({x}/60)&"時間"&IF(MOD({x},60)=0,"",MOD({x},60)&"分"),{x}&"分")')
+
+
+def when_header(ws):
+    """印刷用の「いつ作る」列(画面のみ)の見出しと幅。印刷範囲 A1:I28 の外なので紙は変わらない"""
+    ws.column_dimensions[WHEN_COL].width = 21
+    for c in ("L", "M", "N"):
+        ws.column_dimensions[c].width = 8
+        ws.column_dimensions[c].hidden = True
+    ws[f"{WHEN_COL}7"] = "いつ作る\n(画面のみ・印刷されません)"
+    style_range(ws, f"{WHEN_COL}7", font=fnt(8.5, True, GRAY),
+                alignment=align("center", "center", True), border=BORDER_LIGHT)
+    ws[f"{WHEN_COL}6"] = ('=IF(NOT(ISNUMBER(準備数計算!' + NOW_CELL + ')),'
+                          '"← 準備数計算の「⑦ いま」に今の時刻を入れると出ます","")')
+    style_range(ws, f"{WHEN_COL}6", font=fnt(8.5, False, GRAY), alignment=align("left"))
+
+
+def when_row(ws, r):
+    """「いつ作る」1行ぶん。⑦が空欄なら全部空になり、これまでと何も変わらない。
+    時刻の引き算は MOD で折り返さない(折り返すと『遅れ』が『あと19時間』に化ける)。
+    翌日のピークは ⑥ に 25:30 のように24時間超えで入れる運用(既存の閉店時刻と同じ)"""
+    now = f"準備数計算!{NOW_CELL}"
+    peak = f"準備数計算!{PEAK_START}"
+    hold = f'INDEX(準備数計算!$O${ROW_M0}:$O${ROW_M0 + N_SLOTS - 1},$J{r})'
+    # L=ピークまで何分(符号つき) / M=保持時間(数値でなければ空) / N=調理の目安(数値でなければ空)
+    ws[f"L{r}"] = (f'=IF(OR($J{r}="",NOT(ISNUMBER({now})),NOT(ISNUMBER({peak}))),"",'
+                   f'ROUND(({peak}-{now})*1440,0))')
+    ws[f"M{r}"] = f'=IF($J{r}="","",IF(ISNUMBER({hold}),{hold},""))'
+    ws[f"N{r}"] = f'=IF($J{r}="","",IF(ISNUMBER($E{r}),$E{r},""))'
+    early = f"($L{r}-$M{r})"                      # 開始目安まで何分
+    slack = f"($L{r}-$N{r})"                      # 今から作り始めたときの余裕
+    ws[f"{WHEN_COL}{r}"] = (
+        f'=IF(OR($J{r}="",$L{r}=""),"",'
+        f'IF(ABS($L{r})>720,"⚠ ⑦ いまの時刻を確認",'
+        f'IF($L{r}<0,"⚠ ピーク開始を過ぎています",'
+        f'IF(AND($N{r}<>"",{slack}<0),"⚠ ' + '"&' + mins_text(f"-{slack}") + '&" 足りません",'
+        f'IF(AND($M{r}<>"",{early}>0),"⏳ あと"&' + mins_text(early) + ','
+        f'IF($M{r}="","余裕 "&' + mins_text(f"MAX(0,{slack})") + ',"▶ 今すぐ"))))))')
+    style_range(ws, f"{WHEN_COL}{r}", font=fnt(10.5, True, "5B6472"),
+                alignment=align("center"), border=BORDER_LIGHT)
+    for c in ("L", "M", "N"):
+        style_range(ws, f"{c}{r}", font=fnt(8, False, GRAY))
+
+
 def upgrade_print(ws):
     explode_column_groups(ws)
     for c, w in {"C": 58, "D": 9, "E": 8, "F": 10, "G": 17.7, "H": 11, "I": 2.4}.items():
@@ -488,7 +553,9 @@ def upgrade_print(ws):
     dv_view.add(VIEW_ADDR)
     ws["B4"] = (ftext(ws["B4"]).rstrip()
                 + f'&IF(ISNUMBER(準備数計算!{PEAK_START}),"　｜　ピーク "&TEXT(準備数計算!{PEAK_START},"h:mm")'
-                + f'&IF(ISNUMBER(準備数計算!{PEAK_END}),"〜"&TEXT(準備数計算!{PEAK_END},"h:mm"),""),"")')
+                + f'&IF(ISNUMBER(準備数計算!{PEAK_END}),"〜"&TEXT(準備数計算!{PEAK_END},"h:mm"),""),"")'
+                + f'&IF(ISNUMBER(準備数計算!{NOW_CELL}),"　｜　いま "'
+                + f'&TEXT(準備数計算!{NOW_CELL},"h:mm")&" 時点","")')
 
     navy_header(ws, "B7", "作る順", 10)
     navy_header(ws, "C7", "商品名", 10)
@@ -529,6 +596,8 @@ def upgrade_print(ws):
                     border=Border(bottom=thin, top=thin, left=coral_side, right=coral_side))
         style_range(ws, f"H{r}", font=fnt(12, False, "B9C0CC"), alignment=align("center"), border=BORDER_LIGHT)
         style_range(ws, f"J{r}", font=fnt(8, False, GRAY))
+        when_row(ws, r)
+    when_header(ws)
     ws.conditional_formatting = ConditionalFormattingList()
     ws.conditional_formatting.add("F8:F27", FormulaRule(
         formula=[f'F8="{PRI_HI}"'], font=Font(name=FONT_NAME, size=12, bold=True, color=CORAL)))
@@ -617,7 +686,13 @@ def upgrade_guide(ws):
         f"変えたい商品は「タイミング(手動)」で {PRI_HI}／{PRI_LO} を選べます（未入力は「—」。"
         f"「{VIEW_HI}」の表示には含まれますが、作る順では最後に並びます）。",
         "・⑥ ピーク時間（準備数計算・入力ブロックの右）：これから準備するピークの開始（と終了）を 17:30 のように入力すると、"
-        "商品ごとの「仕込み開始(目安)」＝ピーク開始 − 保持時間 が出ます（保持時間が長い商品ほど早く、短い商品ほど直前）。",
+        "商品ごとの「仕込み開始(目安)」＝ピーク開始 − 保持時間 が出ます（保持時間が長い商品ほど早く、短い商品ほど直前）。"
+        "翌日にまたぐピーク（深夜0時30分など）は 24:30 のように24時間を超えた形で入力してください（閉店時刻と同じ書き方です）。",
+        "・⑦ いま（⑥のすぐ下）：今の時刻を 17:05 のように入力すると、印刷用の画面に「いつ作る」の列が出ます"
+        "（⏳ あと○分／▶ 今すぐ／⚠ ○分 足りません）。紙の見出しにも「いま ○:○○ 時点」と刷られるので、"
+        "いつ出した紙かが分かります。空欄のままでも今までどおり使えます（列は空になるだけ）。"
+        "自動では動かないので、刷る直前に入れ直してください（自動で動くようにすると、刷った紙が何時のものか分からなくなるためです）。"
+        "ピーク開始と12時間以上離れていると、前回の値が残っている可能性として状態表示に ※ が出ます。",
         "・印刷用は「作る順」＝保持時間の長い順に上から並びます（長く持つものは先に作っておき、短いものはピークに合わせて作る）。"
         "「調理時間」シートを入れると「調理の目安」（1台で作りきる分数）も並びます。"
         f"右上のプルダウンで「{VIEW_HI}」「{VIEW_LO}」に絞り込めます。保持時間の短い商品ほど作るタイミングが"

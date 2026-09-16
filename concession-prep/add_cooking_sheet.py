@@ -52,6 +52,9 @@ assert (COL_NAME, COL_MIN) == (CK_NAME_COL, CK_MIN_COL)   # 印刷用「調理�
 C_T0 = 13                                                        # 1個の列(M)
 COL_T1, COL_TN = get_column_letter(C_T0), get_column_letter(C_T0 + COUNTS - 1)   # M..V
 LAST = COL_TN
+# 計算用の列(印刷範囲の外・非表示)。機器ごとの集計で使う
+COL_SUM = get_column_letter(C_T0 + COUNTS)          # W: 所要時間の数値版(数値でなければ0)
+COL_ONE = get_column_letter(C_T0 + COUNTS + 1)      # X: 1回ぶんの分数(数値でなければ0)
 MEMO_WIDTH = 44
 
 # マニュアルの項目名 → 売上CSVの商品名を拾うキーワード。各要素は「いずれかを含む」、
@@ -230,12 +233,15 @@ def build_sheet(wb, manual, candidates, sample_label=False):
     ws = wb.create_sheet(SHEET, index=wb.sheetnames.index("期間データ") + 1)
     ws.sheet_properties.tabColor = TAB_COLOR
     ws.sheet_view.showGridLines = False
-    widths = {"A": 5, COL_NAME: 30, COL_LABEL: 26, COL_MACH: 24, COL_COND: 18, COL_MAX: 8, COL_GAP: 8,
-              COL_NEED: 9, COL_RUNS: 7, COL_MIN: 11, COL_HOLD: 9, COL_MEMO: MEMO_WIDTH}
+    widths = {"A": 5, COL_NAME: 30, COL_LABEL: 26, COL_MACH: 24, COL_COND: 18, COL_MAX: 8, COL_GAP: 9,
+              COL_NEED: 9, COL_RUNS: 7, COL_MIN: 12, COL_HOLD: 9, COL_MEMO: MEMO_WIDTH}
     for k in range(COUNTS):
         widths[get_column_letter(C_T0 + k)] = 6.2
     for c, w in widths.items():
         ws.column_dimensions[c].width = w
+    for c in (COL_SUM, COL_ONE):            # 計算用。印刷範囲の外に置いたうえで非表示にする
+        ws.column_dimensions[c].width = 8
+        ws.column_dimensions[c].hidden = True
     title_band(ws, f"B1:{LAST}1", "　🍳 調理時間｜商品ごとの調理条件（マニュアルから転記・手修正OK）")
     ws.row_dimensions[1].height = 34
     desc = ("商品名はプルダウン（貼ったCSVの商品）。調理機器・条件・一度に最大・回転の間隔・個数別の時間(秒)は"
@@ -327,6 +333,11 @@ def build_sheet(wb, manual, candidates, sample_label=False):
         ws[f"{COL_MIN}{r}"] = (f'=IF(OR(${COL_NAME}{r}="",NOT(ISNUMBER(${COL_RUNS}{r}))),"",'
                                f'IF(NOT(ISNUMBER({tsel})),"⚠ その個数は不可／時間なし",'
                                f'(${COL_RUNS}{r}*{tsel}+MAX(0,${COL_RUNS}{r}-1)*{gap})/60))')
+        # 計算用(印刷範囲の外): 所要時間の数値版と「1回ぶんの分数」。
+        # 機器ごとの集計で MAX/SUMPRODUCT に渡すため、数値でないときは0にしておく
+        ws[f"{COL_SUM}{r}"] = f'=IF(ISNUMBER(${COL_MIN}{r}),${COL_MIN}{r},0)'
+        ws[f"{COL_ONE}{r}"] = (f'=IF(OR(${COL_NAME}{r}="",NOT(ISNUMBER(${COL_MAX}{r})),'
+                               f'${COL_MAX}{r}<1,${COL_MAX}{r}>{COUNTS},NOT(ISNUMBER({tsel}))),0,{tsel}/60)')
         hold_rng = f"期間データ!$E${ROW_P0}:$E${ROW_P0 + N_SLOTS - 1}"
         name_rng = f"期間データ!$B${ROW_P0}:$B${ROW_P0 + N_SLOTS - 1}"
         ws[f"{COL_HOLD}{r}"] = (f'=IF(${COL_NAME}{r}="","",IFERROR(IF(ISNUMBER(INDEX({hold_rng},MATCH(${COL_NAME}{r},{name_rng},0))),'
@@ -359,56 +370,86 @@ def build_sheet(wb, manual, candidates, sample_label=False):
     machines = list(dict.fromkeys(rec["machine"] for rec in manual if rec["machine"]))
     mr0 = tr + 2
     chip(ws, f"{COL_NAME}{mr0}:{COL_COND}{mr0}",
-         "  ⏱ 機器ごとの合計所要時間（同じ機器の商品は順番に作るため、こちらが実際の目安。台数は劇場ごとに入力）",
+         "  ⏱ 機器ごとの段取り（同じ機器のものは順番に作ります。ちがう機器なら同時に進められます。台数は劇場ごとに入力）",
          CHIP_NAVY, INK, 9.5)
     hmr = mr0 + 1
     ws[f"{COL_MACH}{hmr}"] = "調理機器"
     ws[f"{COL_MAX}{hmr}"] = "台数"
+    ws[f"{COL_GAP}{hmr}"] = "1台なら\n(分)"
     ws[f"{COL_NEED}{hmr}"] = "作る数\n(自動)"
-    ws[f"{COL_MIN}{hmr}"] = "所要時間\n(分・台数で割る)"
+    ws[f"{COL_MIN}{hmr}"] = "ふさがる時間\n(分)"
     style_range(ws, f"{COL_MACH}{hmr}:{COL_MIN}{hmr}", font=fnt(9, True, "FFFFFF"), fl=fill(NAVY),
                 alignment=align("center", "center", True), border=BORDER_LIGHT)
     ws.row_dimensions[hmr].height = 28
     MACH_ROW0 = hmr + 1
     mr = hmr
     n_mach = len(machines)
+    mr_last = hmr + n_mach + MACH_BLANKS          # 機器行の最終行(重複チェックで使う)
     for k, mach in enumerate(machines + [None] * MACH_BLANKS):      # 空き行は専用機・追加機器用
         mr += 1
         ws[f"{COL_MACH}{mr}"] = mach
         ws[f"{COL_MAX}{mr}"] = 1 if mach else None
         ws[f"{COL_NAME}{mr}"] = "機器（上の表の調理機器と同じ表記）" if k == n_mach else None
         units = f'MAX(1,IF(ISNUMBER(${COL_MAX}{mr}),${COL_MAX}{mr},1))'
-        has_min = (f'SUMPRODUCT((${COL_MACH}${first}:${COL_MACH}${lastrow}={COL_MACH}{mr})'
-                   f'*ISNUMBER(${COL_MIN}${first}:${COL_MIN}${lastrow}))')
+        # 機器名の照合は SUMIF ではなく SUMPRODUCT の「=」で行う。SUMIF は Excel だと
+        # 機器名の * ? がワイルドカードとして効いてしまい、LibreOfficeと答えが変わるため
+        same = f'(${COL_MACH}${first}:${COL_MACH}${lastrow}=${COL_MACH}{mr})'
+        has_min = f'SUMPRODUCT({same}*ISNUMBER(${COL_MIN}${first}:${COL_MIN}${lastrow}))'
+        # 1台なら＝同じ機器の所要時間をそのまま足した分数(上限)
+        one_unit = f'SUMPRODUCT({same}*${COL_SUM}${first}:${COL_SUM}${lastrow})'
+        # 台数で手分けしても、1回ぶんの調理より短くはならない(下限)。
+        # 所要時間は「回数」本のバッチに分かれるので、分けられない最小単位は1回ぶん
+        longest = f'SUMPRODUCT(MAX({same}*${COL_ONE}${first}:${COL_ONE}${lastrow}))'
+        ws[f"{COL_GAP}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",IF({has_min}=0,"—",{one_unit}))')
         ws[f"{COL_MIN}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",IF({has_min}=0,"—",'
-                                f'SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},${COL_MIN}${first}:${COL_MIN}${lastrow})'
-                                f'/{units}))')
-        ws[f"{COL_NEED}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},'
-                                 f'${COL_NEED}${first}:${COL_NEED}${lastrow}))')
+                                f'MAX({longest},{one_unit}/{units})))')
+        ws[f"{COL_NEED}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",SUMPRODUCT({same}*'
+                                 f'IF(ISNUMBER(${COL_NEED}${first}:${COL_NEED}${lastrow}),'
+                                 f'${COL_NEED}${first}:${COL_NEED}${lastrow},0)))')
         style_range(ws, f"{COL_NAME}{mr}", font=fnt(8.5, False, GRAY), alignment=align("right"))
         style_range(ws, f"{COL_MACH}{mr}:{COL_COND}{mr}", font=fnt(9.5), fl=fill(F_INPUT), alignment=align("left"), border=BORDER_LIGHT)
         style_range(ws, f"{COL_MAX}{mr}", font=fnt(9.5), fl=fill(F_INPUT), alignment=align("center"), border=BORDER_LIGHT, num='0"台"')
+        style_range(ws, f"{COL_GAP}{mr}", font=fnt(9.5, False, "5B6472"), fl=fill(F_AUTO),
+                    alignment=align("center"), border=BORDER_LIGHT, num='0.0"分"')
         style_range(ws, f"{COL_NEED}{mr}", font=fnt(9.5), fl=fill(F_AUTO), alignment=align("center"), border=BORDER_LIGHT, num="0")
         style_range(ws, f"{COL_MIN}{mr}", font=fnt(10, True, CORAL), fl=fill(F_AUTO), alignment=align("center"), border=BORDER_LIGHT, num='0.0"分"')
-        ws[f"{COL_HOLD}{mr}"] = (f'=IF(${COL_MACH}{mr}="","",'
-                                 f'IF(OR(${COL_MAX}{mr}="",NOT(ISNUMBER(${COL_MAX}{mr})),${COL_MAX}{mr}<1),'
-                                 f'"⚠ 台数が未入力/数値でないため1台で計算",'
-                                 f'IF(AND(ISNUMBER(${COL_MIN}{mr}),'
-                                 f'COUNTIFS(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},'
-                                 f'${COL_HOLD}${first}:${COL_HOLD}${lastrow},"<"&${COL_MIN}{mr})>0),'
-                                 f'"⚠ この機器で作り切る時間が、一番持ちの短い商品の保持時間を超えています（台数を増やすか分けて作る）","")))')
+        # 注意書き。入れ子にすると先に当たったものだけしか出ないので「&」で連結する。
+        # 保持時間の超過は2段階: ふさがる時間(手分けしても)で超えるなら⚠、
+        # 1台なら超えるだけなら※(手分け次第)。台数を増やすと⚠が消えるのは
+        # 「手分けが効けば間に合う」という意味なので、文言でそう書く
+        over_run = (f'COUNTIFS(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},'
+                    f'${COL_HOLD}${first}:${COL_HOLD}${lastrow},"<"&${COL_MIN}{mr})')
+        over_one = (f'COUNTIFS(${COL_MACH}${first}:${COL_MACH}${lastrow},${COL_MACH}{mr},'
+                    f'${COL_HOLD}${first}:${COL_HOLD}${lastrow},"<"&${COL_GAP}{mr})')
+        no_time = f'SUMPRODUCT({same}*(${COL_NAME}${first}:${COL_NAME}${lastrow}<>"")*(1-ISNUMBER(${COL_MIN}${first}:${COL_MIN}${lastrow})))'
+        ws[f"{COL_HOLD}{mr}"] = (
+            f'=IF(${COL_MACH}{mr}="","",'
+            f'IF(COUNTIF(${COL_MACH}${MACH_ROW0}:${COL_MACH}${mr_last},${COL_MACH}{mr})>1,'
+            f'"⚠ 同じ機器名が2行あります（1行にまとめて台数を入れてください）　","")'
+            f'&IF(OR(${COL_MAX}{mr}="",NOT(ISNUMBER(${COL_MAX}{mr})),${COL_MAX}{mr}<1),'
+            f'"⚠ 台数が未入力/数値でないため1台で計算　","")'
+            f'&IF(AND(ISNUMBER(${COL_MIN}{mr}),ISNUMBER(${COL_MAX}{mr}),${COL_MAX}{mr}>1),'
+            f'${COL_MAX}{mr}&"台で手分けして "&ROUNDUP(${COL_MIN}{mr},0)&"分（1台なら "'
+            f'&ROUNDUP(${COL_GAP}{mr},0)&"分）　","")'
+            f'&IF(AND(ISNUMBER(${COL_MIN}{mr}),{over_run}>0),'
+            f'"⚠ 手分けしても作り切るまでに、一番持ちの短い商品の保持時間を超えます（台数を増やすか分けて作る）　",'
+            f'IF(AND(ISNUMBER(${COL_GAP}{mr}),{over_one}>0),'
+            f'"※ 1台で作り切ると、一番持ちの短い商品の保持時間を超えます（手分けできれば間に合います）　",""))'
+            f'&IF({no_time}>0,"※ この機器の商品のうち "&{no_time}&"件は調理時間が出ていないので、上の分数に入っていません",""))')
         style_range(ws, f"{COL_HOLD}{mr}:{COL_MEMO}{mr}", font=fnt(8.5, False, CORAL), alignment=align("left"))
     # 機器ごとの合計に入っていない作る数(機器名が空欄・表記違い)を可視化する
     ws[f"{COL_NAME}{mr + 1}"] = "機器ごとの合計に入っていない作る数 →"
     ws[f"{COL_NEED}{mr + 1}"] = (f'=IF(NOT(ISNUMBER(${COL_NEED}{tr})),"",'
-                                 f'${COL_NEED}{tr}-SUMPRODUCT(SUMIF(${COL_MACH}${first}:${COL_MACH}${lastrow},'
-                                 f'${COL_MACH}${MACH_ROW0}:${COL_MACH}{mr},${COL_NEED}${first}:${COL_NEED}${lastrow})))')
+                                 f'${COL_NEED}{tr}-SUM(${COL_NEED}${MACH_ROW0}:${COL_NEED}{mr}))')
     ws[f"{COL_MIN}{mr + 1}"] = (f'=IF(NOT(ISNUMBER(${COL_NEED}{mr + 1})),"",'
-                                f'IF(${COL_NEED}{mr + 1}=0,"OK","⚠ 調理機器が空欄か表記違いの商品があります"))')
+                                f'IF(${COL_NEED}{mr + 1}=0,"OK",'
+                                f'IF(${COL_NEED}{mr + 1}>0,"⚠ 調理機器が空欄か表記違いの商品があります",'
+                                f'"⚠ 機器ごとの合計に同じ機器名が2行あります（1行にまとめて台数を入れてください）")))')
     style_range(ws, f"{COL_NAME}{mr + 1}:{COL_GAP}{mr + 1}", font=fnt(8.5, False, GRAY), alignment=align("right"))
     style_range(ws, f"{COL_NEED}{mr + 1}", font=fnt(9.5, True), alignment=align("center"), num="0")
     style_range(ws, f"{COL_MIN}{mr + 1}:{COL_MEMO}{mr + 1}", font=fnt(8.5, True, CORAL), alignment=align("left"))
-    ws[f"{COL_HOLD}{hmr}"] = "← 同じ機器の商品を順番に作り、台数で割った目安"
+    ws[f"{COL_HOLD}{hmr}"] = ("← 同じ機器の商品は順番に作ります。「ふさがる時間」は台数で手分けしたときの目安で、"
+                              "1回ぶんの調理より短くはなりません（本当の時間は「ふさがる時間」〜「1台なら」の間）")
     style_range(ws, f"{COL_HOLD}{hmr}:{COL_MEMO}{hmr}", font=fnt(8.5, False, GRAY), fl=fill("FFFFFF"),
                 alignment=align("left"))
     dv_units = DataValidation(type="whole", operator="greaterThanOrEqual", formula1="1", allow_blank=True,
@@ -417,11 +458,16 @@ def build_sheet(wb, manual, candidates, sample_label=False):
     dv_units.add(f"{COL_MAX}{MACH_ROW0}:{COL_MAX}{mr}")
     nr = mr + 2                                  # mr+1 は上の照合行
     lines = ["※ 商品ごとの所要時間は1台で作りきる場合の調理時間です（仕込み・盛り付けの手間は含みません）。"
-             "機器の台数は下の「機器ごとの合計」で劇場ごとに入力してください（合計を台数で割ります）。"
+             "機器の台数は下の「機器ごとの段取り」で劇場ごとに入力してください。"
              "同じ商品でも機器で時間が違うので、備考の他機種の時間（下段の原本にも）を見て使う機器に合わせて "
              "調理機器・時間・一度に最大・備考 を書き換えてください。名寄せの ❓⚠ は確認したら消してOKです。",
              "※ 所要時間が保持時間より長い商品（赤い背景）は、1台で作り切るとピーク前に最初の分が保持時間を超えます。"
-             "台数を増やすか、何回かに分けてピークに向けて作る目安にしてください（印刷用の「調理の目安」も1台の分数です）。"]
+             "台数を増やすか、何回かに分けてピークに向けて作る目安にしてください（印刷用の「調理の目安」も1台の分数です）。",
+             "※ 台数の効き方：同じ機器の商品は順番に作るので、1台なら所要時間をそのまま足した分数（「1台なら」）になります。"
+             "台数を増やすと手分けできますが、1回ぶんの調理は分けられないので、「ふさがる時間」は"
+             "〈一番長い1回ぶん〉と〈1台なら ÷ 台数〉の大きいほうです。"
+             "例：レンジ1台でポップチキン20分＋スナックじゃが4分なら24分。2台にしても12分にはならず、"
+             "一番長い1回ぶんを下回りません（本当の時間は「ふさがる時間」〜「1台なら」の間に入ります）。"]
     lines.append("※ 台数は「同じように使える台数」です。専用機があるときは台数をまとめず、機器名を分けて1台ずつにしてください"
                  "（例：チョコの行の調理機器を「専用チュリトスオーブン（チョコ専用）」に書き換え、下の空き行に同じ名前を足す）。"
                  "同じ機械で設定だけ違うとき（電子レンジの出力など）は機器名を同じにまとめて台数を入れると、合計を台数で割ります"
@@ -521,7 +567,8 @@ def build_sheet(wb, manual, candidates, sample_label=False):
 
 GUIDE_LINE = ("・調理時間（シート）：調理マニュアルの機器・個数別の時間・一度に最大を商品ごとに転記した表です（手修正OK）。"
               "準備数計算の作る数から 回数と所要時間（分・1台）を自動で出し、保持時間と比べられます。"
-              "「機器ごとの合計」に機器の台数（レンジ・ブラウナーなど）を入れると、台数で割った目安が出ます。"
+              "「機器ごとの段取り」に機器の台数（レンジ・ブラウナーなど）を入れると、"
+              "同じ機器を順番に作り終えるまでの「ふさがる時間」と「1台なら」の分数が出ます。"
               "新商品は商品名をプルダウンで選び、下段のマニュアル原本を見て時間を入れてください。"
               "備考の ❓⚠ は名寄せや機器の要確認です。")
 

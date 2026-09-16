@@ -491,12 +491,15 @@ for _sh, _cell, _locked in [("期間データ", "C6", False), ("期間データ"
                             ("期間データ", "C14", True), ("期間データ", "J6", True),
                             ("準備数計算", "D4", False), ("準備数計算", "D8", False), ("準備数計算", "O5", False),
                             ("準備数計算", "F11", True), ("準備数計算", "G11", True), ("準備数計算", "B9", True),
+                            ("準備数計算", "O8", False),
                             ("印刷用", "H2", False), ("印刷用", "C8", True), ("印刷用", "G8", True),
+                            ("印刷用", "K8", True),
                             ("係数算出", "C4", False), ("商品別の波", "D3", False), ("使い方", "C10", True)]:
     check(f"{_sh}!{_cell}({'ロック' if _locked else '入力可'})", wf[_sh][_cell].protection.locked, _locked)
 if "調理時間" in wf.sheetnames:
     for _cell, _locked in [("B6", False), ("D6", False), ("F6", False), ("L6", False), ("M6", False),
-                           ("H6", True), ("I6", True), ("J6", True), ("K6", True)]:
+                           ("G6", False), ("H6", True), ("I6", True), ("J6", True), ("K6", True),
+                           ("W6", True), ("X6", True)]:
         check(f"調理時間!{_cell}({'ロック' if _locked else '入力可'})", wf["調理時間"][_cell].protection.locked, _locked)
 # 貼り付け領域は「列のスタイル」で解放してある(セル単位ではないのでopenpyxlのセル読みでは分からない)。
 # ここが閉じるとCSVの貼り付けが保護に弾かれるので、列スタイルのロック状態を直接見る
