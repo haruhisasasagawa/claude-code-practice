@@ -312,7 +312,7 @@ ROSTER_COLS = {
     "H": "名簿行", "I": "従業員番号", "J": "名前", "K": "所属", "L": "資格", "M": "出勤日数", "N": "欠勤日数",
     "O": "確定シフト日数", "P": "出勤率", "Q": "欠勤率", "R": "勤務時間", "S": "深夜時間", "T": "平均/日",
     "U": "却下回数", "V": "名前順キー", "W": "出勤率順位", "X": "出勤率順キー(降順)", "Y": "ワーストキー(昇順)",
-    "AR": "在籍月数", "AT": "名前(名前順)", "AU": "番号(名前順)", "AV": "名簿行(名前順)",
+    "AR": "在籍月数", "AS": "出勤率整数キー", "AT": "名前(名前順)", "AU": "番号(名前順)", "AV": "名簿行(名前順)",
 }
 MONTH_WORK = ["Z", "AA", "AB", "AC", "AD", "AE"]      # 月別出勤日数
 MONTH_ABS = ["AF", "AG", "AH", "AI", "AJ", "AK"]      # 月別欠勤日数
@@ -382,11 +382,12 @@ def build_roster(wb, maxrows):
         ws[f"T{r}"] = f'=IF({key}="","",IF($M{r}=0,"",$R{r}/$M{r}))'
         ws[f"U{r}"] = f'=IF({key}="","",{sum6("Q", maxrows, key)})'
         ws[f"V{r}"] = f'=IF($J{r}="","",COUNTIFS($J$2:$J${MAXSTAFF + 1},"<"&$J{r},$J$2:$J${MAXSTAFF + 1},"?*")+COUNTIF($J$2:$J{r},$J{r}))'
-        ws[f"W{r}"] = f'=IF($P{r}="","",COUNTIF($P$2:$P${MAXSTAFF + 1},">"&$P{r})+1)'
-        ws[f"X{r}"] = f'=IF($P{r}="","",$W{r}+COUNTIF($P$2:$P{r},$P{r})-1)'
-        ws[f"Y{r}"] = (f'=IF($P{r}="","",IF($O{r}<{sets}!$B$5,"",'
-                       f'COUNTIFS($P$2:$P${MAXSTAFF + 1},"<"&$P{r},$O$2:$O${MAXSTAFF + 1},">="&{sets}!$B$5)'
-                       f'+COUNTIFS($P$2:$P{r},$P{r},$O$2:$O{r},">="&{sets}!$B$5)))')
+        ws[f"AS{r}"] = f'=IF($P{r}="","",ROUND($P{r}*100000,0))'
+        ws[f"W{r}"] = f'=IF($AS{r}="","",COUNTIF($AS$2:$AS${MAXSTAFF + 1},">"&$AS{r})+1)'
+        ws[f"X{r}"] = f'=IF($AS{r}="","",$W{r}+COUNTIF($AS$2:$AS{r},$AS{r})-1)'
+        ws[f"Y{r}"] = (f'=IF($AS{r}="","",IF($O{r}<{sets}!$B$5,"",'
+                       f'COUNTIFS($AS$2:$AS${MAXSTAFF + 1},"<"&$AS{r},$O$2:$O${MAXSTAFF + 1},">="&{sets}!$B$5)'
+                       f'+COUNTIFS($AS$2:$AS{r},$AS{r},$O$2:$O{r},">="&{sets}!$B$5)))')
         for k in range(1, NSHEETS + 1):
             ws[f"{MONTH_WORK[k - 1]}{r}"] = f'=IF({key}="","",SUMIFS({calc_rng(k, "H", maxrows)},{calc_rng(k, "A", maxrows)},{key}))'
             ws[f"{MONTH_ABS[k - 1]}{r}"] = f'=IF({key}="","",SUMIFS({calc_rng(k, "I", maxrows)},{calc_rng(k, "A", maxrows)},{key}))'
@@ -622,7 +623,7 @@ def build_dashboard(wb, maxrows, select=None):
     all_rate = f"{ros}!$AY$6"
     tiles = [
         ("出勤日数", f"={V('M')}", '0"日"', f'=IF(${HC}$4="","","確定シフト "&{V("O")}&"日 のうち")'),
-        ("出勤率", f"={V('P')}", "0.0%", f'=IF(${HC}$6="","",IF({all_rate}="","","全体平均 "&TEXT({all_rate},"0.0%")&"｜"&{V("W")}&"位/"&{ros}!$AY$8&"人"))'),
+        ("出勤率", f"={V('P')}", "0.0%", f'=IF(${HC}$6="","",IF({all_rate}="","","全体平均 "&TEXT({all_rate},"0.0%")&"｜"&{V("W")}&"位"&IF(COUNTIF({ros}!$W$2:$W${ML},{V("W")})>1,"(同率)","")&"/"&{ros}!$AY$8&"人"))'),
         ("欠勤日数", f"={V('N')}", '0"日"', '="シフト当日に休みへ変更した日数"'),
         ("欠勤率", f"={V('Q')}", "0.0%", f'=IF(${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")))'),
         ("総勤務時間", f"={V('R')}", '0.0"h"', f'=IF(${HC}$4="","",IF({V("T")}="","","平均 "&TEXT({V("T")},"0.0")&" h／出勤日"))'),

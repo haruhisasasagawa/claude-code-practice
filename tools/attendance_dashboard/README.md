@@ -10,6 +10,7 @@
 |---|---|
 | `勤務実績ダッシュボード.xlsx` | 配布用ブック（2026年8月分のCSVが `CSV_1` に貼付済み） |
 | `build_dashboard.py` | 上記ブックを生成するスクリプト（openpyxl） |
+| `inject_values.py` | LibreOffice で再計算した結果を生成ブックにキャッシュ値として埋め込む（保護ビューやプレビューでも数値が見えるようにする） |
 
 ## ブックの構成
 
@@ -41,7 +42,14 @@ python build_dashboard.py out.xlsx --maxrows 8000                               
 ```
 
 上限は 1ヶ月 6,000 行・半年 400 名（`--maxrows`, `MAXSTAFF` で変更可）。
-生成直後のブックには計算結果が入っていないため、Excel で開いたときに自動で全再計算されます。
+
+生成直後のブックには計算結果（キャッシュ値）が入っておらず、Excel で開いたときに全再計算されます。
+配布用には、LibreOffice で再計算したコピーから値を埋め込んでおくと、保護ビューやプレビューでも数値が表示されます:
+
+```bash
+cp out.xlsx recalc.xlsx && soffice --headless ... (xlsx スキルの recalc.py で再計算)
+python inject_values.py out.xlsx recalc.xlsx 勤務実績ダッシュボード.xlsx
+```
 
 ## 検証
 
