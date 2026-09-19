@@ -147,7 +147,7 @@ def read_csv(path):
 
 
 # ---------------------------------------------------------------- シート: CSV_k
-def build_csv_sheet(wb, k, rows=None):
+def build_csv_sheet(wb, k, rows=None, paste_mode="excel"):
     ws = wb.create_sheet(S_CSV.format(k))
     ws.sheet_properties.tabColor = "1BAF7A"
     for j, h in enumerate(CSV_HEADERS, 1):
@@ -160,7 +160,7 @@ def build_csv_sheet(wb, k, rows=None):
     if rows:
         for i, row in enumerate(rows[1:], 2):
             for j, s in enumerate(row, 1):
-                v, fmt = paste_value(s)
+                v, fmt = paste_value(s) if paste_mode == "excel" else ((s or None), None)
                 if v is None:
                     continue
                 c = ws.cell(row=i, column=j, value=v)
@@ -381,11 +381,12 @@ def build_roster(wb, maxrows):
         ws[f"S{r}"] = f'=IF({key}="","",{sum6("N", maxrows, key)})'
         ws[f"T{r}"] = f'=IF({key}="","",IF($M{r}=0,"",$R{r}/$M{r}))'
         ws[f"U{r}"] = f'=IF({key}="","",{sum6("Q", maxrows, key)})'
-        ws[f"V{r}"] = f'=IF($J{r}="","",COUNTIF($J$2:$J${MAXSTAFF + 1},"<"&$J{r})+COUNTIF($J$2:$J{r},$J{r}))'
+        ws[f"V{r}"] = f'=IF($J{r}="","",COUNTIFS($J$2:$J${MAXSTAFF + 1},"<"&$J{r},$J$2:$J${MAXSTAFF + 1},"?*")+COUNTIF($J$2:$J{r},$J{r}))'
         ws[f"W{r}"] = f'=IF($P{r}="","",COUNTIF($P$2:$P${MAXSTAFF + 1},">"&$P{r})+1)'
         ws[f"X{r}"] = f'=IF($P{r}="","",$W{r}+COUNTIF($P$2:$P{r},$P{r})-1)'
         ws[f"Y{r}"] = (f'=IF($P{r}="","",IF($O{r}<{sets}!$B$5,"",'
-                       f'COUNTIF($P$2:$P${MAXSTAFF + 1},"<"&$P{r})+COUNTIF($P$2:$P{r},$P{r})))')
+                       f'COUNTIFS($P$2:$P${MAXSTAFF + 1},"<"&$P{r},$O$2:$O${MAXSTAFF + 1},">="&{sets}!$B$5)'
+                       f'+COUNTIFS($P$2:$P{r},$P{r},$O$2:$O{r},">="&{sets}!$B$5)))')
         for k in range(1, NSHEETS + 1):
             ws[f"{MONTH_WORK[k - 1]}{r}"] = f'=IF({key}="","",SUMIFS({calc_rng(k, "H", maxrows)},{calc_rng(k, "A", maxrows)},{key}))'
             ws[f"{MONTH_ABS[k - 1]}{r}"] = f'=IF({key}="","",SUMIFS({calc_rng(k, "I", maxrows)},{calc_rng(k, "A", maxrows)},{key}))'
@@ -454,9 +455,9 @@ def build_roster(wb, maxrows):
         ws[f"BA{r}"] = (f'=IF($AZ{r}=0,"未貼付",IF(NOT({calc}!$AA$2),"⚠ 列名が見つかりません（1行目にヘッダーを含めて貼り付けてください）",'
                         f'IF($AZ{r}>{maxrows},"⚠ {maxrows:,}行を超えています（超過分は集計されません）","OK")))')
     ws["AX29"] = "対象期間"
-    ws["AY29"] = (f'=IF(COUNT($AZ$22:$AZ$27)=0,"",IF(SUM($AZ$22:$AZ$27)=0,"（CSV未貼付）",'
+    ws["AY29"] = (f'=IF(SUM($AZ$22:$AZ$27)=0,"（CSV未貼付）",'
                   f'INDEX($AY$22:$AY$27,MATCH(TRUE,INDEX($AZ$22:$AZ$27>0,0),0))&" 〜 "&'
-                  f'INDEX($AY$22:$AY$27,{NSHEETS}+1-MATCH(TRUE,INDEX(($AZ$27:$AZ$22)>0,0),0))))')
+                  f'INDEX($AY$22:$AY$27,SUMPRODUCT(MAX(($AZ$22:$AZ$27>0)*(ROW($AZ$22:$AZ$27)-21)))))')
     ws.freeze_panes = "A2"
     return ws
 
@@ -495,7 +496,7 @@ def build_dashboard(wb, maxrows, select=None):
     style(ws[f"{HL}1"], size=9, bold=True, color=C_MUTED)
     helpers = [
         (3, "選択スタッフの従業員番号", f'=IFERROR(INDEX({ros}!$AU$2:$AU${ML},MATCH($B$7,{ros}!$AT$2:$AT${ML},0)),"")'),
-        (4, "名簿の行", f'=IFERROR(MATCH(${HC}$3,{ros}!$I$2:$I${ML},0),"")'),
+        (4, "名簿の行", f'=IF(${HC}$3="","",IFERROR(MATCH(${HC}$3,{ros}!$I$2:$I${ML},0),""))'),
         (5, "所属コード", f"={V('K')}"),
         (6, "出勤率", f"={V('P')}"),
         (7, "◎の基準", f"={sets}!$B$3"),
@@ -547,6 +548,10 @@ def build_dashboard(wb, maxrows, select=None):
         ws[f"{HL}{r}"] = label
         crit = '"' + code + '"'
         ws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("U", "P", crit)})'
+
+    ws[f"{HL}45"] = "月ラベル（グラフ用）"
+    for k in range(1, NSHEETS + 1):
+        ws[f"{HL}{45 + k}"] = f'=IF({ros}!$AZ${21 + k}>0,{ros}!$AY${21 + k},"")'
 
     # ---- タイトル帯
     ws.row_dimensions[1].height = 6
@@ -612,7 +617,7 @@ def build_dashboard(wb, maxrows, select=None):
 
     # ---- KPIタイル
     ws.row_dimensions[9].height = 8
-    for r, h in ((10, 14), (11, 17), (12, 17), (13, 13)):
+    for r, h in ((10, 15), (11, 19), (12, 19), (13, 15)):
         ws.row_dimensions[r].height = h
     all_rate = f"{ros}!$AY$6"
     tiles = [
@@ -631,7 +636,7 @@ def build_dashboard(wb, maxrows, select=None):
         style(ws[f"{a}10"], size=9, color=C_INK2, bg="FFFFFF", align="left")
         ws.merge_cells(f"{a}11:{b}12")
         ws[f"{a}11"] = formula
-        style(ws[f"{a}11"], size=22, bold=True, bg="FFFFFF", align="left", fmt=fmt)
+        style(ws[f"{a}11"], size=20, bold=True, bg="FFFFFF", align="left", fmt=fmt)
         ws.merge_cells(f"{a}13:{b}13")
         ws[f"{a}13"] = sub
         style(ws[f"{a}13"], size=8, color=C_MUTED, bg="FFFFFF", align="left")
@@ -646,7 +651,7 @@ def build_dashboard(wb, maxrows, select=None):
         (f'ISNUMBER(${HC}$6)', C_CRIT),
     ]
     for formula, color in rate_rules:
-        ws.conditional_formatting.add("F11:I12", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=22, color=color), stopIfTrue=True))
+        ws.conditional_formatting.add("F11:I12", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=20, color=color), stopIfTrue=True))
 
     # ---- グラフ行1
     ws.row_dimensions[14].height = 8
@@ -682,6 +687,7 @@ def build_dashboard(wb, maxrows, select=None):
         ch.dataLabels.showCatName = False
         ch.dataLabels.showSerName = False
         ch.dataLabels.showLeaderLines = False
+        ch.dataLabels.showLegendKey = False
         ch.legend.position = "b"
         ch.width, ch.height = 7.7, 7.0
         return ch
@@ -747,7 +753,7 @@ def build_dashboard(wb, maxrows, select=None):
     ch.type, ch.grouping, ch.overlap, ch.gapWidth = "col", "stacked", 100, 55
     ch.add_data(Reference(ws, range_string=f"{q(S_DASH)}!$F$48:$F$54"), titles_from_data=True)
     ch.add_data(Reference(ws, range_string=f"{q(S_DASH)}!$H$48:$H$54"), titles_from_data=True)
-    ch.set_categories(Reference(ws, range_string=f"{q(S_DASH)}!$B$49:$B$54"))
+    ch.set_categories(Reference(ws, range_string=f"{q(S_DASH)}!${HL}$46:${HL}$51"))
     ch.series[0].graphicalProperties = gp(C_BLUE)
     ch.series[1].graphicalProperties = gp(C_RED)
     ch.series[0].dLbls = DataLabelList()
@@ -755,6 +761,7 @@ def build_dashboard(wb, maxrows, select=None):
     ch.series[0].dLbls.showSerName = False
     ch.series[0].dLbls.showCatName = False
     ch.series[0].dLbls.showLegendKey = False
+    ch.series[0].dLbls.numFmt = '0"日";;'
     ch.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill=C_GRID))
     ch.x_axis.delete = False
     ch.y_axis.delete = False
@@ -977,8 +984,8 @@ def build_staff_list(wb):
             (f'=IF({m}="","",{rv("U")})', '0"回"', "right"),
             (f'=IF({m}="","",{rv("AR")})', '0"ヶ月"', "right"),
         ]
-        cells += [(f'=IF({m}="","",{rv(MONTH_WORK[k])})', "0", "right") for k in range(NSHEETS)]
-        cells += [(f'=IF({m}="","",{rv(MONTH_ABS[k])})', "0", "right") for k in range(NSHEETS)]
+        cells += [(f'=IF({m}="","",IF({ros}!$AZ${22 + k}>0,{rv(MONTH_WORK[k])},""))', "0", "right") for k in range(NSHEETS)]
+        cells += [(f'=IF({m}="","",IF({ros}!$AZ${22 + k}>0,{rv(MONTH_ABS[k])},""))', "0", "right") for k in range(NSHEETS)]
         for j, (formula, fmt, al) in enumerate(cells):
             c = ws.cell(row=r, column=1 + j, value=formula)
             style(c, size=10, fmt=fmt, align=al, border=Border(bottom=hair))
@@ -997,6 +1004,7 @@ def build_staff_list(wb):
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.print_title_rows = f"{HR}:{HR}"
+    ws.print_area = f"A1:P{last}"
     return ws
 
 
@@ -1093,19 +1101,26 @@ def build_howto(wb, maxrows):
         ws[f"B{rr}"] = "・" + t
         style(ws[f"B{rr}"], size=10, align="left", valign="top", wrap=True)
         ws.row_dimensions[rr].height = 28
+    ws.print_area = "A1:E40"
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
     return ws
 
 
 # ---------------------------------------------------------------- main
-def build(output, csv_paths=(), maxrows=6000, select=None):
+def build(output, csv_paths=(), maxrows=6000, select=None, paste_mode="excel"):
     wb = Workbook()
     wb.remove(wb.active)
     build_howto(wb, maxrows)
     build_dashboard(wb, maxrows, select=select)
     build_staff_list(wb)
     for k in range(1, NSHEETS + 1):
-        rows = read_csv(csv_paths[k - 1]) if k - 1 < len(csv_paths) else None
-        build_csv_sheet(wb, k, rows)
+        path = csv_paths[k - 1] if k - 1 < len(csv_paths) else None
+        rows = read_csv(path) if path and path != "-" else None
+        build_csv_sheet(wb, k, rows, paste_mode)
     build_settings(wb)
     build_roster(wb, maxrows)
     for k in range(1, NSHEETS + 1):
@@ -1123,8 +1138,9 @@ def build(output, csv_paths=(), maxrows=6000, select=None):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("output")
-    ap.add_argument("--csv", nargs="*", default=[], help="CSV_1, CSV_2 … に貼り付けた状態で生成するCSVファイル")
+    ap.add_argument("--csv", nargs="*", default=[], help="CSV_1, CSV_2 … に貼り付けた状態で生成するCSVファイル（\"-\" で空の月）")
     ap.add_argument("--maxrows", type=int, default=6000, help="1ヶ月あたりの最大行数")
     ap.add_argument("--select", default=None, help="ダッシュボードで初期選択するスタッフ名（検証用）")
+    ap.add_argument("--paste-mode", default="excel", choices=["excel", "text"], help="検証用: text はCSVの値をすべて文字列のまま貼り付けた状態を再現")
     a = ap.parse_args()
-    print(build(a.output, a.csv, a.maxrows, a.select))
+    print(build(a.output, a.csv, a.maxrows, a.select, a.paste_mode))
