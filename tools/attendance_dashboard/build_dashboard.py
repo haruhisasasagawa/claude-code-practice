@@ -670,7 +670,7 @@ def build_dashboard(wb, maxrows, select=None):
 
     # ---- KPIタイル
     ws.row_dimensions[9].height = 8
-    for r, h in ((10, 15), (11, 19), (12, 19), (13, 15)):
+    for r, h in ((10, 15), (11, 19), (12, 19), (13, 26)):
         ws.row_dimensions[r].height = h
     all_rate = f"{ros}!$AY$6"
     tiles = [
@@ -678,10 +678,10 @@ def build_dashboard(wb, maxrows, select=None):
         ("出勤率", f"={V('P')}", "0.0%",
          f'=IF(${HC}$6="","",IF({all_rate}="","","全体平均 "&TEXT({all_rate},"0.0%")&"（"&TEXT((${HC}$6-{all_rate})*100,"+0.0;-0.0;0.0")&"pt）｜"'
          f'&{V("W")}&"位"&IF(N({V("AW")})>1,"（同率"&{V("AW")}&"人）","")&"/"&{ros}!$AY$8&"人"))'),
-        ("欠勤日数（シフト当日に休みへ変更）", f"={V('N')}", '0"日"',
+        ("欠勤日数（当日休み変更）", f"={V('N')}", '0"日"',
          f'=IF(${HC}$3="","",IF(N(${HC}$40)>0,"参考: 前日に休みへ変更 "&${HC}$40&"日（欠勤・分母に含めず）","前日までの休み変更は含みません"))'),
         ("欠勤率", f"={V('Q')}", "0.0%", f'=IF(${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")))'),
-        ("シフト勤務時間（予定ベース）", f"={V('R')}", '0.0"h"', f'=IF(${HC}$4="","",IF({V("T")}="","","平均 "&TEXT({V("T")},"0.0")&" h／出勤日　※打刻ではありません"))'),
+        ("シフト勤務時間", f"={V('R')}", '0.0"h"', f'=IF(${HC}$4="","",IF({V("T")}="","","平均 "&TEXT({V("T")},"0.0")&" h／出勤日　※打刻ではありません"))'),
         ("深夜勤務時間", f"={V('S')}", '0.0"h"', f'=IF(${HC}$4="","",IF(N({V("R")})=0,"","シフト勤務時間の "&TEXT({V("S")}/{V("R")},"0%")&"（22時〜翌5時）"))'),
     ]
     for i, (label, formula, fmt, sub) in enumerate(tiles):
@@ -696,7 +696,7 @@ def build_dashboard(wb, maxrows, select=None):
         style(ws[f"{a}11"], size=(24 if label == "出勤率" else 20), bold=True, bg="FFFFFF", align="left", fmt=fmt)
         ws.merge_cells(f"{a}13:{b}13")
         ws[f"{a}13"] = sub
-        style(ws[f"{a}13"], size=7.5, color=C_MUTED, bg="FFFFFF", align="left")
+        style(ws[f"{a}13"], size=7.5, color=C_MUTED, bg="FFFFFF", align="left", valign="top", wrap=True)
         box_range(ws, f"{a}10:{b}13")
         accent = C_RED if "欠勤" in label else (C_BLUE if ("出勤" in label) else "6B7280")
         for r in range(10, 14):
