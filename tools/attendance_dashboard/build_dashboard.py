@@ -649,16 +649,16 @@ def build_dashboard(wb, maxrows, select=None):
         style(ws[f"{col_a}{r_label + 1}"], size=size, bold=True, bg="FFFFFF", align="left", fmt=fmt)
         box_range(ws, f"{col_a}{r_label + 1}:{col_b}{r_label + 2}")
 
-    info("J", "L", 6, "従業員番号", f"={V('I')}", fmt="0")
-    info("N", "P", 6, "所属", f'=IF(${HC}$5="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH(${HC}$5,{ros}!$AX$14:$AX$17,0)),${HC}$5))')
-    info("R", "T", 6, "資格", f'=IF(${HC}$4="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({V("L")},"01アルバイト","アルバイト"),"02サブリーダー","サブリーダー"),"03リーダー","リーダー"))')
-    ws["V6"] = "総合判定（出勤率基準）"
-    style(ws["V6"], size=8, color=C_INK2)
-    ws.merge_cells("V7:Y8")
-    ws["V7"] = (f'=IF(${HC}$6="","－",IF(${HC}$10<${HC}$9,"参考値（確定シフト "&${HC}$10&"日）",'
+    info("J", "K", 6, "従業員番号", f"={V('I')}", fmt="0")
+    info("M", "N", 6, "所属", f'=IF(${HC}$5="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH(${HC}$5,{ros}!$AX$14:$AX$17,0)),${HC}$5))')
+    info("P", "Q", 6, "資格", f'=IF(${HC}$4="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({V("L")},"01アルバイト","アルバイト"),"02サブリーダー","サブリーダー"),"03リーダー","リーダー"))', size=10)
+    ws["S6"] = "総合判定（出勤率基準）"
+    style(ws["S6"], size=8, color=C_INK2)
+    ws.merge_cells("S7:Y8")
+    ws["S7"] = (f'=IF(${HC}$6="","－",IF(${HC}$10<${HC}$9,"参考値（確定シフト "&${HC}$10&"日）",'
                 f'IF(${HC}$6>=${HC}$7,"◎ 良好（"&TEXT(${HC}$7,"0%")&"以上）",'
                 f'IF(${HC}$6>=${HC}$8,"△ 注意（"&TEXT(${HC}$8,"0%")&"以上）","✕ 要改善（"&TEXT(${HC}$8,"0%")&"未満）"))))')
-    style(ws["V7"], size=12, bold=True, color="FFFFFF", bg=C_MUTED, align="center")
+    style(ws["S7"], size=12, bold=True, color="FFFFFF", bg=C_MUTED, align="center")
     badge_rules = [
         (f'AND(ISNUMBER(${HC}$6),${HC}$10<${HC}$9)', "D9D9D6", C_INK),
         (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$7)', C_GOOD, "FFFFFF"),
@@ -666,7 +666,7 @@ def build_dashboard(wb, maxrows, select=None):
         (f'ISNUMBER(${HC}$6)', C_CRIT, "FFFFFF"),
     ]
     for formula, bg, fg in badge_rules:
-        ws.conditional_formatting.add("V7:Y8", FormulaRule(formula=[formula], fill=fill(bg), font=Font(name=FONT, bold=True, color=fg, size=12), stopIfTrue=True))
+        ws.conditional_formatting.add("S7:Y8", FormulaRule(formula=[formula], fill=fill(bg), font=Font(name=FONT, bold=True, color=fg, size=12), stopIfTrue=True))
 
     # ---- KPIタイル
     ws.row_dimensions[9].height = 8
