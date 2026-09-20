@@ -308,6 +308,7 @@ def build_settings(wb):
         (3, "出勤率 ◎良好 の基準（この値以上）", 0.95, "0%", "総合判定に使用。既定 95%"),
         (4, "出勤率 △注意 の基準（この値以上）", 0.90, "0%", "この値未満は「✕要改善」。既定 90%"),
         (5, "判定を保留する確定シフト日数（この日数未満は「参考値」）", 20, "0", "シフト日数が少ないと欠勤1日で出勤率が大きく動くため、判定は出さず出勤率のみ表示。既定 20日"),
+        (6, "当欠率（当日欠勤率）のアラート基準（この値以上で警告）", 0.05, "0.0%", "当日に休みへ変更した日数 ÷ 確定シフト日数 がこの値以上のスタッフに警告を出す。既定 5%"),
         (7, "深夜勤務の開始時刻", 22 / 24, "[h]:mm", "深夜勤務時間の集計範囲（開始）"),
         (8, "深夜勤務の終了時刻", 29 / 24, "[h]:mm", "同（終了）。翌5時は 29:00 と入力"),
     ]
@@ -347,7 +348,7 @@ def build_settings(wb):
 # ---------------------------------------------------------------- シート: 名簿（集計エンジン）
 ROSTER_COLS = {
     "H": "名簿行", "I": "従業員番号", "J": "名前", "K": "所属", "L": "資格", "M": "出勤日数", "N": "欠勤日数",
-    "O": "確定シフト日数", "P": "出勤率", "Q": "欠勤率", "R": "勤務時間", "S": "深夜時間", "T": "平均/日",
+    "O": "確定シフト日数", "P": "出勤率", "Q": "当欠率", "R": "勤務時間", "S": "深夜時間", "T": "平均/日",
     "U": "却下回数", "V": "名前順キー", "W": "出勤率順位", "X": "出勤率順キー(降順)", "Y": "ワーストキー(昇順)",
     "AR": "在籍月数", "AS": "出勤率整数キー", "AW": "同率人数", "AT": "名前(名前順)", "AU": "番号(名前順)", "AV": "名簿行(名前順)",
 }
@@ -457,7 +458,8 @@ def build_roster(wb, maxrows):
         (4, "総欠勤日数", f"=SUM($N$2:$N${ML})", "0"),
         (5, "総確定シフト日数", f"=SUM($O$2:$O${ML})", "0"),
         (6, "全体出勤率", f'=IF($AY$5=0,"",$AY$3/$AY$5)', "0.0%"),
-        (7, "全体欠勤率", f'=IF($AY$5=0,"",$AY$4/$AY$5)', "0.0%"),
+        (7, "全体当欠率", f'=IF($AY$5=0,"",$AY$4/$AY$5)', "0.0%"),
+        (10, "当欠アラート該当者数", f'=COUNTIFS($Q$2:$Q${ML},">="&{sets}!$B$6,$O$2:$O${ML},">="&{sets}!$B$5)', "0"),
         (8, "評価対象人数(確定日数>0)", f"=COUNT($P$2:$P${ML})", "0"),
         (9, "総勤務時間", f"=SUM($R$2:$R${ML})", "0.0"),
     ]
@@ -467,7 +469,7 @@ def build_roster(wb, maxrows):
 
     ws["AX12"] = "所属別"
     style(ws["AX12"], size=9, bold=True, color="FFFFFF", bg=C_INK2)
-    for j, h in enumerate(["所属コード", "表示名", "人数", "出勤日数", "欠勤日数", "確定日数", "出勤率", "欠勤率"]):
+    for j, h in enumerate(["所属コード", "表示名", "人数", "出勤日数", "欠勤日数", "確定日数", "出勤率", "当欠率"]):
         c = ws.cell(row=13, column=50 + j, value=h)   # AX=50
         style(c, size=9, bold=True, color="FFFFFF", bg=C_INK2)
     for i in range(len(DEPTS)):
@@ -561,6 +563,8 @@ def build_dashboard(wb, maxrows, select=None):
         (8, "△の基準", f"={sets}!$B$4"),
         (9, "判定保留の日数", f"={sets}!$B$5"),
         (10, "確定シフト日数", f"={V('O')}"),
+        (11, "当欠率アラート基準", f"={sets}!$B$6"),
+        (12, "当欠率", f"={V('Q')}"),
     ]
     for r, label, formula in helpers:
         hws[f"{HL}{r}"], hws[f"{HC}{r}"] = label, formula
@@ -706,7 +710,7 @@ def build_dashboard(wb, maxrows, select=None):
         ("出勤日数", f"={V('M')}", '0"日"', f'=IF({P}${HC}$4="","","確定シフト "&{V("O")}&"日")'),
         ("出勤率", f"={V('P')}", "0.0%", f'=IF({P}${HC}$6="","",IF({all_rate}="","","全体平均 "&TEXT({all_rate},"0.0%")))'),
         ("欠勤日数", f"={V('N')}", '0"日"', '="当日に休みへ変更した日"'),
-        ("欠勤率", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")))'),
+        ("当欠率（当日欠勤率）", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")&"　基準 "&TEXT({P}${HC}$11,"0%"))&"")'),
         ("勤務時間", f"={V('R')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF({V("T")}="","","1日あたり "&TEXT({V("T")},"0.0")&"h"))'),
         ("深夜勤務", f"={V('S')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF(N({V("R")})=0,"","勤務時間の "&TEXT({V("S")}/{V("R")},"0%")))'),
     ]
@@ -743,7 +747,13 @@ def build_dashboard(wb, maxrows, select=None):
                  f'"確定シフト "&{P}${HC}$10&"日のうち出勤 "&{V("M")}&"日、当日欠勤 "&{V("N")}&"日。'
                  f'出勤率 "&TEXT({P}${HC}$6,"0.0%")&"（全体平均 "&TEXT({P}${HC}$35,"0.0%")&"、"&{ros}!$AY$8&"人中 "&{V("W")}&"位）"))')
     style(ws["B15"], size=10, bold=True, color=C_INK, align="left")
-    ws.row_dimensions[16].height = 14
+    ws.row_dimensions[16].height = 16
+    ws.merge_cells("B16:X16")
+    ws["B16"] = (f'=IF(OR({P}${HC}$12="",{P}${HC}$10=""),"",IF(AND({P}${HC}$12>={P}${HC}$11,{P}${HC}$10>={P}${HC}$9),'
+                 f'"⚠ 当欠率 "&TEXT({P}${HC}$12,"0.0%")&" が基準（"&TEXT({P}${HC}$11,"0%")&"以上）に達しています。当日欠勤の状況を本人に確認してください。",""))')
+    style(ws["B16"], size=9.5, bold=True, color=C_CRIT, align="left")
+    ws.conditional_formatting.add("N10:P13", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$12),{P}${HC}$12>={P}${HC}$11,{P}${HC}$10>={P}${HC}$9)'], fill=fill("FDECEA"), stopIfTrue=False))
+    ws.conditional_formatting.add("N11:P12", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$12),{P}${HC}$12>={P}${HC}$11,{P}${HC}$10>={P}${HC}$9)'], font=Font(name=FONT, bold=True, size=20, color=C_CRIT), stopIfTrue=True))
 
     # ---- グラフ 1段目（7列＋空き1列 ×3）
     ws.row_dimensions[17].height = 18
@@ -931,7 +941,7 @@ def build_dashboard(wb, maxrows, select=None):
     ws.row_dimensions[50].height = 4
     notes = [
         "出勤日数は確定シフトのあった日数（同じ日の複数区分は1日）。欠勤日数は、確定していたシフトを当日に「休み」へ変更した日数で、前日までの変更は含みません。",
-        "出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋欠勤日数）。勤務時間はシフト上の時間（変更後の時間から休憩を除く）。",
+        f'="出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋当日欠勤日数）、当欠率 ＝ 当日欠勤日数 ÷ 確定シフト日数（基準 "&TEXT({P}${HC}$11,"0%")&"以上で警告）。勤務時間はシフト上の時間。"',
         f'="総合判定は出勤率のみによる目安です。確定シフト日数が "&{P}${HC}$9&"日未満の場合は参考値とし、判定を行いません。"',
         f'="欠勤には店側の都合による当日変更が含まれることがあります。面談では本人に事情を確認のうえご利用ください。"&IF({sel}="","","　応募の却下（店側の判断）："&{P}${HC}$55&"件")',
     ]
@@ -1080,8 +1090,8 @@ def build_staff_list(wb):
 
     # 全体サマリー
     tiles = [("スタッフ数", f"={ros}!$AY$2", '0"名"'), ("評価対象（確定シフトあり）", f"={ros}!$AY$8", '0"名"'),
-             ("全体出勤率", f"={ros}!$AY$6", "0.0%"), ("全体欠勤率", f"={ros}!$AY$7", "0.0%"),
-             ("総出勤日数", f"={ros}!$AY$3", '#,##0"日"'), ("総欠勤日数", f"={ros}!$AY$4", '#,##0"日"')]
+             ("全体出勤率", f"={ros}!$AY$6", "0.0%"), ("全体当欠率", f"={ros}!$AY$7", "0.0%"),
+             ("総出勤日数", f"={ros}!$AY$3", '#,##0"日"'), ("当欠アラート該当", f"={ros}!$AY$10", '0"名"')]
     for i, (label, formula, fmt) in enumerate(tiles):
         c = 1 + i * 2
         a, b = L(c), L(c + 1)
@@ -1097,7 +1107,7 @@ def build_staff_list(wb):
     # 所属別
     ws["A7"] = "所属別"
     style(ws["A7"], size=10, bold=True)
-    for j, h in enumerate(["所属", "人数", "出勤日数", "欠勤日数", "確定シフト日数", "出勤率", "欠勤率"]):
+    for j, h in enumerate(["所属", "人数", "出勤日数", "当日欠勤", "確定シフト日数", "出勤率", "当欠率"]):
         c = ws.cell(row=8, column=1 + j, value=h)
         style(c, size=9, bold=True, color=C_INK, bg="E7E6E1", align="center", border=Border(top=thin, bottom=thin))
     for i in range(len(DEPTS)):
@@ -1108,9 +1118,9 @@ def build_staff_list(wb):
             style(c, size=10, fmt=fmt, align=("left" if j == 0 else "right"), border=Border(bottom=hair))
 
     # ワースト
-    ws["J7"] = f'="出勤率 ワースト10（確定シフト日数 "&{sets}!$B$5&"日以上の人が対象）"'
+    ws["J7"] = f'="当欠率 ワースト10（確定シフト日数 "&{sets}!$B$5&"日以上の人が対象。基準 "&TEXT({sets}!$B$6,"0%")&"以上は赤）"'
     style(ws["J7"], size=10, bold=True)
-    for j, h in enumerate(["名前", "所属", "確定シフト日数", "欠勤日数", "出勤率"]):
+    for j, h in enumerate(["名前", "所属", "確定シフト日数", "当日欠勤", "当欠率"]):
         c = ws.cell(row=8, column=10 + j, value=h)
         style(c, size=9, bold=True, color=C_INK, bg="E7E6E1", align="center", border=Border(top=thin, bottom=thin))
     for n in range(1, 11):
@@ -1120,16 +1130,16 @@ def build_staff_list(wb):
         ws[f"K{r}"] = f'=IF({m}="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH(INDEX({ros}!$K$2:$K${ML},{m}),{ros}!$AX$14:$AX$17,0)),INDEX({ros}!$K$2:$K${ML},{m})))'
         ws[f"L{r}"] = f'=IF({m}="","",INDEX({ros}!$O$2:$O${ML},{m}))'
         ws[f"M{r}"] = f'=IF({m}="","",INDEX({ros}!$N$2:$N${ML},{m}))'
-        ws[f"N{r}"] = f'=IF({m}="","",INDEX({ros}!$P$2:$P${ML},{m}))'
+        ws[f"N{r}"] = f'=IF({m}="","",INDEX({ros}!$Q$2:$Q${ML},{m}))'
         for c, fmt, al in (("J", None, "left"), ("K", None, "left"), ("L", '0"日"', "right"), ("M", '0"日"', "right"), ("N", "0.0%", "right")):
             style(ws[f"{c}{r}"], size=10, fmt=fmt, align=al, border=Border(bottom=hair))
-    ws.conditional_formatting.add("N9:N18", FormulaRule(formula=[f'AND(ISNUMBER(N9),N9<{sets}!$B$4)'], font=Font(name=FONT, bold=True, color=C_CRIT, size=10)))
+    ws.conditional_formatting.add("N9:N18", FormulaRule(formula=[f'AND(ISNUMBER(N9),N9>={sets}!$B$6)'], font=Font(name=FONT, bold=True, color=C_CRIT, size=10), fill=fill("FDECEA")))
 
     # スタッフ別テーブル
     HR = 21
     ws[f"A{HR - 1}"] = "スタッフ別 集計（半年）"
     style(ws[f"A{HR - 1}"], size=10, bold=True)
-    headers = ["順位", "名前", "従業員番号", "所属", "資格", "出勤日数", "欠勤日数", "確定シフト日数", "出勤率", "欠勤率", "判定",
+    headers = ["順位", "名前", "従業員番号", "所属", "資格", "出勤日数", "当日欠勤", "確定シフト日数", "出勤率", "当欠率", "判定",
                "シフト勤務時間", "平均 h／日", "深夜時間", "却下回数（参考）", "在籍月数"]
     month_hdr_w = [f'="出勤 "&{ros}!$AY${21 + k}' for k in range(1, NSHEETS + 1)]
     month_hdr_a = [f'="欠勤 "&{ros}!$AY${21 + k}' for k in range(1, NSHEETS + 1)]
@@ -1176,6 +1186,7 @@ def build_staff_list(wb):
     ws.freeze_panes = f"C{HR + 1}"
     ws.conditional_formatting.add(f"F{HR + 1}:F{last}", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_BLUE, showValue=True))
     ws.conditional_formatting.add(f"G{HR + 1}:G{last}", FormulaRule(formula=[f"AND(ISNUMBER(G{HR + 1}),G{HR + 1}>0)"], font=Font(name=FONT, bold=True, color=C_CRIT, size=10)))
+    ws.conditional_formatting.add(f"J{HR + 1}:J{last}", FormulaRule(formula=[f"AND(ISNUMBER(J{HR + 1}),J{HR + 1}>={sets}!$B$6,H{HR + 1}>={sets}!$B$5)"], font=Font(name=FONT, bold=True, color=C_CRIT, size=10), fill=fill("FDECEA")))
     for formula, color in [(f'AND(ISNUMBER(I{HR + 1}),I{HR + 1}>={sets}!$B$3)', C_GOOD_TXT), (f'AND(ISNUMBER(I{HR + 1}),I{HR + 1}>={sets}!$B$4)', C_WARN_TXT), (f'ISNUMBER(I{HR + 1})', C_CRIT)]:
         ws.conditional_formatting.add(f"I{HR + 1}:I{last}", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=10, color=color), stopIfTrue=True))
     R1 = HR + 1
@@ -1207,7 +1218,7 @@ def build_howto(wb, maxrows):
     ws.column_dimensions["E"].width = 70
     ws["B2"] = "勤務実績ダッシュボード　使い方"
     style(ws["B2"], size=18, bold=True)
-    ws["B3"] = "シェアフルシフトの月次シフトCSVを貼り付けるだけで、スタッフごとの出勤日数・出勤率・欠勤率などを集計します。"
+    ws["B3"] = "シェアフルシフトの月次シフトCSVを貼り付けるだけで、スタッフごとの出勤日数・出勤率・当欠率（当日欠勤率）などを集計します。"
     style(ws["B3"], size=10, color=C_INK2)
 
     r = 5
@@ -1255,7 +1266,7 @@ def build_howto(wb, maxrows):
         ("出勤日数", "ステータスが「確定」系（確定／確定（シフト作成）／確定（アサイン））で、勤務種別が勤務（1）のシフトがある日数。同じ日の複数区分は1日と数えます。"),
         ("欠勤日数", "確定していたシフトが、シフト当日に「休み」（勤務種別4）へ変更された日数。CSVの「更新時間」を日本時間に直し、暦日がシフト日と同じ場合のみ欠勤とします。前日までの変更やシフト日より後の更新は欠勤にも分母にも含めません（ダッシュボードの「休みへの変更タイミング」に表示）。"),
         ("確定シフト日数", "出勤日数 ＋ 欠勤日数。事前に休みへ変更した日は含めません。"),
-        ("出勤率／欠勤率", "出勤日数 ÷ 確定シフト日数 ／ 欠勤日数 ÷ 確定シフト日数。"),
+        ("出勤率／当欠率", "出勤日数 ÷ 確定シフト日数 ／ 当日欠勤日数 ÷ 確定シフト日数。当欠率が設定の基準（既定5%）以上のスタッフには、ダッシュボードに警告行、スタッフ一覧に赤い塗りが出ます。"),
         ("勤務時間", "「変更後の開始・終了時間」（無ければ募集時間）から休憩1〜3を引いた、シフト上の時間です。"),
         ("深夜勤務時間", "勤務時間のうち、設定シートの深夜時間帯（既定 22:00〜翌5:00）に重なる時間。"),
         ("却下回数", "応募ステータスが「却下」系の行数。店舗側の採用判断による件数なので、出勤率・判定・順位には用いず参考情報として表示します。"),
@@ -1276,7 +1287,7 @@ def build_howto(wb, maxrows):
     style(ws[f"B{r}"], size=12, bold=True)
     items = [
         ("劇場名", "設定!B1。ダッシュボードの見出しに表示されます。"),
-        ("判定の基準", "設定!B3（◎の基準、既定95%）、B4（△の基準、既定90%）、B5（判定を保留する確定シフト日数、既定20日）。"),
+        ("判定の基準", "設定!B3（◎の基準、既定95%）、B4（△の基準、既定90%）、B5（判定を保留する確定シフト日数、既定20日）、B6（当欠率のアラート基準、既定5%）。"),
         ("深夜の時間帯", "設定!B7〜B8（既定 22:00〜29:00）。"),
         ("職種の区分", "設定!A13〜B18。CSVの「募集シフトの職種」の値（例 02コンセ）と表示名。劇場によって職種名が違う場合はここを合わせます。"),
         ("所属の一覧", "設定!A24〜B27。CSVの「応募者の職種」の値と表示名。所属別集計と「同所属平均」に使います。"),
