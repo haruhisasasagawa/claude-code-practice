@@ -35,7 +35,7 @@ MAXSTAFF = 400            # 半年で扱えるスタッフ数の上限
 STACK = NSHEETS * MAXSTAFF
 FONT = "Yu Gothic"
 
-S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿"
+S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER, S_DBCALC = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿", "DB計算"
 S_CSV = "CSV_{}"
 S_CALC = "計算{}"
 
@@ -207,7 +207,7 @@ def build_calc_sheet(wb, k, maxrows):
         ws.column_dimensions[colref].width = 8
     ws["AA4"] = "列AB〜ATは貼付シートの列名→列番号の対応表、Z6〜AA12は貼付チェック用のセルです。数式で使うので編集しないでください。"
     style(ws["AA4"], size=8, color=C_MUTED)
-    dash = q(S_DASH)
+    dash = q(S_DBCALC)
     brng = f"$B$2:$B${last}"
     arng = f"$A$2:$A${last}"
     checks = [
@@ -292,8 +292,11 @@ def build_settings(wb):
     ws.column_dimensions["A"].width = 44
     ws.column_dimensions["B"].width = 16
     ws.column_dimensions["C"].width = 60
-    ws["A1"] = "設定（黄色のセルは変更できます）"
-    style(ws["A1"], size=14, bold=True)
+    ws["A1"] = "劇場名（ダッシュボードの見出しに表示）"
+    ws["B1"] = "TOHOシネマズ新宿"
+    style(ws["B1"], bg=C_INPUT_FILL, border=BOX)
+    ws["C1"] = "他の劇場で使う場合はここを変更"
+    style(ws["C1"], size=9, color=C_INK2)
 
     rows = [
         (3, "出勤率 ◎良好 の基準（この値以上）", 0.95, "0%", "総合判定に使用。既定 95%"),
@@ -517,6 +520,9 @@ C_NAVY = "1F3A5F"
 
 def build_dashboard(wb, maxrows, select=None):
     ws = wb.create_sheet(S_DASH)
+    hws = wb.create_sheet(S_DBCALC)
+    hws.sheet_properties.tabColor = "898781"
+    P = q(S_DBCALC) + "!"
     ws.sheet_properties.tabColor = C_NAVY
     ws.sheet_view.showGridLines = False
     ros, sets = q(S_ROSTER), q(S_SET)
@@ -528,21 +534,21 @@ def build_dashboard(wb, maxrows, select=None):
     ws.column_dimensions["Y"].width = 2.5
     ws.column_dimensions["Z"].width = 2.5
     ws.column_dimensions["AA"].width = 3
-    ws.column_dimensions[HL].width = 26
-    ws.column_dimensions[HC].width = 14
-    ws.column_dimensions["AD"].width = 12
+    hws.column_dimensions[HL].width = 30
+    hws.column_dimensions[HC].width = 14
+    hws.column_dimensions["AD"].width = 12
     LAST_ROW = 82
     fill_range(ws, f"A1:Y{LAST_ROW}", C_PAGE)
 
     def V(colref):
-        return f'IF(${HC}$4="","",INDEX({ros}!${colref}$2:${colref}${ML},${HC}$4))'
+        return f'IF({P}${HC}$4="","",INDEX({ros}!${colref}$2:${colref}${ML},{P}${HC}$4))'
 
     # ---- 内部計算セル（画面右外）
-    ws[f"{HL}1"] = "内部計算（このブロックは触らないでください）"
-    style(ws[f"{HL}1"], size=9, bold=True, color=C_MUTED)
+    hws[f"{HL}1"] = "内部計算（このブロックは触らないでください）"
+    style(hws[f"{HL}1"], size=9, bold=True, color=C_MUTED)
     helpers = [
-        (3, "選択スタッフの従業員番号", f'=IFERROR(INDEX({ros}!$AU$2:$AU${ML},MATCH($B$7,{ros}!$AT$2:$AT${ML},0)),"")'),
-        (4, "名簿の行", f'=IF(${HC}$3="","",IFERROR(MATCH(${HC}$3,{ros}!$I$2:$I${ML},0),""))'),
+        (3, "選択スタッフの従業員番号", f'=IFERROR(INDEX({ros}!$AU$2:$AU${ML},MATCH({q(S_DASH)}!$B$7,{ros}!$AT$2:$AT${ML},0)),"")'),
+        (4, "名簿の行", f'=IF({P}${HC}$3="","",IFERROR(MATCH({P}${HC}$3,{ros}!$I$2:$I${ML},0),""))'),
         (5, "所属コード", f"={V('K')}"),
         (6, "出勤率", f"={V('P')}"),
         (7, "◎の基準", f"={sets}!$B$3"),
@@ -551,11 +557,11 @@ def build_dashboard(wb, maxrows, select=None):
         (10, "確定シフト日数", f"={V('O')}"),
     ]
     for r, label, formula in helpers:
-        ws[f"{HL}{r}"], ws[f"{HC}{r}"] = label, formula
-        style(ws[f"{HL}{r}"], size=9, color=C_INK2)
-        style(ws[f"{HC}{r}"], size=9)
-    ws[f"{HC}6"].number_format = "0.0%"
-    sel = f"${HC}$3"
+        hws[f"{HL}{r}"], hws[f"{HC}{r}"] = label, formula
+        style(hws[f"{HL}{r}"], size=9, color=C_INK2)
+        style(hws[f"{HC}{r}"], size=9)
+    hws[f"{HC}6"].number_format = "0.0%"
+    sel = f"{P}${HC}$3"
 
     def sum6sel(colref, crit_col=None, crit=None):
         parts = []
@@ -566,39 +572,39 @@ def build_dashboard(wb, maxrows, select=None):
             parts.append(a + ")")
         return "+".join(parts)
 
-    ws[f"{HL}12"], ws[f"{HC}12"] = "出勤", f"=N({V('M')})"
-    ws[f"{HL}13"], ws[f"{HC}13"] = "欠勤", f"=N({V('N')})"
+    hws[f"{HL}12"], hws[f"{HC}12"] = "出勤", f"=N({V('M')})"
+    hws[f"{HL}13"], hws[f"{HC}13"] = "欠勤", f"=N({V('N')})"
     for i in range(len(JOB_CATS)):
         r = 16 + i
-        ws[f"{HL}{r}"] = f"={sets}!$B${13 + i}"
-        ws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("M", "R", f"{sets}!$A${13 + i}")})'
-    ws[f"{HL}22"] = f"={sets}!$B$19"
-    ws[f"{HC}22"] = f'=IF({sel}="",0,MAX(0,N({V("R")})-SUM(${HC}$16:${HC}$21)))'
+        hws[f"{HL}{r}"] = f"={sets}!$B${13 + i}"
+        hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("M", "R", f"{sets}!$A${13 + i}")})'
+    hws[f"{HL}22"] = f"={sets}!$B$19"
+    hws[f"{HC}22"] = f'=IF({sel}="",0,MAX(0,N({V("R")})-SUM({P}${HC}$16:{P}${HC}$21)))'
     for i, (code, wd) in enumerate(WD_ORDER):
         r = 25 + i
-        ws[f"{HL}{r}"] = wd
-        ws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("H", "O", code)})'
-    ws[f"{HL}34"], ws[f"{HC}34"] = "本人", f"=N(${HC}$6)"
-    ws[f"{HL}35"], ws[f"{HC}35"] = "全体平均", f"=N({ros}!$AY$6)"
-    ws[f"{HL}36"] = f'=IF(${HC}$5="","同所属","同所属（"&IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH(${HC}$5,{ros}!$AX$14:$AX$17,0)),${HC}$5)&"）")'
-    ws[f"{HC}36"] = f'=IFERROR(N(INDEX({ros}!$BD$14:$BD$17,MATCH(${HC}$5,{ros}!$AX$14:$AX$17,0))),0)'
+        hws[f"{HL}{r}"] = wd
+        hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("H", "O", code)})'
+    hws[f"{HL}34"], hws[f"{HC}34"] = "本人", f"=N({P}${HC}$6)"
+    hws[f"{HL}35"], hws[f"{HC}35"] = "全体平均", f"=N({ros}!$AY$6)"
+    hws[f"{HL}36"] = f'=IF({P}${HC}$5="","同所属","同所属（"&IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH({P}${HC}$5,{ros}!$AX$14:$AX$17,0)),{P}${HC}$5)&"）")'
+    hws[f"{HC}36"] = f'=IFERROR(N(INDEX({ros}!$BD$14:$BD$17,MATCH({P}${HC}$5,{ros}!$AX$14:$AX$17,0))),0)'
     for r in (34, 35, 36):
-        ws[f"{HC}{r}"].number_format = "0.0%"
+        hws[f"{HC}{r}"].number_format = "0.0%"
     for i, (code, label) in enumerate(REST_CATS):
         r = 39 + i
-        ws[f"{HL}{r}"] = label
+        hws[f"{HL}{r}"] = label
         crit = '"' + code + '"'
-        ws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("U", "P", crit)})'
-    ws[f"{HL}45"], ws[f"{HC}45"], ws["AD45"] = "月（グラフ用）", "出勤日数", "欠勤日数"
+        hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("U", "P", crit)})'
+    hws[f"{HL}45"], hws[f"{HC}45"], hws["AD45"] = "月（グラフ用）", "出勤日数", "欠勤日数"
     for k in range(1, NSHEETS + 1):
         r = 45 + k
-        ws[f"{HL}{r}"] = f'=IF({q(S_CALC.format(k))}!$AA$6="","",MONTH({q(S_CALC.format(k))}!$AA$6)&"月")'
-        ws[f"{HC}{r}"] = f"=N({V(MONTH_WORK[k - 1])})"
-        ws[f"AD{r}"] = f"=N({V(MONTH_ABS[k - 1])})"
-        ws[f"{HC}{r}"].number_format = "0;;;"
-        ws[f"AD{r}"].number_format = "0;;;"
-    ws[f"{HL}54"], ws[f"{HC}54"] = "欠勤日数（一覧の件数）", "=" + "+".join(f"{q(S_CALC.format(k))}!$AA$11" for k in range(1, NSHEETS + 1))
-    ws[f"{HL}55"], ws[f"{HC}55"] = "却下回数（参考）", f"=N({V('U')})"
+        hws[f"{HL}{r}"] = f'=IF({q(S_CALC.format(k))}!$AA$6="","",MONTH({q(S_CALC.format(k))}!$AA$6)&"月")'
+        hws[f"{HC}{r}"] = f"=N({V(MONTH_WORK[k - 1])})"
+        hws[f"AD{r}"] = f"=N({V(MONTH_ABS[k - 1])})"
+        hws[f"{HC}{r}"].number_format = "0;;;"
+        hws[f"AD{r}"].number_format = "0;;;"
+    hws[f"{HL}54"], hws[f"{HC}54"] = "欠勤日数（一覧の件数）", "=" + "+".join(f"{q(S_CALC.format(k))}!$AA$11" for k in range(1, NSHEETS + 1))
+    hws[f"{HL}55"], hws[f"{HC}55"] = "却下回数（参考）", f"=N({V('U')})"
 
     def section(row, text, a="B", b="X"):
         """見出し行: 太字."""
@@ -623,7 +629,7 @@ def build_dashboard(wb, maxrows, select=None):
     ws["B2"] = "勤務実績ダッシュボード"
     style(ws["B2"], size=16, bold=True, color="FFFFFF", bg=C_DARK, align="left")
     ws.merge_cells("B3:N3")
-    ws["B3"] = "TOHOシネマズ新宿　アルバイトスタッフ（シェアフルシフトのシフト実績より）"
+    ws["B3"] = f'={sets}!$B$1&"　アルバイトスタッフ（シェアフルシフトのシフト実績より）"'
     style(ws["B3"], size=9, color="C3C2B7", bg=C_DARK, align="left")
     ws.merge_cells("O2:X2")
     ws["O2"] = f'="対象期間　"&{ros}!$AY$29'
@@ -661,19 +667,19 @@ def build_dashboard(wb, maxrows, select=None):
         box_range(ws, f"{col_a}7:{col_b}8")
 
     info("J", "K", "従業員番号", f"={V('I')}", fmt="0")
-    info("M", "N", "所属", f'=IF(${HC}$5="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH(${HC}$5,{ros}!$AX$14:$AX$17,0)),${HC}$5))')
-    info("P", "Q", "資格", f'=IF(${HC}$4="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({V("L")},"01アルバイト","アルバイト"),"02サブリーダー","サブリーダー"),"03リーダー","リーダー"))', size=10)
-    ws["S6"] = f'="総合判定（出勤率 "&TEXT(${HC}$7,"0%")&"以上◎／"&TEXT(${HC}$8,"0%")&"以上△）"'
+    info("M", "N", "所属", f'=IF({P}${HC}$5="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH({P}${HC}$5,{ros}!$AX$14:$AX$17,0)),{P}${HC}$5))')
+    info("P", "Q", "資格", f'=IF({P}${HC}$4="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({V("L")},"01アルバイト","アルバイト"),"02サブリーダー","サブリーダー"),"03リーダー","リーダー"))', size=10)
+    ws["S6"] = f'="総合判定（出勤率 "&TEXT({P}${HC}$7,"0%")&"以上◎／"&TEXT({P}${HC}$8,"0%")&"以上△）"'
     style(ws["S6"], size=9, color=C_INK2)
     ws.merge_cells("S7:X8")
-    ws["S7"] = (f'=IF(${HC}$6="","－",IF(${HC}$10<${HC}$9,"参考値（確定シフト "&${HC}$10&"日）",'
-                f'IF(${HC}$6>=${HC}$7,"◎ 良好",IF(${HC}$6>=${HC}$8,"△ 注意","✕ 要改善"))))')
+    ws["S7"] = (f'=IF({P}${HC}$6="","－",IF({P}${HC}$10<{P}${HC}$9,"参考値（確定シフト "&{P}${HC}$10&"日）",'
+                f'IF({P}${HC}$6>={P}${HC}$7,"◎ 良好",IF({P}${HC}$6>={P}${HC}$8,"△ 注意","✕ 要改善"))))')
     style(ws["S7"], size=13, bold=True, color="FFFFFF", bg=C_MUTED, align="center")
     badge_rules = [
-        (f'AND(ISNUMBER(${HC}$6),${HC}$10<${HC}$9)', "D9D9D6", C_INK),
-        (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$7)', C_GOOD, "FFFFFF"),
-        (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$8)', C_WARN, C_INK),
-        (f'ISNUMBER(${HC}$6)', C_CRIT, "FFFFFF"),
+        (f'AND(ISNUMBER({P}${HC}$6),{P}${HC}$10<{P}${HC}$9)', "D9D9D6", C_INK),
+        (f'AND(ISNUMBER({P}${HC}$6),{P}${HC}$6>={P}${HC}$7)', C_GOOD, "FFFFFF"),
+        (f'AND(ISNUMBER({P}${HC}$6),{P}${HC}$6>={P}${HC}$8)', C_WARN, C_INK),
+        (f'ISNUMBER({P}${HC}$6)', C_CRIT, "FFFFFF"),
     ]
     for formula, bg, fg in badge_rules:
         ws.conditional_formatting.add("S7:X8", FormulaRule(formula=[formula], fill=fill(bg), font=Font(name=FONT, bold=True, color=fg, size=13), stopIfTrue=True))
@@ -684,12 +690,12 @@ def build_dashboard(wb, maxrows, select=None):
         ws.row_dimensions[r].height = h
     all_rate = f"{ros}!$AY$6"
     tiles = [
-        ("出勤日数", f"={V('M')}", '0"日"', f'=IF(${HC}$4="","","確定シフト "&{V("O")}&"日")'),
-        ("出勤率", f"={V('P')}", "0.0%", f'=IF(${HC}$6="","",IF({all_rate}="","","全体平均 "&TEXT({all_rate},"0.0%")))'),
+        ("出勤日数", f"={V('M')}", '0"日"', f'=IF({P}${HC}$4="","","確定シフト "&{V("O")}&"日")'),
+        ("出勤率", f"={V('P')}", "0.0%", f'=IF({P}${HC}$6="","",IF({all_rate}="","","全体平均 "&TEXT({all_rate},"0.0%")))'),
         ("欠勤日数", f"={V('N')}", '0"日"', '="当日に休みへ変更した日"'),
-        ("欠勤率", f"={V('Q')}", "0.0%", f'=IF(${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")))'),
-        ("勤務時間", f"={V('R')}", '0.0"h"', f'=IF(${HC}$4="","",IF({V("T")}="","","1日あたり "&TEXT({V("T")},"0.0")&"h"))'),
-        ("深夜勤務", f"={V('S')}", '0.0"h"', f'=IF(${HC}$4="","",IF(N({V("R")})=0,"","勤務時間の "&TEXT({V("S")}/{V("R")},"0%")))'),
+        ("欠勤率", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")))'),
+        ("勤務時間", f"={V('R')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF({V("T")}="","","1日あたり "&TEXT({V("T")},"0.0")&"h"))'),
+        ("深夜勤務", f"={V('S')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF(N({V("R")})=0,"","勤務時間の "&TEXT({V("S")}/{V("R")},"0%")))'),
     ]
     for i, (label, formula, fmt, sub) in enumerate(tiles):
         c0 = GRID_FIRST + i * 4
@@ -709,9 +715,9 @@ def build_dashboard(wb, maxrows, select=None):
         for r in range(10, 14):
             ws[f"{L(c0)}{r}"].border = Border(left=Side(style="thick", color=accent), top=ws[f"{L(c0)}{r}"].border.top, bottom=ws[f"{L(c0)}{r}"].border.bottom)
     rate_rules = [
-        (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$7)', C_GOOD_TXT),
-        (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$8)', C_WARN_TXT),
-        (f'ISNUMBER(${HC}$6)', C_CRIT),
+        (f'AND(ISNUMBER({P}${HC}$6),{P}${HC}$6>={P}${HC}$7)', C_GOOD_TXT),
+        (f'AND(ISNUMBER({P}${HC}$6),{P}${HC}$6>={P}${HC}$8)', C_WARN_TXT),
+        (f'ISNUMBER({P}${HC}$6)', C_CRIT),
     ]
     for formula, color in rate_rules:
         ws.conditional_formatting.add("F11:H12", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=20, color=color), stopIfTrue=True))
@@ -720,16 +726,16 @@ def build_dashboard(wb, maxrows, select=None):
     ws.row_dimensions[14].height = 10
     ws.row_dimensions[15].height = 20
     ws.merge_cells("B15:X15")
-    ws["B15"] = (f'=IF(${HC}$4="","",IF(N(${HC}$10)=0,"対象期間に確定シフトがありません。",'
-                 f'"確定シフト "&${HC}$10&"日のうち出勤 "&{V("M")}&"日、当日欠勤 "&{V("N")}&"日。'
-                 f'出勤率 "&TEXT(${HC}$6,"0.0%")&"（全体平均 "&TEXT(${HC}$35,"0.0%")&"、"&{ros}!$AY$8&"人中 "&{V("W")}&"位）"))')
+    ws["B15"] = (f'=IF({P}${HC}$4="","",IF(N({P}${HC}$10)=0,"対象期間に確定シフトがありません。",'
+                 f'"確定シフト "&{P}${HC}$10&"日のうち出勤 "&{V("M")}&"日、当日欠勤 "&{V("N")}&"日。'
+                 f'出勤率 "&TEXT({P}${HC}$6,"0.0%")&"（全体平均 "&TEXT({P}${HC}$35,"0.0%")&"、"&{ros}!$AY$8&"人中 "&{V("W")}&"位）"))')
     style(ws["B15"], size=10, bold=True, color=C_INK, align="left")
     ws.row_dimensions[16].height = 14
 
     # ---- グラフ 1段目（7列＋空き1列 ×3）
     ws.row_dimensions[17].height = 18
     for r in range(18, 32):
-        ws.row_dimensions[r].height = 15
+        ws.row_dimensions[r].height = 16.5
     section(17, "出勤率", "B", "H")
     section(17, "月別の出勤日数・欠勤日数", "J", "P")
     section(17, "職種別の勤務時間", "R", "X")
@@ -744,14 +750,14 @@ def build_dashboard(wb, maxrows, select=None):
     def plain(ch):
         ch.graphical_properties = GraphicalProperties()
         ch.graphical_properties.line.noFill = True
-        ch.width, ch.height = 6.8, 7.0
+        ch.width, ch.height = 6.3, 7.2
         return ch
 
     def doughnut(label_rng, data_rng, colors, hole=58):
         ch = DoughnutChart()
         ch.holeSize = hole
-        ch.add_data(Reference(ws, range_string=f"{q(S_DASH)}!{data_rng}"), titles_from_data=False)
-        ch.set_categories(Reference(ws, range_string=f"{q(S_DASH)}!{label_rng}"))
+        ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!{data_rng}"), titles_from_data=False)
+        ch.set_categories(Reference(hws, range_string=f"{q(S_DBCALC)}!{label_rng}"))
         s = ch.series[0]
         for i, color in enumerate(colors):
             pt = DataPoint(idx=i)
@@ -773,9 +779,9 @@ def build_dashboard(wb, maxrows, select=None):
 
     ch = BarChart()
     ch.type, ch.grouping, ch.overlap, ch.gapWidth = "col", "stacked", 100, 60
-    ch.add_data(Reference(ws, range_string=f"{q(S_DASH)}!${HC}$45:${HC}$51"), titles_from_data=True)
-    ch.add_data(Reference(ws, range_string=f"{q(S_DASH)}!$AD$45:$AD$51"), titles_from_data=True)
-    ch.set_categories(Reference(ws, range_string=f"{q(S_DASH)}!${HL}$46:${HL}$51"))
+    ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!${HC}$45:${HC}$51"), titles_from_data=True)
+    ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!$AD$45:$AD$51"), titles_from_data=True)
+    ch.set_categories(Reference(hws, range_string=f"{q(S_DBCALC)}!${HL}$46:${HL}$51"))
     ch.series[0].graphicalProperties = gp(C_BLUE)
     ch.series[1].graphicalProperties = gp(C_RED)
     for s_ in ch.series:
@@ -797,7 +803,7 @@ def build_dashboard(wb, maxrows, select=None):
     ws.row_dimensions[32].height = 14
     ws.row_dimensions[33].height = 18
     for r in range(34, 48):
-        ws.row_dimensions[r].height = 15
+        ws.row_dimensions[r].height = 16.5
     section(33, "曜日別の出勤日数", "B", "H")
     section(33, "出勤率の比較", "J", "P")
     section(33, "休みへの変更のタイミング", "R", "X")
@@ -806,8 +812,8 @@ def build_dashboard(wb, maxrows, select=None):
 
     ch = BarChart()
     ch.type, ch.gapWidth = "col", 50
-    ch.add_data(Reference(ws, range_string=f"{q(S_DASH)}!${HC}$25:${HC}$31"), titles_from_data=False)
-    ch.set_categories(Reference(ws, range_string=f"{q(S_DASH)}!${HL}$25:${HL}$31"))
+    ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!${HC}$25:${HC}$31"), titles_from_data=False)
+    ch.set_categories(Reference(hws, range_string=f"{q(S_DBCALC)}!${HL}$25:${HL}$31"))
     ch.series[0].graphicalProperties = gp(C_BLUE)
     for i in (5, 6):
         pt = DataPoint(idx=i)
@@ -828,8 +834,8 @@ def build_dashboard(wb, maxrows, select=None):
 
     ch = BarChart()
     ch.type, ch.gapWidth = "bar", 50
-    ch.add_data(Reference(ws, range_string=f"{q(S_DASH)}!${HC}$34:${HC}$36"), titles_from_data=False)
-    ch.set_categories(Reference(ws, range_string=f"{q(S_DASH)}!${HL}$34:${HL}$36"))
+    ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!${HC}$34:${HC}$36"), titles_from_data=False)
+    ch.set_categories(Reference(hws, range_string=f"{q(S_DBCALC)}!${HL}$34:${HL}$36"))
     ch.series[0].graphicalProperties = gp(C_GRAY_BAR)
     pt = DataPoint(idx=0)
     pt.graphicalProperties = gp(C_BLUE)
@@ -854,20 +860,23 @@ def build_dashboard(wb, maxrows, select=None):
     head_cell("R35", "区分", align="left")
     ws.merge_cells("W35:X35")
     head_cell("W35", "日数")
-    for i, (code, label) in enumerate(REST_CATS):
+    for i, (code, label) in enumerate(REST_CATS[:3]):
         r = 36 + i * 2
         ws.merge_cells(f"R{r}:V{r + 1}")
         ws[f"R{r}"] = label
         style(ws[f"R{r}"], size=10, bg="FFFFFF", align="left")
         ws.merge_cells(f"W{r}:X{r + 1}")
-        ws[f"W{r}"] = f'=IF({sel}="","",${HC}${39 + i})'
+        ws[f"W{r}"] = f'=IF({sel}="","",{P}${HC}${39 + i})'
         style(ws[f"W{r}"], size=11, bold=(code == "当日"), bg="FFFFFF", align="right", fmt='0"日"', color=(C_RED if code == "当日" else C_INK))
         for c in "RSTUVWX":
             ws[f"{c}{r + 1}"].border = Border(bottom=hair)
-    ws.merge_cells("R45:X47")
-    ws["R45"] = "確定していたシフトを「休み」に変えた日を、変更した時期ごとに数えたものです。欠勤として数えるのは「当日」のみです。"
-    style(ws["R45"], size=8, color=C_MUTED, bg="FFFFFF", align="left", valign="top", wrap=True)
-    ws.conditional_formatting.add("W36:W43", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_GRAY_BAR, showValue=True))
+    ws.merge_cells("R42:X44")
+    ws["R42"] = "確定していたシフトを「休み」に変えた日を、変更した時期ごとに数えたものです。欠勤として数えるのは「当日」のみです。"
+    style(ws["R42"], size=8, color=C_MUTED, bg="FFFFFF", align="left", valign="top", wrap=True)
+    ws.merge_cells("R45:X46")
+    ws["R45"] = f'=IF(N({P}${HC}$42)>0,"※ シフト日より後に更新された休みが "&{P}${HC}$42&"日あります（欠勤には含めていません）","")'
+    style(ws["R45"], size=8, color=C_CRIT, bg="FFFFFF", align="left", valign="top", wrap=True)
+    ws.conditional_formatting.add("W36:W41", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_GRAY_BAR, showValue=True))
 
     # ---- 2ページ目: 月別サマリー
     ws.row_dimensions[48].height = 14
@@ -889,14 +898,14 @@ def build_dashboard(wb, maxrows, select=None):
         H = f"N({V(has)})=1"
         vals = [
             (f"={ros}!$AY${21 + k}", None, "left"),
-            (f'=IF(${HC}$4="","",IF({H},{V(mw)},"—"))', '0"日"', "right"),
-            (f'=IF(${HC}$4="","",IF({H},{V(ma)},"—"))', '0"日"', "right"),
-            (f'=IF(${HC}$4="","",IF({H},N({V(mw)})+N({V(ma)}),"—"))', '0"日"', "right"),
-            (f'=IF(${HC}$4="","",IF({H},IF(N(J{r})=0,"－",N(F{r})/N(J{r})),"—"))', "0.0%", "right"),
-            (f'=IF(${HC}$4="","",IF({H},{V(mh)},"—"))', '0.0"h"', "right"),
-            (f'=IF(${HC}$4="","",IF({H},IF(N(F{r})=0,"－",N(P{r})/N(F{r})),"—"))', '0.0"h"', "right"),
-            (f'=IF(${HC}$4="","",IF({H},{sum6sel_k("N", k, maxrows, sel)},"—"))', '0.0"h"', "right"),
-            (f'=IF(${HC}$4="","",IF({H},SUMIFS({calc_rng(k, "U", maxrows)},{calc_rng(k, "A", maxrows)},{sel},{calc_rng(k, "P", maxrows)},"前日"),"—"))', '0"日"', "right"),
+            (f'=IF({P}${HC}$4="","",IF({H},{V(mw)},"—"))', '0"日"', "right"),
+            (f'=IF({P}${HC}$4="","",IF({H},{V(ma)},"—"))', '0"日"', "right"),
+            (f'=IF({P}${HC}$4="","",IF({H},N({V(mw)})+N({V(ma)}),"—"))', '0"日"', "right"),
+            (f'=IF({P}${HC}$4="","",IF({H},IF(N(J{r})=0,"－",N(F{r})/N(J{r})),"—"))', "0.0%", "right"),
+            (f'=IF({P}${HC}$4="","",IF({H},{V(mh)},"—"))', '0.0"h"', "right"),
+            (f'=IF({P}${HC}$4="","",IF({H},IF(N(F{r})=0,"－",N(P{r})/N(F{r})),"—"))', '0.0"h"', "right"),
+            (f'=IF({P}${HC}$4="","",IF({H},{sum6sel_k("N", k, maxrows, sel)},"—"))', '0.0"h"', "right"),
+            (f'=IF({P}${HC}$4="","",IF({H},SUMIFS({calc_rng(k, "U", maxrows)},{calc_rng(k, "A", maxrows)},{sel},{calc_rng(k, "P", maxrows)},"前日"),"—"))', '0"日"', "right"),
         ]
         for (title, a, b), (formula, fmt, align) in zip(tbl_cols, vals):
             ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
@@ -908,14 +917,14 @@ def build_dashboard(wb, maxrows, select=None):
     ws.row_dimensions[r].height = 18
     totals = [
         ('="合計"', None, "left"),
-        (f'=IF(${HC}$4="","",SUM(F52:F57))', '0"日"', "right"),
-        (f'=IF(${HC}$4="","",SUM(H52:H57))', '0"日"', "right"),
-        (f'=IF(${HC}$4="","",SUM(J52:J57))', '0"日"', "right"),
-        (f'=IF(${HC}$4="","",IF(N(J58)=0,"－",N(F58)/N(J58)))', "0.0%", "right"),
-        (f'=IF(${HC}$4="","",SUM(P52:P57))', '0.0"h"', "right"),
-        (f'=IF(${HC}$4="","",IF(N(F58)=0,"－",N(P58)/N(F58)))', '0.0"h"', "right"),
-        (f'=IF(${HC}$4="","",SUM(U52:U57))', '0.0"h"', "right"),
-        (f'=IF(${HC}$4="","",SUM(W52:W57))', '0"日"', "right"),
+        (f'=IF({P}${HC}$4="","",SUM(F52:F57))', '0"日"', "right"),
+        (f'=IF({P}${HC}$4="","",SUM(H52:H57))', '0"日"', "right"),
+        (f'=IF({P}${HC}$4="","",SUM(J52:J57))', '0"日"', "right"),
+        (f'=IF({P}${HC}$4="","",IF(N(J58)=0,"－",N(F58)/N(J58)))', "0.0%", "right"),
+        (f'=IF({P}${HC}$4="","",SUM(P52:P57))', '0.0"h"', "right"),
+        (f'=IF({P}${HC}$4="","",IF(N(F58)=0,"－",N(P58)/N(F58)))', '0.0"h"', "right"),
+        (f'=IF({P}${HC}$4="","",SUM(U52:U57))', '0.0"h"', "right"),
+        (f'=IF({P}${HC}$4="","",SUM(W52:W57))', '0"日"', "right"),
     ]
     for (title, a, b), (formula, fmt, align) in zip(tbl_cols, totals):
         ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
@@ -925,7 +934,7 @@ def build_dashboard(wb, maxrows, select=None):
             ws[f"{L(c)}{r}"].border = Border(top=thin, bottom=thin)
     ws.conditional_formatting.add("F52:F57", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_BLUE, showValue=True))
     ws.conditional_formatting.add("H52:H57", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_RED, showValue=True))
-    for formula, color in [(f'AND(ISNUMBER(M52),M52>=${HC}$7)', C_GOOD_TXT), (f'AND(ISNUMBER(M52),M52>=${HC}$8)', C_WARN_TXT), ('ISNUMBER(M52)', C_CRIT)]:
+    for formula, color in [(f'AND(ISNUMBER(M52),M52>={P}${HC}$7)', C_GOOD_TXT), (f'AND(ISNUMBER(M52),M52>={P}${HC}$8)', C_WARN_TXT), ('ISNUMBER(M52)', C_CRIT)]:
         ws.conditional_formatting.add("M52:M58", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=10, color=color), stopIfTrue=True))
 
     # ---- 欠勤（当日休み変更）の日付一覧
@@ -949,7 +958,7 @@ def build_dashboard(wb, maxrows, select=None):
     for i in range(1, ABS_ROWS + 1):
         r = 62 + i
         ws.row_dimensions[r].height = 17
-        date_f = f"={lk('B', i)}" if i > 1 else f'=IF(AND({sel}<>"",N(${HC}$54)=0),"該当なし",{lk("B", i)})'
+        date_f = f"={lk('B', i)}" if i > 1 else f'=IF(AND({sel}<>"",N({P}${HC}$54)=0),"該当なし",{lk("B", i)})'
         cells = [
             (2, 5, date_f, "m/d", "left"),
             (6, 6, f'=IF(ISNUMBER(B{r}),CHOOSE(WEEKDAY(B{r}),"日","月","火","水","木","金","土"),"")', None, "center"),
@@ -969,7 +978,7 @@ def build_dashboard(wb, maxrows, select=None):
     r = 63 + ABS_ROWS
     ws.row_dimensions[r].height = 16
     ws.merge_cells(f"B{r}:X{r}")
-    ws[f"B{r}"] = (f'=IF({sel}="","",IF(N(${HC}$54)>{ABS_ROWS},"ほか "&(${HC}$54-{ABS_ROWS})&" 件（表示は最初の{ABS_ROWS}件）。",""))'
+    ws[f"B{r}"] = (f'=IF({sel}="","",IF(N({P}${HC}$54)>{ABS_ROWS},"ほか "&({P}${HC}$54-{ABS_ROWS})&" 件（表示は最初の{ABS_ROWS}件）。",""))'
                    f'&"日時はシフト管理アプリ上で休みに変更された時刻です。"')
     style(ws[f"B{r}"], size=8, color=C_MUTED, align="left")
 
@@ -982,8 +991,8 @@ def build_dashboard(wb, maxrows, select=None):
     notes = [
         "出勤日数は確定シフトのあった日数（同じ日の複数区分は1日）。欠勤日数は、確定していたシフトを当日に「休み」へ変更した日数で、前日までの変更は含みません。",
         "出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋欠勤日数）。勤務時間はシフト上の時間（変更後の時間から休憩を除く）。",
-        f'="総合判定は出勤率のみによる目安です。確定シフト日数が "&${HC}$9&"日未満の場合は参考値とし、判定を行いません。"',
-        f'="欠勤には店側の都合による当日変更が含まれることがあります。面談では本人に事情を確認のうえご利用ください。"&IF({sel}="","","　応募の却下（店側の判断）："&${HC}$55&"件")',
+        f'="総合判定は出勤率のみによる目安です。確定シフト日数が "&{P}${HC}$9&"日未満の場合は参考値とし、判定を行いません。"',
+        f'="欠勤には店側の都合による当日変更が含まれることがあります。面談では本人に事情を確認のうえご利用ください。"&IF({sel}="","","　応募の却下（店側の判断）："&{P}${HC}$55&"件")',
     ]
     for i, t in enumerate(notes):
         rr = r0 + 2 + i
@@ -1219,13 +1228,33 @@ def build_howto(wb, maxrows):
         ws.row_dimensions[rr].height = 30
 
     r = 34
+    ws[f"B{r}"] = "他の劇場で使うときに変更する項目（「設定」シート）"
+    style(ws[f"B{r}"], size=12, bold=True)
+    items = [
+        ("劇場名", "設定!B1。ダッシュボードの見出しに表示されます。"),
+        ("判定の基準", "設定!B3（◎の基準、既定95%）、B4（△の基準、既定90%）、B5（判定を保留する確定シフト日数、既定20日）。"),
+        ("深夜の時間帯", "設定!B7〜B8（既定 22:00〜29:00）。"),
+        ("職種の区分", "設定!A13〜B18。CSVの「募集シフトの職種」の値（例 02コンセ）と表示名。劇場によって職種名が違う場合はここを合わせます。"),
+        ("所属の一覧", "設定!A24〜B27。CSVの「応募者の職種」の値と表示名。所属別集計と「同所属平均」に使います。"),
+        ("それ以外", "CSVの列名（1行目）が同じであれば、他に変更する箇所はありません。列名が変わった場合は「貼付状況」に警告が出ます。"),
+    ]
+    for i, (k_, t) in enumerate(items):
+        rr = r + 1 + i
+        ws[f"B{rr}"] = k_
+        style(ws[f"B{rr}"], size=10, bold=True, align="left", valign="top")
+        ws.merge_cells(f"C{rr}:E{rr}")
+        ws[f"C{rr}"] = t
+        style(ws[f"C{rr}"], size=10, align="left", valign="top", wrap=True)
+        ws.row_dimensions[rr].height = 28
+
+    r = 42
     ws[f"B{r}"] = "注意事項"
     style(ws[f"B{r}"], size=12, bold=True)
     cautions = [
         f"1ヶ月あたり {maxrows:,} 行、スタッフは半年で {MAXSTAFF} 名まで集計できます。超えた場合は「貼付状況」に警告が出ます。",
         "スタッフは「応募者の従業員番号」で同一人物を判定し、名前は最新月のものを表示します（名前の前後の記号が月によって変わっても同じ人として集計されます）。",
         "CSVの列名（1行目）で列を探すため、列の順番が変わっても動作します。列名が変わった場合は「貼付状況」に警告が出ます。",
-        "開いたときに計算に数秒かかることがあります。「ダッシュボード」「スタッフ一覧」以外のシート（設定・名簿・計算1〜6）の数式は編集しないでください。",
+        "開いたときに計算に数秒かかることがあります。計算用のシート（名簿・DB計算・計算1〜6）は非表示にしてあります。表示して編集しないでください。",
         "欠勤（当日休み変更）には、本人都合だけでなく店側都合の当日カットなどが含まれる可能性があります。理由はCSVにないため、必ず本人に事情を確認したうえで評価してください。",
         "「更新時間」は行の最終更新時刻です。シフト日より後に休み行を編集すると「シフト日より後」に分類され欠勤から外れます。その区分が0日でない人は当日の実態を確認してください。",
         "このファイルには個人の勤務情報が含まれます。取り扱いにご注意ください。",
@@ -1236,7 +1265,7 @@ def build_howto(wb, maxrows):
         ws[f"B{rr}"] = "・" + t
         style(ws[f"B{rr}"], size=10, align="left", valign="top", wrap=True)
         ws.row_dimensions[rr].height = 28
-    ws.print_area = "A1:E44"
+    ws.print_area = "A1:E52"
     ws.page_setup.orientation = "portrait"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
@@ -1265,6 +1294,8 @@ def build(output, csv_paths=(), maxrows=6000, select=None, paste_mode="excel"):
     wb.defined_names["StaffNames"] = DefinedName(
         "StaffNames", attr_text=f"{q(S_ROSTER)}!$AT$2:INDEX({q(S_ROSTER)}!$AT$2:$AT${ML},MAX(1,N({q(S_ROSTER)}!$AY$2)))")
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
+    for name in [S_ROSTER, S_DBCALC] + [S_CALC.format(k) for k in range(1, NSHEETS + 1)]:
+        wb[name].sheet_state = "hidden"
     wb.active = wb.sheetnames.index(S_DASH)
     wb.save(output)
     return output
