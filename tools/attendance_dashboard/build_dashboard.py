@@ -734,7 +734,8 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
 
     info("J", "K", "従業員番号", f"={V('I')}", fmt="0")
     info("M", "N", "所属", f'=IF({P}${HC}$5="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH({P}${HC}$5,{ros}!$AX$14:$AX$17,0)),{P}${HC}$5))')
-    info("P", "Q", "資格", f'=IF({P}${HC}$4="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({V("L")},"01アルバイト","アルバイト"),"02サブリーダー","サブリーダー"),"03リーダー","リーダー"))', size=10)
+    # 資格はほぼ全員アルバイトなので表示しない。代わりにデータのある月数（途中加入や参考値の説明になる）
+    info("P", "Q", "データのある月数", f'=IF({P}${HC}$4="","",{V("AR")}&"／"&COUNTIF({ros}!$BA$22:$BA$27,"OK")&"ヶ月")', size=11)
     ws["S6"] = f'="総合判定（出勤率 "&TEXT({P}${HC}$7,"0%")&"以上◎／"&TEXT({P}${HC}$8,"0%")&"以上△）"'
     style(ws["S6"], size=9, color=C_INK2)
     ws.merge_cells("S7:X8")
