@@ -563,8 +563,8 @@ def build_dashboard(wb, maxrows, select=None):
         (8, "△の基準", f"={sets}!$B$4"),
         (9, "判定保留の日数", f"={sets}!$B$5"),
         (10, "確定シフト日数", f"={V('O')}"),
-        (11, "当欠率アラート基準", f"={sets}!$B$6"),
-        (12, "当欠率", f"={V('Q')}"),
+        (56, "当欠率アラート基準", f"={sets}!$B$6"),
+        (57, "当欠率", f"={V('Q')}"),
     ]
     for r, label, formula in helpers:
         hws[f"{HL}{r}"], hws[f"{HC}{r}"] = label, formula
@@ -710,7 +710,7 @@ def build_dashboard(wb, maxrows, select=None):
         ("出勤日数", f"={V('M')}", '0"日"', f'=IF({P}${HC}$4="","","確定シフト "&{V("O")}&"日")'),
         ("出勤率", f"={V('P')}", "0.0%", f'=IF({P}${HC}$6="","",IF({all_rate}="","","全体平均 "&TEXT({all_rate},"0.0%")))'),
         ("欠勤日数", f"={V('N')}", '0"日"', '="当日に休みへ変更した日"'),
-        ("当欠率（当日欠勤率）", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")&"　基準 "&TEXT({P}${HC}$11,"0%"))&"")'),
+        ("当欠率（当日欠勤率）", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")&"　基準 "&TEXT({P}${HC}$56,"0%"))&"")'),
         ("勤務時間", f"={V('R')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF({V("T")}="","","1日あたり "&TEXT({V("T")},"0.0")&"h"))'),
         ("深夜勤務", f"={V('S')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF(N({V("R")})=0,"","勤務時間の "&TEXT({V("S")}/{V("R")},"0%")))'),
     ]
@@ -749,11 +749,11 @@ def build_dashboard(wb, maxrows, select=None):
     style(ws["B15"], size=10, bold=True, color=C_INK, align="left")
     ws.row_dimensions[16].height = 16
     ws.merge_cells("B16:X16")
-    ws["B16"] = (f'=IF(OR({P}${HC}$12="",{P}${HC}$10=""),"",IF(AND({P}${HC}$12>={P}${HC}$11,{P}${HC}$10>={P}${HC}$9),'
-                 f'"⚠ 当欠率 "&TEXT({P}${HC}$12,"0.0%")&" が基準（"&TEXT({P}${HC}$11,"0%")&"以上）に達しています。当日欠勤の状況を本人に確認してください。",""))')
+    ws["B16"] = (f'=IF(OR({P}${HC}$57="",{P}${HC}$10=""),"",IF(AND({P}${HC}$57>={P}${HC}$56,{P}${HC}$10>={P}${HC}$9),'
+                 f'"⚠ 当欠率 "&TEXT({P}${HC}$57,"0.0%")&" が基準（"&TEXT({P}${HC}$56,"0%")&"以上）に達しています。当日欠勤の状況を本人に確認してください。",""))')
     style(ws["B16"], size=9.5, bold=True, color=C_CRIT, align="left")
-    ws.conditional_formatting.add("N10:P13", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$12),{P}${HC}$12>={P}${HC}$11,{P}${HC}$10>={P}${HC}$9)'], fill=fill("FDECEA"), stopIfTrue=False))
-    ws.conditional_formatting.add("N11:P12", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$12),{P}${HC}$12>={P}${HC}$11,{P}${HC}$10>={P}${HC}$9)'], font=Font(name=FONT, bold=True, size=20, color=C_CRIT), stopIfTrue=True))
+    ws.conditional_formatting.add("N10:P13", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$57),{P}${HC}$57>={P}${HC}$56,{P}${HC}$10>={P}${HC}$9)'], fill=fill("FDECEA"), stopIfTrue=False))
+    ws.conditional_formatting.add("N11:P12", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$57),{P}${HC}$57>={P}${HC}$56,{P}${HC}$10>={P}${HC}$9)'], font=Font(name=FONT, bold=True, size=20, color=C_CRIT), stopIfTrue=True))
 
     # ---- グラフ 1段目（7列＋空き1列 ×3）
     ws.row_dimensions[17].height = 18
@@ -941,7 +941,7 @@ def build_dashboard(wb, maxrows, select=None):
     ws.row_dimensions[50].height = 4
     notes = [
         "出勤日数は確定シフトのあった日数（同じ日の複数区分は1日）。欠勤日数は、確定していたシフトを当日に「休み」へ変更した日数で、前日までの変更は含みません。",
-        f'="出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋当日欠勤日数）、当欠率 ＝ 当日欠勤日数 ÷ 確定シフト日数（基準 "&TEXT({P}${HC}$11,"0%")&"以上で警告）。勤務時間はシフト上の時間。"',
+        f'="出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋当日欠勤日数）、当欠率 ＝ 当日欠勤日数 ÷ 確定シフト日数（基準 "&TEXT({P}${HC}$56,"0%")&"以上で警告）。勤務時間はシフト上の時間。"',
         f'="総合判定は出勤率のみによる目安です。確定シフト日数が "&{P}${HC}$9&"日未満の場合は参考値とし、判定を行いません。"',
         f'="欠勤には店側の都合による当日変更が含まれることがあります。面談では本人に事情を確認のうえご利用ください。"&IF({sel}="","","　応募の却下（店側の判断）："&{P}${HC}$55&"件")',
     ]
