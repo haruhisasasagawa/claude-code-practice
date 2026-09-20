@@ -584,6 +584,13 @@ def build_dashboard(wb, maxrows, select=None):
         hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("M", "R", f"{sets}!$A${13 + i}")})'
     hws[f"{HL}22"] = f"={sets}!$B$19"
     hws[f"{HC}22"] = f'=IF({sel}="",0,MAX(0,N({V("R")})-SUM({P}${HC}$16:{P}${HC}$21)))'
+    hws[f"{HL}23"] = "職種トップ（名前／割合）"
+    hws[f"{HC}23"] = f'=IF(SUM({P}${HC}$16:{P}${HC}$22)=0,"",INDEX({P}${HL}$16:{P}${HL}$22,MATCH(MAX({P}${HC}$16:{P}${HC}$22),{P}${HC}$16:{P}${HC}$22,0)))'
+    hws["AD23"] = f'=IF(SUM({P}${HC}$16:{P}${HC}$22)=0,"",MAX({P}${HC}$16:{P}${HC}$22)/SUM({P}${HC}$16:{P}${HC}$22))'
+    hws["AD23"].number_format = "0%"
+    for i in range(7):
+        hws[f"AD{16 + i}"] = f'=IF(SUM({P}${HC}$16:{P}${HC}$22)=0,0,{P}${HC}${16 + i}/SUM({P}${HC}$16:{P}${HC}$22))'
+        hws[f"AD{16 + i}"].number_format = "0%"
     for i, (code, wd) in enumerate(WD_ORDER):
         r = 25 + i
         hws[f"{HL}{r}"] = wd
@@ -754,10 +761,10 @@ def build_dashboard(wb, maxrows, select=None):
     def plain(ch):
         ch.graphical_properties = GraphicalProperties()
         ch.graphical_properties.line.noFill = True
-        ch.width, ch.height = 6.3, 7.2
+        ch.width, ch.height = 6.3, 6.6
         return ch
 
-    def doughnut(label_rng, data_rng, colors, hole=58):
+    def doughnut(label_rng, data_rng, colors, hole=62, labels=True):
         ch = DoughnutChart()
         ch.holeSize = hole
         ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!{data_rng}"), titles_from_data=False)
@@ -767,19 +774,52 @@ def build_dashboard(wb, maxrows, select=None):
             pt = DataPoint(idx=i)
             pt.graphicalProperties = gp(color)
             s.dPt.append(pt)
-        ch.dataLabels = DataLabelList()
-        ch.dataLabels.showPercent = True
-        ch.dataLabels.showVal = False
-        ch.dataLabels.showCatName = False
-        ch.dataLabels.showSerName = False
-        ch.dataLabels.showLeaderLines = False
-        ch.dataLabels.showLegendKey = False
-        ch.dataLabels.numFmt = "0%;;;"
-        ch.legend.position = "b"
-        return plain(ch)
+        if labels:
+            ch.dataLabels = DataLabelList()
+            ch.dataLabels.showPercent = True
+            ch.dataLabels.showVal = False
+            ch.dataLabels.showCatName = False
+            ch.dataLabels.showSerName = False
+            ch.dataLabels.showLeaderLines = False
+            ch.dataLabels.showLegendKey = False
+            ch.dataLabels.numFmt = "0%;;;"
+        ch.legend = None
+        plain(ch)
+        ch.plot_area.graphicalProperties = GraphicalProperties(noFill=True)
+        ch.graphical_properties.noFill = True
+        ch.width, ch.height = 6.3, 6.0
+        return ch
 
-    ws.add_chart(doughnut(f"${HL}$12:${HL}$13", f"${HC}$12:${HC}$13", [C_BLUE, C_RED], hole=60), "B18")
-    ws.add_chart(doughnut(f"${HL}$16:${HL}$22", f"${HC}$16:${HC}$22", CAT_COLORS), "R18")
+    ws.add_chart(doughnut(f"${HL}$12:${HL}$13", f"${HC}$12:${HC}$13", [C_BLUE, C_RED], labels=False), "B18")
+    ws.add_chart(doughnut(f"${HL}$16:${HL}$22", f"${HC}$16:${HC}$22", CAT_COLORS, labels=False), "R18")
+
+    # リングの穴に大きな数値を表示（グラフ背景は透明）
+    def center(a, b, label, value, fmt, color=C_INK):
+        ws.merge_cells(f"{a}22:{b}22")
+        ws[f"{a}22"] = label
+        style(ws[f"{a}22"], size=8, color=C_MUTED, bg="FFFFFF", align="center", valign="bottom")
+        ws.merge_cells(f"{a}23:{b}24")
+        ws[f"{a}23"] = value
+        style(ws[f"{a}23"], size=20, bold=True, color=color, bg="FFFFFF", align="center", fmt=fmt)
+
+    center("D", "F", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
+    for formula, color in rate_rules:
+        ws.conditional_formatting.add("D23:F24", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=20, color=color), stopIfTrue=True))
+    center("T", "V", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
+
+    # 凡例（グラフの下に小さく）
+    ws.merge_cells("C30:E30")
+    ws["C30"] = f'=IF({P}${HC}$3="","","● 出勤 "&TEXT(IF({P}${HC}$12+{P}${HC}$13=0,0,{P}${HC}$12/({P}${HC}$12+{P}${HC}$13)),"0%"))'
+    style(ws["C30"], size=8.5, bold=True, color=C_BLUE, bg="FFFFFF", align="center")
+    ws.merge_cells("F30:H30")
+    ws["F30"] = f'=IF({P}${HC}$3="","","● 欠勤 "&TEXT(IF({P}${HC}$12+{P}${HC}$13=0,0,{P}${HC}$13/({P}${HC}$12+{P}${HC}$13)),"0%"))'
+    style(ws["F30"], size=8.5, bold=True, color=C_RED, bg="FFFFFF", align="center")
+    slots = [("R", "S", 30), ("T", "U", 30), ("V", "W", 30), ("X", "X", 30), ("R", "S", 31), ("T", "U", 31), ("V", "W", 31)]
+    for i, (a, b, r) in enumerate(slots):
+        if a != b:
+            ws.merge_cells(f"{a}{r}:{b}{r}")
+        ws[f"{a}{r}"] = f'=IF(N({P}${HC}${16 + i})=0,"","●"&{P}${HL}${16 + i}&" "&TEXT({P}$AD${16 + i},"0%"))'
+        style(ws[f"{a}{r}"], size=7.5, bold=True, color=CAT_COLORS[i], bg="FFFFFF", align="left")
 
     ch = BarChart()
     ch.type, ch.grouping, ch.overlap, ch.gapWidth = "col", "stacked", 100, 60
