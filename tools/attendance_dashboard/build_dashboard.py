@@ -267,9 +267,9 @@ def build_calc_sheet(wb, k, maxrows):
                   f'ROUND({tconv("募集シフトの終了時間")}*1440,0)=1740),"",{tconv("募集シフトの開始時間")}),""))'),
             "Y": f'=IF($A{r}="","",IF($X{r}="","",{tconv("募集シフトの終了時間")}))',
             "S": f'=IF($A{r}="","",IF(MATCH($A{r},$A$2:$A${last},0)=ROW()-1,1,0))',
-            "AV": f'=IF($E{r}=1,IFERROR($A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
-            "AW": f'=IF(AND($C{r}=1,$D{r}=4),IFERROR($A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
-            "AX": f'=IF($G{r}=1,IFERROR($A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
+            "AV": f'=IF($E{r}=1,IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
+            "AW": f'=IF(AND($C{r}=1,$D{r}=4),IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
+            "AX": f'=IF($G{r}=1,IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
             "T": f'=N($T{r-1})+IF($S{r}=1,1,0)',
             "U": f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=4),IF(MATCH($AW{r},$AW$2:$AW${last},0)=ROW()-1,1,0),0))',
         }
@@ -285,6 +285,8 @@ def build_calc_sheet(wb, k, maxrows):
         ws[f"V{r}"].number_format = "yyyy/mm/dd hh:mm"
         ws[f"X{r}"].number_format = "[h]:mm"
         ws[f"Y{r}"].number_format = "[h]:mm"
+        for c in ("AV", "AW", "AX"):      # 日付を含む式は日付書式を引き継ぐので、キーは数値書式に固定
+            ws[f"{c}{r}"].number_format = "0"
     ws.freeze_panes = "A2"
     return ws
 
@@ -764,7 +766,7 @@ def build_dashboard(wb, maxrows, select=None):
         ch.width, ch.height = 6.3, 6.6
         return ch
 
-    def doughnut(label_rng, data_rng, colors, hole=62, labels=True):
+    def doughnut(label_rng, data_rng, colors, hole=66, labels=True):
         ch = DoughnutChart()
         ch.holeSize = hole
         ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!{data_rng}"), titles_from_data=False)
@@ -800,11 +802,11 @@ def build_dashboard(wb, maxrows, select=None):
         style(ws[f"{a}22"], size=8, color=C_MUTED, bg="FFFFFF", align="center", valign="bottom")
         ws.merge_cells(f"{a}23:{b}24")
         ws[f"{a}23"] = value
-        style(ws[f"{a}23"], size=20, bold=True, color=color, bg="FFFFFF", align="center", fmt=fmt)
+        style(ws[f"{a}23"], size=16, bold=True, color=color, bg="FFFFFF", align="center", fmt=fmt)
 
     center("D", "F", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
     for formula, color in rate_rules:
-        ws.conditional_formatting.add("D23:F24", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=20, color=color), stopIfTrue=True))
+        ws.conditional_formatting.add("D23:F24", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=16, color=color), stopIfTrue=True))
     center("T", "V", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
 
     # 凡例（グラフの下に小さく）
