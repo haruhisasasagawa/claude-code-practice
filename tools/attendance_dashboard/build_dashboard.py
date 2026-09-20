@@ -804,10 +804,10 @@ def build_dashboard(wb, maxrows, select=None):
         ws[f"{a}23"] = value
         style(ws[f"{a}23"], size=16, bold=True, color=color, bg="FFFFFF", align="center", fmt=fmt)
 
-    center("D", "F", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
+    center("C", "G", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
     for formula, color in rate_rules:
-        ws.conditional_formatting.add("D23:F24", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=16, color=color), stopIfTrue=True))
-    center("T", "V", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
+        ws.conditional_formatting.add("C23:G24", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=16, color=color), stopIfTrue=True))
+    center("S", "W", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
 
     # 凡例（グラフの下に小さく）
     ws.merge_cells("C30:E30")
