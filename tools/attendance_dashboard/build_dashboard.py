@@ -592,7 +592,7 @@ def build_dashboard(wb, maxrows, select=None):
     ws[f"{HL}45"], ws[f"{HC}45"], ws["AD45"] = "月（グラフ用）", "出勤日数", "欠勤日数"
     for k in range(1, NSHEETS + 1):
         r = 45 + k
-        ws[f"{HL}{r}"] = f'=IF({ros}!$AZ${21 + k}>0,MONTH({q(S_CALC.format(k))}!$AA$6)&"月","")'
+        ws[f"{HL}{r}"] = f'=IF({q(S_CALC.format(k))}!$AA$6="","",MONTH({q(S_CALC.format(k))}!$AA$6)&"月")'
         ws[f"{HC}{r}"] = f"=N({V(MONTH_WORK[k - 1])})"
         ws[f"AD{r}"] = f"=N({V(MONTH_ABS[k - 1])})"
         ws[f"{HC}{r}"].number_format = "0;;;"
