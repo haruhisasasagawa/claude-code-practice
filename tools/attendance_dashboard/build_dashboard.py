@@ -36,6 +36,7 @@ STACK = NSHEETS * MAXSTAFF
 FONT = "Yu Gothic"
 
 S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER, S_DBCALC = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿", "DB計算"
+S_PDF = "PDF出力"                        # 説明文なしの面談用ページ（ダッシュボードで選んだスタッフに連動）
 S_CSV = "CSV_{}"
 S_CALC = "計算{}"
 
@@ -526,12 +527,17 @@ C_HEAD = "E7E6E1"                        # 表見出しの薄いグレー
 C_NAVY = "1F3A5F"
 
 
-def build_dashboard(wb, maxrows, select=None):
-    ws = wb.create_sheet(S_DASH)
-    hws = wb.create_sheet(S_DBCALC)
-    hws.sheet_properties.tabColor = "898781"
+def build_dashboard(wb, maxrows, select=None, pdf=False):
+    """pdf=True: 説明文・画面用の表を省いた「PDF出力」シート。選択スタッフはダッシュボードに連動し、
+    内部計算セル（DB計算）はダッシュボードと共用する（同じ式を上書きするだけ）。"""
+    ws = wb.create_sheet(S_PDF if pdf else S_DASH)
+    if pdf:
+        hws = wb[S_DBCALC]
+    else:
+        hws = wb.create_sheet(S_DBCALC)
+        hws.sheet_properties.tabColor = "898781"
     P = q(S_DBCALC) + "!"
-    ws.sheet_properties.tabColor = C_NAVY
+    ws.sheet_properties.tabColor = "6B7280" if pdf else C_NAVY
     ws.sheet_view.showGridLines = False
     ros, sets = q(S_ROSTER), q(S_SET)
     ML = MAXSTAFF + 1
@@ -545,7 +551,7 @@ def build_dashboard(wb, maxrows, select=None):
     hws.column_dimensions[HL].width = 30
     hws.column_dimensions[HC].width = 14
     hws.column_dimensions["AD"].width = 12
-    LAST_ROW = 90
+    LAST_ROW = 48 if pdf else 90
     fill_range(ws, f"A1:Y{LAST_ROW}", C_PAGE)
 
     def V(colref):
@@ -662,18 +668,21 @@ def build_dashboard(wb, maxrows, select=None):
     ws.row_dimensions[6].height = 15
     ws.row_dimensions[7].height = 22
     ws.row_dimensions[8].height = 22
-    ws["B6"] = "スタッフ（▼から選択）"
+    ws["B6"] = "スタッフ（ダッシュボードで選択）" if pdf else "スタッフ（▼から選択）"
     style(ws["B6"], size=9, color=C_INK2)
     ws.merge_cells("B7:H8")
-    if select:
+    if pdf:
+        ws["B7"] = f'=IF({q(S_DASH)}!$B$7="","",{q(S_DASH)}!$B$7)'
+    elif select:
         ws["B7"] = select
     else:
         ws["B7"] = f'=IF({ros}!$AT$2="","← CSV_1 にデータを貼り付けてください",{ros}!$AT$2)'
     style(ws["B7"], size=14, bold=True, bg="FFFFFF", align="left")
     box_range(ws, "B7:H8", Side(style="medium", color=C_BLUE))
-    dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)
-    ws.add_data_validation(dv)
-    dv.add("B7")
+    if not pdf:
+        dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)
+        ws.add_data_validation(dv)
+        dv.add("B7")
 
     def info(col_a, col_b, label, formula, fmt=None, size=11):
         ws[f"{col_a}6"] = label
@@ -926,13 +935,20 @@ def build_dashboard(wb, maxrows, select=None):
         style(ws[f"W{r}"], size=11, bold=(code == "当日"), bg="FFFFFF", align="right", fmt='0"日"', color=(C_RED if code == "当日" else C_INK))
         for c in "RSTUVWX":
             ws[f"{c}{r + 1}"].border = Border(bottom=hair)
-    ws.merge_cells("R42:X44")
-    ws["R42"] = "確定していたシフトを「休み」に変えた日を、変更した時期ごとに数えたものです。欠勤として数えるのは「当日」のみです。"
-    style(ws["R42"], size=8, color=C_MUTED, bg="FFFFFF", align="left", valign="top", wrap=True)
+    if not pdf:
+        ws.merge_cells("R42:X44")
+        ws["R42"] = "確定していたシフトを「休み」に変えた日を、変更した時期ごとに数えたものです。欠勤として数えるのは「当日」のみです。"
+        style(ws["R42"], size=8, color=C_MUTED, bg="FFFFFF", align="left", valign="top", wrap=True)
     ws.merge_cells("R45:X46")
     ws["R45"] = f'=IF(N({P}${HC}$42)>0,"※ シフト日より後に更新された休みが "&{P}${HC}$42&"日あります（欠勤には含めていません）","")'
     style(ws["R45"], size=8, color=C_CRIT, bg="FFFFFF", align="left", valign="top", wrap=True)
     ws.conditional_formatting.add("W36:W41", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_GRAY_BAR, showValue=True))
+
+    if pdf:
+        # PDF出力: 見出し〜グラフまで。集計のきまり・月別の実績・欠勤一覧は載せない
+        ws.row_dimensions[48].height = 12
+        print_setup(ws, "A1:Y48")
+        return ws
 
     # ---- 注記（印刷範囲に含める）
     ws.row_dimensions[48].height = 12
@@ -1055,9 +1071,14 @@ def build_dashboard(wb, maxrows, select=None):
                    f'&"日時はシフト管理アプリ上で休みに変更された時刻です。"')
     style(ws[f"B{r}"], size=8, color=C_MUTED, align="left")
 
-    # ---- 印刷設定（A4縦・幅1ページ・2ページ目に月別以降）
     # 印刷はA4縦1枚（見出し〜集計のきまりまで）。月別の実績・欠勤一覧は画面用で印刷範囲外
-    ws.print_area = "A1:Y54"
+    print_setup(ws, "A1:Y54")
+    return ws
+
+
+def print_setup(ws, area):
+    """A4縦1枚に収める印刷設定."""
+    ws.print_area = area
     ws.page_setup.orientation = "portrait"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
@@ -1068,7 +1089,6 @@ def build_dashboard(wb, maxrows, select=None):
     ws.page_margins.top = ws.page_margins.bottom = 0.6
     ws.print_options.verticalCentered = True
     ws.sheet_view.zoomScale = 100
-    return ws
 
 
 def sum6sel_k(colref, k, maxrows, sel):
@@ -1228,8 +1248,9 @@ def build_howto(wb, maxrows):
         ("1", "シェアフルシフトから1ヶ月分のシフトCSVを出力し、Excelで開きます（ダブルクリックで開けます）。"),
         ("2", "CSVの全体（1行目のヘッダーを含む・列はそのまま）をコピーします。Ctrl+A → Ctrl+C。"),
         ("3", "このブックの「CSV_1」シートのA1セルを選択して貼り付けます（Ctrl+V）。2ヶ月目は「CSV_2」、以降「CSV_3」…「CSV_6」へ。順番は古い月から新しい月の順が見やすいです。"),
-        ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦1枚（見出し〜グラフまで）。その下の月別の実績・欠勤の一覧は画面で確認する部分で、必要なら範囲を選択して印刷してください。"),
-        ("5", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値や深夜時間帯は「設定」シートで変更できます。"),
+        ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦1枚（見出し〜集計のきまりまで）。その下の月別の実績・欠勤の一覧は画面で確認する部分で、必要なら範囲を選択して印刷してください。"),
+        ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。"),
+        ("6", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値や深夜時間帯は「設定」シートで変更できます。"),
         ("★", "貼り直すときは、貼付シートの古いデータをすべて削除（Ctrl+A → Delete）してから貼り付けてください。行数が前より少ない月を上書きすると、古い行が残ってしまいます。"),
     ]
     for i, (n, t) in enumerate(steps):
@@ -1241,7 +1262,7 @@ def build_howto(wb, maxrows):
         style(ws[f"C{rr}"], size=10, align="left", wrap=True)
         ws.row_dimensions[rr].height = 30
 
-    r = 13
+    r = 14
     ws[f"B{r}"] = "貼付状況"
     style(ws[f"B{r}"], size=12, bold=True)
     for j, h in enumerate(["シート", "月", "貼付行数", "状態"]):
@@ -1259,7 +1280,7 @@ def build_howto(wb, maxrows):
     ws.conditional_formatting.add(f"E{r + 2}:E{r + 1 + NSHEETS}", FormulaRule(formula=[f'LEFT(E{r + 2},1)="※"'], font=Font(name=FONT, bold=True, color=C_CRIT, size=10)))
     ws.conditional_formatting.add(f"E{r + 2}:E{r + 1 + NSHEETS}", FormulaRule(formula=[f'E{r + 2}="OK"'], font=Font(name=FONT, bold=True, color=C_GOOD_TXT, size=10)))
 
-    r = 22
+    r = 23
     ws[f"B{r}"] = "指標の定義"
     style(ws[f"B{r}"], size=12, bold=True)
     defs = [
@@ -1282,7 +1303,7 @@ def build_howto(wb, maxrows):
         style(ws[f"C{rr}"], size=10, align="left", valign="top", wrap=True)
         ws.row_dimensions[rr].height = 30
 
-    r = 34
+    r = 35
     ws[f"B{r}"] = "他の劇場で使うときに変更する項目（「設定」シート）"
     style(ws[f"B{r}"], size=12, bold=True)
     items = [
@@ -1302,7 +1323,7 @@ def build_howto(wb, maxrows):
         style(ws[f"C{rr}"], size=10, align="left", valign="top", wrap=True)
         ws.row_dimensions[rr].height = 28
 
-    r = 42
+    r = 43
     ws[f"B{r}"] = "注意事項"
     style(ws[f"B{r}"], size=12, bold=True)
     cautions = [
@@ -1321,7 +1342,7 @@ def build_howto(wb, maxrows):
         ws[f"B{rr}"] = "・" + t
         style(ws[f"B{rr}"], size=10, align="left", valign="top", wrap=True)
         ws.row_dimensions[rr].height = 28
-    ws.print_area = "A1:E52"
+    ws.print_area = "A1:E53"
     ws.page_setup.orientation = "portrait"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
@@ -1336,6 +1357,7 @@ def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
     wb.remove(wb.active)
     build_howto(wb, maxrows)
     build_dashboard(wb, maxrows, select=select)
+    build_dashboard(wb, maxrows, pdf=True)
     build_staff_list(wb)
     for k in range(1, NSHEETS + 1):
         path = csv_paths[k - 1] if k - 1 < len(csv_paths) else None
