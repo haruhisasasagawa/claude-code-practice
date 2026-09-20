@@ -37,8 +37,6 @@ FONT = "Yu Gothic"
 
 S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER, S_DBCALC = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿", "DB計算"
 S_PDF = "PDF出力"                        # 説明文なしの面談用ページ（ダッシュボードで選んだスタッフに連動）
-S_NOTE = "コメント"                      # スタッフごとの面談コメント（PDF出力の下段に引用）
-NOTE_ROWS = 400                          # コメントの入力行数
 S_CSV = "CSV_{}"
 S_CALC = "計算{}"
 
@@ -295,39 +293,6 @@ def build_calc_sheet(wb, k, maxrows):
 
 
 # ---------------------------------------------------------------- シート: 設定
-def build_notes(wb):
-    """コメントシート: A 氏名（▼から選択）、B コメント。PDF出力の下段に氏名で引用する."""
-    ws = wb.create_sheet(S_NOTE)
-    ws.sheet_properties.tabColor = "EDA100"
-    ws.sheet_view.showGridLines = False
-    ws.column_dimensions["A"].width = 26
-    ws.column_dimensions["B"].width = 90
-    ws["A1"], ws["B1"] = "スタッフ（▼から選択）", "コメント（PDF出力の下の「コメント」欄に表示されます）"
-    for c in ("A1", "B1"):
-        style(ws[c], size=10, bold=True, color=C_INK, bg="E7E6E1", align="left", border=Border(top=thin, bottom=thin))
-    ws.row_dimensions[1].height = 22
-    dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)
-    ws.add_data_validation(dv)
-    for r in range(2, NOTE_ROWS + 2):
-        style(ws[f"A{r}"], size=10, bg=C_INPUT_FILL, border=BOX, align="left")
-        style(ws[f"B{r}"], size=10, bg=C_INPUT_FILL, border=BOX, align="left", valign="top", wrap=True)
-        dv.add(f"A{r}")
-    ws["D1"] = "使い方"
-    style(ws["D1"], size=10, bold=True)
-    tips = [
-        "A列でスタッフを選び（または氏名をそのまま入力し）、B列に面談用のコメントを書きます。1人1行。",
-        "「PDF出力」シートで同じスタッフを選ぶと、下の「コメント」欄にこの文が入ります。未入力なら空欄のまま印刷され、手書きできます。",
-        "改行は Alt+Enter。長文は欄からはみ出るので、5〜6行程度までが目安です。",
-        "同じ人を2行書いた場合は上の行だけが使われます。",
-    ]
-    for i, t in enumerate(tips):
-        ws[f"D{2 + i}"] = t
-        style(ws[f"D{2 + i}"], size=9, color=C_INK2, align="left")
-    ws.column_dimensions["D"].width = 90
-    ws.freeze_panes = "A2"
-    return ws
-
-
 def build_settings(wb):
     ws = wb.create_sheet(S_SET)
     ws.sheet_properties.tabColor = "EDA100"
@@ -586,7 +551,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     hws.column_dimensions[HL].width = 30
     hws.column_dimensions[HC].width = 14
     hws.column_dimensions["AD"].width = 12
-    LAST_ROW = 48 if pdf else 90
+    LAST_ROW = 74 if pdf else 90
     fill_range(ws, f"A1:Y{LAST_ROW}", C_PAGE)
 
     def V(colref):
@@ -606,7 +571,6 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         (10, "確定シフト日数", f"={V('O')}"),
         (56, "当欠率アラート基準", f"={sets}!$B$6"),
         (57, "当欠率", f"={V('Q')}"),
-        (58, "コメントあり", f'=IF({q(S_DASH)}!$B$7="",0,IFERROR(LEN(INDEX({q(S_NOTE)}!$B$2:$B${NOTE_ROWS + 1},MATCH({q(S_DASH)}!$B$7,{q(S_NOTE)}!$A$2:$A${NOTE_ROWS + 1},0)))>0,0)*1)'),
     ]
     for r, label, formula in helpers:
         hws[f"{HL}{r}"], hws[f"{HC}{r}"] = label, formula
@@ -980,43 +944,85 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     style(ws["R45"], size=8, color=C_CRIT, bg="FFFFFF", align="left", valign="top", wrap=True)
     ws.conditional_formatting.add("W36:W41", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_GRAY_BAR, showValue=True))
 
+    def notes_block(top):
+        """集計のきまり: top=見出し行。top+1 は空き、top+2〜top+5 に4行."""
+        ws.row_dimensions[top].height = 18
+        section(top, "集計のきまり")
+        ws.row_dimensions[top + 1].height = 4
+        notes = [
+            "出勤日数は確定シフトのあった日数（同じ日の複数区分は1日）。欠勤日数は、確定していたシフトを当日に「休み」へ変更した日数で、前日までの変更は含みません。",
+            f'="出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋当日欠勤日数）、当欠率 ＝ 当日欠勤日数 ÷ 確定シフト日数（基準 "&TEXT({P}${HC}$56,"0%")&"以上で警告）。勤務時間はシフト上の時間。"',
+            f'="総合判定は出勤率のみによる目安です。確定シフト日数が "&{P}${HC}$9&"日未満の場合は参考値とし、判定を行いません。"',
+            f'="欠勤には店側の都合による当日変更が含まれることがあります。面談では本人に事情を確認のうえご利用ください。"&IF({sel}="","","　応募の却下（店側の判断）："&{P}${HC}$55&"件")',
+        ]
+        for i, t in enumerate(notes):
+            rr = top + 2 + i
+            ws.row_dimensions[rr].height = 24
+            ws.merge_cells(f"B{rr}:X{rr}")
+            ws[f"B{rr}"] = t
+            style(ws[f"B{rr}"], size=8.5, color=C_INK2, align="left", valign="top", wrap=True)
+        return top + 5
+
+    def absence_block(top):
+        """欠勤（当日休み変更）の日付一覧: top=見出し行。top+2 が表見出し、top+3 から ABS_ROWS 行、その下に注記."""
+        ws.row_dimensions[top].height = 18
+        section(top, "欠勤（当日に休みへ変更）の一覧")
+        ws.row_dimensions[top + 1].height = 8
+        hr = top + 2
+        ws.row_dimensions[hr].height = 18
+        list_cols = [("日付", 2, 5), ("曜", 6, 6), ("休みへ変更した日時", 7, 11), ("元のシフト時間", 12, 16), ("募集の職種", 17, 24)]
+        for title, a, b in list_cols:
+            ws.merge_cells(f"{L(a)}{hr}:{L(b)}{hr}")
+            head_cell(f"{L(a)}{hr}", title, align=("left" if a in (2, 17) else "center"))
+
+        def lk(colref, i):
+            expr = '""'
+            for k in range(NSHEETS, 0, -1):
+                c = q(S_CALC.format(k))
+                expr = f'IFERROR(INDEX({c}!${colref}$2:${colref}${last},MATCH({i},{c}!$W$2:$W${last},0)),{expr})'
+            return expr
+
+        for i in range(1, ABS_ROWS + 1):
+            r = hr + i
+            ws.row_dimensions[r].height = 17
+            date_f = f"={lk('B', i)}" if i > 1 else f'=IF(AND({sel}<>"",N({P}${HC}$54)=0),"該当なし",{lk("B", i)})'
+            cells = [
+                (2, 5, date_f, "m/d", "left"),
+                (6, 6, f'=IF(ISNUMBER(B{r}),CHOOSE(WEEKDAY(B{r}),"日","月","火","水","木","金","土"),"")', None, "center"),
+                (7, 11, f"={lk('V', i)}", "m/d hh:mm", "left"),
+                (12, 13, f"={lk('X', i)}", "[h]:mm", "right"),
+                (14, 14, f'=IF(ISNUMBER(L{r}),"〜","")', None, "center"),
+                (15, 16, f"={lk('Y', i)}", "[h]:mm", "left"),
+                (17, 24, f"={lk('R', i)}", None, "left"),
+            ]
+            for a, b, formula, fmt, align in cells:
+                if a != b:
+                    ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
+                ws[f"{L(a)}{r}"] = formula
+                style(ws[f"{L(a)}{r}"], size=10, bg="FFFFFF", align=align, fmt=fmt)
+                for c in range(a, b + 1):
+                    ws[f"{L(c)}{r}"].border = Border(bottom=hair)
+        r = hr + ABS_ROWS + 1
+        ws.row_dimensions[r].height = 16
+        ws.merge_cells(f"B{r}:X{r}")
+        ws[f"B{r}"] = (f'=IF({sel}="","",IF(N({P}${HC}$54)>{ABS_ROWS},"ほか "&({P}${HC}$54-{ABS_ROWS})&" 件（表示は最初の{ABS_ROWS}件）。",""))'
+                       f'&"日時はシフト管理アプリ上で休みに変更された時刻です。"')
+        style(ws[f"B{r}"], size=8, color=C_MUTED, align="left")
+        return r
+
     if pdf:
-        # PDF出力: 見出し〜グラフ＋コメント欄。集計のきまり・月別の実績・欠勤一覧は載せない
+        # PDF出力: 見出し〜グラフ、集計のきまり、欠勤の一覧。月別の実績は載せない
         ws.row_dimensions[48].height = 12
-        ws.row_dimensions[49].height = 18
-        section(49, "コメント")
-        ws["R49"] = f'=IF({sel}="","",IF(N({P}${HC}$58)=0,"","「コメント」シートより"))'
-        style(ws["R49"], size=8, color=C_MUTED, align="right")
-        ws.merge_cells("R49:X49")
-        ws.row_dimensions[50].height = 4
-        for r in range(51, 60):
-            ws.row_dimensions[r].height = 16.5
-        card("B51:X59")
-        ws.merge_cells("B51:X59")
-        ws["B51"] = f'=IF({sel}="","",IFERROR(INDEX({q(S_NOTE)}!$B$2:$B${NOTE_ROWS + 1},MATCH({q(S_DASH)}!$B$7,{q(S_NOTE)}!$A$2:$A${NOTE_ROWS + 1},0)),""))'
-        style(ws["B51"], size=10, color=C_INK, bg="FFFFFF", align="left", valign="top", wrap=True)
-        ws["B51"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True, indent=1)
-        ws.row_dimensions[60].height = 12
-        print_setup(ws, "A1:Y60")
+        r = notes_block(49)
+        ws.row_dimensions[r + 1].height = 12
+        r = absence_block(r + 2)
+        ws.row_dimensions[r + 1].height = 10
+        print_setup(ws, f"A1:Y{r + 1}")
         return ws
 
     # ---- 注記（印刷範囲に含める）
     ws.row_dimensions[48].height = 12
-    ws.row_dimensions[49].height = 18
-    section(49, "集計のきまり")
-    ws.row_dimensions[50].height = 4
-    notes = [
-        "出勤日数は確定シフトのあった日数（同じ日の複数区分は1日）。欠勤日数は、確定していたシフトを当日に「休み」へ変更した日数で、前日までの変更は含みません。",
-        f'="出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋当日欠勤日数）、当欠率 ＝ 当日欠勤日数 ÷ 確定シフト日数（基準 "&TEXT({P}${HC}$56,"0%")&"以上で警告）。勤務時間はシフト上の時間。"',
-        f'="総合判定は出勤率のみによる目安です。確定シフト日数が "&{P}${HC}$9&"日未満の場合は参考値とし、判定を行いません。"',
-        f'="欠勤には店側の都合による当日変更が含まれることがあります。面談では本人に事情を確認のうえご利用ください。"&IF({sel}="","","　応募の却下（店側の判断）："&{P}${HC}$55&"件")',
-    ]
-    for i, t in enumerate(notes):
-        rr = 51 + i
-        ws.row_dimensions[rr].height = 24
-        ws.merge_cells(f"B{rr}:X{rr}")
-        ws[f"B{rr}"] = t
-        style(ws[f"B{rr}"], size=8.5, color=C_INK2, align="left", valign="top", wrap=True)
+    notes_block(49)
 
     # ---- 画面用: 月別サマリー（印刷範囲外）
     ws.row_dimensions[55].height = 14
@@ -1078,48 +1084,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
 
     # ---- 欠勤（当日休み変更）の日付一覧
     ws.row_dimensions[66].height = 16
-    ws.row_dimensions[67].height = 18
-    section(67, "欠勤（当日に休みへ変更）の一覧")
-    ws.row_dimensions[68].height = 8
-    ws.row_dimensions[69].height = 18
-    list_cols = [("日付", 2, 5), ("曜", 6, 6), ("休みへ変更した日時", 7, 11), ("元のシフト時間", 12, 16), ("募集の職種", 17, 24)]
-    for title, a, b in list_cols:
-        ws.merge_cells(f"{L(a)}69:{L(b)}69")
-        head_cell(f"{L(a)}69", title, align=("left" if a in (2, 17) else "center"))
-
-    def lk(colref, i):
-        expr = '""'
-        for k in range(NSHEETS, 0, -1):
-            c = q(S_CALC.format(k))
-            expr = f'IFERROR(INDEX({c}!${colref}$2:${colref}${last},MATCH({i},{c}!$W$2:$W${last},0)),{expr})'
-        return expr
-
-    for i in range(1, ABS_ROWS + 1):
-        r = 69 + i
-        ws.row_dimensions[r].height = 17
-        date_f = f"={lk('B', i)}" if i > 1 else f'=IF(AND({sel}<>"",N({P}${HC}$54)=0),"該当なし",{lk("B", i)})'
-        cells = [
-            (2, 5, date_f, "m/d", "left"),
-            (6, 6, f'=IF(ISNUMBER(B{r}),CHOOSE(WEEKDAY(B{r}),"日","月","火","水","木","金","土"),"")', None, "center"),
-            (7, 11, f"={lk('V', i)}", "m/d hh:mm", "left"),
-            (12, 13, f"={lk('X', i)}", "[h]:mm", "right"),
-            (14, 14, f'=IF(ISNUMBER(L{r}),"〜","")', None, "center"),
-            (15, 16, f"={lk('Y', i)}", "[h]:mm", "left"),
-            (17, 24, f"={lk('R', i)}", None, "left"),
-        ]
-        for a, b, formula, fmt, align in cells:
-            if a != b:
-                ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
-            ws[f"{L(a)}{r}"] = formula
-            style(ws[f"{L(a)}{r}"], size=10, bg="FFFFFF", align=align, fmt=fmt)
-            for c in range(a, b + 1):
-                ws[f"{L(c)}{r}"].border = Border(bottom=hair)
-    r = 70 + ABS_ROWS
-    ws.row_dimensions[r].height = 16
-    ws.merge_cells(f"B{r}:X{r}")
-    ws[f"B{r}"] = (f'=IF({sel}="","",IF(N({P}${HC}$54)>{ABS_ROWS},"ほか "&({P}${HC}$54-{ABS_ROWS})&" 件（表示は最初の{ABS_ROWS}件）。",""))'
-                   f'&"日時はシフト管理アプリ上で休みに変更された時刻です。"')
-    style(ws[f"B{r}"], size=8, color=C_MUTED, align="left")
+    absence_block(67)
 
     # 印刷はA4縦1枚（見出し〜集計のきまりまで）。月別の実績・欠勤一覧は画面用で印刷範囲外
     print_setup(ws, "A1:Y54")
@@ -1299,7 +1264,7 @@ def build_howto(wb, maxrows):
         ("2", "CSVの全体（1行目のヘッダーを含む・列はそのまま）をコピーします。Ctrl+A → Ctrl+C。"),
         ("3", "このブックの「CSV_1」シートのA1セルを選択して貼り付けます（Ctrl+V）。2ヶ月目は「CSV_2」、以降「CSV_3」…「CSV_6」へ。順番は古い月から新しい月の順が見やすいです。"),
         ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦1枚（見出し〜集計のきまりまで）。その下の月別の実績・欠勤の一覧は画面で確認する部分で、必要なら範囲を選択して印刷してください。"),
-        ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。一番下の「コメント」欄には「コメント」シートに書いた本人向けのコメントが入ります（未入力なら空欄＝手書き用）。"),
+        ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。下に「集計のきまり」と「欠勤の一覧」が付きます。"),
         ("6", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値や深夜時間帯は「設定」シートで変更できます。"),
         ("★", "貼り直すときは、貼付シートの古いデータをすべて削除（Ctrl+A → Delete）してから貼り付けてください。行数が前より少ない月を上書きすると、古い行が残ってしまいます。"),
     ]
@@ -1402,7 +1367,7 @@ def build_howto(wb, maxrows):
 
 
 # ---------------------------------------------------------------- main
-def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel", notes=()):
+def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
     wb = Workbook()
     wb.remove(wb.active)
     build_howto(wb, maxrows)
@@ -1413,9 +1378,6 @@ def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel", n
         path = csv_paths[k - 1] if k - 1 < len(csv_paths) else None
         rows = read_csv(path) if path and path != "-" else None
         build_csv_sheet(wb, k, rows, paste_mode)
-    nws = build_notes(wb)
-    for i, (name, text) in enumerate(notes):
-        nws[f"A{2 + i}"], nws[f"B{2 + i}"] = name, text
     build_settings(wb)
     build_roster(wb, maxrows)
     for k in range(1, NSHEETS + 1):
@@ -1437,9 +1399,7 @@ if __name__ == "__main__":
     ap.add_argument("output")
     ap.add_argument("--csv", nargs="*", default=[], help="CSV_1, CSV_2 … に貼り付けた状態で生成するCSVファイル（\"-\" で空の月）")
     ap.add_argument("--maxrows", type=int, default=5000, help="1ヶ月あたりの最大行数")
-    ap.add_argument("--note", action="append", default=[], metavar="氏名=コメント", help="コメントシートに入れる行（サンプル用）")
     ap.add_argument("--select", default=None, help="ダッシュボードで初期選択するスタッフ名（検証用）")
     ap.add_argument("--paste-mode", default="excel", choices=["excel", "text"], help="検証用: text はCSVの値をすべて文字列のまま貼り付けた状態を再現")
     a = ap.parse_args()
-    notes = [tuple(n.split("=", 1)) for n in a.note if "=" in n]
-    print(build(a.output, a.csv, a.maxrows, a.select, a.paste_mode, notes))
+    print(build(a.output, a.csv, a.maxrows, a.select, a.paste_mode))
