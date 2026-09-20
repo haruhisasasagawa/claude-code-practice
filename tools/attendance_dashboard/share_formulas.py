@@ -6,6 +6,9 @@ openpyxl は数式を1セルずつ書き出すため、計算シート（1列 5,
 計算結果・意味は変わらない（Excel / LibreOffice とも共有数式を通常の数式として展開する）。
 
 使い方: python share_formulas.py 入力.xlsx 出力.xlsx
+
+注意: この書き換えを行ったブックは Excel が「名簿」「計算1〜6」の数式を修復で削除する（LibreOffice では開ける）。
+配布用ファイルには使わないこと。原因の切り分けが済むまで参考として残している。
 """
 import collections
 import os
