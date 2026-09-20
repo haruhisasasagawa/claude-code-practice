@@ -37,6 +37,8 @@ FONT = "Yu Gothic"
 
 S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER, S_DBCALC = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿", "DB計算"
 S_PDF = "PDF出力"                        # 説明文なしの面談用ページ（ダッシュボードで選んだスタッフに連動）
+S_NOTE = "コメント"                      # スタッフごとの面談コメント（PDF出力の下段に引用）
+NOTE_ROWS = 400                          # コメントの入力行数
 S_CSV = "CSV_{}"
 S_CALC = "計算{}"
 
@@ -293,6 +295,39 @@ def build_calc_sheet(wb, k, maxrows):
 
 
 # ---------------------------------------------------------------- シート: 設定
+def build_notes(wb):
+    """コメントシート: A 氏名（▼から選択）、B コメント。PDF出力の下段に氏名で引用する."""
+    ws = wb.create_sheet(S_NOTE)
+    ws.sheet_properties.tabColor = "EDA100"
+    ws.sheet_view.showGridLines = False
+    ws.column_dimensions["A"].width = 26
+    ws.column_dimensions["B"].width = 90
+    ws["A1"], ws["B1"] = "スタッフ（▼から選択）", "コメント（PDF出力の下の「コメント」欄に表示されます）"
+    for c in ("A1", "B1"):
+        style(ws[c], size=10, bold=True, color=C_INK, bg="E7E6E1", align="left", border=Border(top=thin, bottom=thin))
+    ws.row_dimensions[1].height = 22
+    dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)
+    ws.add_data_validation(dv)
+    for r in range(2, NOTE_ROWS + 2):
+        style(ws[f"A{r}"], size=10, bg=C_INPUT_FILL, border=BOX, align="left")
+        style(ws[f"B{r}"], size=10, bg=C_INPUT_FILL, border=BOX, align="left", valign="top", wrap=True)
+        dv.add(f"A{r}")
+    ws["D1"] = "使い方"
+    style(ws["D1"], size=10, bold=True)
+    tips = [
+        "A列でスタッフを選び（または氏名をそのまま入力し）、B列に面談用のコメントを書きます。1人1行。",
+        "「PDF出力」シートで同じスタッフを選ぶと、下の「コメント」欄にこの文が入ります。未入力なら空欄のまま印刷され、手書きできます。",
+        "改行は Alt+Enter。長文は欄からはみ出るので、5〜6行程度までが目安です。",
+        "同じ人を2行書いた場合は上の行だけが使われます。",
+    ]
+    for i, t in enumerate(tips):
+        ws[f"D{2 + i}"] = t
+        style(ws[f"D{2 + i}"], size=9, color=C_INK2, align="left")
+    ws.column_dimensions["D"].width = 90
+    ws.freeze_panes = "A2"
+    return ws
+
+
 def build_settings(wb):
     ws = wb.create_sheet(S_SET)
     ws.sheet_properties.tabColor = "EDA100"
@@ -571,6 +606,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         (10, "確定シフト日数", f"={V('O')}"),
         (56, "当欠率アラート基準", f"={sets}!$B$6"),
         (57, "当欠率", f"={V('Q')}"),
+        (58, "コメントあり", f'=IF({q(S_DASH)}!$B$7="",0,IFERROR(LEN(INDEX({q(S_NOTE)}!$B$2:$B${NOTE_ROWS + 1},MATCH({q(S_DASH)}!$B$7,{q(S_NOTE)}!$A$2:$A${NOTE_ROWS + 1},0)))>0,0)*1)'),
     ]
     for r, label, formula in helpers:
         hws[f"{HL}{r}"], hws[f"{HC}{r}"] = label, formula
@@ -945,9 +981,23 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ws.conditional_formatting.add("W36:W41", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_GRAY_BAR, showValue=True))
 
     if pdf:
-        # PDF出力: 見出し〜グラフまで。集計のきまり・月別の実績・欠勤一覧は載せない
+        # PDF出力: 見出し〜グラフ＋コメント欄。集計のきまり・月別の実績・欠勤一覧は載せない
         ws.row_dimensions[48].height = 12
-        print_setup(ws, "A1:Y48")
+        ws.row_dimensions[49].height = 18
+        section(49, "コメント")
+        ws["R49"] = f'=IF({sel}="","",IF(N({P}${HC}$58)=0,"","「コメント」シートより"))'
+        style(ws["R49"], size=8, color=C_MUTED, align="right")
+        ws.merge_cells("R49:X49")
+        ws.row_dimensions[50].height = 4
+        for r in range(51, 60):
+            ws.row_dimensions[r].height = 16.5
+        card("B51:X59")
+        ws.merge_cells("B51:X59")
+        ws["B51"] = f'=IF({sel}="","",IFERROR(INDEX({q(S_NOTE)}!$B$2:$B${NOTE_ROWS + 1},MATCH({q(S_DASH)}!$B$7,{q(S_NOTE)}!$A$2:$A${NOTE_ROWS + 1},0)),""))'
+        style(ws["B51"], size=10, color=C_INK, bg="FFFFFF", align="left", valign="top", wrap=True)
+        ws["B51"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True, indent=1)
+        ws.row_dimensions[60].height = 12
+        print_setup(ws, "A1:Y60")
         return ws
 
     # ---- 注記（印刷範囲に含める）
@@ -1249,7 +1299,7 @@ def build_howto(wb, maxrows):
         ("2", "CSVの全体（1行目のヘッダーを含む・列はそのまま）をコピーします。Ctrl+A → Ctrl+C。"),
         ("3", "このブックの「CSV_1」シートのA1セルを選択して貼り付けます（Ctrl+V）。2ヶ月目は「CSV_2」、以降「CSV_3」…「CSV_6」へ。順番は古い月から新しい月の順が見やすいです。"),
         ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦1枚（見出し〜集計のきまりまで）。その下の月別の実績・欠勤の一覧は画面で確認する部分で、必要なら範囲を選択して印刷してください。"),
-        ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。"),
+        ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。一番下の「コメント」欄には「コメント」シートに書いた本人向けのコメントが入ります（未入力なら空欄＝手書き用）。"),
         ("6", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値や深夜時間帯は「設定」シートで変更できます。"),
         ("★", "貼り直すときは、貼付シートの古いデータをすべて削除（Ctrl+A → Delete）してから貼り付けてください。行数が前より少ない月を上書きすると、古い行が残ってしまいます。"),
     ]
@@ -1352,7 +1402,7 @@ def build_howto(wb, maxrows):
 
 
 # ---------------------------------------------------------------- main
-def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
+def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel", notes=()):
     wb = Workbook()
     wb.remove(wb.active)
     build_howto(wb, maxrows)
@@ -1363,6 +1413,9 @@ def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
         path = csv_paths[k - 1] if k - 1 < len(csv_paths) else None
         rows = read_csv(path) if path and path != "-" else None
         build_csv_sheet(wb, k, rows, paste_mode)
+    nws = build_notes(wb)
+    for i, (name, text) in enumerate(notes):
+        nws[f"A{2 + i}"], nws[f"B{2 + i}"] = name, text
     build_settings(wb)
     build_roster(wb, maxrows)
     for k in range(1, NSHEETS + 1):
@@ -1384,7 +1437,9 @@ if __name__ == "__main__":
     ap.add_argument("output")
     ap.add_argument("--csv", nargs="*", default=[], help="CSV_1, CSV_2 … に貼り付けた状態で生成するCSVファイル（\"-\" で空の月）")
     ap.add_argument("--maxrows", type=int, default=5000, help="1ヶ月あたりの最大行数")
+    ap.add_argument("--note", action="append", default=[], metavar="氏名=コメント", help="コメントシートに入れる行（サンプル用）")
     ap.add_argument("--select", default=None, help="ダッシュボードで初期選択するスタッフ名（検証用）")
     ap.add_argument("--paste-mode", default="excel", choices=["excel", "text"], help="検証用: text はCSVの値をすべて文字列のまま貼り付けた状態を再現")
     a = ap.parse_args()
-    print(build(a.output, a.csv, a.maxrows, a.select, a.paste_mode))
+    notes = [tuple(n.split("=", 1)) for n in a.note if "=" in n]
+    print(build(a.output, a.csv, a.maxrows, a.select, a.paste_mode, notes))
