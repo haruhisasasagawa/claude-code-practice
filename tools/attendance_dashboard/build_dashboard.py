@@ -880,7 +880,6 @@ def build_dashboard(wb, maxrows, select=None):
 
     # ---- 2ページ目: 月別サマリー
     ws.row_dimensions[48].height = 14
-    ws.row_breaks.append(Break(id=48))
     ws.row_dimensions[49].height = 30
     section(49, "月別の実績")
     ws["B49"].alignment = Alignment(vertical="bottom")
@@ -1002,17 +1001,17 @@ def build_dashboard(wb, maxrows, select=None):
         style(ws[f"B{rr}"], size=8.5, color=C_INK2, align="left", valign="top", wrap=True)
 
     # ---- 印刷設定（A4縦・幅1ページ・2ページ目に月別以降）
-    ws.print_area = f"A1:Y{LAST_ROW}"
-    ws.print_title_rows = "1:8"
+    # 印刷はA4縦1枚（見出し〜グラフ2段目まで）。月別の実績・欠勤一覧は画面用で印刷範囲外
+    ws.print_area = "A1:Y47"
     ws.page_setup.orientation = "portrait"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
+    ws.page_setup.fitToHeight = 1
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.print_options.horizontalCentered = True
     ws.page_margins.left = ws.page_margins.right = 0.5
     ws.page_margins.top = ws.page_margins.bottom = 0.6
-    ws.oddFooter.right.text = "&P"
+    ws.print_options.verticalCentered = True
     ws.sheet_view.zoomScale = 100
     return ws
 
@@ -1173,7 +1172,7 @@ def build_howto(wb, maxrows):
         ("1", "シェアフルシフトから1ヶ月分のシフトCSVを出力し、Excelで開きます（ダブルクリックで開けます）。"),
         ("2", "CSVの全体（1行目のヘッダーを含む・列はそのまま）をコピーします。Ctrl+A → Ctrl+C。"),
         ("3", "このブックの「CSV_1」シートのA1セルを選択して貼り付けます（Ctrl+V）。2ヶ月目は「CSV_2」、以降「CSV_3」…「CSV_6」へ。順番は古い月から新しい月の順が見やすいです。"),
-        ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦で、1ページ目に概要とグラフ、2ページ目に月別の実績と欠勤の一覧が入ります。"),
+        ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦1枚（見出し〜グラフまで）。その下の月別の実績・欠勤の一覧は画面で確認する部分で、必要なら範囲を選択して印刷してください。"),
         ("5", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値や深夜時間帯は「設定」シートで変更できます。"),
         ("★", "貼り直すときは、貼付シートの古いデータをすべて削除（Ctrl+A → Delete）してから貼り付けてください。行数が前より少ない月を上書きすると、古い行が残ってしまいます。"),
     ]
