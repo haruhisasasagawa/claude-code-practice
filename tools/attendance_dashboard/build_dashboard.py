@@ -532,7 +532,7 @@ def build_dashboard(wb, maxrows, select=None):
     ws.column_dimensions[HC].width = 14
     ws.column_dimensions["AD"].width = 12
     LAST_ROW = 82
-    fill_range(ws, f"A1:Y{LAST_ROW}", "FFFFFF")
+    fill_range(ws, f"A1:Y{LAST_ROW}", C_PAGE)
 
     def V(colref):
         return f'IF(${HC}$4="","",INDEX({ros}!${colref}$2:${colref}${ML},${HC}$4))'
@@ -601,37 +601,38 @@ def build_dashboard(wb, maxrows, select=None):
     ws[f"{HL}55"], ws[f"{HC}55"] = "却下回数（参考）", f"=N({V('U')})"
 
     def section(row, text, a="B", b="X"):
-        """見出し行: 太字＋下罫線."""
+        """見出し行: 太字."""
         ws[f"{a}{row}"] = text
         style(ws[f"{a}{row}"], size=10.5, bold=True, color=C_INK)
-        for c in range(column_index_from_string(a), column_index_from_string(b) + 1):
-            ws[f"{L(c)}{row}"].border = Border(bottom=Side(style="thin", color="9E9C95"))
+
+    def card(rng):
+        fill_range(ws, rng, "FFFFFF")
+        box_range(ws, rng)
 
     def head_cell(ref, text, align="center"):
         ws[ref] = text
-        style(ws[ref], size=9, bold=True, color=C_INK, bg=C_HEAD, align=align, border=Border(bottom=thin, top=thin))
+        style(ws[ref], size=9, bold=True, color="FFFFFF", bg=C_INK2, align=align)
 
     # ---- タイトル
     ws.row_dimensions[1].height = 12
     ws.row_dimensions[2].height = 26
     ws.row_dimensions[3].height = 16
     ws.row_dimensions[4].height = 14
+    fill_range(ws, "B2:X3", C_DARK)
     ws.merge_cells("B2:N2")
     ws["B2"] = "勤務実績ダッシュボード"
-    style(ws["B2"], size=16, bold=True, color=C_NAVY, align="left")
+    style(ws["B2"], size=16, bold=True, color="FFFFFF", bg=C_DARK, align="left")
     ws.merge_cells("B3:N3")
     ws["B3"] = "TOHOシネマズ新宿　アルバイトスタッフ（シェアフルシフトのシフト実績より）"
-    style(ws["B3"], size=9, color=C_INK2, align="left")
+    style(ws["B3"], size=9, color="C3C2B7", bg=C_DARK, align="left")
     ws.merge_cells("O2:X2")
     ws["O2"] = f'="対象期間　"&{ros}!$AY$29'
-    style(ws["O2"], size=10.5, bold=True, color=C_INK, align="right")
+    style(ws["O2"], size=10.5, bold=True, color="FFFFFF", bg=C_DARK, align="right")
     ws.merge_cells("O3:X3")
     ws["O3"] = (f'=IF({ros}!$AY$31=1,"※ 貼付データに問題があります。「使い方」の貼付状況をご確認ください",'
                 f'IF({ros}!$AY$2="","","集計対象 "&{ros}!$AY$2&"名　　貼付済み "&COUNTIF({ros}!$BA$22:$BA$27,"OK")&"ヶ月"))')
-    style(ws["O3"], size=9, color=C_INK2, align="right")
-    ws.conditional_formatting.add("O3", FormulaRule(formula=['LEFT($O$3,1)="※"'], font=Font(name=FONT, bold=True, size=9, color=C_CRIT)))
-    for c in range(GRID_FIRST, GRID_LAST + 1):
-        ws[f"{L(c)}4"].border = Border(bottom=Side(style="medium", color=C_NAVY))
+    style(ws["O3"], size=9, color="C3C2B7", bg=C_DARK, align="right")
+    ws.conditional_formatting.add("O3", FormulaRule(formula=['LEFT($O$3,1)="※"'], font=Font(name=FONT, bold=True, size=9, color=C_WARN)))
 
     # ---- スタッフ選択
     ws.row_dimensions[5].height = 14
@@ -646,7 +647,7 @@ def build_dashboard(wb, maxrows, select=None):
     else:
         ws["B7"] = f'=IF({ros}!$AT$2="","← CSV_1 にデータを貼り付けてください",{ros}!$AT$2)'
     style(ws["B7"], size=14, bold=True, bg="FFFFFF", align="left")
-    box_range(ws, "B7:H8", Side(style="medium", color=C_NAVY))
+    box_range(ws, "B7:H8", Side(style="medium", color=C_BLUE))
     dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)
     ws.add_data_validation(dv)
     dv.add("B7")
@@ -667,13 +668,12 @@ def build_dashboard(wb, maxrows, select=None):
     ws.merge_cells("S7:X8")
     ws["S7"] = (f'=IF(${HC}$6="","－",IF(${HC}$10<${HC}$9,"参考値（確定シフト "&${HC}$10&"日）",'
                 f'IF(${HC}$6>=${HC}$7,"◎ 良好",IF(${HC}$6>=${HC}$8,"△ 注意","✕ 要改善"))))')
-    style(ws["S7"], size=13, bold=True, color=C_INK, bg="F3F3F0", align="center")
-    box_range(ws, "S7:X8")
+    style(ws["S7"], size=13, bold=True, color="FFFFFF", bg=C_MUTED, align="center")
     badge_rules = [
-        (f'AND(ISNUMBER(${HC}$6),${HC}$10<${HC}$9)', "EEEEEA", C_INK2),
-        (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$7)', "E3F4E3", C_GOOD_TXT),
-        (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$8)', "FFF1CC", C_WARN_TXT),
-        (f'ISNUMBER(${HC}$6)', "F9DEDE", C_CRIT),
+        (f'AND(ISNUMBER(${HC}$6),${HC}$10<${HC}$9)', "D9D9D6", C_INK),
+        (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$7)', C_GOOD, "FFFFFF"),
+        (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$8)', C_WARN, C_INK),
+        (f'ISNUMBER(${HC}$6)', C_CRIT, "FFFFFF"),
     ]
     for formula, bg, fg in badge_rules:
         ws.conditional_formatting.add("S7:X8", FormulaRule(formula=[formula], fill=fill(bg), font=Font(name=FONT, bold=True, color=fg, size=13), stopIfTrue=True))
@@ -694,18 +694,20 @@ def build_dashboard(wb, maxrows, select=None):
     for i, (label, formula, fmt, sub) in enumerate(tiles):
         c0 = GRID_FIRST + i * 4
         a, b = L(c0), L(c0 + 2)
+        fill_range(ws, f"{a}10:{b}13", "FFFFFF")
         ws.merge_cells(f"{a}10:{b}10")
         ws[f"{a}10"] = label
-        style(ws[f"{a}10"], size=9, color=C_INK2, align="left")
+        style(ws[f"{a}10"], size=9, color=C_INK2, bg="FFFFFF", align="left")
         ws.merge_cells(f"{a}11:{b}12")
         ws[f"{a}11"] = formula
-        style(ws[f"{a}11"], size=20, bold=True, align="left", fmt=fmt)
+        style(ws[f"{a}11"], size=20, bold=True, bg="FFFFFF", align="left", fmt=fmt)
         ws.merge_cells(f"{a}13:{b}13")
         ws[f"{a}13"] = sub
-        style(ws[f"{a}13"], size=8, color=C_MUTED, align="left")
-        for c in range(c0, c0 + 3):
-            ws[f"{L(c)}10"].border = Border(top=thin)
-            ws[f"{L(c)}13"].border = Border(bottom=thin)
+        style(ws[f"{a}13"], size=8, color=C_MUTED, bg="FFFFFF", align="left")
+        box_range(ws, f"{a}10:{b}13")
+        accent = C_RED if "欠勤" in label else (C_BLUE if "出勤" in label else "6B7280")
+        for r in range(10, 14):
+            ws[f"{L(c0)}{r}"].border = Border(left=Side(style="thick", color=accent), top=ws[f"{L(c0)}{r}"].border.top, bottom=ws[f"{L(c0)}{r}"].border.bottom)
     rate_rules = [
         (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$7)', C_GOOD_TXT),
         (f'AND(ISNUMBER(${HC}$6),${HC}$6>=${HC}$8)', C_WARN_TXT),
@@ -721,7 +723,7 @@ def build_dashboard(wb, maxrows, select=None):
     ws["B15"] = (f'=IF(${HC}$4="","",IF(N(${HC}$10)=0,"対象期間に確定シフトがありません。",'
                  f'"確定シフト "&${HC}$10&"日のうち出勤 "&{V("M")}&"日、当日欠勤 "&{V("N")}&"日。'
                  f'出勤率 "&TEXT(${HC}$6,"0.0%")&"（全体平均 "&TEXT(${HC}$35,"0.0%")&"、"&{ros}!$AY$8&"人中 "&{V("W")}&"位）"))')
-    style(ws["B15"], size=10, color=C_INK, align="left")
+    style(ws["B15"], size=10, bold=True, color=C_INK, align="left")
     ws.row_dimensions[16].height = 14
 
     # ---- グラフ 1段目（7列＋空き1列 ×3）
@@ -731,6 +733,8 @@ def build_dashboard(wb, maxrows, select=None):
     section(17, "出勤率", "B", "H")
     section(17, "月別の出勤日数・欠勤日数", "J", "P")
     section(17, "職種別の勤務時間", "R", "X")
+    for a, b in (("B", "H"), ("J", "P"), ("R", "X")):
+        card(f"{a}18:{b}31")
 
     def gp(color):
         g = GraphicalProperties(solidFill=color)
@@ -797,6 +801,8 @@ def build_dashboard(wb, maxrows, select=None):
     section(33, "曜日別の出勤日数", "B", "H")
     section(33, "出勤率の比較", "J", "P")
     section(33, "休みへの変更のタイミング", "R", "X")
+    for a, b in (("B", "H"), ("J", "P"), ("R", "X")):
+        card(f"{a}34:{b}47")
 
     ch = BarChart()
     ch.type, ch.gapWidth = "col", 50
@@ -852,15 +858,16 @@ def build_dashboard(wb, maxrows, select=None):
         r = 36 + i * 2
         ws.merge_cells(f"R{r}:V{r + 1}")
         ws[f"R{r}"] = label
-        style(ws[f"R{r}"], size=10, align="left")
+        style(ws[f"R{r}"], size=10, bg="FFFFFF", align="left")
         ws.merge_cells(f"W{r}:X{r + 1}")
         ws[f"W{r}"] = f'=IF({sel}="","",${HC}${39 + i})'
-        style(ws[f"W{r}"], size=11, bold=(code == "当日"), align="right", fmt='0"日"', color=(C_RED if code == "当日" else C_INK))
+        style(ws[f"W{r}"], size=11, bold=(code == "当日"), bg="FFFFFF", align="right", fmt='0"日"', color=(C_RED if code == "当日" else C_INK))
         for c in "RSTUVWX":
             ws[f"{c}{r + 1}"].border = Border(bottom=hair)
     ws.merge_cells("R45:X47")
     ws["R45"] = "確定していたシフトを「休み」に変えた日を、変更した時期ごとに数えたものです。欠勤として数えるのは「当日」のみです。"
-    style(ws["R45"], size=8, color=C_MUTED, align="left", valign="top", wrap=True)
+    style(ws["R45"], size=8, color=C_MUTED, bg="FFFFFF", align="left", valign="top", wrap=True)
+    ws.conditional_formatting.add("W36:W43", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_GRAY_BAR, showValue=True))
 
     # ---- 2ページ目: 月別サマリー
     ws.row_dimensions[48].height = 14
@@ -894,7 +901,7 @@ def build_dashboard(wb, maxrows, select=None):
         for (title, a, b), (formula, fmt, align) in zip(tbl_cols, vals):
             ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
             ws[f"{L(a)}{r}"] = formula
-            style(ws[f"{L(a)}{r}"], size=10, align=align, fmt=fmt)
+            style(ws[f"{L(a)}{r}"], size=10, bg="FFFFFF", align=align, fmt=fmt)
             for c in range(a, b + 1):
                 ws[f"{L(c)}{r}"].border = Border(bottom=hair)
     r = 58
@@ -913,9 +920,11 @@ def build_dashboard(wb, maxrows, select=None):
     for (title, a, b), (formula, fmt, align) in zip(tbl_cols, totals):
         ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
         ws[f"{L(a)}{r}"] = formula
-        style(ws[f"{L(a)}{r}"], size=10, bold=True, align=align, fmt=fmt)
+        style(ws[f"{L(a)}{r}"], size=10, bold=True, bg="F3F3F0", align=align, fmt=fmt)
         for c in range(a, b + 1):
             ws[f"{L(c)}{r}"].border = Border(top=thin, bottom=thin)
+    ws.conditional_formatting.add("F52:F57", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_BLUE, showValue=True))
+    ws.conditional_formatting.add("H52:H57", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_RED, showValue=True))
     for formula, color in [(f'AND(ISNUMBER(M52),M52>=${HC}$7)', C_GOOD_TXT), (f'AND(ISNUMBER(M52),M52>=${HC}$8)', C_WARN_TXT), ('ISNUMBER(M52)', C_CRIT)]:
         ws.conditional_formatting.add("M52:M58", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=10, color=color), stopIfTrue=True))
 
@@ -954,7 +963,7 @@ def build_dashboard(wb, maxrows, select=None):
             if a != b:
                 ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
             ws[f"{L(a)}{r}"] = formula
-            style(ws[f"{L(a)}{r}"], size=10, align=align, fmt=fmt)
+            style(ws[f"{L(a)}{r}"], size=10, bg="FFFFFF", align=align, fmt=fmt)
             for c in range(a, b + 1):
                 ws[f"{L(c)}{r}"].border = Border(bottom=hair)
     r = 63 + ABS_ROWS
