@@ -766,7 +766,7 @@ def build_dashboard(wb, maxrows, select=None):
         ch.width, ch.height = 6.3, 6.6
         return ch
 
-    def doughnut(label_rng, data_rng, colors, hole=66, labels=True):
+    def doughnut(label_rng, data_rng, colors, hole=70, labels=True):
         ch = DoughnutChart()
         ch.holeSize = hole
         ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!{data_rng}"), titles_from_data=False)
@@ -802,12 +802,12 @@ def build_dashboard(wb, maxrows, select=None):
         style(ws[f"{a}22"], size=8, color=C_MUTED, bg="FFFFFF", align="center", valign="bottom")
         ws.merge_cells(f"{a}23:{b}24")
         ws[f"{a}23"] = value
-        style(ws[f"{a}23"], size=16, bold=True, color=color, bg="FFFFFF", align="center", fmt=fmt)
+        style(ws[f"{a}23"], size=14, bold=True, color=color, bg="FFFFFF", align="center", fmt=fmt)
 
-    center("C", "G", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
+    center("C", "F", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
     for formula, color in rate_rules:
-        ws.conditional_formatting.add("C23:G24", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=16, color=color), stopIfTrue=True))
-    center("S", "W", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
+        ws.conditional_formatting.add("C23:F24", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=14, color=color), stopIfTrue=True))
+    center("S", "V", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
 
     # 凡例（グラフの下に小さく）
     ws.merge_cells("C30:E30")
