@@ -459,7 +459,7 @@ def build_roster(wb, maxrows):
         (5, "総確定シフト日数", f"=SUM($O$2:$O${ML})", "0"),
         (6, "全体出勤率", f'=IF($AY$5=0,"",$AY$3/$AY$5)', "0.0%"),
         (7, "全体当欠率", f'=IF($AY$5=0,"",$AY$4/$AY$5)', "0.0%"),
-        (10, "当欠アラート該当者数", f'=COUNTIFS($Q$2:$Q${ML},">="&{sets}!$B$6,$O$2:$O${ML},">="&{sets}!$B$5)', "0"),
+        (10, "当欠アラート該当者数", f'=COUNTIF($Q$2:$Q${ML},">="&{sets}!$B$6)', "0"),
         (8, "評価対象人数(確定日数>0)", f"=COUNT($P$2:$P${ML})", "0"),
         (9, "総勤務時間", f"=SUM($R$2:$R${ML})", "0.0"),
     ]
@@ -749,11 +749,11 @@ def build_dashboard(wb, maxrows, select=None):
     style(ws["B15"], size=10, bold=True, color=C_INK, align="left")
     ws.row_dimensions[16].height = 16
     ws.merge_cells("B16:X16")
-    ws["B16"] = (f'=IF(OR({P}${HC}$57="",{P}${HC}$10=""),"",IF(AND({P}${HC}$57>={P}${HC}$56,{P}${HC}$10>={P}${HC}$9),'
+    ws["B16"] = (f'=IF(OR({P}${HC}$57="",{P}${HC}$10=""),"",IF({P}${HC}$57>={P}${HC}$56,'
                  f'"⚠ 当欠率 "&TEXT({P}${HC}$57,"0.0%")&" が基準（"&TEXT({P}${HC}$56,"0%")&"以上）に達しています。当日欠勤の状況を本人に確認してください。",""))')
     style(ws["B16"], size=9.5, bold=True, color=C_CRIT, align="left")
-    ws.conditional_formatting.add("N10:P13", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$57),{P}${HC}$57>={P}${HC}$56,{P}${HC}$10>={P}${HC}$9)'], fill=fill("FDECEA"), stopIfTrue=False))
-    ws.conditional_formatting.add("N11:P12", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$57),{P}${HC}$57>={P}${HC}$56,{P}${HC}$10>={P}${HC}$9)'], font=Font(name=FONT, bold=True, size=20, color=C_CRIT), stopIfTrue=True))
+    ws.conditional_formatting.add("N10:P13", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$57),{P}${HC}$57>={P}${HC}$56)'], fill=fill("FDECEA"), stopIfTrue=False))
+    ws.conditional_formatting.add("N11:P12", FormulaRule(formula=[f'AND(ISNUMBER({P}${HC}$57),{P}${HC}$57>={P}${HC}$56)'], font=Font(name=FONT, bold=True, size=20, color=C_CRIT), stopIfTrue=True))
 
     # ---- グラフ 1段目（7列＋空き1列 ×3）
     ws.row_dimensions[17].height = 18
@@ -1186,7 +1186,7 @@ def build_staff_list(wb):
     ws.freeze_panes = f"C{HR + 1}"
     ws.conditional_formatting.add(f"F{HR + 1}:F{last}", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_BLUE, showValue=True))
     ws.conditional_formatting.add(f"G{HR + 1}:G{last}", FormulaRule(formula=[f"AND(ISNUMBER(G{HR + 1}),G{HR + 1}>0)"], font=Font(name=FONT, bold=True, color=C_CRIT, size=10)))
-    ws.conditional_formatting.add(f"J{HR + 1}:J{last}", FormulaRule(formula=[f"AND(ISNUMBER(J{HR + 1}),J{HR + 1}>={sets}!$B$6,H{HR + 1}>={sets}!$B$5)"], font=Font(name=FONT, bold=True, color=C_CRIT, size=10), fill=fill("FDECEA")))
+    ws.conditional_formatting.add(f"J{HR + 1}:J{last}", FormulaRule(formula=[f"AND(ISNUMBER(J{HR + 1}),J{HR + 1}>={sets}!$B$6)"], font=Font(name=FONT, bold=True, color=C_CRIT, size=10), fill=fill("FDECEA")))
     for formula, color in [(f'AND(ISNUMBER(I{HR + 1}),I{HR + 1}>={sets}!$B$3)', C_GOOD_TXT), (f'AND(ISNUMBER(I{HR + 1}),I{HR + 1}>={sets}!$B$4)', C_WARN_TXT), (f'ISNUMBER(I{HR + 1})', C_CRIT)]:
         ws.conditional_formatting.add(f"I{HR + 1}:I{last}", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=10, color=color), stopIfTrue=True))
     R1 = HR + 1
