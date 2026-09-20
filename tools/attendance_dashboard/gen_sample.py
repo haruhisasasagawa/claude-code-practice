@@ -144,6 +144,17 @@ def make_month(prof, year, month, rng, state, header):
                         r[f"休憩{i}開始時間"] = fmt(hm(src[f"休憩{i}開始時間"]) + delta)
                         r[f"休憩{i}終了時間"] = fmt(hm(src[f"休憩{i}終了時間"]) + delta)
                 out.append(r)
+            # 当日の時間変更: 入りを遅く（遅出）1.0%、上がりを早く（早退）0.4%。当日の朝〜昼に更新
+            x = rng.random()
+            if x < 0.014:
+                r = out[-len(group)]
+                if r["変更後の開始時間"] and r["変更後の終了時間"]:
+                    s1, e1 = hm(r["変更後の開始時間"]), hm(r["変更後の終了時間"])
+                    if x < 0.010 and e1 - s1 >= 240:
+                        r["変更後の開始時間"] = fmt(s1 + 60 * rng.choice([1, 1, 2, 3]))
+                    elif x >= 0.010 and e1 - s1 >= 240:
+                        r["変更後の終了時間"] = fmt(e1 - 60 * rng.choice([1, 2, 3]))
+                    r["更新時間"] = ts(dt.datetime.combine(d, dt.time(rng.randint(2, 12), rng.randrange(60), rng.randrange(60), rng.randrange(1000) * 1000), JST))
             # 却下（店側の判断）: 1.5%。多くは勤務日とは別の日に応募した分
             if rng.random() < 0.015:
                 r = dict(group[0])
