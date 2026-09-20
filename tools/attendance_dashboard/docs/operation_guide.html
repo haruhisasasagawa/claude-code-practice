@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><title>勤務実績ダッシュボード 運用ガイド</title><link rel="stylesheet" href="guide.css"></head>
+<body>
+<div class="page">
+  <div class="titlebar">勤務実績ダッシュボード　運用ガイド</div>
+  <div class="authorbar">ＴＯＨＯシネマズ新宿　副支配人　笹川 晴央</div>
+  <div class="body">
+    <h2>目的 <span class="sub">― 契約更新の面談で、勤務実績を客観的なデータで示す</span></h2>
+    <p>シェアフルシフトのシフトCSVを月1回貼るだけで、スタッフごとの出勤日数・出勤率・欠勤日数（当日の休み変更）・勤務時間を半年分まとめて表示します。「あなたの実績はこうだから、この評価です」を数字と図で説明し、本人の納得感につなげるためのツールです。打刻データは使いません。</p>
+
+    <div class="cols" style="gap:6mm">
+      <div style="flex:1.15">
+        <h2>毎月の流れ（3ステップ）</h2>
+        <p><b>STEP1　CSVを出力して貼る</b><br>シェアフルシフトから前月1ヶ月分（月初〜月末）のシフトCSVを出力。Excelで開き、全選択コピー→その月の「CSV_○」シートの<b>A1セル</b>へ貼付（ヘッダー行ごと）。1ヶ月目はCSV_1、2ヶ月目はCSV_2…と古い月から順に。</p>
+        <p><b>STEP2　貼付状況を確認する</b><br>「使い方」シートの貼付状況に「2026年8月／OK」と出ればOK。「※」が出たらセットアップガイド2ページ目の表で対処。貼り直すときはシートを全選択→Deleteしてから。</p>
+        <p><b>STEP3　スタッフを選ぶ → 印刷</b><br>「ダッシュボード」でスタッフ名を選ぶ（▼から選ぶか氏名を入力）。数字とグラフがその場で切り替わるので、A4縦1枚で印刷して面談へ。全員の一覧・順位は「スタッフ一覧」で。</p>
+        <table class="mock" style="margin-top:2mm">
+          <tr><th style="width:4mm"></th><th>A</th><th>B</th><th>C</th><th>D</th><th>…</th></tr>
+          <tr><th>1</th><td class="a1">募集シフトの日付</td><td>募集店舗</td><td>応募ステータス</td><td>募集シフトの開始時間</td><td>…</td></tr>
+          <tr><th>2</th><td>2026/08/01</td><td>TC新宿</td><td>確定（シフト作成）</td><td>7:00</td><td>…</td></tr>
+          <tr><th>3</th><td>2026/08/01</td><td>TC新宿</td><td>確定</td><td>20:00</td><td>…</td></tr>
+        </table>
+        <div class="cap">【写真1】CSV_1〜CSV_6 ― ヘッダー行ごと、A1セルへ貼り付け</div>
+      </div>
+      <div style="flex:1">
+        <img class="shot" src="img/shot_howto.png" style="height:40mm; object-fit:cover; object-position:top">
+        <div class="cap">【写真2】使い方 ― 貼付状況で「OK」を確認</div>
+        <img class="shot" src="img/shot_staff.png">
+        <div class="cap">【写真3】スタッフ一覧 ― 全員の集計・順位・所属別・ワースト10</div>
+      </div>
+    </div>
+
+    <h2>画面の見方 <span class="sub">― 上でスタッフを選ぶ → 下の数字とグラフを見る</span></h2>
+    <div class="formula">出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤＋欠勤）　／　欠勤日数 ＝ 確定シフトを<b>当日</b>に「休み」へ変更した日数（前日までは含まない）<br>勤務時間 ＝ シフト上の時間（休憩を除く）　／　総合判定 ＝ 出勤率のみの目安（◎95%以上／△90%以上／✕90%未満。20日未満は参考値）</div>
+    <div class="cols" style="gap:5mm">
+      <div style="flex:1.05; position:relative">
+        <img class="shot" src="img/shot_dashboard.png" style="height:74mm; object-fit:contain; object-position:top">
+        <div class="cap">【写真4】ダッシュボード ― A4縦1枚。そのまま面談へ</div>
+      </div>
+      <div style="flex:1">
+        <div class="box" style="margin-top:0"><span class="num">1</span><b>スタッフ選択</b>　▼から選ぶか氏名を入力。名前は部門記号順に並びます</div>
+        <div class="box"><span class="num">2</span><b>総合判定</b>　◎良好／△注意／✕要改善。確定シフト日数が少ない人は「参考値」で判定を出しません</div>
+        <div class="box"><span class="num">3</span><b>6つの数字</b>　出勤日数・出勤率・欠勤日数・欠勤率・勤務時間・深夜勤務。下の小さい文字は全体平均との比較</div>
+        <div class="box"><span class="num">4</span><b>一文サマリー</b>　面談で読み上げる文。全体平均と順位入り</div>
+        <div class="box"><span class="num">5</span><b>休みへの変更のタイミング</b>　事前／前日／当日。欠勤として数えるのは「当日」だけ</div>
+        <div class="box"><span class="num">6</span><b>画面の下（印刷範囲外）</b>　月別の実績と、欠勤した日付・休みに変更した時刻の一覧。面談で「この日ですね」と確認できます</div>
+      </div>
+    </div>
+
+    <div class="cols" style="margin-top:1mm">
+      <div class="box orange"><h3>数が合わないと感じたら</h3>
+        <ul class="dot"><li>貼付状況に「※」が無いか確認（前月の行が残っていると月がずれます）</li><li>欠勤の一覧で日付と変更時刻を見て、店側都合の当日変更が混ざっていないか確認</li><li>同じ人が2人に見える → 従業員番号が違います。CSV側の登録を確認</li><li>「参考値」は出勤率が低いという意味ではなく、日数が少ないだけです</li></ul></div>
+      <div class="box gray"><h3>必ず守ること</h3>
+        <ul class="dot"><li>出る数字はシフト上の記録から数えたもの。欠勤の理由は分からないので、面談では本人に事情を確認したうえで使う</li><li>黄色セル（設定）と CSV_1〜6 以外は編集しない。非表示シートは表示しない</li><li>貼り替えは全選択→Delete してから。並べ替え禁止・1ヶ月6,000行まで</li><li>個人の勤務情報です。印刷物の取り扱いに注意</li></ul></div>
+    </div>
+  </div>
+</div>
+</body></html>
