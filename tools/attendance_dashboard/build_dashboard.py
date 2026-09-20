@@ -18,6 +18,8 @@ from openpyxl.chart import BarChart, DoughnutChart, Reference
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.layout import Layout, ManualLayout
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
+from openpyxl.chart.text import RichText
+from openpyxl.drawing.text import CharacterProperties, Font as DrawFont, Paragraph, ParagraphProperties
 from openpyxl.chart.marker import DataPoint
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.comments import Comment
@@ -34,7 +36,7 @@ from openpyxl.worksheet.pagebreak import Break
 NSHEETS = 6
 MAXSTAFF = 400            # 半年で扱えるスタッフ数の上限
 STACK = NSHEETS * MAXSTAFF
-FONT = "Yu Gothic"
+FONT = "Meiryo UI"
 
 S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER, S_DBCALC = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿", "DB計算"
 S_PDF = "PDF出力"                        # 説明文なしの面談用ページ（ダッシュボードで選んだスタッフに連動）
@@ -553,6 +555,14 @@ WD_ORDER = [(2, "月"), (3, "火"), (4, "水"), (5, "木"), (6, "金"), (7, "土
 C_NAVY = "1B4F9E"
 
 
+def chart_text(size=9, bold=False, color=None):
+    """グラフの軸・データラベルの文字（フォントをセルと同じ Meiryo UI に揃える）."""
+    cp = CharacterProperties(sz=int(size * 100), b=bold, latin=DrawFont(typeface=FONT), ea=DrawFont(typeface=FONT))
+    if color:
+        cp.solidFill = color
+    return RichText(p=[Paragraph(pPr=ParagraphProperties(defRPr=cp), endParaRPr=cp)])
+
+
 def build_dashboard(wb, maxrows, select=None, pdf=False):
     """pdf=True: 説明文・画面用の表を省いた「PDF出力」シート。選択スタッフはダッシュボードに連動し、
     内部計算セル（DB計算）はダッシュボードと共用する（同じ式を上書きするだけ）。"""
@@ -644,8 +654,8 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         hws[f"{HL}{r}"] = label
         crit = '"' + code + '"'
         hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("U", "P", crit)})'
-    hws[f"{HL}43"], hws[f"{HC}43"] = "当日 入り時間を遅く（遅出）", f"=N({V('BM')})"
-    hws[f"{HL}44"], hws[f"{HC}44"] = "当日 上がり時間を早く（早退）", f"=N({V('BN')})"
+    hws[f"{HL}43"], hws[f"{HC}43"] = "当日に入りを遅く（遅出）", f"=N({V('BM')})"
+    hws[f"{HL}44"], hws[f"{HC}44"] = "当日に上がりを早く（早退）", f"=N({V('BN')})"
     hws[f"{HL}45"], hws[f"{HC}45"], hws["AD45"] = "月（グラフ用）", "出勤日数", "欠勤日数"
     for k in range(1, NSHEETS + 1):
         r = 45 + k
@@ -740,7 +750,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     info("J", "K", "従業員番号", f"={V('I')}", fmt="0")
     info("M", "N", "所属", f'=IF({P}${HC}$5="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH({P}${HC}$5,{ros}!$AX$14:$AX$17,0)),{P}${HC}$5))')
     # 資格はほぼ全員アルバイトなので表示しない。代わりにデータのある月数（途中加入や参考値の説明になる）
-    info("P", "Q", "データのある月数", f'=IF({P}${HC}$4="","",{V("AR")}&"／"&COUNTIF({ros}!$BA$22:$BA$27,"OK")&"ヶ月")', size=11)
+    info("P", "Q", "データのある月数", f'=IF({P}${HC}$4="","",{V("AR")}&"／"&COUNTIF({ros}!$BA$22:$BA$27,"OK")&"ヶ月")', size=10)
     ws["S6"] = f'="総合判定（出勤率 "&TEXT({P}${HC}$7,"0%")&"以上◎／"&TEXT({P}${HC}$8,"0%")&"以上△）"'
     style(ws["S6"], size=9, color=C_INK2)
     ws.merge_cells("S7:X8")
@@ -764,8 +774,8 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     tiles = [
         ("出勤日数", f"={V('M')}", '0"日"', f'=IF({P}${HC}$4="","","確定シフト "&{V("O")}&"日")'),
         ("出勤率", f"={V('P')}", "0.0%", f'=IF({P}${HC}$6="","",IF({all_rate}="","","全体平均 "&TEXT({all_rate},"0.0%")))'),
-        ("欠勤日数", f"={V('N')}", '0"日"', '="当日に休みへ変更した日"'),
-        ("当欠率（当日欠勤率）", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%")&"　基準 "&TEXT({P}${HC}$56,"0%"))&"")'),
+        ("欠勤日数", f"={V('N')}", '0"日"', '="当日の休み変更"'),
+        ("当欠率（当日欠勤率）", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","平均 "&TEXT({ros}!$AY$7,"0.0%")&"／基準 "&TEXT({P}${HC}$56,"0%"))&"")'),
         ("勤務時間", f"={V('R')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF({V("T")}="","","1日あたり "&TEXT({V("T")},"0.0")&"h"))'),
         ("深夜勤務", f"={V('S')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF(N({V("R")})=0,"","勤務時間の "&TEXT({V("S")}/{V("R")},"0%")))'),
     ]
@@ -781,7 +791,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         style(ws[f"{a}11"], size=20, bold=True, bg="FFFFFF", align="center", fmt=fmt)
         ws.merge_cells(f"{a}13:{b}13")
         ws[f"{a}13"] = sub
-        style(ws[f"{a}13"], size=8, color=C_MUTED, bg="FFFFFF", align="center")
+        style(ws[f"{a}13"], size=7.5, color=C_MUTED, bg="FFFFFF", align="center")
         box_range(ws, f"{a}10:{b}13")
         accent = C_RED if "欠勤" in label else (C_BLUE if "出勤" in label else "9AA7B8")
         for r in range(10, 14):
@@ -901,12 +911,13 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ws.merge_cells(f"N{LEG}:P{LEG}")
     ws[f"N{LEG}"] = "■ 欠勤日数"
     style(ws[f"N{LEG}"], size=8.5, bold=True, color=C_RED_TXT, bg="FFFFFF", align="center")
-    slots = [("R", "S", LEG), ("T", "U", LEG), ("V", "W", LEG), ("X", "X", LEG), ("R", "S", LEG + 1), ("T", "U", LEG + 1), ("V", "W", LEG + 1)]
+    # 職種の凡例: 1行2項目（R:T / U:X）× 4行。項目名がはみ出さない幅にする
+    slots = [("R", "T", LEG), ("U", "X", LEG), ("R", "T", LEG + 1), ("U", "X", LEG + 1),
+             ("R", "T", LEG + 2), ("U", "X", LEG + 2), ("R", "T", LEG + 3)]
     for i, (a, b, r) in enumerate(slots):
-        if a != b:
-            ws.merge_cells(f"{a}{r}:{b}{r}")
-        ws[f"{a}{r}"] = f'=IF(N({P}${HC}${16 + i})=0,"","●"&{P}${HL}${16 + i}&" "&TEXT({P}$AD${16 + i},"0%"))'
-        style(ws[f"{a}{r}"], size=7.5, bold=True, color=CAT_TXT[i], bg="FFFFFF", align="left")
+        ws.merge_cells(f"{a}{r}:{b}{r}")
+        ws[f"{a}{r}"] = f'=IF(N({P}${HC}${16 + i})=0,"","● "&{P}${HL}${16 + i}&" "&TEXT({P}$AD${16 + i},"0%"))'
+        style(ws[f"{a}{r}"], size=8, bold=True, color=CAT_TXT[i], bg="FFFFFF", align="left")
 
     ch = BarChart()
     ch.type, ch.grouping, ch.overlap, ch.gapWidth = "col", "stacked", 100, 60
@@ -922,9 +933,12 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         s_.dLbls.showCatName = False
         s_.dLbls.showLegendKey = False
         s_.dLbls.numFmt = "0;;;"
+        s_.dLbls.txPr = chart_text(8)
     ch.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill=C_GRID))
     ch.x_axis.delete = False
     ch.y_axis.delete = False
+    ch.x_axis.txPr = chart_text(8)
+    ch.y_axis.txPr = chart_text(8)
     ch.y_axis.scaling.min = 0
     ch.y_axis.number_format = "0"
     ch.legend = None
@@ -955,9 +969,12 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ch.dataLabels.showSerName = False
     ch.dataLabels.showCatName = False
     ch.dataLabels.showLegendKey = False
+    ch.dataLabels.txPr = chart_text(8)
     ch.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill=C_GRID))
     ch.x_axis.delete = False
     ch.y_axis.delete = False
+    ch.x_axis.txPr = chart_text(8)
+    ch.y_axis.txPr = chart_text(8)
     ch.y_axis.scaling.min = 0
     ch.y_axis.number_format = "0"
     ch.legend = None
@@ -977,12 +994,15 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ch.dataLabels.showCatName = False
     ch.dataLabels.showLegendKey = False
     ch.dataLabels.numFmt = "0.0%"
+    ch.dataLabels.txPr = chart_text(8)
     ch.x_axis.scaling.orientation = "maxMin"
     ch.y_axis.scaling.min, ch.y_axis.scaling.max = 0, 1
     ch.y_axis.number_format = "0%"
     ch.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill=C_GRID))
     ch.x_axis.delete = False
     ch.y_axis.delete = False
+    ch.x_axis.txPr = chart_text(8)
+    ch.y_axis.txPr = chart_text(8)
     ch.legend = None
     ws.add_chart(plain(ch), span(10, 34, 16, 46))
 
@@ -995,18 +1015,18 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         r = 36 + i * 2
         ws.merge_cells(f"R{r}:V{r + 1}")
         ws[f"R{r}"] = label
-        style(ws[f"R{r}"], size=10, bg="FFFFFF", align="left")
+        style(ws[f"R{r}"], size=9.5, bg="FFFFFF", align="left")
         ws.merge_cells(f"W{r}:X{r + 1}")
         ws[f"W{r}"] = f'=IF({sel}="","",{P}${HC}${39 + i})'
         style(ws[f"W{r}"], size=11, bold=(code == "当日"), bg="FFFFFF", align="right", fmt='0"日"', color=(C_RED if code == "当日" else C_INK))
         for c in "RSTUVWX":
             ws[f"{c}{r + 1}"].border = Border(bottom=hair)
     # 当日の時間変更（シフト上の変更。打刻の遅刻・早退ではない）
-    for i, (label, hrow) in enumerate((("当日 入り時間を遅く（遅出）", 43), ("当日 上がりを早く（早退）", 44))):
+    for i, (label, hrow) in enumerate((("当日に入りを遅く（遅出）", 43), ("当日に上がりを早く（早退）", 44))):
         r = 42 + i * 2
         ws.merge_cells(f"R{r}:V{r + 1}")
         ws[f"R{r}"] = label
-        style(ws[f"R{r}"], size=10, bg="FFFFFF", align="left")
+        style(ws[f"R{r}"], size=9.5, bg="FFFFFF", align="left")
         ws.merge_cells(f"W{r}:X{r + 1}")
         ws[f"W{r}"] = f'=IF({sel}="","",{P}${HC}${hrow})'
         style(ws[f"W{r}"], size=11, bold=True, bg="FFFFFF", align="right", fmt='0"日"', color=C_WARN_TXT)
@@ -1047,7 +1067,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         hr = top + 2
         ws.row_dimensions[hr].height = 18
         tbl_cols = [("月", 2, 5), ("出勤日数", 6, 7), ("欠勤日数", 8, 9), ("確定シフト日数", 10, 12), ("出勤率", 13, 15),
-                    ("勤務時間", 16, 18), ("1日あたり", 19, 20), ("深夜勤務", 21, 22), ("前日休み変更", 23, 24)]
+                    ("勤務時間", 16, 18), ("1日あたり", 19, 20), ("深夜勤務", 21, 22), ("前日変更", 23, 24)]
         for title, a, b in tbl_cols:
             ws.merge_cells(f"{L(a)}{hr}:{L(b)}{hr}")
             head_cell(f"{L(a)}{hr}", title, align=("left" if a == 2 else "center"))
