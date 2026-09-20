@@ -551,7 +551,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     hws.column_dimensions[HL].width = 30
     hws.column_dimensions[HC].width = 14
     hws.column_dimensions["AD"].width = 12
-    LAST_ROW = 74 if pdf else 90
+    LAST_ROW = 78 if pdf else 90
     fill_range(ws, f"A1:Y{LAST_ROW}", C_PAGE)
 
     def V(colref):
@@ -963,6 +963,67 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
             style(ws[f"B{rr}"], size=8.5, color=C_INK2, align="left", valign="top", wrap=True)
         return top + 5
 
+    def monthly_block(top):
+        """月別の実績: top=見出し行、top+1 空き、top+2 表見出し、top+3〜 月別6行、その下に合計."""
+        ws.row_dimensions[top].height = 30
+        section(top, "月別の実績")
+        ws[f"B{top}"].alignment = Alignment(vertical="bottom")
+        ws.row_dimensions[top + 1].height = 8
+        hr = top + 2
+        ws.row_dimensions[hr].height = 18
+        tbl_cols = [("月", 2, 5), ("出勤日数", 6, 7), ("欠勤日数", 8, 9), ("確定シフト日数", 10, 12), ("出勤率", 13, 15),
+                    ("勤務時間", 16, 18), ("1日あたり", 19, 20), ("深夜勤務", 21, 22), ("前日休み変更", 23, 24)]
+        for title, a, b in tbl_cols:
+            ws.merge_cells(f"{L(a)}{hr}:{L(b)}{hr}")
+            head_cell(f"{L(a)}{hr}", title, align=("left" if a == 2 else "center"))
+        f1, f6 = hr + 1, hr + NSHEETS
+        for k in range(1, NSHEETS + 1):
+            r = hr + k
+            ws.row_dimensions[r].height = 18
+            mw, ma, mh, has = MONTH_WORK[k - 1], MONTH_ABS[k - 1], MONTH_HRS[k - 1], MONTH_HAS[k - 1]
+            H = f"N({V(has)})=1"
+            vals = [
+                (f"={ros}!$AY${21 + k}", None, "left"),
+                (f'=IF({P}${HC}$4="","",IF({H},{V(mw)},"—"))', '0"日"', "right"),
+                (f'=IF({P}${HC}$4="","",IF({H},{V(ma)},"—"))', '0"日"', "right"),
+                (f'=IF({P}${HC}$4="","",IF({H},N({V(mw)})+N({V(ma)}),"—"))', '0"日"', "right"),
+                (f'=IF({P}${HC}$4="","",IF({H},IF(N(J{r})=0,"－",N(F{r})/N(J{r})),"—"))', "0.0%", "right"),
+                (f'=IF({P}${HC}$4="","",IF({H},{V(mh)},"—"))', '0.0"h"', "right"),
+                (f'=IF({P}${HC}$4="","",IF({H},IF(N(F{r})=0,"－",N(P{r})/N(F{r})),"—"))', '0.0"h"', "right"),
+                (f'=IF({P}${HC}$4="","",IF({H},{sum6sel_k("N", k, maxrows, sel)},"—"))', '0.0"h"', "right"),
+                (f'=IF({P}${HC}$4="","",IF({H},SUMIFS({calc_rng(k, "U", maxrows)},{calc_rng(k, "A", maxrows)},{sel},{calc_rng(k, "P", maxrows)},"前日"),"—"))', '0"日"', "right"),
+            ]
+            for (title, a, b), (formula, fmt, align) in zip(tbl_cols, vals):
+                ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
+                ws[f"{L(a)}{r}"] = formula
+                style(ws[f"{L(a)}{r}"], size=10, bg="FFFFFF", align=align, fmt=fmt)
+                for c in range(a, b + 1):
+                    ws[f"{L(c)}{r}"].border = Border(bottom=hair)
+        r = f6 + 1
+        ws.row_dimensions[r].height = 18
+        totals = [
+            ('="合計"', None, "left"),
+            (f'=IF({P}${HC}$4="","",SUM(F{f1}:F{f6}))', '0"日"', "right"),
+            (f'=IF({P}${HC}$4="","",SUM(H{f1}:H{f6}))', '0"日"', "right"),
+            (f'=IF({P}${HC}$4="","",SUM(J{f1}:J{f6}))', '0"日"', "right"),
+            (f'=IF({P}${HC}$4="","",IF(N(J{r})=0,"－",N(F{r})/N(J{r})))', "0.0%", "right"),
+            (f'=IF({P}${HC}$4="","",SUM(P{f1}:P{f6}))', '0.0"h"', "right"),
+            (f'=IF({P}${HC}$4="","",IF(N(F{r})=0,"－",N(P{r})/N(F{r})))', '0.0"h"', "right"),
+            (f'=IF({P}${HC}$4="","",SUM(U{f1}:U{f6}))', '0.0"h"', "right"),
+            (f'=IF({P}${HC}$4="","",SUM(W{f1}:W{f6}))', '0"日"', "right"),
+        ]
+        for (title, a, b), (formula, fmt, align) in zip(tbl_cols, totals):
+            ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
+            ws[f"{L(a)}{r}"] = formula
+            style(ws[f"{L(a)}{r}"], size=10, bold=True, bg="F3F3F0", align=align, fmt=fmt)
+            for c in range(a, b + 1):
+                ws[f"{L(c)}{r}"].border = Border(top=thin, bottom=thin)
+        ws.conditional_formatting.add(f"F{f1}:F{f6}", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_BLUE, showValue=True))
+        ws.conditional_formatting.add(f"H{f1}:H{f6}", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_RED, showValue=True))
+        for formula, color in [(f'AND(ISNUMBER(M{f1}),M{f1}>={P}${HC}$7)', C_GOOD_TXT), (f'AND(ISNUMBER(M{f1}),M{f1}>={P}${HC}$8)', C_WARN_TXT), (f'ISNUMBER(M{f1})', C_CRIT)]:
+            ws.conditional_formatting.add(f"M{f1}:M{r}", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=10, color=color), stopIfTrue=True))
+        return r
+
     def absence_block(top):
         """欠勤（当日休み変更）の日付一覧: top=見出し行。top+2 が表見出し、top+3 から ABS_ROWS 行、その下に注記."""
         ws.row_dimensions[top].height = 18
@@ -1011,9 +1072,9 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         return r
 
     if pdf:
-        # PDF出力: 見出し〜グラフ、集計のきまり、欠勤の一覧。月別の実績は載せない
-        ws.row_dimensions[48].height = 12
-        r = notes_block(49)
+        # PDF出力: 見出し〜グラフ、月別の実績、欠勤の一覧。集計のきまりは載せない
+        ws.row_dimensions[48].height = 6
+        r = monthly_block(49)
         ws.row_dimensions[r + 1].height = 12
         r = absence_block(r + 2)
         ws.row_dimensions[r + 1].height = 10
@@ -1026,61 +1087,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
 
     # ---- 画面用: 月別サマリー（印刷範囲外）
     ws.row_dimensions[55].height = 14
-    ws.row_dimensions[56].height = 30
-    section(56, "月別の実績")
-    ws["B56"].alignment = Alignment(vertical="bottom")
-    ws.row_dimensions[57].height = 8
-    ws.row_dimensions[58].height = 18
-    tbl_cols = [("月", 2, 5), ("出勤日数", 6, 7), ("欠勤日数", 8, 9), ("確定シフト日数", 10, 12), ("出勤率", 13, 15),
-                ("勤務時間", 16, 18), ("1日あたり", 19, 20), ("深夜勤務", 21, 22), ("前日休み変更", 23, 24)]
-    for title, a, b in tbl_cols:
-        ws.merge_cells(f"{L(a)}58:{L(b)}58")
-        head_cell(f"{L(a)}58", title, align=("left" if a == 2 else "center"))
-    for k in range(1, NSHEETS + 1):
-        r = 58 + k
-        ws.row_dimensions[r].height = 18
-        mw, ma, mh, has = MONTH_WORK[k - 1], MONTH_ABS[k - 1], MONTH_HRS[k - 1], MONTH_HAS[k - 1]
-        H = f"N({V(has)})=1"
-        vals = [
-            (f"={ros}!$AY${21 + k}", None, "left"),
-            (f'=IF({P}${HC}$4="","",IF({H},{V(mw)},"—"))', '0"日"', "right"),
-            (f'=IF({P}${HC}$4="","",IF({H},{V(ma)},"—"))', '0"日"', "right"),
-            (f'=IF({P}${HC}$4="","",IF({H},N({V(mw)})+N({V(ma)}),"—"))', '0"日"', "right"),
-            (f'=IF({P}${HC}$4="","",IF({H},IF(N(J{r})=0,"－",N(F{r})/N(J{r})),"—"))', "0.0%", "right"),
-            (f'=IF({P}${HC}$4="","",IF({H},{V(mh)},"—"))', '0.0"h"', "right"),
-            (f'=IF({P}${HC}$4="","",IF({H},IF(N(F{r})=0,"－",N(P{r})/N(F{r})),"—"))', '0.0"h"', "right"),
-            (f'=IF({P}${HC}$4="","",IF({H},{sum6sel_k("N", k, maxrows, sel)},"—"))', '0.0"h"', "right"),
-            (f'=IF({P}${HC}$4="","",IF({H},SUMIFS({calc_rng(k, "U", maxrows)},{calc_rng(k, "A", maxrows)},{sel},{calc_rng(k, "P", maxrows)},"前日"),"—"))', '0"日"', "right"),
-        ]
-        for (title, a, b), (formula, fmt, align) in zip(tbl_cols, vals):
-            ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
-            ws[f"{L(a)}{r}"] = formula
-            style(ws[f"{L(a)}{r}"], size=10, bg="FFFFFF", align=align, fmt=fmt)
-            for c in range(a, b + 1):
-                ws[f"{L(c)}{r}"].border = Border(bottom=hair)
-    r = 65
-    ws.row_dimensions[r].height = 18
-    totals = [
-        ('="合計"', None, "left"),
-        (f'=IF({P}${HC}$4="","",SUM(F59:F64))', '0"日"', "right"),
-        (f'=IF({P}${HC}$4="","",SUM(H59:H64))', '0"日"', "right"),
-        (f'=IF({P}${HC}$4="","",SUM(J59:J64))', '0"日"', "right"),
-        (f'=IF({P}${HC}$4="","",IF(N(J65)=0,"－",N(F65)/N(J65)))', "0.0%", "right"),
-        (f'=IF({P}${HC}$4="","",SUM(P59:P64))', '0.0"h"', "right"),
-        (f'=IF({P}${HC}$4="","",IF(N(F65)=0,"－",N(P65)/N(F65)))', '0.0"h"', "right"),
-        (f'=IF({P}${HC}$4="","",SUM(U59:U64))', '0.0"h"', "right"),
-        (f'=IF({P}${HC}$4="","",SUM(W59:W64))', '0"日"', "right"),
-    ]
-    for (title, a, b), (formula, fmt, align) in zip(tbl_cols, totals):
-        ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
-        ws[f"{L(a)}{r}"] = formula
-        style(ws[f"{L(a)}{r}"], size=10, bold=True, bg="F3F3F0", align=align, fmt=fmt)
-        for c in range(a, b + 1):
-            ws[f"{L(c)}{r}"].border = Border(top=thin, bottom=thin)
-    ws.conditional_formatting.add("F59:F64", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_BLUE, showValue=True))
-    ws.conditional_formatting.add("H59:H64", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_RED, showValue=True))
-    for formula, color in [(f'AND(ISNUMBER(M59),M59>={P}${HC}$7)', C_GOOD_TXT), (f'AND(ISNUMBER(M59),M59>={P}${HC}$8)', C_WARN_TXT), ('ISNUMBER(M59)', C_CRIT)]:
-        ws.conditional_formatting.add("M59:M65", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=10, color=color), stopIfTrue=True))
+    monthly_block(56)
 
     # ---- 欠勤（当日休み変更）の日付一覧
     ws.row_dimensions[66].height = 16
@@ -1264,7 +1271,7 @@ def build_howto(wb, maxrows):
         ("2", "CSVの全体（1行目のヘッダーを含む・列はそのまま）をコピーします。Ctrl+A → Ctrl+C。"),
         ("3", "このブックの「CSV_1」シートのA1セルを選択して貼り付けます（Ctrl+V）。2ヶ月目は「CSV_2」、以降「CSV_3」…「CSV_6」へ。順番は古い月から新しい月の順が見やすいです。"),
         ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦1枚（見出し〜集計のきまりまで）。その下の月別の実績・欠勤の一覧は画面で確認する部分で、必要なら範囲を選択して印刷してください。"),
-        ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。下に「集計のきまり」と「欠勤の一覧」が付きます。"),
+        ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。下に「月別の実績」と「欠勤の一覧」が付きます。"),
         ("6", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値や深夜時間帯は「設定」シートで変更できます。"),
         ("★", "貼り直すときは、貼付シートの古いデータをすべて削除（Ctrl+A → Delete）してから貼り付けてください。行数が前より少ない月を上書きすると、古い行が残ってしまいます。"),
     ]
