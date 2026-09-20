@@ -676,7 +676,7 @@ def build_dashboard(wb, maxrows, select=None):
         style(ws[f"{col_a}6"], size=9, color=C_INK2)
         ws.merge_cells(f"{col_a}7:{col_b}8")
         ws[f"{col_a}7"] = formula
-        style(ws[f"{col_a}7"], size=size, bold=True, bg="FFFFFF", align="left", fmt=fmt)
+        style(ws[f"{col_a}7"], size=size, bold=True, bg="FFFFFF", align="center", fmt=fmt)
         box_range(ws, f"{col_a}7:{col_b}8")
 
     info("J", "K", "従業員番号", f"={V('I')}", fmt="0")
@@ -716,13 +716,13 @@ def build_dashboard(wb, maxrows, select=None):
         fill_range(ws, f"{a}10:{b}13", "FFFFFF")
         ws.merge_cells(f"{a}10:{b}10")
         ws[f"{a}10"] = label
-        style(ws[f"{a}10"], size=9, color=C_INK2, bg="FFFFFF", align="left")
+        style(ws[f"{a}10"], size=9, color=C_INK2, bg="FFFFFF", align="center")
         ws.merge_cells(f"{a}11:{b}12")
         ws[f"{a}11"] = formula
-        style(ws[f"{a}11"], size=20, bold=True, bg="FFFFFF", align="left", fmt=fmt)
+        style(ws[f"{a}11"], size=20, bold=True, bg="FFFFFF", align="center", fmt=fmt)
         ws.merge_cells(f"{a}13:{b}13")
         ws[f"{a}13"] = sub
-        style(ws[f"{a}13"], size=8, color=C_MUTED, bg="FFFFFF", align="left")
+        style(ws[f"{a}13"], size=8, color=C_MUTED, bg="FFFFFF", align="center")
         box_range(ws, f"{a}10:{b}13")
         accent = C_RED if "欠勤" in label else (C_BLUE if "出勤" in label else "6B7280")
         for r in range(10, 14):
