@@ -17,6 +17,7 @@ from openpyxl import Workbook
 from openpyxl.chart import BarChart, DoughnutChart, Reference
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.layout import Layout, ManualLayout
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from openpyxl.chart.marker import DataPoint
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.comments import Comment
@@ -818,10 +819,20 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         g.line.solidFill = "FFFFFF"
         return g
 
+    CHART_W = 6.86                 # 参考値（実際の大きさはセル範囲アンカーで決まる）
+    RING_FRAC = 0.86               # リングの直径（グラフ高さ＝10行に対する割合）
+
+    def span(c1, r1, c2, r2):
+        """列 c1〜c2・行 r1〜r2（1始まり・両端含む）にぴったり合わせるアンカー。列幅がフォントで変わっても位置がずれない."""
+        a = TwoCellAnchor()
+        a._from = AnchorMarker(col=c1 - 1, row=r1 - 1)
+        a.to = AnchorMarker(col=c2, row=r2)
+        return a
+
     def plain(ch):
         ch.graphical_properties = GraphicalProperties()
         ch.graphical_properties.line.noFill = True
-        ch.width, ch.height = 6.3, 6.6
+        ch.width, ch.height = CHART_W, 6.6
         return ch
 
     def doughnut(label_rng, data_rng, colors, hole=70, labels=True):
@@ -847,34 +858,44 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         plain(ch)
         ch.plot_area.graphicalProperties = GraphicalProperties(noFill=True)
         ch.graphical_properties.noFill = True
-        ch.width, ch.height = 6.3, 6.0
+        # リングの位置を固定: グラフはカード幅（7列）×10行（18〜27行）に貼るので、
+        # 描画領域を「幅いっぱい × 高さ RING_FRAC」で上下中央に置くと、円の中心がちょうど行22〜23の境界＝中央列 D:F / T:V の中心に来る
+        ch.plot_area.layout = Layout(manualLayout=ManualLayout(
+            xMode="edge", yMode="edge", layoutTarget="inner", x=0.0, y=(1 - RING_FRAC) / 2, w=1.0, h=RING_FRAC))
         return ch
 
-    ws.add_chart(doughnut(f"${HL}$12:${HL}$13", f"${HC}$12:${HC}$13", [C_BLUE, C_RED], labels=False), "B18")
-    ws.add_chart(doughnut(f"${HL}$16:${HL}$22", f"${HC}$16:${HC}$22", CAT_COLORS, labels=False), "R18")
+    ws.add_chart(doughnut(f"${HL}$12:${HL}$13", f"${HC}$12:${HC}$13", [C_BLUE, C_RED], labels=False), span(2, 18, 8, 27))
+    ws.add_chart(doughnut(f"${HL}$16:${HL}$22", f"${HC}$16:${HC}$22", CAT_COLORS, labels=False), span(18, 18, 24, 27))
 
     # リングの穴に大きな数値を表示（グラフ背景は透明）
     def center(a, b, label, value, fmt, color=C_INK):
-        ws.merge_cells(f"{a}22:{b}22")
-        ws[f"{a}22"] = label
-        style(ws[f"{a}22"], size=8, color=C_MUTED, bg="FFFFFF", align="center", valign="bottom")
-        ws.merge_cells(f"{a}23:{b}24")
-        ws[f"{a}23"] = value
-        style(ws[f"{a}23"], size=14, bold=True, color=color, bg="FFFFFF", align="center", fmt=fmt)
+        ws.merge_cells(f"{a}21:{b}21")
+        ws[f"{a}21"] = label
+        style(ws[f"{a}21"], size=8, color=C_MUTED, bg="FFFFFF", align="center", valign="bottom")
+        ws.merge_cells(f"{a}22:{b}23")
+        ws[f"{a}22"] = value
+        style(ws[f"{a}22"], size=14, bold=True, color=color, bg="FFFFFF", align="center", fmt=fmt)
 
-    center("C", "F", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
+    center("D", "F", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
     for formula, color in rate_rules:
-        ws.conditional_formatting.add("C23:F24", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=14, color=color), stopIfTrue=True))
-    center("S", "V", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
+        ws.conditional_formatting.add("D22:F23", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=14, color=color), stopIfTrue=True))
+    center("T", "V", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
 
     # 凡例（グラフの下に小さく）
-    ws.merge_cells("C30:E30")
-    ws["C30"] = f'=IF({P}${HC}$3="","","● 出勤 "&TEXT(IF({P}${HC}$12+{P}${HC}$13=0,0,{P}${HC}$12/({P}${HC}$12+{P}${HC}$13)),"0%"))'
-    style(ws["C30"], size=8.5, bold=True, color=C_BLUE, bg="FFFFFF", align="center")
-    ws.merge_cells("F30:H30")
-    ws["F30"] = f'=IF({P}${HC}$3="","","● 欠勤 "&TEXT(IF({P}${HC}$12+{P}${HC}$13=0,0,{P}${HC}$13/({P}${HC}$12+{P}${HC}$13)),"0%"))'
-    style(ws["F30"], size=8.5, bold=True, color=C_RED, bg="FFFFFF", align="center")
-    slots = [("R", "S", 30), ("T", "U", 30), ("V", "W", 30), ("X", "X", 30), ("R", "S", 31), ("T", "U", 31), ("V", "W", 31)]
+    LEG = 28                        # 凡例行（3つのグラフで同じ高さ）
+    ws.merge_cells(f"C{LEG}:E{LEG}")
+    ws[f"C{LEG}"] = f'=IF({P}${HC}$3="","","● 出勤 "&TEXT(IF({P}${HC}$12+{P}${HC}$13=0,0,{P}${HC}$12/({P}${HC}$12+{P}${HC}$13)),"0%"))'
+    style(ws[f"C{LEG}"], size=8.5, bold=True, color=C_BLUE, bg="FFFFFF", align="center")
+    ws.merge_cells(f"F{LEG}:H{LEG}")
+    ws[f"F{LEG}"] = f'=IF({P}${HC}$3="","","● 欠勤 "&TEXT(IF({P}${HC}$12+{P}${HC}$13=0,0,{P}${HC}$13/({P}${HC}$12+{P}${HC}$13)),"0%"))'
+    style(ws[f"F{LEG}"], size=8.5, bold=True, color=C_RED, bg="FFFFFF", align="center")
+    ws.merge_cells(f"K{LEG}:M{LEG}")
+    ws[f"K{LEG}"] = "■ 出勤日数"
+    style(ws[f"K{LEG}"], size=8.5, bold=True, color=C_BLUE, bg="FFFFFF", align="center")
+    ws.merge_cells(f"N{LEG}:P{LEG}")
+    ws[f"N{LEG}"] = "■ 欠勤日数"
+    style(ws[f"N{LEG}"], size=8.5, bold=True, color=C_RED, bg="FFFFFF", align="center")
+    slots = [("R", "S", LEG), ("T", "U", LEG), ("V", "W", LEG), ("X", "X", LEG), ("R", "S", LEG + 1), ("T", "U", LEG + 1), ("V", "W", LEG + 1)]
     for i, (a, b, r) in enumerate(slots):
         if a != b:
             ws.merge_cells(f"{a}{r}:{b}{r}")
@@ -900,8 +921,8 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ch.y_axis.delete = False
     ch.y_axis.scaling.min = 0
     ch.y_axis.number_format = "0"
-    ch.legend.position = "b"
-    ws.add_chart(plain(ch), "J18")
+    ch.legend = None
+    ws.add_chart(plain(ch), span(10, 18, 16, 27))
 
     # ---- グラフ 2段目
     ws.row_dimensions[32].height = 14
@@ -934,7 +955,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ch.y_axis.scaling.min = 0
     ch.y_axis.number_format = "0"
     ch.legend = None
-    ws.add_chart(plain(ch), "B34")
+    ws.add_chart(plain(ch), span(2, 34, 8, 46))
 
     ch = BarChart()
     ch.type, ch.gapWidth = "bar", 50
@@ -957,7 +978,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ch.x_axis.delete = False
     ch.y_axis.delete = False
     ch.legend = None
-    ws.add_chart(plain(ch), "J34")
+    ws.add_chart(plain(ch), span(10, 34, 16, 46))
 
     ws.row_dimensions[35].height = 18
     ws.merge_cells("R35:V35")
