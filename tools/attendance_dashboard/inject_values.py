@@ -9,6 +9,7 @@ openpyxl が書いた数式セルには計算結果（キャッシュ値）が�
     python inject_values.py 生成ブック.xlsx 再計算済み.xlsx 出力.xlsx
 """
 import datetime as dt
+import re
 import shutil
 import sys
 import tempfile
@@ -63,7 +64,8 @@ def inject_sheet(xml_bytes, vals):
         if old is not None:
             c.remove(old)
         if v is None or v == "":
-            c.attrib.pop("t", None)
+            c.set("t", "str")
+            etree.SubElement(c, f"{{{NS}}}v").text = ""
             continue
         if isinstance(v, bool):
             c.set("t", "b"); text = "1" if v else "0"
@@ -94,6 +96,9 @@ def main(src, recalc, dst):
                     name = path2sheet[item.filename]
                     data, n = inject_sheet(data, values.get(name, {}))
                     print(f"{name}: {n} values")
+                elif item.filename == "xl/workbook.xml":
+                    # 値を埋めたので、開いたときの全再計算は不要（現行の calcId にして fullCalcOnLoad を外す）
+                    data = re.sub(rb'<calcPr[^>]*/>', b'<calcPr calcId="191029"/>', data)
                 zout.writestr(item, data)
     shutil.move(str(tmp), dst)
     print("written", dst)

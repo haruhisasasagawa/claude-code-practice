@@ -179,7 +179,7 @@ CALC_COLS = [
     ("G", "欠勤行"), ("H", "出勤日(初回)"), ("I", "欠勤日(初回)"), ("J", "開始"), ("K", "終了"), ("L", "休憩"),
     ("M", "実働h"), ("N", "深夜h"), ("O", "曜日"), ("P", "休み区分"), ("Q", "却下"), ("R", "職種"),
     ("S", "初出"), ("T", "番号累積"), ("U", "休み日(初回)"), ("V", "更新時刻(JST)"), ("W", "選択者欠勤連番"),
-    ("X", "元開始"), ("Y", "元終了"),
+    ("X", "元開始"), ("Y", "元終了"), ("AV", "勤務キー"), ("AW", "休みキー"), ("AX", "当日休みキー"),
 ]
 
 
@@ -225,7 +225,7 @@ def build_calc_sheet(wb, k, maxrows):
     ws.column_dimensions["Z"].width = 30
 
     def idx(name):
-        return f"INDEX({csvs}!$A:$AZ,ROW(),{MAP[name]}$2)"
+        return f"INDEX({csvs}!$A$1:$AZ${last},ROW(),{MAP[name]}$2)"
 
     def tconv(name):
         x = idx(name)
@@ -244,14 +244,16 @@ def build_calc_sheet(wb, k, maxrows):
             "E": f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=1),1,0))',
             "F": f'=IF($A{r}="","",IFERROR(INT({upd}*1/86400000+25569+9/24),""))',
             "G": f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=4,$B{r}<>"",$F{r}=$B{r}),1,0))',
-            "H": f'=IF($A{r}="","",IF($E{r}=1,IF(COUNTIFS($A$2:$A{r},$A{r},$B$2:$B{r},$B{r},$E$2:$E{r},1)=1,1,0),0))',
-            "I": (f'=IF($A{r}="","",IF($G{r}=1,IF(COUNTIFS($A$2:$A${last},$A{r},$B$2:$B${last},$B{r},$E$2:$E${last},1)>0,0,'
-                  f'IF(COUNTIFS($A$2:$A{r},$A{r},$B$2:$B{r},$B{r},$G$2:$G{r},1)=1,1,0)),0))'),
+            "H": f'=IF($A{r}="","",IF($E{r}=1,IF(MATCH($AV{r},$AV$2:$AV${last},0)=ROW()-1,1,0),0))',
+            "I": (f'=IF($A{r}="","",IF($G{r}=1,IF(ISNUMBER(MATCH($AX{r},$AV$2:$AV${last},0)),0,'
+                  f'IF(MATCH($AX{r},$AX$2:$AX${last},0)=ROW()-1,1,0)),0))'),
             "J": f'=IF($E{r}<>1,"",IF({idx("変更後の開始時間")}="",{tconv("募集シフトの開始時間")},{tconv("変更後の開始時間")}))',
             "K": f'=IF($E{r}<>1,"",IF({idx("変更後の終了時間")}="",{tconv("募集シフトの終了時間")},{tconv("変更後の終了時間")}))',
             "L": f'=IF($E{r}<>1,"",{brk})',
             "M": f'=IF($E{r}<>1,"",($K{r}-$J{r}-$L{r})*24)',
-            "N": f'=IF($E{r}<>1,"",MAX(0,MIN($K{r},{sets}!$B$8)-MAX($J{r},{sets}!$B$7))*24)',
+            "N": (f'=IF($E{r}<>1,"",(MAX(0,MIN($K{r},{sets}!$B$8)-MAX($J{r},{sets}!$B$7))-'
+                  + "-".join(f'MAX(0,MIN({tconv(f"休憩{i}終了時間")},{sets}!$B$8)-MAX({tconv(f"休憩{i}開始時間")},{sets}!$B$7))' for i in (1, 2, 3))
+                  + ')*24)'),
             "O": f'=IF($A{r}="","",IF($B{r}="","",WEEKDAY($B{r})))',
             "P": (f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=4),IF(OR($F{r}="",$B{r}=""),"不明",'
                   f'IF($F{r}>$B{r},"事後",IF($F{r}=$B{r},"当日",IF($F{r}=$B{r}-1,"前日","事前")))),""))'),
@@ -264,10 +266,12 @@ def build_calc_sheet(wb, k, maxrows):
             "X": (f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=4),IF(AND(ROUND({tconv("募集シフトの開始時間")}*1440,0)=300,'
                   f'ROUND({tconv("募集シフトの終了時間")}*1440,0)=1740),"",{tconv("募集シフトの開始時間")}),""))'),
             "Y": f'=IF($A{r}="","",IF($X{r}="","",{tconv("募集シフトの終了時間")}))',
-            "S": f'=IF($A{r}="","",IF(COUNTIF($A$2:$A{r},$A{r})=1,1,0))',
+            "S": f'=IF($A{r}="","",IF(MATCH($A{r},$A$2:$A${last},0)=ROW()-1,1,0))',
+            "AV": f'=IF($E{r}=1,IFERROR($A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
+            "AW": f'=IF(AND($C{r}=1,$D{r}=4),IFERROR($A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
+            "AX": f'=IF($G{r}=1,IFERROR($A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
             "T": f'=N($T{r-1})+IF($S{r}=1,1,0)',
-            "U": (f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=4),'
-                  f'IF(COUNTIFS($A$2:$A{r},$A{r},$B$2:$B{r},$B{r},$C$2:$C{r},1,$D$2:$D{r},4)=1,1,0),0))'),
+            "U": f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=4),IF(MATCH($AW{r},$AW$2:$AW${last},0)=ROW()-1,1,0),0))',
         }
         for colref, formula in f.items():
             ws[f"{colref}{r}"] = formula
@@ -388,10 +392,10 @@ def build_roster(wb, maxrows):
         for i in range(1, MAXSTAFF + 1):
             ws[f"A{r}"] = f'=IFERROR(MATCH({i},{calc}!$T$2:$T${last},0),"")'
             ws[f"B{r}"] = f'=IF($A{r}="","",INDEX({calc}!$A$2:$A${last},$A{r}))'
-            ws[f"C{r}"] = f'=IF($A{r}="","",INDEX({csvs}!$A:$AZ,$A{r}+1,{calc}!$AI$2)&"")'
-            ws[f"D{r}"] = f'=IF($A{r}="","",INDEX({csvs}!$A:$AZ,$A{r}+1,{calc}!$AK$2)&"")'
-            ws[f"E{r}"] = f'=IF($A{r}="","",INDEX({csvs}!$A:$AZ,$A{r}+1,{calc}!$AL$2)&"")'
-            ws[f"F{r}"] = f'=IF($B{r}="","",IF(COUNTIF($B$2:$B{r},$B{r})=1,1,0))'
+            ws[f"C{r}"] = f'=IF($A{r}="","",INDEX({csvs}!$A$1:$AZ${last},$A{r}+1,{calc}!$AI$2)&"")'
+            ws[f"D{r}"] = f'=IF($A{r}="","",INDEX({csvs}!$A$1:$AZ${last},$A{r}+1,{calc}!$AK$2)&"")'
+            ws[f"E{r}"] = f'=IF($A{r}="","",INDEX({csvs}!$A$1:$AZ${last},$A{r}+1,{calc}!$AL$2)&"")'
+            ws[f"F{r}"] = f'=IF($B{r}="","",IF(MATCH($B{r},$B$2:$B${STACK + 1},0)=ROW()-1,1,0))'
             ws[f"G{r}"] = f'=N($G{r - 1})+IF($F{r}=1,1,0)'
             r += 1
     stack_last = r - 1
@@ -1252,7 +1256,8 @@ def build_howto(wb, maxrows):
         f"1ヶ月あたり {maxrows:,} 行、スタッフは半年で {MAXSTAFF} 名まで集計できます。超えた場合は「貼付状況」に警告が出ます。",
         "スタッフは「応募者の従業員番号」で同一人物を判定し、名前は最新月のものを表示します（名前の前後の記号が月によって変わっても同じ人として集計されます）。",
         "CSVの列名（1行目）で列を探すため、列の順番が変わっても動作します。列名が変わった場合は「貼付状況」に警告が出ます。",
-        "開いたときに計算に数秒かかることがあります。計算用のシート（名簿・DB計算・計算1〜6）は非表示にしてあります。表示して編集しないでください。",
+        "6ヶ月分を貼った状態ではファイルが約6〜7MBになり、開くのに数秒〜十数秒かかります。何ヶ月分もまとめて貼るときは「数式」タブ→「計算方法の設定」を「手動」にして最後に F9 を押すと待ち時間が減ります（作業後は「自動」に戻してください）。",
+        "計算用のシート（名簿・DB計算・計算1〜6）は非表示にしてあります。表示して編集しないでください。",
         "欠勤（当日休み変更）には、本人都合だけでなく店側都合の当日カットなどが含まれる可能性があります。理由はCSVにないため、必ず本人に事情を確認したうえで評価してください。",
         "「更新時間」は行の最終更新時刻です。シフト日より後に休み行を編集すると「シフト日より後」に分類され欠勤から外れます。その区分が0日でない人は当日の実態を確認してください。",
         "このファイルには個人の勤務情報が含まれます。取り扱いにご注意ください。",
@@ -1273,7 +1278,7 @@ def build_howto(wb, maxrows):
 
 
 # ---------------------------------------------------------------- main
-def build(output, csv_paths=(), maxrows=6000, select=None, paste_mode="excel"):
+def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
     wb = Workbook()
     wb.remove(wb.active)
     build_howto(wb, maxrows)
@@ -1303,7 +1308,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("output")
     ap.add_argument("--csv", nargs="*", default=[], help="CSV_1, CSV_2 … に貼り付けた状態で生成するCSVファイル（\"-\" で空の月）")
-    ap.add_argument("--maxrows", type=int, default=6000, help="1ヶ月あたりの最大行数")
+    ap.add_argument("--maxrows", type=int, default=5000, help="1ヶ月あたりの最大行数")
     ap.add_argument("--select", default=None, help="ダッシュボードで初期選択するスタッフ名（検証用）")
     ap.add_argument("--paste-mode", default="excel", choices=["excel", "text"], help="検証用: text はCSVの値をすべて文字列のまま貼り付けた状態を再現")
     a = ap.parse_args()
