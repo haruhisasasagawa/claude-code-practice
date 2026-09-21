@@ -336,7 +336,8 @@ def build_calc_sheet(wb, k, maxrows):
             "B": f'=IF($A{r}="","",IF(ISNUMBER({date_}),{date_},IFERROR(DATEVALUE({date_}),IFERROR(DATEVALUE(SUBSTITUTE({date_},"/","-")),""))))',
             "C": f'=IF($A{r}="","",IF(ISNUMBER(SEARCH("確定",{status})),1,0))',
             "D": f'=IF($A{r}="","",IFERROR({kind}*1,0))',
-            "E": f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=1),1,0))',
+            # 勤務行: 日付が読み取れない行は数えない（欠勤行 G・曜日 O・繁忙日 BC と同じ扱いに揃える）
+            "E": f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=1,$B{r}<>""),1,0))',
             "F": f'=IF($A{r}="","",IFERROR(INT({upd}*1/86400000+25569+9/24),""))',
             "G": f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=4,$B{r}<>"",$F{r}=$B{r}),1,0))',
             "H": f'=IF($A{r}="","",IF($E{r}=1,IF(MATCH($AV{r},$AV$2:$AV${last},0)=ROW()-1,1,0),0))',
