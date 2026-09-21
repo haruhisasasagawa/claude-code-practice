@@ -6,50 +6,55 @@
   <div class="authorbar">ＴＯＨＯシネマズ新宿　副支配人　笹川 晴央</div>
   <div class="body">
     <div class="banner">① まずこのガイドで初回セットアップ（1回だけ）　→　② 完了後は別紙「運用ガイド」へ</div>
-    <div class="info"><b>所要10〜15分。</b>原本（テンプレート）と、新宿の設定・8月データが入った見本をディスカッション本文に添付します。<br>各劇場は必ず原本をコピーし、自劇場用にセットアップしてご利用ください。マクロは使っていません（Excel 2016以降／Microsoft 365）。</div>
+    <div class="info"><b>所要10〜15分。</b>原本（テンプレート）と、新宿の設定・8月データが入った見本を本文に添付します。各劇場は必ず<b>原本をコピー</b>し、自劇場用にセットアップしてご利用ください。マクロは使っていません（Excel 2016以降／Microsoft 365）。</div>
 
-    <h2>手順</h2>
+    <h2>手順 <span class="sub">― 上から順に1回だけ</span></h2>
 
     <div class="step"><span class="badge">SETUP 1</span><span class="t">原本をコピーして劇場名を入れる<span class="where">― 「設定」B1セル</span></span></div>
-    <p>原本を「勤務実績ダッシュボード_◯◯.xlsx」のように劇場名を付けて保存します。「設定」シートのB1（黄色セル）に劇場名を入力すると、ダッシュボードの見出しに表示されます。</p>
-    <p class="note">黄色セルだけが変更してよいセルです。非表示の計算用シート（名簿・DB計算・計算1〜6）は表示・編集しないでください。</p>
+    <p>「勤務実績ダッシュボード_◯◯.xlsx」のように劇場名を付けて保存し、「設定」B1（黄色セル）に劇場名を入力します。ダッシュボードの見出しに出ます。</p>
+    <p class="note">変更してよいのは黄色セルと CSV_1〜6 だけです。非表示の計算用シート（名簿・DB計算・計算1〜6）は表示・編集しないでください。</p>
 
     <div class="step"><span class="badge">SETUP 2</span><span class="t">使うCSVの出力条件を確認する</span></div>
-    <p>使うのは <b>シェアフルシフトのシフトCSV</b> 1種類だけです（打刻データは使いません）。</p>
     <ul class="dot">
-      <li>期間は <b>月初〜月末の1ヶ月分</b>で1本ずつ出力します（例：8/1〜8/31）。半年分で6本になります。</li>
-      <li>ヘッダー行（1行目の列名）を含めて出力し、列名は変更しないでください。列の順番は変わっても動きます。</li>
-      <li>1ヶ月あたり6,000行・半年で400名まで扱えます。超える場合はご連絡ください。</li>
+      <li>使うのは<b>シェアフルシフトのシフトCSV</b>1種類だけです（打刻データは使いません）。</li>
+      <li>期間は<b>月初〜月末の1ヶ月分</b>で1本ずつ出力（例：8/1〜8/31）。半年分で6本になります。</li>
+      <li>ヘッダー行（1行目の列名）を含めて出力し、列名は変えないでください。列の順番は変わっても動きます。</li>
+      <li>1ヶ月6,000行・半年400名まで。超える場合はご連絡ください。</li>
     </ul>
 
-    <div class="step"><span class="badge">SETUP 3</span><span class="t">職種・所属の名称を自劇場に合わせる<span class="where">― 「設定」A13〜B32 ／ A38〜B57（各20件まで）</span></span></div>
-    <p>ダッシュボードの「職種別の勤務時間」とスタッフ一覧の「所属別」で使う名称です。CSVの値と<b>完全一致</b>で入力します。</p>
+    <div class="step"><span class="badge">SETUP 3</span><span class="t">職種・所属・祝日を自劇場に合わせる<span class="where">― 「設定」A13〜B32／A38〜B57、「祝日・繁忙日」シート</span></span></div>
     <ul class="dot">
-      <li>職種の区分＝CSVのL列「募集シフトの職種」の値（例：01ボックス、02コンセ、03フロア）。劇場ごとのセクション割りに合わせて最大20件。表に無い値は自動で「その他」にまとまります。使わない行は空欄のままにします。</li>
-      <li>所属の一覧＝CSVのR列「応募者の職種」の値。所属別集計と「同所属平均」に使います。</li>
-      <li>新宿と同じ名称であれば変更不要です。違う場合は右の表示名も合わせて直してください。</li>
+      <li><b>職種の区分</b>＝CSVのL列「募集シフトの職種」の値（例：01ボックス、02コンセ）。セクション割りに合わせて最大20件。表に無い値は自動で「その他」に。使わない行は空欄のまま。</li>
+      <li><b>所属の一覧</b>＝CSVのR列「応募者の職種」の値。最大20件。所属別集計と「同所属平均」に使います。CSVの値と<b>完全一致</b>で入力してください。</li>
+      <li><b>祝日・繁忙日</b>＝土日祝出勤率で使う日付。<b>土曜・日曜は自動</b>なので、登録するのは平日の祝日と、出勤してほしい繁忙日だけです。</li>
+      <li>国民の祝日 2025〜2032年分と、GW・お盆・年末年始は登録済み。地域のイベント日があれば足し、不要な行は削除できます。</li>
     </ul>
-
-    <div class="step"><span class="badge">SETUP 3.5</span><span class="t">祝日・繁忙日を自劇場に合わせる<span class="where">― 「祝日・繁忙日」シート</span></span></div>
-    <p>ダッシュボードの<b>土日祝出勤率</b>で使います。<b>土曜・日曜は自動</b>で繁忙日として数えるので、登録するのは平日の祝日と、劇場として出勤してほしい日だけです。国民の祝日（振替休日・国民の休日を含む）2025〜2031年分と、GW・お盆・年末年始を初期登録してあります。地域のイベント日などがあれば行を足し、不要な行は削除してください。</p>
 
     <div class="step"><span class="badge">SETUP 4</span><span class="t">判定とアラートの基準を確認する<span class="where">― 「設定」B3〜B6</span></span></div>
-    <p>総合判定は出勤率だけで決まります。既定は <b>◎良好＝95%以上／△注意＝90%以上／✕要改善＝90%未満</b>、確定シフト日数が<b>20日未満</b>の人は判定を出さず「参考値」です。</p>
-    <p><b>当欠率（当日欠勤率）のアラート</b>＝設定!B6（既定 <b>5%</b>）。当日に休みへ変更した日数÷確定シフト日数がこの値以上のスタッフは、ダッシュボードに赤い警告行、スタッフ一覧に赤い塗りが出ます。</p>
+    <p>総合判定は出勤率だけで決まります。既定は <b>◎良好＝95%以上／△注意＝90%以上／✕要改善＝90%未満</b>、確定シフト日数が<b>20日未満</b>の人は判定を出さず「参考値」です。<b>当欠率のアラート</b>＝B6（既定 <b>5%</b>）。これ以上のスタッフに赤い警告行と赤い塗りが出ます。</p>
     <p class="red">試験運用中はエリアで同じ基準に統一してください。途中で変えると劇場間・期間間の比較ができなくなります。</p>
 
     <div class="step"><span class="badge">SETUP 5</span><span class="t">最初の1ヶ月を貼って表示を確認する<span class="where">― 「CSV_1」A1セル</span></span></div>
     <ul class="dot">
       <li>CSVをExcelで開き、全選択（Ctrl+A）→コピー→「CSV_1」の<b>A1セル</b>を選んで貼り付け（ヘッダー行ごと）。</li>
-      <li>「使い方」シートの<b>貼付状況</b>が「2026年8月／OK」のように出れば成功です。※印が出たら次ページの表で対処します。</li>
-      <li>「ダッシュボード」でスタッフ名を選び、出勤日数・出勤率が出ることを確認します。</li>
+      <li>「使い方」シートの<b>貼付状況</b>が「2026年8月／OK」と出れば成功です。※印が出たら次ページの表で対処します。</li>
+      <li>「ダッシュボード」でスタッフ名を選び、数字とグラフが出ることを確認します。</li>
     </ul>
 
-    <div class="step"><span class="badge">SETUP 6</span><span class="t">印刷を確認する（任意）</span></div>
-    <p>「ダッシュボード」はA4縦1枚に収まる設定済みです。Ctrl+P でプレビューし、1枚に収まっていれば完了です。下にある「月別の実績」「欠勤の一覧」は画面用で、印刷範囲には入りません。PDFは「PDF出力」シートを開いて ファイル → エクスポート → PDF/XPS。</p>
-    <div class="cols" style="margin-top:3mm; align-items:flex-start">
-      <div style="flex:1.1"><img class="shot" src="img/shot_settings.png" style="height:62mm; object-fit:cover; object-position:top"><div class="cap">【写真1】設定シート ― 黄色セルだけ変更（SETUP 1・3・4）</div></div>
-      <div style="flex:1"><img class="shot" src="img/shot_dash_top.png" style="height:62mm; object-fit:cover; object-position:top"><div class="cap">【写真2】ダッシュボード上部 ― 劇場名・対象期間・警告はここに出る（SETUP 5）</div></div>
+    <div class="step"><span class="badge">SETUP 6</span><span class="t">印刷とPDFを確認する（任意）</span></div>
+    <p>「ダッシュボード」はA4縦1枚に収まる設定済みです。Ctrl+P で1枚に収まっていれば完了。PDFで渡すときは「PDF出力」シートを開いて ファイル → エクスポート → PDF/XPS。</p>
+
+    <div class="cols" style="margin-top:3mm; align-items:flex-start; gap:6mm">
+      <div style="flex:1">
+        <img class="shot" src="img/shot_settings.png" style="height:55mm; object-fit:cover; object-position:top">
+        <div class="cap">【写真1】設定シート ― 黄色セルだけ変更（SETUP 1・3・4）</div>
+      </div>
+      <div style="flex:1">
+        <img class="shot" src="img/shot_dash_top.png">
+        <div class="cap">【写真2】ダッシュボード上部 ― 劇場名・対象期間はここに出る（SETUP 5）</div>
+        <div class="box gray" style="margin-top:1mm"><h3 style="margin-bottom:1mm">ここまで出れば完了</h3>
+          <ul class="dot" style="margin:0"><li>見出しに自劇場名が出ている</li><li>貼付状況が「OK」になっている</li><li>スタッフを選ぶと数字とグラフが変わる</li></ul></div>
+      </div>
     </div>
   </div>
 </div>
@@ -88,6 +93,7 @@
       <div class="checks">
         <div>設定B1 に自劇場の名前を入れた</div>
         <div>設定の職種・所属がCSVの値と一致している</div>
+        <div>「祝日・繁忙日」の登録状況がすべて「OK」</div>
         <div>判定・当欠率アラートの基準（B3〜B6）をエリアと揃えた</div>
         <div>CSV_1 に貼り、貼付状況が「OK」になっている</div>
         <div>ダッシュボードで名前を選び、数字とグラフが出る</div>
@@ -101,7 +107,7 @@
       <div class="box orange"><h3>試験運用中のお願い</h3>
         <ul class="dot"><li>判定の基準と「参考値」の日数はエリアで統一する</li><li>CSVは月初〜月末の1ヶ月単位で出力する</li><li>不具合や分かりにくい表示はご連絡ください</li></ul></div>
       <div class="box gray"><h3>困ったときは</h3>
-        <ul class="dot"><li>数が合わない → 運用ガイド「数が合わないと感じたら」</li><li>警告表示 → このページの表を確認</li><li>解決しない → エリアディスカッションへ投稿</li><li>画面の写真があると原因特定が早くなります</li></ul></div>
+        <ul class="dot"><li>数が合わない → 運用ガイド「数が合わないと感じたら」</li><li>警告表示 → このページの表を確認</li><li>土日祝出勤率が低い → 「祝日・繁忙日」の登録状況を確認</li><li>解決しない → エリアディスカッションへ投稿</li><li>画面の写真があると原因特定が早くなります</li></ul></div>
     </div>
   </div>
 </div>
