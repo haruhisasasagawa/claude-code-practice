@@ -40,6 +40,9 @@ FONT = "Meiryo UI"
 
 S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER, S_DBCALC = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿", "DB計算"
 S_PDF = "PDF出力"                        # 説明文なしの面談用ページ（ダッシュボードで選んだスタッフに連動）
+S_HOL = "祝日・繁忙日"                    # 土日以外で「繁忙日」として数える日付の一覧（編集可）
+HOL_R0, HOL_ROWS = 3, 400                # 祝日・繁忙日シートのデータ開始行と行数
+HOL_YEARS = (2025, 2033)                 # 初期値として書き出す年の範囲（末尾は含まない）
 S_CSV = "CSV_{}"
 S_CALC = "計算{}"
 
@@ -109,6 +112,66 @@ BOX = Border(left=thin, right=thin, top=thin, bottom=thin)
 
 def q(name):
     return f"'{name}'"
+
+
+def _nth_monday(y, m, n):
+    d = dt.date(y, m, 1)
+    return d + dt.timedelta(days=(7 - d.weekday()) % 7 + 7 * (n - 1))
+
+
+def jp_holidays(y):
+    """その年の国民の祝日（振替休日・国民の休日を含む）。
+    根拠は「国民の祝日に関する法律」。春分・秋分は1980〜2099年用の近似式による."""
+    base = {
+        dt.date(y, 1, 1): "元日",
+        _nth_monday(y, 1, 2): "成人の日",
+        dt.date(y, 2, 11): "建国記念の日",
+        dt.date(y, 2, 23): "天皇誕生日",
+        dt.date(y, 3, int(20.8431 + 0.242194 * (y - 1980) - int((y - 1980) / 4))): "春分の日",
+        dt.date(y, 4, 29): "昭和の日",
+        dt.date(y, 5, 3): "憲法記念日",
+        dt.date(y, 5, 4): "みどりの日",
+        dt.date(y, 5, 5): "こどもの日",
+        _nth_monday(y, 7, 3): "海の日",
+        dt.date(y, 8, 11): "山の日",
+        _nth_monday(y, 9, 3): "敬老の日",
+        dt.date(y, 9, int(23.2488 + 0.242194 * (y - 1980) - int((y - 1980) / 4))): "秋分の日",
+        _nth_monday(y, 10, 2): "スポーツの日",
+        dt.date(y, 11, 3): "文化の日",
+        dt.date(y, 11, 23): "勤労感謝の日",
+    }
+    h = dict(base)
+    for d in sorted(base):                 # 振替休日: 日曜に当たったら次の祝日でない日
+        if d.weekday() == 6:
+            x = d + dt.timedelta(days=1)
+            while x in h:
+                x += dt.timedelta(days=1)
+            h[x] = "振替休日"
+    for d in sorted(base):                 # 国民の休日: 祝日に挟まれた平日
+        mid, nxt = d + dt.timedelta(days=1), d + dt.timedelta(days=2)
+        if nxt in base and mid not in h and mid.weekday() != 6:
+            h[mid] = "国民の休日"
+    return h
+
+
+def busy_days():
+    """祝日＋劇場の繁忙日（GW・お盆・年末年始）。日付の昇順で (日付, 名称) を返す."""
+    out, seen = [], set()
+    for y in range(*HOL_YEARS):
+        for d, name in sorted(jp_holidays(y).items()):
+            if d not in seen:
+                out.append((d, name)); seen.add(d)
+    for y in range(*HOL_YEARS):
+        spans = [((4, 29), (5, 6), "GW"), ((8, 13), (8, 16), "お盆"),
+                 ((12, 28), (12, 31), "年末年始"), ((1, 1), (1, 4), "年末年始")]
+        for (m0, d0), (m1, d1), label in spans:
+            d = dt.date(y, m0, d0)
+            while d <= dt.date(y, m1, d1):
+                if d not in seen:
+                    out.append((d, label)); seen.add(d)
+                d += dt.timedelta(days=1)
+    out.sort()
+    return out
 
 
 def font(size=10, bold=False, color=C_INK, italic=False):
@@ -211,6 +274,7 @@ CALC_COLS = [
     ("S", "初出"), ("T", "番号累積"), ("U", "休み日(初回)"), ("V", "更新時刻(JST)"), ("W", "選択者一覧連番"),
     ("X", "元開始"), ("Y", "元終了"), ("AV", "勤務キー"), ("AW", "休みキー"), ("AX", "当日休みキー"),
     ("AY", "遅出行"), ("AZ", "早退行"), ("BA", "時間変更キー"), ("BB", "時間変更日(初回)"),
+    ("BC", "繁忙日"),
 ]
 
 
@@ -311,6 +375,9 @@ def build_calc_sheet(wb, k, maxrows):
             "AV": f'=IF($E{r}=1,IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
             "AW": f'=IF(AND($C{r}=1,$D{r}=4),IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
             "AX": f'=IF($G{r}=1,IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
+            # 繁忙日: 土日、または「祝日・繁忙日」シートに登録された日
+            "BC": (f'=IF($A{r}="","",IF($B{r}="",0,IF(OR(WEEKDAY($B{r},2)>=6,'
+                   f'COUNTIF({q(S_HOL)}!$A${HOL_R0}:$A${HOL_R0 + HOL_ROWS - 1},$B{r})>0),1,0)))'),
             "T": f'=N($T{r-1})+IF($S{r}=1,1,0)',
             "U": f'=IF($A{r}="","",IF(AND($C{r}=1,$D{r}=4),IF(MATCH($AW{r},$AW$2:$AW${last},0)=ROW()-1,1,0),0))',
         }
@@ -326,13 +393,67 @@ def build_calc_sheet(wb, k, maxrows):
         ws[f"V{r}"].number_format = "yyyy/mm/dd hh:mm"
         ws[f"X{r}"].number_format = "[h]:mm"
         ws[f"Y{r}"].number_format = "[h]:mm"
-        for c in ("AV", "AW", "AX", "BA"):      # 日付を含む式は日付書式を引き継ぐので、キーは数値書式に固定
+        for c in ("AV", "AW", "AX", "BA", "BC"):      # 日付を含む式は日付書式を引き継ぐので、キー・フラグは数値書式に固定
             ws[f"{c}{r}"].number_format = "0"
     ws.freeze_panes = "A2"
     return ws
 
 
 # ---------------------------------------------------------------- シート: 設定
+def build_holidays(wb):
+    """祝日・繁忙日の一覧。ここに載っている日付と土日を「繁忙日」として数える."""
+    ws = wb.create_sheet(S_HOL)
+    ws.sheet_properties.tabColor = "EDA100"
+    ws.sheet_view.showGridLines = False
+    ws.column_dimensions["A"].width = 14
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["D"].width = 92
+    ws["A1"] = "祝日・繁忙日の一覧（この日付に出勤した日を「土日祝・繁忙日」として数えます）"
+    style(ws["A1"], size=12, bold=True)
+    ws["A2"], ws["B2"] = "日付", "名称（任意）"
+    for c in ("A2", "B2"):
+        style(ws[c], size=9, bold=True, color=C_INK, bg=C_HEAD, border=Border(top=thin, bottom=thin))
+    ws["D2"] = "使い方"
+    style(ws["D2"], size=10, bold=True)
+    tips = [
+        "土曜・日曜は自動で「繁忙日」として数えます。ここに登録するのは平日の祝日と、劇場として忙しい日だけです。",
+        "初期値として国民の祝日（振替休日・国民の休日を含む）と、ゴールデンウィーク・お盆・年末年始を入れてあります。",
+        "自劇場に合わせて、行の追加・削除ができます（日付の順番は問いません）。使わない行は空欄のままにしてください。",
+        "例：地域のイベント日、レイトショーの特別興行、大型作品の公開初週など、出勤してほしい日を足せます。",
+        f"国民の祝日は {HOL_YEARS[0]}年〜{HOL_YEARS[1] - 1}年分を入れてあります。{HOL_YEARS[1]}年以降を使うときは、その年の祝日を足してください。",
+        f"日付は{HOL_ROWS}件まで（{HOL_R0}行目〜{HOL_R0 + HOL_ROWS - 1}行目）。それより下に入力しても集計されません。名称は画面には出ないのでメモとして使えます。",
+        "ここを変えると、ダッシュボードの「土日祝出勤率」とスタッフ一覧の集計がすぐに変わります。",
+    ]
+    for i, t in enumerate(tips):
+        ws[f"D{3 + i}"] = "・" + t
+        style(ws[f"D{3 + i}"], size=9.5, color=C_INK2, align="left", valign="top", wrap=True)
+        ws.row_dimensions[3 + i].height = 26
+    for i, (d, name) in enumerate(busy_days()[:HOL_ROWS]):
+        r = HOL_R0 + i
+        ws[f"A{r}"], ws[f"B{r}"] = d, name
+        style(ws[f"A{r}"], bg=C_INPUT_FILL, border=BOX, fmt="yyyy/mm/dd", align="center")
+        style(ws[f"B{r}"], bg=C_INPUT_FILL, border=BOX, align="left")
+    for r in range(HOL_R0 + len(busy_days()[:HOL_ROWS]), HOL_R0 + HOL_ROWS):
+        style(ws[f"A{r}"], bg=C_INPUT_FILL, border=BOX, fmt="yyyy/mm/dd", align="center")
+        style(ws[f"B{r}"], bg=C_INPUT_FILL, border=BOX, align="left")
+    rng = f"$A${HOL_R0}:$A${HOL_R0 + HOL_ROWS - 1}"
+    chk = HOL_R0 + len(tips) + 1
+    ws[f"D{chk}"] = "登録状況（自動）"
+    style(ws[f"D{chk}"], size=10, bold=True)
+    checks = [
+        f'="登録されている日付　"&COUNT({rng})&"件（土日はこの一覧に無くても繁忙日として数えます）"',
+        f'=IF(COUNTA({rng})-COUNT({rng})>0,"※ 日付として読めない行が "&(COUNTA({rng})-COUNT({rng}))&" 行あります。yyyy/mm/dd の形式で入力し直してください。","日付の形式：OK")',
+        f'=IF(COUNTA($A${HOL_R0 + HOL_ROWS}:$A$2000)>0,"※ {HOL_R0 + HOL_ROWS - 1}行目より下に入力があります。この範囲は集計されません。上の空いている行に移してください。","入力範囲：OK")',
+    ]
+    for i, t in enumerate(checks):
+        ws[f"D{chk + 1 + i}"] = t
+        style(ws[f"D{chk + 1 + i}"], size=9.5, color=C_INK2, align="left")
+        ws.conditional_formatting.add(f"D{chk + 1 + i}", FormulaRule(
+            formula=[f'LEFT(D{chk + 1 + i},1)="※"'], font=Font(name=FONT, bold=True, size=9.5, color=C_CRIT)))
+    ws.freeze_panes = "A3"
+    return ws
+
+
 def build_settings(wb):
     ws = wb.create_sheet(S_SET)
     ws.sheet_properties.tabColor = "EDA100"
@@ -399,6 +520,7 @@ ROSTER_COLS = {
     "U": "却下回数", "V": "名前順キー", "W": "出勤率順位", "X": "出勤率順キー(降順)", "Y": "ワーストキー(昇順)",
     "AR": "在籍月数", "AS": "出勤率整数キー", "AW": "同率人数", "AT": "名前(名前順)", "AU": "番号(名前順)", "AV": "名簿行(名前順)",
     "BM": "当日遅出日数", "BN": "当日早退日数", "BX": "当日遅出率", "BY": "当日早退率",
+    "BZ": "土日祝出勤日数", "CB": "土日祝出勤率",
 }
 MONTH_WORK = ["Z", "AA", "AB", "AC", "AD", "AE"]      # 月別出勤日数
 MONTH_ABS = ["AF", "AG", "AH", "AI", "AJ", "AK"]      # 月別欠勤日数
@@ -412,6 +534,12 @@ def calc_rng(k, colref, maxrows):
 
 def sum6(colref, maxrows, key):
     return "+".join(f"SUMIFS({calc_rng(k, colref, maxrows)},{calc_rng(k, 'A', maxrows)},{key})" for k in range(1, NSHEETS + 1))
+
+
+def sum6busy(colref, maxrows, key):
+    """繁忙日（土日祝）に限った合計: 計算k の colref を、番号一致かつ BC=1 の行だけ6シート分."""
+    return "+".join(f"SUMIFS({calc_rng(k, colref, maxrows)},{calc_rng(k, 'A', maxrows)},{key},{calc_rng(k, 'BC', maxrows)},1)"
+                    for k in range(1, NSHEETS + 1))
 
 
 def count6(maxrows, key, flag):
@@ -477,6 +605,9 @@ def build_roster(wb, maxrows):
         ws[f"U{r}"] = f'=IF({key}="","",{sum6("Q", maxrows, key)})'
         ws[f"BM{r}"] = f'=IF({key}="","",{count6(maxrows, key, "AY")})'
         ws[f"BN{r}"] = f'=IF({key}="","",{count6(maxrows, key, "AZ")})'
+        ws[f"BZ{r}"] = f'=IF({key}="","",{sum6busy("H", maxrows, key)})'
+        ws[f"CB{r}"] = f'=IF({key}="","",IF($M{r}=0,"",$BZ{r}/$M{r}))'
+        ws[f"CB{r}"].number_format = "0.0%"
         ws[f"BX{r}"] = f'=IF({key}="","",IF($O{r}=0,"",$BM{r}/$O{r}))'
         ws[f"BY{r}"] = f'=IF({key}="","",IF($O{r}=0,"",$BN{r}/$O{r}))'
         ws[f"BX{r}"].number_format = "0.0%"
@@ -521,6 +652,7 @@ def build_roster(wb, maxrows):
         (10, "当欠アラート該当者数", f'=COUNTIF($Q$2:$Q${ML},">="&{sets}!$B$6)', "0"),
         (8, "評価対象人数(確定日数>0)", f"=COUNT($P$2:$P${ML})", "0"),
         (9, "総勤務時間", f"=SUM($R$2:$R${ML})", "0.0"),
+        (11, "全体の土日祝出勤率", f'=IF(SUM($M$2:$M${ML})=0,"",SUM($BZ$2:$BZ${ML})/SUM($M$2:$M${ML}))', "0.0%"),
     ]
     for r, label, formula, fmt in summary:
         ws[f"AX{r}"], ws[f"AY{r}"] = label, formula
@@ -698,6 +830,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("U", "P", crit)})'
     hws[f"{HL}43"], hws[f"{HC}43"] = "当日遅出（当日の開始変更）", f"=N({V('BM')})"
     hws[f"{HL}44"], hws[f"{HC}44"] = "当日早退（当日の終了変更）", f"=N({V('BN')})"
+    hws[f"{HL}93"], hws[f"{HC}93"] = "土日祝の出勤日数", f"=N({V('BZ')})"
     hws[f"{HL}52"], hws[f"{HC}52"] = "当日遅出率（÷確定シフト日数）", f"=N({V('BX')})"
     hws[f"{HL}53"], hws[f"{HC}53"] = "当日早退率（÷確定シフト日数）", f"=N({V('BY')})"
     hws[f"{HC}52"].number_format = hws[f"{HC}53"].number_format = "0.0%"
@@ -822,7 +955,8 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         ("欠勤日数", f"={V('N')}", '0"日"', '="当日の休み変更"'),
         ("当日欠勤率", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%"))&"")'),
         ("勤務時間", f"={V('R')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF({V("T")}="","","1日あたり "&TEXT({V("T")},"0.0")&"h"))'),
-        ("深夜勤務", f"={V('S')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF(N({V("R")})=0,"","勤務時間の "&TEXT({V("S")}/{V("R")},"0%")))'),
+        ("土日祝出勤率", f"={V('CB')}", "0.0%",
+         f'=IF({P}${HC}$4="","",{P}${HC}$93&"日"&IF({ros}!$AY$11="","","／平均 "&TEXT({ros}!$AY$11,"0%")))'),
     ]
     for i, (label, formula, fmt, sub) in enumerate(tiles):
         c0 = GRID_FIRST + i * 4
@@ -1095,7 +1229,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         ws.row_dimensions[top + 1].height = 4
         notes = [
             "出勤日数は確定シフトのあった日数（同じ日の複数区分は1日）。欠勤日数は、確定していたシフトを当日に「休み」へ変更した日数で、前日までの変更は含みません。",
-            f'="出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋当日欠勤日数）、当欠率 ＝ 当日欠勤日数 ÷ 確定シフト日数（基準 "&TEXT({P}${HC}$56,"0%")&"以上で警告）。当日遅出率・当日早退率 ＝ 各日数 ÷ 確定シフト日数。勤務時間はシフト上の時間。"',
+            f'="出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋当日欠勤日数）、当欠率 ＝ 当日欠勤日数 ÷ 確定シフト日数（基準 "&TEXT({P}${HC}$56,"0%")&"以上で警告）。当日遅出率・当日早退率 ＝ 各日数 ÷ 確定シフト日数。土日祝出勤率 ＝ 土日祝・繁忙日の出勤日数 ÷ 出勤日数。"',
             f'="総合判定は出勤率のみによる目安です。確定シフト日数が "&{P}${HC}$9&"日未満の場合は参考値とし、判定を行いません。"',
             f'="当日遅出・当日早退は、当日にシフトの開始を遅く／終了を早く変更した日数（シフト上の変更で、打刻の遅刻・早退とは別）。欠勤・遅出・早退には店側の都合による変更が含まれることがあります。面談では本人に事情を確認のうえご利用ください。"&IF({sel}="","","　応募の却下（店側の判断）："&{P}${HC}$55&"件")',
         ]
@@ -1116,7 +1250,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         hr = top + 2
         ws.row_dimensions[hr].height = 18
         tbl_cols = [("月", 2, 5), ("出勤日数", 6, 7), ("欠勤日数", 8, 9), ("確定シフト", 10, 12), ("出勤率", 13, 15),
-                    ("勤務時間", 16, 18), ("1日平均", 19, 20), ("深夜勤務", 21, 22), ("前日変更", 23, 24)]
+                    ("勤務時間", 16, 18), ("1日平均", 19, 20), ("土日祝", 21, 22), ("前日変更", 23, 24)]
         for title, a, b in tbl_cols:
             ws.merge_cells(f"{L(a)}{hr}:{L(b)}{hr}")
             head_cell(f"{L(a)}{hr}", title, align=("left" if a == 2 else "center"))
@@ -1134,7 +1268,8 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
                 (f'=IF({P}${HC}$4="","",IF({H},IF(N(J{r})=0,"－",N(F{r})/N(J{r})),"—"))', "0.0%", "right"),
                 (f'=IF({P}${HC}$4="","",IF({H},{V(mh)},"—"))', '0.0"h"', "right"),
                 (f'=IF({P}${HC}$4="","",IF({H},IF(N(F{r})=0,"－",N(P{r})/N(F{r})),"—"))', '0.0"h"', "right"),
-                (f'=IF({P}${HC}$4="","",IF({H},{sum6sel_k("N", k, maxrows, sel)},"—"))', '0.0"h"', "right"),
+                (f'=IF({P}${HC}$4="","",IF({H},SUMIFS({calc_rng(k, "H", maxrows)},{calc_rng(k, "A", maxrows)},{sel},'
+                 f'{calc_rng(k, "BC", maxrows)},1),"—"))', '0"日"', "right"),
                 (f'=IF({P}${HC}$4="","",IF({H},SUMIFS({calc_rng(k, "U", maxrows)},{calc_rng(k, "A", maxrows)},{sel},{calc_rng(k, "P", maxrows)},"前日"),"—"))', '0"日"', "right"),
             ]
             for (title, a, b), (formula, fmt, align) in zip(tbl_cols, vals):
@@ -1153,7 +1288,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
             (f'=IF({P}${HC}$4="","",IF(N(J{r})=0,"－",N(F{r})/N(J{r})))', "0.0%", "right"),
             (f'=IF({P}${HC}$4="","",SUM(P{f1}:P{f6}))', '0.0"h"', "right"),
             (f'=IF({P}${HC}$4="","",IF(N(F{r})=0,"－",N(P{r})/N(F{r})))', '0.0"h"', "right"),
-            (f'=IF({P}${HC}$4="","",SUM(U{f1}:U{f6}))', '0.0"h"', "right"),
+            (f'=IF({P}${HC}$4="","",SUM(U{f1}:U{f6}))', '0"日"', "right"),
             (f'=IF({P}${HC}$4="","",SUM(W{f1}:W{f6}))', '0"日"', "right"),
         ]
         for (title, a, b), (formula, fmt, align) in zip(tbl_cols, totals):
@@ -1254,10 +1389,6 @@ def print_setup(ws, area):
     ws.sheet_view.zoomScale = 100
 
 
-def sum6sel_k(colref, k, maxrows, sel):
-    return f"SUMIFS({calc_rng(k, colref, maxrows)},{calc_rng(k, 'A', maxrows)},{sel})"
-
-
 # ---------------------------------------------------------------- シート: スタッフ一覧
 def build_staff_list(wb):
     ws = wb.create_sheet(S_LIST)
@@ -1325,14 +1456,14 @@ def build_staff_list(wb):
     ws[f"A{HR - 1}"] = "スタッフ別 集計（半年）"
     style(ws[f"A{HR - 1}"], size=10, bold=True)
     headers = ["順位", "名前", "従業員番号", "所属", "資格", "出勤日数", "当日欠勤", "確定シフト日数", "出勤率", "当欠率", "判定",
-               "シフト勤務時間", "平均 h／日", "深夜時間", "却下回数（参考）", "在籍月数", "当日遅出", "当日遅出率", "当日早退", "当日早退率"]
+               "シフト勤務時間", "平均 h／日", "深夜時間", "却下回数（参考）", "在籍月数", "当日遅出", "当日遅出率", "当日早退", "当日早退率", "土日祝出勤", "土日祝出勤率"]
     month_hdr_w = [f'="出勤 "&{ros}!$AY${21 + k}' for k in range(1, NSHEETS + 1)]
     month_hdr_a = [f'="欠勤 "&{ros}!$AY${21 + k}' for k in range(1, NSHEETS + 1)]
     for j, h in enumerate(headers + month_hdr_w + month_hdr_a):
         c = ws.cell(row=HR, column=1 + j, value=h)
         style(c, size=9, bold=True, color=C_INK, bg=C_HEAD, align="center", wrap=True, border=Border(top=thin, bottom=thin))
     ws.row_dimensions[HR].height = 32
-    widths = [6, 24, 11, 9, 12, 9, 9, 11, 9, 9, 13, 12, 10, 9, 9, 8, 9, 10, 9, 10] + [9] * 12
+    widths = [6, 24, 11, 9, 12, 9, 9, 11, 9, 9, 13, 12, 10, 9, 9, 8, 9, 10, 9, 10, 11, 11] + [9] * 12
     for j, w in enumerate(widths):
         ws.column_dimensions[L(1 + j)].width = w
 
@@ -1363,6 +1494,8 @@ def build_staff_list(wb):
             (f'=IF({m}="","",{rv("BX")})', "0.0%", "right"),
             (f'=IF({m}="","",{rv("BN")})', '0"日"', "right"),
             (f'=IF({m}="","",{rv("BY")})', "0.0%", "right"),
+            (f'=IF({m}="","",{rv("BZ")})', '0"日"', "right"),
+            (f'=IF({m}="","",{rv("CB")})', "0.0%", "right"),
         ]
         cells += [(f'=IF({m}="","",IF({ros}!$AZ${22 + k}>0,{rv(MONTH_WORK[k])},""))', "0", "right") for k in range(NSHEETS)]
         cells += [(f'=IF({m}="","",IF({ros}!$AZ${22 + k}>0,{rv(MONTH_ABS[k])},""))', "0", "right") for k in range(NSHEETS)]
@@ -1371,7 +1504,7 @@ def build_staff_list(wb):
             c = ws.cell(row=r, column=1 + j, value=formula)
             style(c, size=10, fmt=fmt, align=al, border=Border(bottom=hair), color=(C_MUTED if j == 14 else C_INK))
     last = HR + MAXSTAFF
-    ws.auto_filter.ref = f"A{HR}:{L(20 + 2 * NSHEETS)}{last}"
+    ws.auto_filter.ref = f"A{HR}:{L(22 + 2 * NSHEETS)}{last}"
     ws.freeze_panes = f"C{HR + 1}"
     ws.conditional_formatting.add(f"F{HR + 1}:F{last}", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_BLUE, showValue=True))
     ws.conditional_formatting.add(f"G{HR + 1}:G{last}", FormulaRule(formula=[f"AND(ISNUMBER(G{HR + 1}),G{HR + 1}>0)"], font=Font(name=FONT, bold=True, color=C_CRIT, size=10)))
@@ -1419,7 +1552,7 @@ def build_howto(wb, maxrows):
         ("3", "このブックの「CSV_1」シートのA1セルを選択して貼り付けます（Ctrl+V）。2ヶ月目は「CSV_2」、以降「CSV_3」…「CSV_6」へ。順番は古い月から新しい月の順が見やすいです。"),
         ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦1枚（見出し〜集計のきまりまで）。その下の月別の実績・欠勤の一覧は画面で確認する部分で、必要なら範囲を選択して印刷してください。"),
         ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。下に「月別の実績」と「欠勤の一覧」が付きます。"),
-        ("6", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値や深夜時間帯は「設定」シートで変更できます。"),
+        ("6", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値などは「設定」シート、土日祝出勤率で使う祝日・繁忙日の日付は「祝日・繁忙日」シートで変更できます。"),
         ("★", "貼り直すときは、貼付シートの古いデータをすべて削除（Ctrl+A → Delete）してから貼り付けてください。行数が前より少ない月を上書きすると、古い行が残ってしまいます。"),
     ]
     for i, (n, t) in enumerate(steps):
@@ -1458,7 +1591,8 @@ def build_howto(wb, maxrows):
         ("確定シフト日数", "出勤日数 ＋ 欠勤日数。事前に休みへ変更した日は含めません。"),
         ("出勤率／当欠率", "出勤日数 ÷ 確定シフト日数 ／ 当日欠勤日数 ÷ 確定シフト日数。当欠率が設定の基準（既定5%）以上のスタッフには、ダッシュボードに警告行、スタッフ一覧に赤い塗りが出ます。"),
         ("勤務時間", "「変更後の開始・終了時間」（無ければ募集時間）から休憩1〜3を引いた、シフト上の時間です。"),
-        ("深夜勤務時間", "勤務時間のうち、設定シートの深夜時間帯（既定 22:00〜翌5:00）に重なる時間。"),
+        ("深夜勤務時間", "勤務時間のうち、設定シートの深夜時間帯（既定 22:00〜翌5:00）に重なる時間。スタッフ一覧に表示します。"),
+        ("土日祝出勤率", f"土日・祝日・繁忙日に出勤した日数 ÷ 出勤日数。その人の出勤のうち、繁忙日がどれくらいを占めるかを表します。土日は自動判定、祝日と繁忙日（GW・お盆・年末年始など）は「{S_HOL}」シートの日付で判定します。"),
         ("却下回数", "応募ステータスが「却下」系の行数。店舗側の採用判断による件数なので、出勤率・判定・順位には用いず参考情報として表示します。"),
         ("当日遅出／当日早退", "確定した勤務シフトが、シフト当日に「変更後の開始時間」を募集の開始より遅く（当日遅出）／「変更後の終了時間」を募集の終了より早く（当日早退）変更された日数。シフト上の変更を数えたもので、打刻による遅刻・早退ではありません。店側の都合による変更も含まれるため、参考情報として一覧に日付・時間を表示します。当日遅出率・当日早退率は各日数 ÷ 確定シフト日数です。"),
         ("総合判定", "出勤率のみを基準にした目安。◎ 良好（設定の基準1以上）／△ 注意（基準2以上）／✕ 要改善（基準2未満）。確定シフト日数が設定の日数未満の人は判定を保留し「参考値」と表示します。"),
@@ -1474,7 +1608,7 @@ def build_howto(wb, maxrows):
         ws.row_dimensions[rr].height = 30
 
     r = 36
-    ws[f"B{r}"] = "他の劇場で使うときに変更する項目（「設定」シート）"
+    ws[f"B{r}"] = "他の劇場で使うときに変更する項目"
     style(ws[f"B{r}"], size=12, bold=True)
     items = [
         ("劇場名", "設定!B1。ダッシュボードの見出しに表示されます。"),
@@ -1482,6 +1616,7 @@ def build_howto(wb, maxrows):
         ("深夜の時間帯", "設定!B7〜B8（既定 22:00〜29:00）。"),
         ("職種の区分", f"設定!A{JOB_R0}〜B{JOB_OTHER - 1}（最大{NJOB}件）。CSVの「募集シフトの職種」の値（例 02コンセ、01ボックス）と表示名。劇場によってセクションの割り振りが違うので、自劇場の職種をすべて登録します。使わない行は空欄のままで構いません。"),
         ("所属の一覧", f"設定!A{DEPT_R0}〜B{DEPT_R0 + NDEPT - 1}（最大{NDEPT}件）。CSVの「応募者の職種」の値と表示名。所属別集計と「同所属平均」に使います。"),
+        ("祝日・繁忙日", f"「{S_HOL}」シート。土日は自動で繁忙日として数えます。平日の祝日と、劇場として出勤してほしい繁忙日をここに登録すると「土日祝出勤率」に反映されます。"),
         ("それ以外", "CSVの列名（1行目）が同じであれば、他に変更する箇所はありません。列名が変わった場合は「貼付状況」に警告が出ます。"),
     ]
     for i, (k_, t) in enumerate(items):
@@ -1493,14 +1628,14 @@ def build_howto(wb, maxrows):
         style(ws[f"C{rr}"], size=10, align="left", valign="top", wrap=True)
         ws.row_dimensions[rr].height = 28
 
-    r = 44
+    r = 45
     ws[f"B{r}"] = "注意事項"
     style(ws[f"B{r}"], size=12, bold=True)
     cautions = [
         f"1ヶ月あたり {maxrows:,} 行、スタッフは半年で {MAXSTAFF} 名まで集計できます。超えた場合は「貼付状況」に警告が出ます。",
         "スタッフは「応募者の従業員番号」で同一人物を判定し、名前は最新月のものを表示します（名前の前後の記号が月によって変わっても同じ人として集計されます）。",
         "CSVの列名（1行目）で列を探すため、列の順番が変わっても動作します。列名が変わった場合は「貼付状況」に警告が出ます。",
-        "6ヶ月分を貼った状態ではファイルが約6〜7MBになり、開くのに数秒〜十数秒かかります。何ヶ月分もまとめて貼るときは「数式」タブ→「計算方法の設定」を「手動」にして最後に F9 を押すと待ち時間が減ります（作業後は「自動」に戻してください）。",
+        "6ヶ月分を貼った状態ではファイルが約16MBになり、開くのに数秒〜十数秒かかります。何ヶ月分もまとめて貼るときは「数式」タブ→「計算方法の設定」を「手動」にして最後に F9 を押すと待ち時間が減ります（作業後は「自動」に戻してください）。",
         "計算用のシート（名簿・DB計算・計算1〜6）は非表示にしてあります。表示して編集しないでください。",
         "欠勤（当日休み変更）には、本人都合だけでなく店側都合の当日カットなどが含まれる可能性があります。理由はCSVにないため、必ず本人に事情を確認したうえで評価してください。",
         "「更新時間」は行の最終更新時刻です。シフト日より後に休み行を編集すると「シフト日より後」に分類され欠勤から外れます。その区分が0日でない人は当日の実態を確認してください。",
@@ -1534,6 +1669,7 @@ def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
         rows = read_csv(path) if path and path != "-" else None
         build_csv_sheet(wb, k, rows, paste_mode)
     build_settings(wb)
+    build_holidays(wb)
     build_roster(wb, maxrows)
     for k in range(1, NSHEETS + 1):
         build_calc_sheet(wb, k, maxrows)
