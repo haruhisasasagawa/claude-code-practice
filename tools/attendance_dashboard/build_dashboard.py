@@ -41,7 +41,7 @@ FONT = "Meiryo UI"
 S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER, S_DBCALC = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿", "DB計算"
 S_PDF = "PDF出力"                        # 説明文なしの面談用ページ（ダッシュボードで選んだスタッフに連動）
 S_HOL = "祝日・繁忙日"                    # 土日以外で「繁忙日」として数える日付の一覧（編集可）
-HOL_R0, HOL_ROWS = 3, 400                # 祝日・繁忙日シートのデータ開始行と行数
+HOL_R0, HOL_ROWS = 17, 400               # 祝日・繁忙日シートのデータ開始行と行数（1〜15行目は説明・チェック用）
 HOL_YEARS = (2025, 2033)                 # 初期値として書き出す年の範囲（末尾は含まない）
 S_CSV = "CSV_{}"
 S_CALC = "計算{}"
@@ -161,16 +161,22 @@ def busy_days():
         for d, name in sorted(jp_holidays(y).items()):
             if d not in seen:
                 out.append((d, name)); seen.add(d)
+    spans = [((4, 29), (5, 6), "GW"), ((8, 13), (8, 16), "お盆"), ((12, 28), (12, 31), "年末年始")]
     for y in range(*HOL_YEARS):
-        spans = [((4, 29), (5, 6), "GW"), ((8, 13), (8, 16), "お盆"),
-                 ((12, 28), (12, 31), "年末年始"), ((1, 1), (1, 4), "年末年始")]
         for (m0, d0), (m1, d1), label in spans:
             d = dt.date(y, m0, d0)
             while d <= dt.date(y, m1, d1):
                 if d not in seen:
                     out.append((d, label)); seen.add(d)
                 d += dt.timedelta(days=1)
+    for y in range(HOL_YEARS[0], HOL_YEARS[1] + 1):      # 年末年始の1月側は翌年にかかる
+        for dd in range(1, 5):
+            d = dt.date(y, 1, dd)
+            if d not in seen:
+                out.append((d, "年末年始")); seen.add(d)
     out.sort()
+    if len(out) > HOL_ROWS:
+        raise ValueError(f"祝日・繁忙日が {len(out)} 件で上限 {HOL_ROWS} 件を超えています。HOL_ROWS を増やしてください。")
     return out
 
 
@@ -411,11 +417,8 @@ def build_holidays(wb):
     ws.column_dimensions["D"].width = 92
     ws["A1"] = "祝日・繁忙日の一覧（この日付に出勤した日を「土日祝・繁忙日」として数えます）"
     style(ws["A1"], size=12, bold=True)
-    ws["A2"], ws["B2"] = "日付", "名称（任意）"
-    for c in ("A2", "B2"):
-        style(ws[c], size=9, bold=True, color=C_INK, bg=C_HEAD, border=Border(top=thin, bottom=thin))
-    ws["D2"] = "使い方"
-    style(ws["D2"], size=10, bold=True)
+    ws["A2"] = "使い方"
+    style(ws["A2"], size=10, bold=True)
     tips = [
         "土曜・日曜は自動で「繁忙日」として数えます。ここに登録するのは平日の祝日と、劇場として忙しい日だけです。",
         "初期値として国民の祝日（振替休日・国民の休日を含む）と、ゴールデンウィーク・お盆・年末年始を入れてあります。",
@@ -426,32 +429,42 @@ def build_holidays(wb):
         "ここを変えると、ダッシュボードの「土日祝出勤率」とスタッフ一覧の集計がすぐに変わります。",
     ]
     for i, t in enumerate(tips):
-        ws[f"D{3 + i}"] = "・" + t
-        style(ws[f"D{3 + i}"], size=9.5, color=C_INK2, align="left", valign="top", wrap=True)
-        ws.row_dimensions[3 + i].height = 26
-    for i, (d, name) in enumerate(busy_days()[:HOL_ROWS]):
+        r = 3 + i
+        ws.merge_cells(f"A{r}:D{r}")
+        ws[f"A{r}"] = "・" + t
+        style(ws[f"A{r}"], size=9.5, color=C_INK2, align="left", valign="center")
+    ws[f"A{HOL_R0 - 1}"], ws[f"B{HOL_R0 - 1}"] = "日付", "名称（任意）"
+    for c in (f"A{HOL_R0 - 1}", f"B{HOL_R0 - 1}"):
+        style(ws[c], size=9, bold=True, color=C_INK, bg=C_HEAD, border=Border(top=thin, bottom=thin))
+    days = busy_days()
+    for i in range(HOL_ROWS):
         r = HOL_R0 + i
-        ws[f"A{r}"], ws[f"B{r}"] = d, name
-        style(ws[f"A{r}"], bg=C_INPUT_FILL, border=BOX, fmt="yyyy/mm/dd", align="center")
-        style(ws[f"B{r}"], bg=C_INPUT_FILL, border=BOX, align="left")
-    for r in range(HOL_R0 + len(busy_days()[:HOL_ROWS]), HOL_R0 + HOL_ROWS):
+        if i < len(days):
+            ws[f"A{r}"], ws[f"B{r}"] = days[i]
         style(ws[f"A{r}"], bg=C_INPUT_FILL, border=BOX, fmt="yyyy/mm/dd", align="center")
         style(ws[f"B{r}"], bg=C_INPUT_FILL, border=BOX, align="left")
     rng = f"$A${HOL_R0}:$A${HOL_R0 + HOL_ROWS - 1}"
-    chk = HOL_R0 + len(tips) + 1
-    ws[f"D{chk}"] = "登録状況（自動）"
-    style(ws[f"D{chk}"], size=10, bold=True)
+    chk = 3 + len(tips)
+    ws[f"A{chk}"] = "登録状況（自動）"
+    style(ws[f"A{chk}"], size=10, bold=True)
     checks = [
         f'="登録されている日付　"&COUNT({rng})&"件（土日はこの一覧に無くても繁忙日として数えます）"',
         f'=IF(COUNTA({rng})-COUNT({rng})>0,"※ 日付として読めない行が "&(COUNTA({rng})-COUNT({rng}))&" 行あります。yyyy/mm/dd の形式で入力し直してください。","日付の形式：OK")',
         f'=IF(COUNTA($A${HOL_R0 + HOL_ROWS}:$A$2000)>0,"※ {HOL_R0 + HOL_ROWS - 1}行目より下に入力があります。この範囲は集計されません。上の空いている行に移してください。","入力範囲：OK")',
+        ('=IF(COUNT(' + rng + ')=0,"※ 日付が1件も登録されていません。土日だけの集計になります。",IF('
+         + "+".join(f'IF({q(S_CALC.format(k))}!$AA$6="",0,IF(OR(YEAR({q(S_CALC.format(k))}!$AA$6)<YEAR(MIN({rng})),'
+                    f'YEAR({q(S_CALC.format(k))}!$AA$6)>YEAR(MAX({rng}))),1,0))' for k in range(1, NSHEETS + 1))
+         + '>0,"※ 貼り付けた月の年の祝日が登録されていません。その年の祝日を追加してください（いまは土日だけで数えています）。",'
+         '"貼付月との対応　"&TEXT(MIN(' + rng + '),"yyyy/m/d")&" 〜 "&TEXT(MAX(' + rng + '),"yyyy/m/d")&" を登録済み：OK"))'),
     ]
     for i, t in enumerate(checks):
-        ws[f"D{chk + 1 + i}"] = t
-        style(ws[f"D{chk + 1 + i}"], size=9.5, color=C_INK2, align="left")
-        ws.conditional_formatting.add(f"D{chk + 1 + i}", FormulaRule(
-            formula=[f'LEFT(D{chk + 1 + i},1)="※"'], font=Font(name=FONT, bold=True, size=9.5, color=C_CRIT)))
-    ws.freeze_panes = "A3"
+        r = chk + 1 + i
+        ws.merge_cells(f"A{r}:D{r}")
+        ws[f"A{r}"] = t
+        style(ws[f"A{r}"], size=9.5, color=C_INK2, align="left")
+        ws.conditional_formatting.add(f"A{r}", FormulaRule(
+            formula=[f'LEFT(A{r},1)="※"'], font=Font(name=FONT, bold=True, size=9.5, color=C_CRIT)))
+    ws.freeze_panes = f"A{HOL_R0}"
     return ws
 
 
@@ -796,7 +809,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     # 職種ブロック（JB0 〜 JB0+NCAT-1）: 設定の職種 NJOB 行＋「その他」。空欄の職種は 0
     JBL = JB0 + NCAT - 1
     CATS = f"{P}${HC}${JB0}:{P}${HC}${JBL}"
-    hws[f"{HL}{JB0 - 1}"], hws[f"{HC}{JB0 - 1}"], hws[f"AD{JB0 - 1}"], hws[f"AE{JB0 - 1}"], hws[f"AF{JB0 - 1}"] = "職種（グラフ用）", "時間", "割合", "表示順", "凡例j→職種行"
+    hws[f"{HL}{JB0 - 1}"], hws[f"{HC}{JB0 - 1}"], hws[f"AD{JB0 - 1}"], hws[f"AE{JB0 - 1}"] = "職種（グラフ用）", "時間", "割合", "表示順（AFは凡例j→職種行）"
     for i in range(NJOB):
         r = JB0 + i
         hws[f"{HL}{r}"] = f'=IF({sets}!$A${JOB_R0 + i}="","",IF({sets}!$B${JOB_R0 + i}="",{sets}!$A${JOB_R0 + i},{sets}!$B${JOB_R0 + i}))'
@@ -957,7 +970,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         ("当日欠勤率", f"={V('Q')}", "0.0%", f'=IF({P}${HC}$6="","",IF({ros}!$AY$7="","","全体平均 "&TEXT({ros}!$AY$7,"0.0%"))&"")'),
         ("勤務時間", f"={V('R')}", '0.0"h"', f'=IF({P}${HC}$4="","",IF({V("T")}="","","1日あたり "&TEXT({V("T")},"0.0")&"h"))'),
         ("土日祝出勤率", f"={V('CB')}", "0.0%",
-         f'=IF({P}${HC}$4="","",{P}${HC}$93&"日"&IF({ros}!$AY$11="","","／平均 "&TEXT({ros}!$AY$11,"0%")))'),
+         f'=IF({P}${HC}$4="","",{P}${HC}$93&"日"&IF({ros}!$AY$11="","","／平均 "&TEXT({ros}!$AY$11,"0.0%")))'),
     ]
     for i, (label, formula, fmt, sub) in enumerate(tiles):
         c0 = GRID_FIRST + i * 4
@@ -1524,7 +1537,12 @@ def build_staff_list(wb):
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.print_title_rows = f"{HR}:{HR}"
-    ws.print_area = f"A1:P{last}"
+    ws.print_area = f"A1:{L(22 + 2 * NSHEETS)}{last}"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
     return ws
 
 
