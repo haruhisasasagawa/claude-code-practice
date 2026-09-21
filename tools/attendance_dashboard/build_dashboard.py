@@ -606,10 +606,12 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ros, sets = q(S_ROSTER), q(S_SET)
     ML = MAXSTAFF + 1
     last = maxrows + 1
-    ws.column_dimensions["A"].width = 2.5
+    # PDF出力は行数が多く縦長になるので、列を広げてA4の縦横比（高さ基準で縮小しても横が余らない）に合わせる
+    gw, mw = (6.2, 3.0) if pdf else (4.6, 2.5)
+    ws.column_dimensions["A"].width = mw
     for c in range(GRID_FIRST, GRID_LAST + 1):
-        ws.column_dimensions[L(c)].width = 4.6
-    ws.column_dimensions["Y"].width = 2.5
+        ws.column_dimensions[L(c)].width = gw
+    ws.column_dimensions["Y"].width = mw
     ws.column_dimensions["Z"].width = 2.5
     ws.column_dimensions["AA"].width = 3
     hws.column_dimensions[HL].width = 30
