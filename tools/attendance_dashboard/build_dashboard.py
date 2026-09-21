@@ -64,6 +64,11 @@ MAP = {name: colref for colref, name in NEEDED}
 JOB_CATS = [("02コンセ", "コンセ"), ("03フロア", "フロア"), ("04ストア", "ストア"), ("05オフィス", "オフィス"),
             ("06トレーナー", "トレーナー"), ("07トレーニー", "トレーニー")]
 DEPTS = [("02コンセ", "コンセ"), ("03フロア", "フロア"), ("04ストア", "ストア"), ("05オフィス", "オフィス")]
+NJOB, NDEPT = 20, 20                     # 設定シートで登録できる職種・所属の行数（劇場ごとにセクション割りが違うため）
+JOB_R0, JOB_OTHER = 13, 13 + NJOB        # 設定: 職種 A13:B32、上記以外＝行33
+DEPT_R0 = JOB_OTHER + 5                  # 設定: 所属 A38:B57（見出し 36、列名 37）
+JB0, NCAT = 72, NJOB + 1                 # DB計算: 職種ブロックの先頭行（72〜92、最後が「その他」）
+DEPT_ROW0 = 14                           # 名簿: 所属別集計 BP13 見出し、14〜33 データ
 WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"]
 REST_CATS = [("事前", "事前（2日以上前）"), ("前日", "前日"), ("当日", "当日（＝欠勤）"), ("事後", "シフト日より後")]
 
@@ -78,8 +83,23 @@ C_GRAY_BAR = "C9D1DC"
 C_HEAD = "DCE6F5"                                                # 表見出しの薄い青
 C_TOTAL = "EEF2F8"                                               # 合計行
 # 職種の色（欠勤の赤と紛れないよう、赤系は後ろに回す）
-CAT_COLORS = ["7EB2E6", "8FCBA3", "F1D46A", "B5A3DE", "F2B27A", "DC8E8E", "A9B4C2"]
-CAT_TXT = ["3B78C4", "2F8F5B", "A67C00", "7B5FC2", "C97A2B", "C0504D", "6B7684"]
+CAT_COLORS = ["7EB2E6", "8FCBA3", "F1D46A", "B5A3DE", "F2B27A", "DC8E8E"]
+CAT_TXT = ["3B78C4", "2F8F5B", "A67C00", "7B5FC2", "C97A2B", "C0504D"]
+
+
+def _hls(h, l, s_):
+    import colorsys
+    r, g, b = colorsys.hls_to_rgb(h, l, s_)
+    return f"{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
+
+
+# 7番目以降は色相を回して淡い塗り／濃い文字色を作る。最後（その他）はグレー
+for _i in range(NJOB - len(CAT_COLORS)):
+    _h = (0.55 + _i * 0.17) % 1.0
+    CAT_COLORS.append(_hls(_h, 0.74, 0.55))
+    CAT_TXT.append(_hls(_h, 0.36, 0.5))
+CAT_COLORS.append("A9B4C2")
+CAT_TXT.append("6B7684")
 C_INPUT_FILL = "FFF9C4"
 
 thin = Side(style="thin", color=C_GRID)
@@ -345,21 +365,27 @@ def build_settings(wb):
     ws["A12"], ws["B12"] = "CSVの職種名", "表示名"
     for c in ("A12", "B12"):
         style(ws[c], size=9, bold=True, color=C_INK, bg=C_HEAD)
-    for i, (code, label) in enumerate(JOB_CATS):
-        r = 13 + i
+    ws["C12"] = f"最大{NJOB}件。使わない行は空欄のままにしてください（空欄の行は集計しません）"
+    style(ws["C12"], size=9, color=C_INK2)
+    for i in range(NJOB):
+        r = JOB_R0 + i
+        code, label = JOB_CATS[i] if i < len(JOB_CATS) else ("", "")
         ws[f"A{r}"], ws[f"B{r}"] = code, label
         style(ws[f"A{r}"], bg=C_INPUT_FILL, border=BOX)
         style(ws[f"B{r}"], bg=C_INPUT_FILL, border=BOX)
-    ws["A19"], ws["B19"] = "（上記以外）", "その他"
-    style(ws["B19"], bg=C_INPUT_FILL, border=BOX)
+    ws[f"A{JOB_OTHER}"], ws[f"B{JOB_OTHER}"] = "（上記以外）", "その他"
+    style(ws[f"B{JOB_OTHER}"], bg=C_INPUT_FILL, border=BOX)
 
-    ws["A22"] = "所属（CSVの「応募者の職種」）の一覧（スタッフ一覧の所属別集計に使用）"
-    style(ws["A22"], bold=True)
-    ws["A23"], ws["B23"] = "CSVの所属名", "表示名"
-    for c in ("A23", "B23"):
+    ws[f"A{DEPT_R0 - 2}"] = "所属（CSVの「応募者の職種」）の一覧（スタッフ一覧の所属別集計に使用）"
+    style(ws[f"A{DEPT_R0 - 2}"], bold=True)
+    ws[f"A{DEPT_R0 - 1}"], ws[f"B{DEPT_R0 - 1}"] = "CSVの所属名", "表示名"
+    for c in (f"A{DEPT_R0 - 1}", f"B{DEPT_R0 - 1}"):
         style(ws[c], size=9, bold=True, color=C_INK, bg=C_HEAD)
-    for i, (code, label) in enumerate(DEPTS):
-        r = 24 + i
+    ws[f"C{DEPT_R0 - 1}"] = f"最大{NDEPT}件。使わない行は空欄のままにしてください"
+    style(ws[f"C{DEPT_R0 - 1}"], size=9, color=C_INK2)
+    for i in range(NDEPT):
+        r = DEPT_R0 + i
+        code, label = DEPTS[i] if i < len(DEPTS) else ("", "")
         ws[f"A{r}"], ws[f"B{r}"] = code, label
         style(ws[f"A{r}"], bg=C_INPUT_FILL, border=BOX)
         style(ws[f"B{r}"], bg=C_INPUT_FILL, border=BOX)
@@ -496,23 +522,25 @@ def build_roster(wb, maxrows):
         ws[f"AX{r}"], ws[f"AY{r}"] = label, formula
         ws[f"AY{r}"].number_format = fmt
 
-    ws["AX12"] = "所属別"
-    style(ws["AX12"], size=9, bold=True, color="FFFFFF", bg=C_INK2)
+    ws["BP12"] = "所属別（設定シートの所属の一覧。空欄の行は空）"
+    style(ws["BP12"], size=9, bold=True, color="FFFFFF", bg=C_INK2)
+    ws.column_dimensions["BP"].width = 14
+    ws.column_dimensions["BQ"].width = 12
     for j, h in enumerate(["所属コード", "表示名", "人数", "出勤日数", "欠勤日数", "確定日数", "出勤率", "当欠率"]):
-        c = ws.cell(row=13, column=50 + j, value=h)   # AX=50
+        c = ws.cell(row=13, column=68 + j, value=h)   # BP=68
         style(c, size=9, bold=True, color="FFFFFF", bg=C_INK2)
-    for i in range(len(DEPTS)):
-        r = 14 + i
-        ws[f"AX{r}"] = f"={sets}!$A${24 + i}"
-        ws[f"AY{r}"] = f"={sets}!$B${24 + i}"
-        ws[f"AZ{r}"] = f"=COUNTIF($K$2:$K${ML},$AX{r})"
-        ws[f"BA{r}"] = f"=SUMIFS($M$2:$M${ML},$K$2:$K${ML},$AX{r})"
-        ws[f"BB{r}"] = f"=SUMIFS($N$2:$N${ML},$K$2:$K${ML},$AX{r})"
-        ws[f"BC{r}"] = f"=SUMIFS($O$2:$O${ML},$K$2:$K${ML},$AX{r})"
-        ws[f"BD{r}"] = f'=IF($BC{r}=0,"",$BA{r}/$BC{r})'
-        ws[f"BE{r}"] = f'=IF($BC{r}=0,"",$BB{r}/$BC{r})'
-        ws[f"BD{r}"].number_format = "0.0%"
-        ws[f"BE{r}"].number_format = "0.0%"
+    for i in range(NDEPT):
+        r = DEPT_ROW0 + i
+        ws[f"BP{r}"] = f'=IF({sets}!$A${DEPT_R0 + i}="","",{sets}!$A${DEPT_R0 + i})'
+        ws[f"BQ{r}"] = f'=IF($BP{r}="","",IF({sets}!$B${DEPT_R0 + i}="",$BP{r},{sets}!$B${DEPT_R0 + i}))'
+        ws[f"BR{r}"] = f'=IF($BP{r}="","",COUNTIF($K$2:$K${ML},$BP{r}))'
+        ws[f"BS{r}"] = f'=IF($BP{r}="","",SUMIFS($M$2:$M${ML},$K$2:$K${ML},$BP{r}))'
+        ws[f"BT{r}"] = f'=IF($BP{r}="","",SUMIFS($N$2:$N${ML},$K$2:$K${ML},$BP{r}))'
+        ws[f"BU{r}"] = f'=IF($BP{r}="","",SUMIFS($O$2:$O${ML},$K$2:$K${ML},$BP{r}))'
+        ws[f"BV{r}"] = f'=IF($BP{r}="","",IF($BU{r}=0,"",$BS{r}/$BU{r}))'
+        ws[f"BW{r}"] = f'=IF($BP{r}="","",IF($BU{r}=0,"",$BT{r}/$BU{r}))'
+        ws[f"BV{r}"].number_format = "0.0%"
+        ws[f"BW{r}"].number_format = "0.0%"
 
     # --- 月ラベル・貼付状況
     ws["AX20"] = "月ラベル / 貼付状況"
@@ -626,31 +654,35 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
 
     hws[f"{HL}12"], hws[f"{HC}12"] = "出勤", f"=N({V('M')})"
     hws[f"{HL}13"], hws[f"{HC}13"] = "欠勤", f"=N({V('N')})"
-    for i in range(len(JOB_CATS)):
-        r = 16 + i
-        hws[f"{HL}{r}"] = f"={sets}!$B${13 + i}"
-        hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("M", "R", f"{sets}!$A${13 + i}")})'
-    hws[f"{HL}22"] = f"={sets}!$B$19"
-    hws[f"{HC}22"] = f'=IF({sel}="",0,MAX(0,N({V("R")})-SUM({P}${HC}$16:{P}${HC}$21)))'
+    # 職種ブロック（JB0 〜 JB0+NCAT-1）: 設定の職種 NJOB 行＋「その他」。空欄の職種は 0
+    JBL = JB0 + NCAT - 1
+    CATS = f"{P}${HC}${JB0}:{P}${HC}${JBL}"
+    hws[f"{HL}{JB0 - 1}"], hws[f"{HC}{JB0 - 1}"], hws[f"AD{JB0 - 1}"], hws[f"AE{JB0 - 1}"], hws[f"AF{JB0 - 1}"] = "職種（グラフ用）", "時間", "割合", "表示順", "凡例j→職種行"
+    for i in range(NJOB):
+        r = JB0 + i
+        hws[f"{HL}{r}"] = f'=IF({sets}!$A${JOB_R0 + i}="","",IF({sets}!$B${JOB_R0 + i}="",{sets}!$A${JOB_R0 + i},{sets}!$B${JOB_R0 + i}))'
+        hws[f"{HC}{r}"] = f'=IF(OR({sel}="",{sets}!$A${JOB_R0 + i}=""),0,{sum6sel("M", "R", f"{sets}!$A${JOB_R0 + i}")})'
+    hws[f"{HL}{JBL}"] = f"={sets}!$B${JOB_OTHER}"
+    hws[f"{HC}{JBL}"] = f'=IF({sel}="",0,MAX(0,N({V("R")})-SUM({P}${HC}${JB0}:{P}${HC}${JBL - 1})))'
     hws[f"{HL}23"] = "職種トップ（名前／割合）"
-    hws[f"{HC}23"] = f'=IF(SUM({P}${HC}$16:{P}${HC}$22)=0,"",INDEX({P}${HL}$16:{P}${HL}$22,MATCH(MAX({P}${HC}$16:{P}${HC}$22),{P}${HC}$16:{P}${HC}$22,0)))'
-    hws["AD23"] = f'=IF(SUM({P}${HC}$16:{P}${HC}$22)=0,"",MAX({P}${HC}$16:{P}${HC}$22)/SUM({P}${HC}$16:{P}${HC}$22))'
+    hws[f"{HC}23"] = f'=IF(SUM({CATS})=0,"",INDEX({P}${HL}${JB0}:{P}${HL}${JBL},MATCH(MAX({CATS}),{CATS},0)))'
+    hws["AD23"] = f'=IF(SUM({CATS})=0,"",MAX({CATS})/SUM({CATS}))'
     hws["AD23"].number_format = "0%"
-    for i in range(7):
-        hws[f"AD{16 + i}"] = f'=IF(SUM({P}${HC}$16:{P}${HC}$22)=0,0,{P}${HC}${16 + i}/SUM({P}${HC}$16:{P}${HC}$22))'
-        hws[f"AD{16 + i}"].number_format = "0%"
-        # 凡例を詰めて表示するための順番: AE=時間>0の職種の通し番号、AF=j番目に表示する職種の行番号(1〜7)
-        hws[f"AE{16 + i}"] = f'=IF(N({P}${HC}${16 + i})>0,COUNTIF({P}${HC}$16:{P}${HC}${16 + i},">0"),"")'
-        hws[f"AF{16 + i}"] = f'=IFERROR(MATCH({i + 1},{P}$AE$16:{P}$AE$22,0),"")'
-    hws["AD15"], hws["AE15"], hws["AF15"] = "割合", "表示順", "凡例j→職種行"
+    for i in range(NCAT):
+        r = JB0 + i
+        hws[f"AD{r}"] = f'=IF(SUM({CATS})=0,0,{P}${HC}${r}/SUM({CATS}))'
+        hws[f"AD{r}"].number_format = "0%"
+        # 凡例を詰めて表示するための順番: AE=時間>0の職種の通し番号、AF=j番目に表示する職種の行番号(1〜NCAT)
+        hws[f"AE{r}"] = f'=IF(N({P}${HC}${r})>0,COUNTIF({P}${HC}${JB0}:{P}${HC}${r},">0"),"")'
+        hws[f"AF{r}"] = f'=IFERROR(MATCH({i + 1},{P}$AE${JB0}:{P}$AE${JBL},0),"")'
     for i, (code, wd) in enumerate(WD_ORDER):
         r = 25 + i
         hws[f"{HL}{r}"] = wd
         hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("H", "O", code)})'
     hws[f"{HL}34"], hws[f"{HC}34"] = "本人", f"=N({P}${HC}$6)"
     hws[f"{HL}35"], hws[f"{HC}35"] = "全体平均", f"=N({ros}!$AY$6)"
-    hws[f"{HL}36"] = f'=IF({P}${HC}$5="","同所属","同所属（"&IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH({P}${HC}$5,{ros}!$AX$14:$AX$17,0)),{P}${HC}$5)&"）")'
-    hws[f"{HC}36"] = f'=IFERROR(N(INDEX({ros}!$BD$14:$BD$17,MATCH({P}${HC}$5,{ros}!$AX$14:$AX$17,0))),0)'
+    hws[f"{HL}36"] = f'=IF({P}${HC}$5="","同所属","同所属（"&IFERROR(INDEX({ros}!$BQ$14:$BQ$33,MATCH({P}${HC}$5,{ros}!$BP$14:$BP$33,0)),{P}${HC}$5)&"）")'
+    hws[f"{HC}36"] = f'=IFERROR(N(INDEX({ros}!$BV$14:$BV$33,MATCH({P}${HC}$5,{ros}!$BP$14:$BP$33,0))),0)'
     for r in (34, 35, 36):
         hws[f"{HC}{r}"].number_format = "0.0%"
     for i, (code, label) in enumerate(REST_CATS):
@@ -752,7 +784,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         box_range(ws, f"{col_a}7:{col_b}8")
 
     info("J", "K", "従業員番号", f"={V('I')}", fmt="0")
-    info("M", "N", "所属", f'=IF({P}${HC}$5="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH({P}${HC}$5,{ros}!$AX$14:$AX$17,0)),{P}${HC}$5))')
+    info("M", "N", "所属", f'=IF({P}${HC}$5="","",IFERROR(INDEX({ros}!$BQ$14:$BQ$33,MATCH({P}${HC}$5,{ros}!$BP$14:$BP$33,0)),{P}${HC}$5))')
     # 資格はほぼ全員アルバイトなので表示しない。代わりにデータのある月数（途中加入や参考値の説明になる）
     info("P", "Q", "データのある月数", f'=IF({P}${HC}$4="","",{V("AR")}&"/"&COUNTIF({ros}!$BA$22:$BA$27,"OK")&"ヶ月")', size=10)
     ws["S6"] = f'="総合判定（◎"&TEXT({P}${HC}$7,"0%")&"以上／△"&TEXT({P}${HC}$8,"0%")&"以上）"'
@@ -885,7 +917,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
         return ch
 
     ws.add_chart(doughnut(f"${HL}$12:${HL}$13", f"${HC}$12:${HC}$13", [C_BLUE, C_RED], labels=False), span(2, 18, 8, 27))
-    ws.add_chart(doughnut(f"${HL}$16:${HL}$22", f"${HC}$16:${HC}$22", CAT_COLORS, labels=False), span(18, 18, 24, 27))
+    ws.add_chart(doughnut(f"${HL}${JB0}:${HL}${JB0 + NCAT - 1}", f"${HC}${JB0}:${HC}${JB0 + NCAT - 1}", CAT_COLORS, labels=False), span(18, 18, 24, 27))
 
     # リングの穴に大きな数値を表示（グラフ背景は透明）
     def center(a, b, label, value, fmt, color=C_INK):
@@ -920,10 +952,11 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
              ("R", "T", LEG + 2), ("U", "X", LEG + 2), ("R", "T", LEG + 3)]
     for j, (a, b, r) in enumerate(slots):
         ws.merge_cells(f"{a}{r}:{b}{r}")
-        ix = f"{P}$AF${16 + j}"
-        ws[f"{a}{r}"] = f'=IF({ix}="","",INDEX({P}${HL}$16:{P}${HL}$22,{ix})&" "&TEXT(INDEX({P}$AD$16:{P}$AD$22,{ix}),"0%"))'
+        ix = f"{P}$AF${JB0 + j}"
+        JBL = JB0 + NCAT - 1
+        ws[f"{a}{r}"] = f'=IF({ix}="","",INDEX({P}${HL}${JB0}:{P}${HL}${JBL},{ix})&" "&TEXT(INDEX({P}$AD${JB0}:{P}$AD${JBL},{ix}),"0%"))'
         style(ws[f"{a}{r}"], size=8, bold=True, color=C_INK, bg="FFFFFF", align="left")
-        for k in range(7):    # 表示された職種に合わせて文字色をグラフの色に
+        for k in range(NCAT):    # 表示された職種に合わせて文字色をグラフの色に
             ws.conditional_formatting.add(f"{a}{r}:{b}{r}", FormulaRule(formula=[f"{ix}={k + 1}"], font=Font(name=FONT, bold=True, size=8, color=CAT_TXT[k]), stopIfTrue=True))
 
     ch = BarChart()
@@ -1251,12 +1284,14 @@ def build_staff_list(wb):
     for j, h in enumerate(["所属", "人数", "出勤日数", "欠勤", "確定シフト", "出勤率", "当欠率"]):
         c = ws.cell(row=8, column=1 + j, value=h)
         style(c, size=9, bold=True, color=C_INK, bg=C_HEAD, align="center", border=Border(top=thin, bottom=thin))
-    for i in range(len(DEPTS)):
+    for i in range(NDEPT):
         r = 9 + i
-        src = 14 + i
-        for j, (colref, fmt) in enumerate([("AY", None), ("AZ", '0"名"'), ("BA", '#,##0"日"'), ("BB", '#,##0"日"'), ("BC", '#,##0"日"'), ("BD", "0.0%"), ("BE", "0.0%")]):
+        src = DEPT_ROW0 + i
+        for j, (colref, fmt) in enumerate([("BQ", None), ("BR", '0"名"'), ("BS", '#,##0"日"'), ("BT", '#,##0"日"'), ("BU", '#,##0"日"'), ("BV", "0.0%"), ("BW", "0.0%")]):
             c = ws.cell(row=r, column=1 + j, value=f"={ros}!${colref}${src}")
-            style(c, size=10, fmt=fmt, align=("left" if j == 0 else "right"), border=Border(bottom=hair))
+            style(c, size=10, fmt=fmt, align=("left" if j == 0 else "right"))
+    # 所属が登録されている行だけ罫線を出す（空欄の行は白いまま）
+    ws.conditional_formatting.add(f"A9:G{8 + NDEPT}", FormulaRule(formula=['$A9<>""'], border=Border(bottom=hair)))
 
     # ワースト
     ws["J7"] = f'="当欠率 ワースト10（確定シフト日数 "&{sets}!$B$5&"日以上の人が対象。基準 "&TEXT({sets}!$B$6,"0%")&"以上は赤）"'
@@ -1268,7 +1303,7 @@ def build_staff_list(wb):
         r = 8 + n
         m = f"IFERROR(MATCH({n},{ros}!$Y$2:$Y${ML},0),\"\")"
         ws[f"J{r}"] = f'=IF({m}="","",INDEX({ros}!$J$2:$J${ML},{m}))'
-        ws[f"K{r}"] = f'=IF({m}="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH(INDEX({ros}!$K$2:$K${ML},{m}),{ros}!$AX$14:$AX$17,0)),INDEX({ros}!$K$2:$K${ML},{m})))'
+        ws[f"K{r}"] = f'=IF({m}="","",IFERROR(INDEX({ros}!$BQ$14:$BQ$33,MATCH(INDEX({ros}!$K$2:$K${ML},{m}),{ros}!$BP$14:$BP$33,0)),INDEX({ros}!$K$2:$K${ML},{m})))'
         ws[f"L{r}"] = f'=IF({m}="","",INDEX({ros}!$O$2:$O${ML},{m}))'
         ws[f"M{r}"] = f'=IF({m}="","",INDEX({ros}!$N$2:$N${ML},{m}))'
         ws[f"N{r}"] = f'=IF({m}="","",INDEX({ros}!$Q$2:$Q${ML},{m}))'
@@ -1277,7 +1312,7 @@ def build_staff_list(wb):
     ws.conditional_formatting.add("N9:N18", FormulaRule(formula=[f'AND(ISNUMBER(N9),N9>={sets}!$B$6)'], font=Font(name=FONT, bold=True, color=C_CRIT, size=10), fill=fill("FDECEA")))
 
     # スタッフ別テーブル
-    HR = 21
+    HR = 9 + NDEPT + 3
     ws[f"A{HR - 1}"] = "スタッフ別 集計（半年）"
     style(ws[f"A{HR - 1}"], size=10, bold=True)
     headers = ["順位", "名前", "従業員番号", "所属", "資格", "出勤日数", "当日欠勤", "確定シフト日数", "出勤率", "当欠率", "判定",
@@ -1288,7 +1323,7 @@ def build_staff_list(wb):
         c = ws.cell(row=HR, column=1 + j, value=h)
         style(c, size=9, bold=True, color=C_INK, bg=C_HEAD, align="center", wrap=True, border=Border(top=thin, bottom=thin))
     ws.row_dimensions[HR].height = 32
-    widths = [6, 24, 11, 9, 11, 9, 9, 11, 9, 9, 13, 9, 10, 9, 9, 8, 8, 8] + [9] * 12
+    widths = [6, 24, 11, 9, 12, 9, 9, 11, 9, 9, 13, 12, 10, 9, 9, 8, 8, 8] + [9] * 12
     for j, w in enumerate(widths):
         ws.column_dimensions[L(1 + j)].width = w
 
@@ -1302,7 +1337,7 @@ def build_staff_list(wb):
             (f'=IF({m}="","",IF({rv("P")}="","－",IF({rv("O")}<{sets}!$B$5,"参考",{rv("W")})))', "0", "center"),
             (f'=IF({m}="","",{rv("J")})', None, "left"),
             (f'=IF({m}="","",{rv("I")})', "0", "right"),
-            (f'=IF({m}="","",IFERROR(INDEX({ros}!$AY$14:$AY$17,MATCH({rv("K")},{ros}!$AX$14:$AX$17,0)),{rv("K")}))', None, "left"),
+            (f'=IF({m}="","",IFERROR(INDEX({ros}!$BQ$14:$BQ$33,MATCH({rv("K")},{ros}!$BP$14:$BP$33,0)),{rv("K")}))', None, "left"),
             (f'=IF({m}="","",{grade(rv("L"))})', None, "left"),
             (f'=IF({m}="","",{rv("M")})', '0"日"', "right"),
             (f'=IF({m}="","",{rv("N")})', '0"日"', "right"),
@@ -1434,8 +1469,8 @@ def build_howto(wb, maxrows):
         ("劇場名", "設定!B1。ダッシュボードの見出しに表示されます。"),
         ("判定の基準", "設定!B3（◎の基準、既定95%）、B4（△の基準、既定90%）、B5（判定を保留する確定シフト日数、既定20日）、B6（当欠率のアラート基準、既定5%）。"),
         ("深夜の時間帯", "設定!B7〜B8（既定 22:00〜29:00）。"),
-        ("職種の区分", "設定!A13〜B18。CSVの「募集シフトの職種」の値（例 02コンセ）と表示名。劇場によって職種名が違う場合はここを合わせます。"),
-        ("所属の一覧", "設定!A24〜B27。CSVの「応募者の職種」の値と表示名。所属別集計と「同所属平均」に使います。"),
+        ("職種の区分", f"設定!A{JOB_R0}〜B{JOB_OTHER - 1}（最大{NJOB}件）。CSVの「募集シフトの職種」の値（例 02コンセ、01ボックス）と表示名。劇場によってセクションの割り振りが違うので、自劇場の職種をすべて登録します。使わない行は空欄のままで構いません。"),
+        ("所属の一覧", f"設定!A{DEPT_R0}〜B{DEPT_R0 + NDEPT - 1}（最大{NDEPT}件）。CSVの「応募者の職種」の値と表示名。所属別集計と「同所属平均」に使います。"),
         ("それ以外", "CSVの列名（1行目）が同じであれば、他に変更する箇所はありません。列名が変わった場合は「貼付状況」に警告が出ます。"),
     ]
     for i, (k_, t) in enumerate(items):
