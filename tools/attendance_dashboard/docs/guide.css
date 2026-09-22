@@ -55,3 +55,5 @@ table.chk tr:nth-child(even) td { background: #f5f6f8; }
 .shot.fig { width: 92%; margin: 0 auto; }
 .box ul.dot { padding-left: 0; }
 .cap.one { margin: 0.6mm 0 1mm; font-size: 9px; }
+.shot.fig2 { width: 76%; margin: 0 auto; }
+table.chk.tightrow td, table.chk.tightrow th { padding: 1.0mm 2.5mm; }

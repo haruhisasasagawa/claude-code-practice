@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><title>勤務実績ダッシュボード 導入のご提案</title><link rel="stylesheet" href="guide.css"></head>
+<body>
+<div class="page">
+  <div class="titlebar">勤務実績ダッシュボード　導入のご提案<small>2026年9月25日　エリア会議資料</small></div>
+  <div class="authorbar">ＴＯＨＯシネマズ新宿　副支配人　笹川 晴央</div>
+  <div class="body">
+
+    <div class="banner" style="margin:1mm 0 2.5mm; padding:2.4mm">契約更新の面談を、劇場ごとの「印象」ではなく<span style="font-size:13px">同じ実績データ</span>で揃えたい　― まずは3ヶ月の試験運用のご相談です</div>
+
+    <div class="info" style="margin-bottom:3mm">
+      <b>ご提案の要旨</b>　シェアフルシフトのシフトCSVを<b>月1回貼るだけ</b>で、スタッフごとの出勤日数・出勤率・当日欠勤率・勤務時間を<b>半年分</b>自動集計するExcelを作成しました。新宿で2026年8月分（199名・3,955行）を試験集計済みです。<b>マクロは使っていません</b>（Excel 2016以降／Microsoft 365）。原本をコピーして劇場名を入れれば、その日から使えます。
+    </div>
+
+    <h2 style="margin-bottom:1mm">いま感じている課題 <span class="sub">― 半期の更新面談で毎回ひっかかる3点</span></h2>
+    <div style="line-height:1.55">・面談で示す材料が劇場・担当ごとに違い、出勤率や当欠の話が<b>印象ベース</b>になりやすい<br>・シフトCSVはあるが、個人別に半年分を数え直すのは手作業では現実的ではない<br>・<b>「当日の欠勤」と「前日までの休み希望」</b>が区別されないまま語られることがある</div>
+
+    <h2>提案するしくみ <span class="sub">― スタッフを選ぶと、この1枚がその場で出ます</span></h2>
+    <img class="shot fig" src="img/g_head.png">
+    <div class="cap one">【図】ダッシュボード上部（A4縦1枚の印刷イメージ）。※氏名・従業員番号は伏せています</div>
+    <div class="note" style="margin-top:-0.5mm">この下に<b>6つのグラフ</b>、印刷範囲の外に<b>月別の実績</b>と<b>欠勤・当日の時間変更の明細</b>。別シートに<b>全員分の一覧</b>も出ます。</div>
+
+    <h2>こういう風に管理したい <span class="sub">― ご提案したい運用ルール4点</span></h2>
+    <div class="cols compact" style="gap:5mm">
+      <div class="box" style="margin-top:0">
+        <div><span class="num">1</span><b>更新面談は「A4縦1枚」を本人に見せながら行う。</b>口頭だけの説明にしない。</div>
+        <div style="margin-top:1.5mm"><span class="num">2</span><b>判定の基準をエリアで統一する。</b>出勤率 ◎95%以上／△90%以上／✕90%未満、当欠率のアラートは5%、確定シフト20日未満は「参考値」として判定しない。</div>
+      </div>
+      <div class="box" style="margin-top:0">
+        <div><span class="num">3</span><b>当欠は「当日に休みへ変更した日」だけを数える。</b>前日までの変更は当欠に含めない。事前・前日・当日は別々に表示されます。</div>
+        <div style="margin-top:1.5mm"><span class="num">4</span><b>数字は会話の入口として使う。</b>欠勤の理由までは分からないので、評価は必ず本人への確認とセットで決める。</div>
+      </div>
+    </div>
+
+    <h2>運用イメージ <span class="sub">― 各劇場の負担は月5分＋面談前の印刷だけ</span></h2>
+    <table class="chk tightrow">
+      <tr><th style="width:32mm">タイミング</th><th>やること</th><th style="width:26mm">所要</th></tr>
+      <tr><td>毎月　月初</td><td>前月1ヶ月分のシフトCSVを出力し、「CSV_1〜6」へ貼り付け（貼付状況が「OK」になるのを確認）</td><td>約5分</td></tr>
+      <tr><td>更新面談の前</td><td>対象スタッフを選び、A4縦1枚を印刷（またはPDFで保存）</td><td>1人 約10秒</td></tr>
+      <tr><td>更新面談</td><td>一文サマリー → 出勤率の比較（全体平均・同所属平均） → 気になる点は明細の日付・時刻で確認</td><td>―</td></tr>
+      <tr><td>エリア会議</td><td>所属別の出勤率・当欠率を持ち寄り、繁忙日（土日祝・GW・年末年始）の応援計画に使う</td><td>―</td></tr>
+    </table>
+
+    <div class="box gray compact" style="margin-top:2mm; padding:1.4mm 3mm"><h3 style="margin-bottom:1mm">前提とご注意</h3>
+      <div style="columns:2; column-gap:8mm">
+        <div>・マクロなし。Excel 2016以降／365。1ヶ月6,000行・半年400名まで</div>
+        <div>・初回セットアップ10〜15分。職種・所属は20件まで登録可</div>
+                <div>・<b>シフト上の記録</b>で、打刻の遅刻・早退ではありません</div>
+        <div>・個人の勤務情報です。印刷物・PDFの取り扱いにご注意ください</div>
+      </div></div>
+
+    <div class="box orange" style="margin-top:2mm"><h3>本日お願いしたいこと</h3>
+      <ul class="dot" style="margin:0"><li><b>10〜12月の3ヶ月、試験運用にご参加いただける劇場</b>を募らせてください（新宿は継続します）</li><li><b>判定・当欠アラートの基準をエリアで揃えること</b>のご了承をいただきたいです。劇場ごとに変えると比較ができなくなります</li><li>使いにくい点・足りない項目をお寄せください。反映のうえ、<b>2027年1月のエリア会議で継続の可否をご判断</b>いただければと思います</li></ul></div>
+
+    <div class="note" style="margin-top:1.5mm">別紙：初回セットアップガイド（A4 2枚）／運用ガイド（A4 2枚）／テンプレート原本（Excel）。劇場ごとのセットアップはこちらで対応します。</div>
+
+  </div>
+</div>
+</body></html>
