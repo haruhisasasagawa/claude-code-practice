@@ -1163,6 +1163,7 @@ def build_dashboard(wb, maxrows, select=None):
             ch.dataLabels.showLeaderLines = False
             ch.dataLabels.showLegendKey = False
             ch.dataLabels.numFmt = "0%;;;"
+            ch.dataLabels.txPr = chart_text(8)
         ch.legend = None
         plain(ch)
         ch.plot_area.graphicalProperties = GraphicalProperties(noFill=True)
@@ -1174,7 +1175,8 @@ def build_dashboard(wb, maxrows, select=None):
         return ch
 
     ws.add_chart(doughnut(f"${HL}$12:${HL}$13", f"${HC}$12:${HC}$13", [C_BLUE, C_RED], labels=False), span(2, 18, 8, 27))
-    ws.add_chart(doughnut(f"${HL}${JB0}:${HL}${JB0 + NCAT - 1}", f"${HC}${JB0}:${HC}${JB0 + NCAT - 1}", CAT_COLORS, labels=False), span(18, 18, 24, 27))
+    # 職種別は「どこに何％ずつ入っているか」を見るグラフなので、各セクションに％を出す
+    ws.add_chart(doughnut(f"${HL}${JB0}:${HL}${JB0 + NCAT - 1}", f"${HC}${JB0}:${HC}${JB0 + NCAT - 1}", CAT_COLORS, labels=True), span(18, 18, 24, 27))
 
     # リングの穴に大きな数値を表示（グラフ背景は透明）
     def center(a, b, label, value, fmt, color=C_INK):
@@ -1188,7 +1190,9 @@ def build_dashboard(wb, maxrows, select=None):
     center("D", "F", "出勤率", f'=IF({P}${HC}$6="","－",{P}${HC}$6)', "0.0%")
     for formula, color in rate_rules:
         ws.conditional_formatting.add("D22:F23", FormulaRule(formula=[formula], font=Font(name=FONT, bold=True, size=14, color=color), stopIfTrue=True))
-    center("T", "V", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', f'=IF({P}$AD$23="","－",{P}$AD$23)', "0%")
+    # 中央は「主に担当しているセクション」。％は各セクションのリング上と凡例に出す
+    center("T", "V", "主に担当", f'=IF({P}${HC}$23="","－",{P}${HC}$23)', None)
+    ws["T22"].font = font(11, True, C_INK)
 
     # 凡例（グラフの下に小さく）
     LEG = 28                        # 凡例行（3つのグラフで同じ高さ）
