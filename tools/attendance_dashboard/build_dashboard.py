@@ -39,7 +39,6 @@ STACK = NSHEETS * MAXSTAFF
 FONT = "Meiryo UI"
 
 S_HOWTO, S_DASH, S_LIST, S_SET, S_ROSTER, S_DBCALC = "使い方", "ダッシュボード", "スタッフ一覧", "設定", "名簿", "DB計算"
-S_PDF = "PDF出力"                        # 説明文なしの面談用ページ（ダッシュボードで選んだスタッフに連動）
 S_HOL = "祝日・繁忙日"                    # 土日以外で「繁忙日」として数える日付の一覧（編集可）
 HOL_R0, HOL_ROWS = 17, 400               # 祝日・繁忙日シートのデータ開始行と行数（1〜15行目は説明・チェック用）
 HOL_YEARS = (2025, 2033)                 # 初期値として書き出す年の範囲（末尾は含まない）
@@ -738,7 +737,7 @@ ABS_ROWS = 12                            # 欠勤・当日時間変更の一覧�
 LIST_ROW0 = 60                           # DB計算 の一覧用セルの先頭行
 BUSY_R0 = 100                            # DB計算 の日別ブロックの先頭行
 BUSY_DAYS = 200                          # 日別ブロックの行数（対象期間は最大6ヶ月＝184日）
-BUSY_ROWS = 9                            # 「シフト希望未提出の繁忙日」の表示件数（3列×3行）
+BUSY_ROWS = 24                           # 「シフト希望未提出の繁忙日」の表示件数（3列×8行）
 RUN_MIN, RUN_RATE = 3, 0.5               # 連休の判定: 3連休以上のかたまりで、シフト希望の提出率が 50%以下なら ×
 RUN_SHOW = 6                             # 表に出す連休の件数
 WD_ORDER = [(2, "月"), (3, "火"), (4, "水"), (5, "木"), (6, "金"), (7, "土"), (1, "日")]   # WEEKDAY値と表示
@@ -753,23 +752,19 @@ def chart_text(size=9, bold=False, color=None):
     return RichText(p=[Paragraph(pPr=ParagraphProperties(defRPr=cp), endParaRPr=cp)])
 
 
-def build_dashboard(wb, maxrows, select=None, pdf=False):
-    """pdf=True: 説明文・画面用の表を省いた「PDF出力」シート。選択スタッフはダッシュボードに連動し、
-    内部計算セル（DB計算）はダッシュボードと共用する（同じ式を上書きするだけ）。"""
-    ws = wb.create_sheet(S_PDF if pdf else S_DASH)
-    if pdf:
-        hws = wb[S_DBCALC]
-    else:
-        hws = wb.create_sheet(S_DBCALC)
-        hws.sheet_properties.tabColor = "A9B4C2"
+def build_dashboard(wb, maxrows, select=None):
+    """スタッフ1人分の面談用ページ。見出し〜グラフ〜月別の実績〜一覧〜繁忙日までをA4縦1枚に収める。"""
+    ws = wb.create_sheet(S_DASH)
+    hws = wb.create_sheet(S_DBCALC)
+    hws.sheet_properties.tabColor = "A9B4C2"
     P = q(S_DBCALC) + "!"
-    ws.sheet_properties.tabColor = "6B7280" if pdf else C_NAVY
+    ws.sheet_properties.tabColor = C_NAVY
     ws.sheet_view.showGridLines = False
     ros, sets = q(S_ROSTER), q(S_SET)
     ML = MAXSTAFF + 1
     last = maxrows + 1
-    # PDF出力は行数が多く縦長になるので、列を広げてA4の縦横比（高さ基準で縮小しても横が余らない）に合わせる
-    gw, mw = (6.2, 3.0) if pdf else (4.6, 2.5)
+    # 行数が多く縦長になるので、列を広げてA4の縦横比（高さ基準で縮小しても横が余らない）に合わせる
+    gw, mw = 6.2, 3.0
     ws.column_dimensions["A"].width = mw
     for c in range(GRID_FIRST, GRID_LAST + 1):
         ws.column_dimensions[L(c)].width = gw
@@ -779,7 +774,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     hws.column_dimensions[HL].width = 30
     hws.column_dimensions[HC].width = 14
     hws.column_dimensions["AD"].width = 12
-    LAST_ROW = 100 if pdf else 106
+    LAST_ROW = 104
     fill_range(ws, f"A1:Y{LAST_ROW}", C_PAGE)
 
     def V(colref):
@@ -1023,21 +1018,18 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     ws.row_dimensions[6].height = 15
     ws.row_dimensions[7].height = 22
     ws.row_dimensions[8].height = 22
-    ws["B6"] = "スタッフ（ダッシュボードで選択）" if pdf else "スタッフ（▼から選択）"
+    ws["B6"] = "スタッフ（▼から選択）"
     style(ws["B6"], size=9, color=C_INK2)
     ws.merge_cells("B7:H8")
-    if pdf:
-        ws["B7"] = f'=IF({q(S_DASH)}!$B$7="","",{q(S_DASH)}!$B$7)'
-    elif select:
+    if select:
         ws["B7"] = select
     else:
         ws["B7"] = f'=IF({ros}!$AT$2="","← CSV_1 にデータを貼り付けてください",{ros}!$AT$2)'
     style(ws["B7"], size=14, bold=True, bg="FFFFFF", align="left")
     box_range(ws, "B7:H8", Side(style="medium", color=C_BLUE))
-    if not pdf:
-        dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)
-        ws.add_data_validation(dv)
-        dv.add("B7")
+    dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)
+    ws.add_data_validation(dv)
+    dv.add("B7")
 
     def info(col_a, col_b, label, formula, fmt=None, size=11):
         ws[f"{col_a}6"] = label
@@ -1344,25 +1336,6 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
     style(ws["R46"], size=8, color=C_CRIT, bg="FFFFFF", align="left", valign="top", wrap=True)
     ws.conditional_formatting.add("V36:V41", DataBarRule(start_type="num", start_value=0, end_type="max", color=C_GRAY_BAR, showValue=True))
 
-    def notes_block(top):
-        """集計のきまり: top=見出し行。top+1 は空き、top+2〜top+5 に4行."""
-        ws.row_dimensions[top].height = 18
-        section(top, "集計のきまり")
-        ws.row_dimensions[top + 1].height = 4
-        notes = [
-            "出勤日数は確定シフトのあった日数（同じ日の複数区分は1日）。欠勤日数は、確定していたシフトを当日に「休み」へ変更した日数で、前日までの変更は含みません。",
-            f'="出勤率 ＝ 出勤日数 ÷ 確定シフト日数（出勤日数＋当日欠勤日数）、当欠率 ＝ 当日欠勤日数 ÷ 確定シフト日数（基準 "&TEXT({P}${HC}$56,"0%")&"以上で警告）。当日遅出率・当日早退率 ＝ 各日数 ÷ 確定シフト日数。土日祝出勤率 ＝ 土日祝・繁忙日の出勤日数 ÷ 出勤日数。"',
-            f'="総合判定は出勤率のみによる目安です。確定シフト日数が "&{P}${HC}$9&"日未満の場合は参考値とし、判定を行いません。"',
-            f'="当日遅出・当日早退は、当日にシフトの開始を遅く／終了を早く変更した日数（シフト上の変更で、打刻の遅刻・早退とは別）。欠勤・遅出・早退には店側の都合による変更が含まれることがあります。面談では本人に事情を確認のうえご利用ください。"',
-        ]
-        for i, t in enumerate(notes):
-            rr = top + 2 + i
-            ws.row_dimensions[rr].height = 24
-            ws.merge_cells(f"B{rr}:X{rr}")
-            ws[f"B{rr}"] = t
-            style(ws[f"B{rr}"], size=8.5, color=C_INK2, align="left", valign="top", wrap=True)
-        return top + 5
-
     def monthly_block(top):
         """月別の実績: top=見出し行、top+1 空き、top+2 表見出し、top+3〜 月別6行、その下に合計."""
         ws.row_dimensions[top].height = 30
@@ -1427,7 +1400,7 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
 
     def absence_block(top):
         """欠勤・当日の時間変更の一覧: top=見出し行。top+2 が表見出し、top+3 から ABS_ROWS 行、その下に注記.
-        値は DB計算 の一覧用セル（AF〜AM 60行目〜）を参照する（ダッシュボードとPDF出力で共用）."""
+        値は DB計算 の一覧用セル（AF〜AM 60行目〜）を参照する."""
         ws.row_dimensions[top].height = 18
         section(top, "欠勤（当日に休みへ変更）・当日の時間変更の一覧")
         ws.row_dimensions[top + 1].height = 8
@@ -1568,50 +1541,27 @@ def build_dashboard(wb, maxrows, select=None, pdf=False):
                 style(ws[f"{L(a)}{r}"], size=10, bg="FFFFFF", align="left")
                 for c in range(a, b + 1):
                     ws[f"{L(c)}{r}"].border = Border(bottom=hair)
+        # 注記は1行に収める（縮小印刷では折り返し付きの結合セルが描画されないことがある）
         r = lr2 + nrows + 1
-        ws.row_dimensions[r].height = ws.row_dimensions[r + 1].height = 11
-        ws.merge_cells(f"B{r}:X{r + 1}")
+        ws.row_dimensions[r].height = 14
+        ws.merge_cells(f"B{r}:X{r}")
         ws[f"B{r}"] = (f'=IF({sel}="","",IF(N({P}${HC}$58)>{BUSY_ROWS},'
                        f'"日付は最初の{BUSY_ROWS}日まで（ほか "&(N({P}${HC}$58)-{BUSY_ROWS})&" 日）。",""))'
-                       f'&IF(N({P}${HC}$60)>{RUN_SHOW},"連休は ほか "&(N({P}${HC}$60)-{RUN_SHOW})&" 件あります。","")'
-                       f'&"連休は、土日・祝日・繁忙日が連続して{RUN_MIN}日以上になる期間です（土日だけ、祝日だけのどちらでも成立します）。'
-                       f'判定はその連休のシフト希望の提出率（希望を出した日数 ÷ 連休の日数）で、{RUN_RATE:.0%}以下なら × です。'
-                       f'土日も日数に数えます。「シフト希望未提出」は、その日のシフト希望を出していない日、'
-                       f'「事前に休み等」は、希望は出したが出勤しなかった日（前日までの休み変更・店舗都合）です。'
-                       f'対象の日は「{S_HOL}」シートで追加・削除できます。"')
-        style(ws[f"B{r}"], size=8, color=C_MUTED, align="left", wrap=True)
-        return r + 1
+                       f'&IF(N({P}${HC}$60)>{RUN_SHOW},"連休は ほか "&(N({P}${HC}$60)-{RUN_SHOW})&" 件。","")'
+                       f'&"連休＝土日・祝日・繁忙日が{RUN_MIN}日以上連続する期間。判定は提出率（希望を出した日数 ÷ 連休の日数）が'
+                       f'{RUN_RATE:.0%}以下で ×。土日も日数に数えます。"')
+        style(ws[f"B{r}"], size=8, color=C_MUTED, align="left")
+        return r
 
-    if pdf:
-        # PDF出力: 見出し〜グラフ、月別の実績、欠勤の一覧。集計のきまりは載せない
-        ws.row_dimensions[48].height = 6
-        r = monthly_block(49)
-        ws.row_dimensions[r + 1].height = 12
-        r = absence_block(r + 2)
-        ws.row_dimensions[r + 1].height = 10
-        r = busy_block(r + 2)
-        ws.row_dimensions[r + 1].height = 10
-        print_setup(ws, f"A1:Y{r + 1}")
-        return ws
-
-    # ---- 注記（印刷範囲に含める）
-    ws.row_dimensions[48].height = 12
-    notes_block(49)
-
-    # ---- 画面用: 月別サマリー（印刷範囲外）
-    ws.row_dimensions[55].height = 14
-    monthly_block(56)
-
-    # ---- 欠勤（当日休み変更）の日付一覧
-    ws.row_dimensions[66].height = 16
-    r = absence_block(67)
-
-    # ---- 繁忙日の出勤状況（印刷範囲外）
+    # ---- 月別の実績 → 欠勤・当日の時間変更の一覧 → 繁忙日の出勤状況
+    ws.row_dimensions[48].height = 6
+    r = monthly_block(49)
     ws.row_dimensions[r + 1].height = 12
-    busy_block(r + 2)
-
-    # 印刷はA4縦1枚（見出し〜集計のきまりまで）。月別の実績・欠勤一覧は画面用で印刷範囲外
-    print_setup(ws, "A1:Y54")
+    r = absence_block(r + 2)
+    ws.row_dimensions[r + 1].height = 10
+    r = busy_block(r + 2)
+    ws.row_dimensions[r + 1].height = 6
+    print_setup(ws, f"A1:Y{r + 1}")
     return ws
 
 
@@ -1624,8 +1574,9 @@ def print_setup(ws, area):
     ws.page_setup.fitToHeight = 1
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.print_options.horizontalCentered = True
-    ws.page_margins.left = ws.page_margins.right = 0.5
-    ws.page_margins.top = ws.page_margins.bottom = 0.6
+    ws.page_margins.left = ws.page_margins.right = 0.25
+    ws.page_margins.top = ws.page_margins.bottom = 0.3
+    ws.page_margins.header = ws.page_margins.footer = 0.2
     ws.print_options.verticalCentered = True
     ws.sheet_view.zoomScale = 100
 
@@ -1797,8 +1748,8 @@ def build_howto(wb, maxrows):
         ("1", "シェアフルシフトから1ヶ月分のシフトCSVを出力し、Excelで開きます（ダブルクリックで開けます）。"),
         ("2", "CSVの全体（1行目のヘッダーを含む・列はそのまま）をコピーします。Ctrl+A → Ctrl+C。"),
         ("3", "このブックの「CSV_1」シートのA1セルを選択して貼り付けます（Ctrl+V）。2ヶ月目は「CSV_2」、以降「CSV_3」…「CSV_6」へ。順番は古い月から新しい月の順が見やすいです。"),
-        ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。印刷はA4縦1枚（見出し〜集計のきまりまで）。その下の月別の実績・欠勤の一覧は画面で確認する部分で、必要なら範囲を選択して印刷してください。"),
-        ("5", "PDFにして渡すときは「PDF出力」シートを開き、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。ダッシュボードで選んだスタッフの数字とグラフだけが説明文なしでA4縦1枚になります。下に「月別の実績」と「欠勤の一覧」が付きます。"),
+        ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。見出し・グラフ・月別の実績・欠勤の一覧・繁忙日の出勤状況まで、そのままA4縦1枚に収まります（Ctrl+P で確認できます）。"),
+        ("5", "PDFにして渡すときは「ダッシュボード」シートのまま、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。用紙はA4縦1枚です。"),
         ("6", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値などは「設定」シート、土日祝出勤率で使う祝日・繁忙日の日付は「祝日・繁忙日」シートで変更できます。"),
         ("★", "貼り直すときは、貼付シートの古いデータをすべて削除（Ctrl+A → Delete）してから貼り付けてください。行数が前より少ない月を上書きすると、古い行が残ってしまいます。"),
     ]
@@ -1840,8 +1791,8 @@ def build_howto(wb, maxrows):
         ("勤務時間", "「変更後の開始・終了時間」（無ければ募集時間）から休憩1〜3を引いた、シフト上の時間です。"),
         ("深夜勤務時間", "勤務時間のうち、設定シートの深夜時間帯（既定 22:00〜翌5:00）に重なる時間。スタッフ一覧に表示します。"),
         ("土日祝出勤率", f"土日・祝日・繁忙日に出勤した日数 ÷ 出勤日数。その人の出勤のうち、繁忙日がどれくらいを占めるかを表します。土日は自動判定、祝日と繁忙日（GW・お盆・年末年始など）は「{S_HOL}」シートの日付で判定します。"),
-        ("繁忙日の出勤状況", f"「{S_HOL}」シートに登録した日のうち対象期間に入る日を、出勤／当日欠勤／事前に休み等（前日までの休み変更・店舗都合）／シフト希望未提出（その日のシフト希望を出していない）に分けて数えます。シフトの募集は基本的に毎日あるため、行が1件も無い日は本人が希望を出していない日とみなします（人数の少ない職種では、その日にたまたま誰も入っていないこともあります）。希望未提出の日付はダッシュボード下部と「PDF出力」に一覧で出ます。土日はこの4区分には含めません（土日を含む割合は土日祝出勤率で見ます）。あわせて、土日・祝日・繁忙日が連続して{RUN_MIN}日以上になる期間（土日だけ、祝日だけのどちらでも成立します）を、期間・日数・希望提出・出勤・提出率・判定（○×）の表にします。提出率＝シフト希望を出した日数 ÷ 連休の日数で、{RUN_RATE:.0%}以下なら × です。この判定では土日も日数に数えます。"),
-        ("追加応募", "募集を見て、あとから自分で応募した件数（CSVの「相談応募の開始時間」が入っている行）。シフト作成時にまとめて出す通常のシフト希望とは別に、自分から手を挙げた回数です。確定したかどうかに関わらず「応募した」回数を数えます（店舗側が採らなかった分も含みます）。ダッシュボード下部と「PDF出力」、スタッフ一覧に表示します。"),
+        ("繁忙日の出勤状況", f"「{S_HOL}」シートに登録した日のうち対象期間に入る日を、出勤／当日欠勤／事前に休み等（前日までの休み変更・店舗都合）／シフト希望未提出（その日のシフト希望を出していない）に分けて数えます。シフトの募集は基本的に毎日あるため、行が1件も無い日は本人が希望を出していない日とみなします（人数の少ない職種では、その日にたまたま誰も入っていないこともあります）。希望未提出の日付はダッシュボード下部に一覧で出ます。土日はこの4区分には含めません（土日を含む割合は土日祝出勤率で見ます）。あわせて、土日・祝日・繁忙日が連続して{RUN_MIN}日以上になる期間（土日だけ、祝日だけのどちらでも成立します）を、期間・日数・希望提出・出勤・提出率・判定（○×）の表にします。提出率＝シフト希望を出した日数 ÷ 連休の日数で、{RUN_RATE:.0%}以下なら × です。この判定では土日も日数に数えます。"),
+        ("追加応募", "募集を見て、あとから自分で応募した件数（CSVの「相談応募の開始時間」が入っている行）。シフト作成時にまとめて出す通常のシフト希望とは別に、自分から手を挙げた回数です。確定したかどうかに関わらず「応募した」回数を数えます（店舗側が採らなかった分も含みます）。ダッシュボードの繁忙日の出勤状況と、スタッフ一覧に表示します。"),
         ("当日遅出／当日早退", "確定した勤務シフトが、シフト当日に「変更後の開始時間」を募集の開始より遅く（当日遅出）／「変更後の終了時間」を募集の終了より早く（当日早退）変更された日数。シフト上の変更を数えたもので、打刻による遅刻・早退ではありません。店側の都合による変更も含まれるため、参考情報として一覧に日付・時間を表示します。当日遅出率・当日早退率は各日数 ÷ 確定シフト日数です。"),
         ("総合判定", "出勤率のみを基準にした目安。◎ 良好（設定の基準1以上）／△ 注意（基準2以上）／✕ 要改善（基準2未満）。確定シフト日数が設定の日数未満の人は判定を保留し「参考値」と表示します。"),
         ("順位", "出勤率の高い順。同率は同じ順位（上位の人数＋1）。判定保留の人は順位を出さず「参考」と表示します。"),
@@ -1910,7 +1861,6 @@ def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
     wb.remove(wb.active)
     build_howto(wb, maxrows)
     build_dashboard(wb, maxrows, select=select)
-    build_dashboard(wb, maxrows, pdf=True)
     build_staff_list(wb)
     for k in range(1, NSHEETS + 1):
         path = csv_paths[k - 1] if k - 1 < len(csv_paths) else None
