@@ -182,30 +182,49 @@
   }
   /* ---------------- keynote hero: title first big & centred, then glides into place ---------------- */
   var HERO = { origin: 1, heyday: 1, turning: 1, position: 1, landscape: 1, strengths: 1, legacy: 1, together: 1 };
-  var HERO_HOLD = 1250, HERO_GLIDE = 1100, HERO_CONTENT = 1550;
+  var HERO_RISE = 220, HERO_HOLD = 1300, HERO_GLIDE = 1100, HERO_CONTENT = 2000;
   function heroOf(scene) { return HERO[scene.dataset.id] ? scene.querySelector('.h2.mask') : null; }
   function stagePos(el) {
     var x = 0, y = 0, e = el;
     while (e && e !== stage) { x += e.offsetLeft; y += e.offsetTop; e = e.offsetParent; }
     return { x: x, y: y };
   }
-  function heroCenter(h) {
-    var tw = 0;
-    $$('.ln > span', h).forEach(function (sp) { tw = Math.max(tw, sp.offsetWidth); });
+  function heroCenter(h, scene) {
+    var tw = 0, lines = $$('.ln', h);
+    lines.forEach(function (ln) { var sp = ln.firstElementChild; ln._w = sp ? sp.offsetWidth : 0; tw = Math.max(tw, ln._w); });
+    // the page camera starts at 1.055 on zoom-out pages: aim at the stage centre in camera-local coordinates
+    var cs = scene.dataset.cam === 'out' ? 1.055 : 1;
+    var co = (scene.style.getPropertyValue('--co') || '50% 50%').trim().split(/\s+/);
+    var ox = parseFloat(co[0]) / 100 * 1920, oy = parseFloat(co[1] || co[0]) / 100 * 1080;
+    var cx = ox + (960 - ox) / cs, cy = oy + (515 - oy) / cs;
     var th = h.offsetHeight, p = stagePos(h);
-    var S = Math.min(1.7, 1560 / tw, 600 / th);
-    var dx = 960 - tw * S / 2 - p.x, dy = 515 - th * S / 2 - p.y;
+    var S = Math.min(1.7, 1560 / cs / tw, 600 / cs / th);
+    var dx = cx - tw * S / 2 - p.x, dy = cy - th * S / 2 - p.y;
+    lines.forEach(function (ln) {
+      ln.style.transition = 'none';
+      ln.style.transform = 'translateX(' + ((tw - ln._w) / 2).toFixed(1) + 'px)';
+    });
+    h.style.opacity = '';
     h.style.transition = 'none';
     h.style.transformOrigin = '0 0';
     h.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px) scale(' + S.toFixed(3) + ')';
   }
   function heroGlide(h) {
-    h.style.transition = 'transform ' + HERO_GLIDE + 'ms cubic-bezier(.62, 0, .22, 1)';
+    var ease = HERO_GLIDE + 'ms cubic-bezier(.62, 0, .22, 1)';
+    h.style.transition = 'transform ' + ease;
     h.style.transform = '';
-    later(function () { h.style.transition = ''; h.style.transformOrigin = ''; }, HERO_GLIDE + 60);
+    $$('.ln', h).forEach(function (ln) { ln.style.transition = 'transform ' + ease; ln.style.transform = ''; });
+    later(function () {
+      h.style.transition = ''; h.style.transformOrigin = '';
+      $$('.ln', h).forEach(function (ln) { ln.style.transition = ''; });
+    }, HERO_GLIDE + 60);
   }
   function heroClear(scene) {
-    $$('.h2.mask', scene).forEach(function (h) { h.style.transition = ''; h.style.transform = ''; h.style.transformOrigin = ''; });
+    scene._heroPending = false;
+    $$('.h2.mask', scene).forEach(function (h) {
+      h.style.transition = ''; h.style.transform = ''; h.style.transformOrigin = ''; h.style.opacity = '';
+      $$('.ln', h).forEach(function (ln) { ln.style.transition = ''; ln.style.transform = ''; });
+    });
   }
 
   function resetScene(scene) {
@@ -232,6 +251,18 @@
 
     if (idx === state.idx && prev.classList.contains('is-active')) {
       // same scene: step change
+      if (opts.instant || reduced) {
+        clearTimers();
+        next.classList.add('instant');
+        heroClear(next);
+        applyStep(next, step, true);
+        void next.offsetWidth;
+        next.classList.remove('instant');
+        Canvases.start(next, true);
+        state.step = step;
+        afterChange();
+        return;
+      }
       if (step < state.step) {
         next.classList.add('instant');
         applyStep(next, step, true);
@@ -239,6 +270,7 @@
         next.classList.remove('instant');
       } else {
         var h = heroOf(next);
+        if (next._heroPending) { next._heroPending = false; Canvases.start(next, false); }
         if (h && h.style.transform) heroGlide(h);
         applyStep(next, step, false);
       }
@@ -258,6 +290,9 @@
         var p = prev;
         p.classList.remove('is-active');
         if (curtainCut) { p.classList.remove('exit'); Canvases.stop(p); resetScene(p); return; }
+        var ph = heroOf(p);
+        if (ph && ph.style.transform) { ph.style.transition = 'opacity .18s ease'; ph.style.opacity = '0'; }
+        p._heroPending = false;
         p.classList.add('is-out');
         Canvases.stop(p);
         clearTimeout(p._outId);
@@ -285,14 +320,16 @@
         next.classList.remove('instant');
         if (curtainCut) next.style.transition = 'none';
         var hero = !curtainCut && step === 1 ? heroOf(next) : null;
-        if (hero) heroCenter(hero);
+        if (hero) heroCenter(hero, next);
         next.classList.add('is-active');
         if (curtainCut) { void next.offsetWidth; next.style.transition = ''; }
         if (hero) {
-          requestAnimationFrame(function () { if (scenes[state.idx] === next) hero.classList.add('go'); });
-          later(function () { if (scenes[state.idx] === next) heroGlide(hero); }, HERO_HOLD);
+          next._heroPending = true;
+          later(function () { if (scenes[state.idx] === next) hero.classList.add('go'); }, HERO_RISE);
+          later(function () { if (scenes[state.idx] === next && hero.style.transform) heroGlide(hero); }, HERO_HOLD);
           later(function () {
-            if (scenes[state.idx] !== next) return;
+            if (scenes[state.idx] !== next || !next._heroPending) return;
+            next._heroPending = false;
             applyStep(next, state.step, false);
             Canvases.start(next, false);
           }, HERO_CONTENT);
