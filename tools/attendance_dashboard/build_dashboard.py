@@ -15,6 +15,7 @@ import re
 
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, DoughnutChart, Reference
+from openpyxl.chart._chart import ChartBase
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.layout import Layout, ManualLayout
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
@@ -177,6 +178,55 @@ def busy_days():
     if len(out) > HOL_ROWS:
         raise ValueError(f"祝日・繁忙日が {len(out)} 件で上限 {HOL_ROWS} 件を超えています。HOL_ROWS を増やしてください。")
     return out
+
+
+def unify_fonts(wb):
+    """ブック全体のフォントを Meiryo UI に統一する。
+
+    openpyxl の既定テーマは日本語＝ＭＳ Ｐゴシック、簡体字＝宋体、繁体字＝新細明體 を持ち、
+    明示的にフォントを指定していない文字（標準スタイル・グラフの既定文字）が
+    環境によって中国語字形の漢字で表示されることがある。
+    そこで「標準」スタイルのフォントと、テーマの見出し・本文フォント（欧文・和文・複雑文字）を
+    すべて Meiryo UI にし、言語別フォントの一覧そのものを削除する。
+    """
+    from openpyxl.writer.theme import theme_xml                # openpyxl 既定のテーマ
+    f0 = wb._fonts[0]                                          # 「標準」スタイル＝フォント0
+    f0.name, f0.family, f0.scheme = FONT, 3, None
+    scheme = (f'<a:latin typeface="{FONT}"/><a:ea typeface="{FONT}"/><a:cs typeface="{FONT}"/>')
+    theme = re.sub(r"(<a:(?:major|minor)Font>).*?(</a:(?:major|minor)Font>)",
+                   lambda m: m.group(1) + scheme + m.group(2), theme_xml, flags=re.S)
+    wb.loaded_theme = theme.encode("utf-8")
+    for ws in wb.worksheets:
+        # 既定フォントが変わると Excel は既定の行の高さを計算し直す。
+        # 高さを指定していない行が伸びてレイアウトが崩れないよう、15ポイントで固定する。
+        ws.sheet_format.defaultRowHeight = 15
+        ws.sheet_format.customHeight = True
+    return wb
+
+
+def set_comment_font(path):
+    """保存済みブックのコメント（セルの吹き出し）の文字も Meiryo UI にする。
+
+    openpyxl はコメント本文にフォントを書かないため、Excel の既定（Tahoma）で表示され、
+    日本語は環境まかせの代替フォントになる。保存後に書式（rPr）を差し込んで揃える。
+    """
+    import shutil
+    import zipfile
+    rpr = f'<rPr><sz val="9"/><color indexed="81"/><rFont val="{FONT}"/><family val="3"/><charset val="128"/></rPr>'
+    src = zipfile.ZipFile(path)
+    tmp = str(path) + ".fonttmp"
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
+        for item in src.infolist():
+            data = src.read(item.filename)
+            if item.filename.startswith("xl/comments/"):
+                text = data.decode("utf-8")
+                text = re.sub(r"<text><t>(.*?)</t></text>",
+                              lambda m: f'<text><r>{rpr}<t xml:space="preserve">{m.group(1)}</t></r></text>',
+                              text, flags=re.S)
+                data = text.encode("utf-8")
+            out.writestr(item, data)
+    src.close()
+    shutil.move(tmp, path)
 
 
 def font(size=10, bold=False, color=C_INK, italic=False):
@@ -750,6 +800,29 @@ def chart_text(size=9, bold=False, color=None):
     if color:
         cp.solidFill = color
     return RichText(p=[Paragraph(pPr=ParagraphProperties(defRPr=cp), endParaRPr=cp)])
+
+
+def _chart_default_font():
+    """グラフ全体（chartSpace）の既定の文字。
+
+    openpyxl はグラフ本体に既定フォントを書き出さないため、軸やラベルで
+    個別に指定していない文字がテーマのフォント（＝環境によっては中国語字形）になる。
+    保存時に chartSpace の txPr を差し込んで、グラフ内のすべての文字を Meiryo UI にする。
+    """
+    _write = ChartBase._write
+
+    def _write_with_font(self):
+        tree = _write(self)                      # chartSpace 要素（lxml）
+        ns = tree.tag[:tree.tag.index("}") + 1] if "}" in tree.tag else ""
+        txpr = chart_text(9).to_tree(tagname=ns + "txPr")
+        sppr = tree.find(ns + "spPr")            # スキーマ上 txPr は spPr の直後
+        tree.insert(list(tree).index(sppr) + 1 if sppr is not None else len(tree), txpr)
+        return tree
+
+    ChartBase._write = _write_with_font
+
+
+_chart_default_font()
 
 
 def build_dashboard(wb, maxrows, select=None):
@@ -1883,7 +1956,9 @@ def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
     for name in [S_ROSTER, S_DBCALC] + [S_CALC.format(k) for k in range(1, NSHEETS + 1)]:
         wb[name].sheet_state = "hidden"
     wb.active = wb.sheetnames.index(S_DASH)
+    unify_fonts(wb)
     wb.save(output)
+    set_comment_font(output)
     return output
 
 

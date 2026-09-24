@@ -1,7 +1,7 @@
 @page { size: A4; margin: 0; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-body { font-family: "Yu Gothic", "Meiryo", "IPAPGothic", "Noto Sans CJK JP", sans-serif; color: #222; font-size: 10.5px; line-height: 1.45; }
+body { font-family: "Meiryo UI", "Meiryo", "Yu Gothic", "IPAPGothic", "Noto Sans CJK JP", sans-serif; color: #222; font-size: 10.5px; line-height: 1.45; }
 .page { width: 210mm; height: 297mm; padding: 0 0 8mm 0; page-break-after: always; position: relative; overflow: hidden; }
 .page:last-child { page-break-after: auto; }
 .titlebar { background: #1f3a5f; color: #fff; padding: 9mm 12mm 6mm; font-size: 20px; font-weight: bold; letter-spacing: .5px; }
