@@ -359,6 +359,10 @@
       return cue + '<span class="' + cls + '">' + esc(s).replace(/\n/g, '<br>') + '</span>';
     }).join('');
   }
+  function notesHTML(d) {
+    return (d.hints || []).map(function (h) { return '<div class="hint">▸ ' + esc(h) + '</div>'; }).join('') +
+      (d.flags || []).map(function (f) { return '<div class="flag">⚠ 要確認：' + esc(f) + '</div>'; }).join('');
+  }
   function label(i) {
     var s = scenes[i];
     return (s.dataset.no ? s.dataset.no + ' ' : '') + s.dataset.title;
@@ -421,7 +425,7 @@
     $('#n-target').textContent = '目標 ' + (d.seconds || 0) + '秒 ・ ステップ ' + state.step + '/' + stepsOf(i);
     $('#n-text').innerHTML = state.started ? scriptHTML(i, state.step) : '<span class="seg now">→ キー／クリックでカウントダウンが始まり、表紙が出ます。</span>';
     $('#n-next').textContent = i < N - 1 ? '次：' + label(i + 1) : '最後のシーンです';
-    $('#n-flags').innerHTML = (d.flags || []).map(function (f) { return '⚠ ' + esc(f); }).join('<br>');
+    $('#n-flags').innerHTML = notesHTML(d);
     renderTimers();
   }
   function renderTimers() {
@@ -470,7 +474,7 @@
     '.track{height:6px;background:#1d2027;border-radius:3px;overflow:hidden}#p-bar{height:100%;width:0;background:#cfae6b;transition:width .25s}#p-bar.over{background:#e3262e}',
     '#p-scene{font-size:14px;color:#c9c7c1}',
     '#p-next{font-size:15px;line-height:1.6;color:#d3d0c8}',
-    '#p-flags{font-size:13px;line-height:1.6;color:#cfae6b}',
+    '#p-flags{font-size:13px;line-height:1.6}#p-flags .hint{color:#9fd3ff;margin-bottom:6px}#p-flags .flag{color:#cfae6b;margin-bottom:6px}',
     '#p-clock{font-family:"Inter Tight",Arial,sans-serif;font-size:22px;color:#8e9099;margin-top:auto}',
     'footer{display:flex;gap:10px;padding:12px 20px;border-top:1px solid #23262d}',
     'button{font:inherit;font-size:15px;color:#f5f2ea;background:#1b1e25;border:1px solid #353944;border-radius:10px;padding:10px 16px;cursor:pointer}',
@@ -514,7 +518,7 @@
     var tx = d.getElementById('p-text');
     if (tx) tx.innerHTML = state.started ? scriptHTML(i, state.step) : '<span class="seg now">待機画面です。→ でカウントダウン → 表紙。表紙が出たら話し始めてください。</span>';
     var nx = d.getElementById('p-next'); if (nx) nx.textContent = i < N - 1 ? label(i + 1) : '（最後のシーン）';
-    var fl = d.getElementById('p-flags'); if (fl) fl.innerHTML = (sd.flags || []).map(function (f) { return '⚠ ' + esc(f); }).join('<br>');
+    var fl = d.getElementById('p-flags'); if (fl) fl.innerHTML = notesHTML(sd);
     renderTimers();
   }
 
@@ -527,7 +531,7 @@
       var d = sceneData(i); var sec = d.seconds || 0; var st = cum; cum += sec; total += sec;
       var c = (d.text || '').replace(/［▶］|\s/g, '').length; chars += c;
       var body = segments(i).map(function (seg, k) { return (k ? '<span class="cue">▶ クリック</span>' : '') + esc(seg).replace(/\n/g, '<br>'); }).join('');
-      var fl = (d.flags || []).map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('');
+      var fl = (d.hints || []).map(function (h) { return '<li class="h">話し方：' + esc(h) + '</li>'; }).join('') + (d.flags || []).map(function (f) { return '<li>要確認：' + esc(f) + '</li>'; }).join('');
       return '<section><div class="h"><span class="no">' + (s.dataset.no || 'COVER') + '</span><span class="tt">' + esc(s.dataset.title) + '</span>' +
         '<span class="tm">' + fmt(st) + '〜' + fmt(cum) + '（' + sec + '秒・' + c + '字）</span></div><p>' + body + '</p>' + (fl ? '<ul>' + fl + '</ul>' : '') + '</section>';
     }).join('');
@@ -540,7 +544,7 @@
       '.h{display:flex;gap:12px;align-items:baseline}.no{font-weight:800;color:#c8141c;letter-spacing:.1em;min-width:64px}.tt{font-weight:700}.tm{margin-left:auto;color:#666;font-size:12px;white-space:nowrap}',
       'p{margin-top:8px;font-size:16px}',
       '.cue{display:inline-block;margin:0 6px;padding:0 6px;border:1px solid #c8141c;color:#c8141c;border-radius:4px;font-size:11px;font-weight:700;vertical-align:2px}',
-      'ul{margin:8px 0 0 18px;color:#8a6d1f;font-size:12px}',
+      'ul{margin:8px 0 0 18px;color:#8a6d1f;font-size:12px}ul li.h{color:#2b6a9e}',
       '@media print{.bar{display:none}body{padding:0}}'
     ].join('\n');
     w.document.open();

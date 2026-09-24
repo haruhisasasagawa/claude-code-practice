@@ -20,15 +20,14 @@ def chars(text: str) -> int:
 
 
 scenes = {s["id"]: s for s in data["scenes"]}
-flags = {}
-for f in data.get("flags", []):
-    flags.setdefault(f["id"], []).append(f["note"])
+flags = {s["id"]: s.get("flags", []) for s in data["scenes"]}
+hints = {s["id"]: s.get("hints", []) for s in data["scenes"]}
 
 # --- script-data.js (read by the deck for presenter view / notes / print) ---
 js_scenes = {}
 for sid in ORDER:
     s = scenes[sid]
-    js_scenes[sid] = {"title": s["title"], "seconds": s["seconds"], "text": s["script"], "flags": flags.get(sid, [])}
+    js_scenes[sid] = {"title": s["title"], "seconds": s["seconds"], "text": s["script"], "flags": flags.get(sid, []), "hints": hints.get(sid, [])}
 target = sum(s["seconds"] for s in js_scenes.values())
 js = ("/* 台本データ — gen_script.py が script.json から生成（直接編集せず script.json を直す） */\n"
       "window.TALK = " + json.dumps({"target": target, "scenes": js_scenes}, ensure_ascii=False, indent=1) + ";\n")
@@ -52,9 +51,11 @@ for i, sid in enumerate(ORDER):
     s = scenes[sid]
     start = cum
     cum += s["seconds"]
-    no = "表紙" if i == 0 else f"{i:02d}"
+    no = s.get("no") or ("表紙" if i == 0 else f"{i:02d}")
     lines.append(f"■ {no}　{s['title']}　（{mmss(start)}〜{mmss(cum)}／{s['seconds']}秒・{chars(s['script'])}字）")
     lines.append(s["script"].replace(CUE, "\n　［▶ クリック］\n"))
+    for h in hints.get(sid, []):
+        lines.append(f"　◇話し方：{h}")
     for f in flags.get(sid, []):
         lines.append(f"　※要確認：{f}")
     lines.append("")
