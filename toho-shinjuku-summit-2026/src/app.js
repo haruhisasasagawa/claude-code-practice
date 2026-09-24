@@ -13,7 +13,8 @@
   var timers = [];           // pending timeouts for the current scene
   var clock = { t0: 0, sceneT0: 0, running: false };
   var presenter = null;      // popup window
-  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var swapId = 0, lastNav = 0;
+  var reduced = false;           // calm mode (M key)
 
   /* ---------------- helpers ---------------- */
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -221,7 +222,8 @@
         if (trans === 'wipe') { resetScene(p); Canvases.stop(p); return; }
         p.classList.add('is-out');
         Canvases.stop(p);
-        setTimeout(function () { p.classList.remove('is-out'); if (!p.classList.contains('is-active')) resetScene(p); }, 650);
+        clearTimeout(p._outId);
+        p._outId = setTimeout(function () { p.classList.remove('is-out'); if (!p.classList.contains('is-active')) resetScene(p); }, 650);
       }
     };
 
@@ -229,6 +231,7 @@
     clock.sceneT0 = performance.now();
 
     var enter = function () {
+      clearTimeout(next._outId); next.classList.remove('is-out');
       resetScene(next);
       if (instant) {
         next.classList.add('instant');
@@ -245,18 +248,23 @@
         if (trans === 'wipe') next.style.transition = 'none';
         next.classList.add('is-active');
         if (trans === 'wipe') { void next.offsetWidth; next.style.transition = ''; }
-        requestAnimationFrame(function () { applyStep(next, step, false); });
+        requestAnimationFrame(function () { if (scenes[state.idx] === next) applyStep(next, state.step, false); });
       }
       Canvases.start(next, instant);
     };
-    if (swapDelay) { state.busy = true; setTimeout(function () { leave(); enter(); state.busy = false; }, swapDelay); }
+    if (swapDelay) { state.busy = true; clearTimeout(swapId); swapId = setTimeout(function () { leave(); enter(); state.busy = false; }, swapDelay); }
     else { leave(); enter(); }
     afterChange();
   }
 
   /* ---------------- navigation ---------------- */
+  function navOK() {
+    if (document.body.classList.contains('black')) { toggleBlack(); return false; }
+    var now = performance.now(); if (now - lastNav < 200) return false; lastNav = now; return true;
+  }
   function next() {
     if (state.busy) return;
+    if (!navOK()) return;
     if (!state.started) { startShow(); return; }
     if (Countdown.running) { Countdown.skip(); return; }
     var steps = stepsOf(state.idx);
@@ -265,6 +273,7 @@
   }
   function prev() {
     if (state.busy || !state.started || Countdown.running) return;
+    if (!navOK()) return;
     if (state.step > 1) show(state.idx, state.step - 1);
     else if (state.idx > 0) show(state.idx - 1, stepsOf(state.idx - 1), { back: true, instant: true });
     else backToStandby();
@@ -273,7 +282,7 @@
     if (state.busy) return;
     idx = Math.max(0, Math.min(N - 1, idx));
     step = Math.max(1, Math.min(stepsOf(idx), step || 1));
-    if (!state.started) { enterShow(); }
+    if (!state.started) { enterShow(); if (!clock.running) startClock(); }
     show(idx, step, { instant: true, back: true });
   }
 
@@ -281,14 +290,16 @@
     state.started = true;
     document.body.classList.remove('pre');
     $('#standby').classList.add('hide');
-    if (!clock.running) startClock();
   }
   function startShow() {
     enterShow();
-    Countdown.play(function () { show(0, 1); });
+    Countdown.play(function () { startClock(); show(0, 1); });
   }
   function backToStandby() {
     clearTimers();
+    clearTimeout(swapId); state.busy = false;
+    if (Countdown.running) Countdown.cancel();
+    clock.running = false;
     scenes.forEach(function (s) { s.classList.remove('is-active', 'is-out'); resetScene(s); Canvases.stop(s); });
     state.started = false; state.idx = 0; state.step = 1;
     document.body.classList.add('pre');
@@ -324,7 +335,8 @@
       $('#countdown').classList.remove('run'); document.body.classList.remove('counting');
       var d = this.done; this.done = null; if (d) d();
     },
-    skip: function () { this.finish(); }
+    skip: function () { this.finish(); },
+    cancel: function () { this.done = null; this.finish(); }
   };
 
   /* ---------------- clock / pacing ---------------- */
@@ -461,7 +473,7 @@
     'header{display:flex;align-items:baseline;gap:18px;padding:16px 26px;border-bottom:1px solid #23262d}',
     'header .no{font-family:"Inter Tight",Arial,sans-serif;font-weight:800;color:#e3262e;letter-spacing:.18em}',
     'header .tt{font-size:20px;font-weight:700}',
-    'header .st{margin-left:auto;color:#8e9099;font-size:14px}',
+    'header .st{margin-left:auto;color:#8e9099;font-size:14px}#p-black{display:none;color:#fff;background:#e3262e;border-radius:6px;padding:2px 10px;font-size:14px;font-weight:700}',
     'main{display:grid;grid-template-columns:1fr 380px;min-height:0}',
     '#p-text{padding:26px 34px;font-size:clamp(20px,3.1vh,34px);line-height:1.8;overflow:auto}',
     '.seg{color:#595c64}.seg.now{color:#fff}.seg.done{color:#8a8d95}',
@@ -471,7 +483,7 @@
     '#p-elapsed{font-family:"Inter Tight",Arial,sans-serif;font-weight:800;font-size:72px;line-height:1;font-variant-numeric:tabular-nums}',
     '#p-left{color:#8e9099;font-size:15px}',
     '.pace{font-size:18px;font-weight:700}.pace.late{color:#ff5a60}.pace.ok{color:#7fd49b}',
-    '.track{height:6px;background:#1d2027;border-radius:3px;overflow:hidden}#p-bar{height:100%;width:0;background:#cfae6b;transition:width .25s}#p-bar.over{background:#e3262e}',
+    '.track{flex-shrink:0;height:6px;background:#1d2027;border-radius:3px;overflow:hidden}#p-bar{height:100%;width:0;background:#cfae6b;transition:width .25s}#p-bar.over{background:#e3262e}',
     '#p-scene{font-size:14px;color:#c9c7c1}',
     '#p-next{font-size:15px;line-height:1.6;color:#d3d0c8}',
     '#p-flags{font-size:13px;line-height:1.6}#p-flags .hint{color:#9fd3ff;margin-bottom:6px}#p-flags .flag{color:#cfae6b;margin-bottom:6px}',
@@ -490,7 +502,7 @@
     var fontCSS = (document.getElementById('font-data') || {}).textContent || '';
     w.document.open();
     w.document.write('<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>発表者ビュー｜TOHOシネマズ新宿</title><style>' + fontCSS + '\n' + PRESENTER_CSS + '</style></head><body>' +
-      '<header><span class="no" id="p-no"></span><span class="tt" id="p-title"></span><span class="st" id="p-step"></span></header>' +
+      '<header><span class="no" id="p-no"></span><span class="tt" id="p-title"></span><span id="p-black">● 暗転中（次へ で解除）</span><span class="st" id="p-step"></span></header>' +
       '<main><div id="p-text"></div><aside>' +
       '<div class="lbl">ELAPSED</div><div id="p-elapsed">0:00</div><div id="p-left"></div><div id="p-pace" class="pace"></div>' +
       '<div class="lbl" style="margin-top:8px">SCENE</div><div class="track"><div id="p-bar"></div></div><div id="p-scene"></div>' +
@@ -500,7 +512,9 @@
       '<span class="h">このウィンドウでも → ← PageUp/Down で操作できます</span>' +
       '<button data-a="reset">タイマー リセット</button><button data-a="black">暗転</button></footer></body></html>');
     w.document.close();
-    w.document.addEventListener('keydown', onKey);
+    w.document.addEventListener('keydown', function (e) {
+      if (/^(ArrowRight|ArrowLeft|ArrowUp|ArrowDown|PageUp|PageDown| |Enter|Backspace|Home|End|b|B|\.|w|W|t|T|[0-9])$/.test(e.key)) onKey(e);
+    });
     w.document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('button'); if (!a) return;
       var act = a.getAttribute('data-a');
@@ -512,7 +526,9 @@
     if (!presenter || presenter.closed) return;
     var d = presenter.document, i = state.idx, sd = sceneData(i);
     var set = function (id, v) { var e = d.getElementById(id); if (e) e.textContent = v; };
-    set('p-no', state.started ? ((scenes[i].dataset.no || 'COVER') + ' / ' + scenes[N - 1].dataset.no) : 'STANDBY');
+    var pno = scenes[i].dataset.no2 && state.step >= 2 ? scenes[i].dataset.no2 : scenes[i].dataset.no;
+    set('p-no', state.started ? ((pno || '表紙') + ' / ' + scenes[N - 1].dataset.no) : 'STANDBY');
+    var bl = d.getElementById('p-black'); if (bl) bl.style.display = document.body.classList.contains('black') ? 'block' : 'none';
     set('p-title', scenes[i].dataset.title);
     set('p-step', 'ステップ ' + state.step + ' / ' + stepsOf(i) + '　目標 ' + (sd.seconds || 0) + '秒');
     var tx = d.getElementById('p-text');
@@ -572,7 +588,7 @@
 
   /* ---------------- misc toggles ---------------- */
   function toggle(cls) { document.body.classList.toggle(cls); if (cls === 'over') renderOverview(); }
-  function toggleBlack() { document.body.classList.toggle('black'); }
+  function toggleBlack() { document.body.classList.toggle('black'); renderPresenter(); }
   function toggleFull() {
     var d = document;
     if (!d.fullscreenElement && !d.webkitFullscreenElement) {
@@ -595,6 +611,7 @@
   function onKey(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target && e.target.tagName === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return;
+    if (e.repeat && /^(ArrowRight|ArrowLeft|ArrowUp|ArrowDown|PageUp|PageDown| |Enter|Backspace)$/.test(e.key)) { e.preventDefault(); return; }
     var k = e.key, body = document.body;
     if (body.classList.contains('help') && (k === 'Escape' || k === '?' || k === 'h' || k === 'H')) { toggle('help'); e.preventDefault(); return; }
     if (body.classList.contains('over') && (k === 'Escape' || k === 'o' || k === 'O')) { toggle('over'); e.preventDefault(); return; }
@@ -604,7 +621,14 @@
         e.preventDefault(); next(); break;
       case 'Enter':
         e.preventDefault();
-        if (jumpBuf) { var n = parseInt(jumpBuf, 10); jumpBuf = ''; goto(n, 1); } else next();
+        if (jumpBuf) {
+          var n = parseInt(jumpBuf, 10); jumpBuf = '';
+          scenes.some(function (sc, i) {
+            if (parseInt(sc.dataset.no || '0', 10) === n) { goto(i, 1); return true; }
+            if (parseInt(sc.dataset.no2 || '0', 10) === n) { goto(i, 2); return true; }
+            return false;
+          });
+        } else next();
         break;
       case 'ArrowLeft': case 'ArrowUp': case 'PageUp': case 'Backspace':
         e.preventDefault(); prev(); break;
@@ -617,6 +641,7 @@
       case 'b': case 'B': case '.': case 'w': case 'W': e.preventDefault(); toggleBlack(); break;
       case 't': case 'T': e.preventDefault(); resetClock(); break;
       case 'd': case 'D': e.preventDefault(); openScript(); break;
+      case 'm': case 'M': e.preventDefault(); reduced = !reduced; document.body.classList.toggle('calm', reduced); toast(reduced ? '動きを控えめにしました（M で戻す）' : '動きを通常に戻しました'); break;
       case '?': case 'h': case 'H': e.preventDefault(); toggle('help'); break;
       case 'Escape': if (body.classList.contains('black')) toggleBlack(); break;
     }
@@ -632,9 +657,13 @@
   var idleId = 0;
   function wake() {
     document.body.classList.remove('idle'); clearTimeout(idleId);
-    idleId = setTimeout(function () { document.body.classList.add('idle'); }, 2500);
+    idleId = setTimeout(function () { if (!onCtrl) document.body.classList.add('idle'); }, 2500);
   }
   document.addEventListener('mousemove', wake);
+  document.addEventListener('mousedown', wake);
+  var ctrlEl = $('#ctrl'), onCtrl = false;
+  ctrlEl.addEventListener('mouseenter', function () { onCtrl = true; });
+  ctrlEl.addEventListener('mouseleave', function () { onCtrl = false; wake(); });
   document.addEventListener('touchstart', wake, { passive: true });
   // keyboard / presentation remote: keep the controls and cursor out of the way
   document.addEventListener('keydown', function () { clearTimeout(idleId); document.body.classList.add('idle'); });
@@ -741,13 +770,17 @@
       });
       if (mode === 'jam') {
         var crowd = ps.filter(function (p) { return p.st === 0 && p.x > wallX - 160; }).length;
-        ctx.font = '700 22px "Inter Tight", Arial, sans-serif'; ctx.fillStyle = 'rgba(227,38,46,.95)'; ctx.textAlign = 'right';
-        ctx.fillText('WAITING ' + crowd, W - 10, 40);
+        ctx.font = '700 22px "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif'; ctx.fillStyle = 'rgba(227,38,46,.95)'; ctx.textAlign = 'right';
+        ctx.fillText('混雑のイメージ', W - 10, 40);
       }
     }
     Canvases.register('renewal', {
-      enter: function (step) { mode = step >= 2 ? 'flow' : 'jam'; ps = []; T = 0; setGates(); for (var i = 0; i < (mode === 'jam' ? 540 : 120); i++) update(1 / 30); draw(); },
-      step: function (step) { var m = step >= 2 ? 'flow' : 'jam'; if (m !== mode) { mode = m; setGates(); } },
+      enter: function (step) { mode = step >= 2 ? 'flow' : 'jam'; ps = []; T = 0; setGates(); for (var i = 0; i < (mode === 'jam' ? 300 : 60); i++) update(1 / 16); draw(); },
+      step: function (step) {
+        var m = step >= 2 ? 'flow' : 'jam'; if (m === mode) return;
+        mode = m; setGates();
+        if (m === 'jam' && ps.filter(function (p) { return p.st === 0; }).length < 20) { for (var i = 0; i < 300; i++) update(1 / 16); }
+      },
       update: update, draw: draw
     });
   })();
