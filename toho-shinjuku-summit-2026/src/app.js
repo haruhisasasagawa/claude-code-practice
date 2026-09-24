@@ -216,14 +216,12 @@
 
     clearTimers();
     var trans = opts.back || instant ? 'none' : (next.dataset.trans || 'fade');
-    var swapDelay = trans === 'wipe' ? 600 : 0;
-    if (trans === 'wipe') playOverlay('wipe', 1400);
+    var swapDelay = 0;
 
     var leave = function () {
       if (prev && prev !== next && prev.classList.contains('is-active')) {
         var p = prev;
         p.classList.remove('is-active');
-        if (trans === 'wipe') { resetScene(p); Canvases.stop(p); return; }
         p.classList.add('is-out');
         Canvases.stop(p);
         clearTimeout(p._outId);
@@ -249,9 +247,7 @@
         next.dataset.at = step;
         void next.offsetWidth;
         next.classList.remove('instant');
-        if (trans === 'wipe') next.style.transition = 'none';
         next.classList.add('is-active');
-        if (trans === 'wipe') { void next.offsetWidth; next.style.transition = ''; }
         requestAnimationFrame(function () { if (scenes[state.idx] === next) applyStep(next, state.step, false); });
       }
       Canvases.start(next, instant);
@@ -834,6 +830,10 @@
     });
     // embers for the closing card
     var ecv = $('.together canvas.embers'), ectx = ecv.getContext('2d'), embers = [];
+    var endEl = $('.together .end'), sweepT = -1;
+    function setSp(v) { endEl.style.setProperty('--sp', v.toFixed(2) + '%'); }
+    function openNow() { sweepT = -1; setSp(0); endEl.classList.add('opened'); }
+    function closeEnd() { sweepT = -1; setSp(50); endEl.classList.remove('opened'); }
     function emberUpdate(dt) {
       while (embers.length < 110) embers.push({ x: Math.random() * 1920, y: 1080 + Math.random() * 400, v: 40 + Math.random() * 90, r: 1 + Math.random() * 2.6, ph: Math.random() * 6.28, life: 0 });
       embers.forEach(function (m) { m.y -= m.v * dt; m.x += Math.sin(m.ph + m.y / 90) * 14 * dt; m.life += dt; });
@@ -849,7 +849,16 @@
       });
     }
     function update(dt, t) {
-      if (stepNow >= 2) { emberUpdate(dt); return; }
+      if (stepNow >= 2) {
+        if (sweepT >= 0) {
+          sweepT += dt;
+          var p = Math.max(0, Math.min(1, (sweepT - 0.9) / 1.6));
+          var e = p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+          setSp(50 - 50 * e);
+          if (p >= 1) { sweepT = -1; endEl.classList.add('opened'); }
+        }
+        emberUpdate(dt); return;
+      }
       tIn += dt; acc += dt;
       nodes.forEach(function (n) { if (n.flash) n.flash = Math.max(0, n.flash - dt * 1.2); });
       nodes.forEach(function (n) { n.x = n.bx + Math.sin(t * .5 + n.ph) * (n.hub ? 2 : 5); n.y = n.by + Math.cos(t * .4 + n.ph) * (n.hub ? 2 : 5); });
@@ -917,8 +926,12 @@
       });
     }
     Canvases.register('together', {
-      enter: function (step, instant) { stepNow = step; tIn = instant ? 5 : 0; pulses = []; embers = []; },
-      step: function (step) { stepNow = step; if (step < 2) ectx.clearRect(0, 0, 1920, 1080); },
+      enter: function (step, instant) { stepNow = step; tIn = instant ? 5 : 0; pulses = []; embers = []; if (step >= 2) openNow(); else closeEnd(); },
+      step: function (step) {
+        var was = stepNow; stepNow = step;
+        if (step < 2) { ectx.clearRect(0, 0, 1920, 1080); closeEnd(); }
+        else if (was < 2) { if (reduced) openNow(); else { closeEnd(); sweepT = 0; } }
+      },
       update: update, draw: draw
     });
   })();
