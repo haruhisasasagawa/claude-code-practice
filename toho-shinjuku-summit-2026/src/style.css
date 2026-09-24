@@ -717,7 +717,7 @@ body.idle #ctrl, body.pre #ctrl, body.counting #ctrl { opacity: 0; pointer-event
 .turning .shift .yr.go { transition-delay: 3.2s; }
 
 /* rebirth — godzilla roar */
-.rebirth .tile.gz.go { animation: roar .9s linear 2.3s both; }
+.rebirth .tile.gz.go { animation: roar .9s linear 4.0s both; }
 @keyframes roar {
   0%, 100% { transform: none; }
   10% { transform: translate(-6px, 3px) rotate(-.4deg); } 20% { transform: translate(6px, -4px) rotate(.4deg); }
@@ -822,3 +822,28 @@ body.calm .punch.go { animation: none !important; opacity: 1; transform: none; f
   display: flex; align-items: center; justify-content: center; font-family: var(--en); font-weight: 800; font-size: 30px; color: var(--gold2); box-shadow: 0 0 30px rgba(207,174,107,.35); letter-spacing: .1em; }
 .together .end.opened .split2 { opacity: 0; }
 .together .end .copy, .together .end .credit { z-index: 4; }
+
+/* rebirth — the curtain that closed on page 03 opens on the new era */
+.rebirth .opener { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.rebirth .opener.rv { opacity: 1; transform: none; }
+.rebirth .opener i { position: absolute; top: 0; bottom: 0; width: 51%;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.25), transparent 30%, rgba(0,0,0,.55)),
+    repeating-linear-gradient(90deg, #4a070b 0 22px, #7d0f15 44px, #a3161d 70px, #7d0f15 96px, #4a070b 118px);
+  box-shadow: inset 0 0 120px rgba(0,0,0,.7); filter: brightness(.55);
+  transition: transform 1.7s cubic-bezier(.65, 0, .3, 1) 1.6s, filter .8s ease 1.2s; }
+.rebirth .opener .l { left: 0; transform-origin: 0 50%; }
+.rebirth .opener .r { right: 0; transform-origin: 100% 50%; }
+.rebirth .opener.go .l { transform: translateX(-102%) scaleX(.85); filter: brightness(.9); }
+.rebirth .opener.go .r { transform: translateX(102%) scaleX(.85); filter: brightness(.9); }
+.rebirth .opener .val { position: absolute; left: 0; right: 0; top: 0; height: 90px; z-index: 1;
+  background: repeating-linear-gradient(90deg, #5c0a0f 0 30px, #8a1118 60px), #6b0c12; box-shadow: 0 10px 30px rgba(0,0,0,.6); border-bottom: 4px solid var(--gold);
+  transition: transform 1s var(--ease) 2.8s; }
+.rebirth .opener.go .val { transform: translateY(-110%); }
+.rebirth .opener .ttl { position: absolute; left: 0; right: 0; top: 360px; z-index: 2; text-align: center;
+  text-shadow: 0 4px 30px rgba(0,0,0,.85); transition: opacity .7s var(--ease) 1.3s, transform .9s var(--ease) 1.3s; }
+.rebirth .opener.go .ttl { opacity: 0; transform: translateY(-12px) scale(1.04); }
+.rebirth .opener .ttl .y { display: block; font-family: var(--en); font-weight: 800; letter-spacing: .5em; font-size: 30px; color: var(--gold2); padding-left: .5em; }
+.rebirth .opener .ttl .big { display: block; margin-top: 18px; font-size: 96px; font-weight: 900; color: #fff; }
+.rebirth .opener .ttl .sub { display: block; margin-top: 20px; font-size: 40px; font-weight: 700; color: var(--gold2); letter-spacing: .12em; }
+body.calm .rebirth .opener { display: none; }
