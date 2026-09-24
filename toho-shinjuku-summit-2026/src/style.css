@@ -229,6 +229,9 @@ body.pre #brandbar { transform: scaleY(0); }
 .cover .years { margin-top: 38px; display: flex; gap: 30px; align-items: center; font-family: var(--en); font-weight: 700; font-size: 34px; letter-spacing: .12em; color: var(--ink2); }
 .cover .years .ar { color: var(--red); font-weight: 500; }
 .cover .years .now { color: #fff; }
+.cover .agenda { margin-top: 34px; display: flex; gap: 22px; font-size: 21px; font-weight: 700; color: var(--ink2); }
+.cover .agenda li { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.cover .agenda b { display: inline-flex; width: 30px; height: 30px; border-radius: 50%; background: var(--gold); color: #17120a; align-items: center; justify-content: center; font-family: var(--en); font-weight: 800; font-size: 16px; }
 .cover .meta-l { position: absolute; left: 132px; bottom: 76px; font-family: var(--en); font-size: 25px; line-height: 1.55; color: var(--ink2); letter-spacing: .02em; }
 .cover .meta-l .relay { font-family: var(--jp); font-size: 22px; color: var(--muted); display: block; margin-bottom: 8px; }
 .cover .meta-r { position: absolute; right: 90px; bottom: 76px; text-align: right; font-size: 26px; line-height: 1.6; color: var(--ink); font-weight: 500; }
@@ -312,7 +315,8 @@ body.pre #brandbar { transform: scaleY(0); }
 .rebirth .tile .tag { font-family: var(--en); font-weight: 700; font-size: 18px; letter-spacing: .32em; color: var(--gold); }
 .rebirth .tile.cinema .tag { color: var(--red2); }
 .rebirth .tile .nm { margin-top: 10px; font-size: 36px; font-weight: 900; line-height: 1.25; white-space: nowrap; }
-.rebirth .tile .ds { margin-top: 6px; font-size: 22px; color: var(--ink2); }
+.rebirth .tile .ds { margin-top: 6px; font-size: 22px; color: var(--ink2); line-height: 1.45; }
+.rebirth .tile .ds .amb { font-size: 17px; color: var(--gold2); }
 .rebirth .tile.cinema { outline: 2px solid var(--red); outline-offset: -2px; }
 .rebirth .kpis { display: flex; gap: 34px; margin-top: 16px; }
 .rebirth .kpi b { font-family: var(--en); font-weight: 800; font-size: 76px; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
@@ -529,10 +533,11 @@ body.pre #brandbar { transform: scaleY(0); }
 .together .end .bg img { width: 100%; height: 100%; object-fit: cover; object-position: 30% 40%; filter: brightness(.5) saturate(1.1); transform: scale(1.1); transition: transform 8s var(--ease); }
 .together[data-at="2"] .end .bg img { transform: scale(1); }
 .together .end .bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(6,7,9,.2) 0%, rgba(6,7,9,.75) 50%, rgba(6,7,9,.95) 100%); }
-.together .end .copy { position: absolute; left: 1000px; top: 300px; width: 860px; }
-.together .end .kick { font-size: 34px; font-weight: 700; color: var(--gold); line-height: 1.5; }
+.together .end .copy { position: absolute; left: 980px; top: 250px; width: 880px; }
+.together .end .kick { font-size: 30px; font-weight: 700; color: var(--gold); line-height: 1.55; }
 .together .end .thanks { margin-top: 30px; font-size: 104px; font-weight: 900; line-height: 1.15; }
-.together .end .rule { margin-top: 44px; width: 640px; height: 4px; background: var(--red); box-shadow: 0 0 18px var(--red-a); }
+.together .end .bye { margin-top: 26px; font-size: 40px; font-weight: 700; color: var(--ink); }
+.together .end .rule { margin-top: 36px; width: 640px; height: 4px; background: var(--red); box-shadow: 0 0 18px var(--red-a); }
 .together .end .sig { margin-top: 34px; font-family: var(--en); font-weight: 800; font-size: 30px; letter-spacing: .4em; }
 .together .end .sig small { display: block; margin-top: 12px; font-family: var(--jp); font-weight: 700; letter-spacing: .04em; font-size: 24px; color: var(--ink2); }
 .together .end .credit { position: absolute; left: 132px; bottom: 60px; font-size: 14px; color: rgba(255,255,255,.4); }

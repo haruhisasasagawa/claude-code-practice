@@ -626,10 +626,15 @@
     if (Math.abs(dx) > 50) { e.preventDefault(); if (dx < 0) next(); else prev(); }
   });
   var idleId = 0;
-  document.addEventListener('mousemove', function () {
+  function wake() {
     document.body.classList.remove('idle'); clearTimeout(idleId);
     idleId = setTimeout(function () { document.body.classList.add('idle'); }, 2500);
-  });
+  }
+  document.addEventListener('mousemove', wake);
+  document.addEventListener('touchstart', wake, { passive: true });
+  // keyboard / presentation remote: keep the controls and cursor out of the way
+  document.addEventListener('keydown', function () { clearTimeout(idleId); document.body.classList.add('idle'); });
+  idleId = setTimeout(function () { document.body.classList.add('idle'); }, 2500);
   window.addEventListener('beforeunload', function () { if (presenter && !presenter.closed) presenter.close(); });
 
   /* =========================================================
