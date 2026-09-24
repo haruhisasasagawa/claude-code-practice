@@ -18,9 +18,9 @@
     <div class="sb-brand">TOHO CINEMAS SHINJUKU</div>
     <div class="sb-title">新宿映画館サミット 2026　リレートーク</div>
     <div class="sb-sub">新宿映画館 ―私たちの現在地と挑戦―</div>
-    <div class="sb-go"><i></i>READY</div>
+    <button class="sb-go" id="sb-start" type="button"><i></i>START</button>
     <div class="sb-hint">
-      <span><kbd>→</kbd>クリックで開始</span>
+      <span><kbd>→</kbd>または START で開始</span>
       <span><kbd>F</kbd>全画面</span>
       <span><kbd>S</kbd>発表者ビュー</span>
       <span><kbd>N</kbd>台本</span>
@@ -63,6 +63,11 @@
 
   <!-- ============ 01 ORIGIN ============ -->
   <section class="scene origin" data-id="origin" data-steps="1" data-trans="wipe" data-no="01" data-title="戦後復興から生まれた「大衆娯楽の殿堂」">
+    <svg class="koma-rings rv-s" style="--d:.5s" viewBox="-330 -330 660 660" aria-hidden="true">
+      <g class="r1"><circle r="310"/><circle r="296" class="dash"/></g>
+      <g class="r2"><circle r="232"/><circle r="220" class="dash"/></g>
+      <g class="r3"><circle r="156"/><circle r="146" class="dash"/></g>
+    </svg>
     <div class="ghost-num rv-f count" data-from="1950" data-to="1956" data-dur="1800" data-plain="1" style="--d:.2s">1956</div>
     <div class="frame">
       <p class="eyebrow rv"><b>01</b><i></i>ORIGIN</p>
@@ -91,10 +96,11 @@
       <div class="v rv" style="--d:.6s"><span class="num count" data-from="0" data-to="100" data-dur="1600" style="--d:.7s">100</span><span class="unit">万人超</span></div>
       <div class="note rv" style="--d:.8s">ピーク時の動員<span class="src">※最盛期。日本経済新聞の報道より</span></div>
       <div class="bar rv-line" style="--d:1.2s"></div>
-      <div class="quote rv" style="--d:1.5s">「演歌の殿堂」<br>歌舞伎町の待ち合わせの象徴</div>
+      <div class="quote rv" style="--d:1.5s"><span class="neon">「演歌の殿堂」</span><br><span class="q2">歌舞伎町の待ち合わせの象徴</span></div>
     </div>
     <figure class="ph ph-a rv-clip" style="--d:.6s"><img src="img/koma-night.jpg" alt="新宿コマ劇場 周辺（夜）"></figure>
     <figure class="ph ph-b rv-clip" style="--d:.8s"><img src="img/koma-interior.jpg" alt="新宿コマ劇場 内部"></figure>
+    <div class="beams rv-f" style="--d:1.2s"><i></i><i></i></div>
     <p class="caption cap-b rv-f" style="--d:1.6s">東京（昭和32年）新宿コマ劇場（内部）｜ジャパンアーカイブス‐Japan Archives　https://jaa2100.org/entry/detail/061738.html</p>
     <div class="forces rv" style="--d:1.2s">
       <h3>人を惹きつけた3つの力</h3>
@@ -121,6 +127,7 @@
         <div class="card rv" style="--d:1.0s"><div class="n">03</div><h3>再開発へ</h3><p>2008年閉館。<br>跡地の価値を再定義</p></div>
       </div>
     </div>
+    <div class="curtain"><i class="l"></i><i class="r"></i><b class="val"></b></div>
     <div class="shift">
       <p class="from rv" data-step="2" style="--d:.5s">「劇場を残す」から、</p>
       <p class="to rv" data-step="2" style="--d:1.0s"><span class="u">「この街に人を呼び続ける」</span>へ</p>
@@ -149,9 +156,9 @@
         <img class="kb" src="img/building.jpg" alt="新宿東宝ビル 外観">
         <div class="lab"><div class="tag">HOTEL</div><div class="nm">ホテルグレイスリー<br>新宿</div><div class="ds">国内外の観光客を迎える</div></div>
       </div>
-      <div class="tile rv-up" style="--d:.9s">
+      <div class="tile gz rv-up" style="--d:.9s">
         <img class="kb" src="img/godzilla.jpg" alt="ゴジラヘッド">
-        <div class="glow"></div>
+        <div class="glow"></div><div class="burst"></div>
         <div class="lab"><div class="tag">IP</div><div class="nm">ゴジラヘッド</div><div class="ds">世界へ届く街のアイコン</div></div>
       </div>
     </div>
@@ -173,10 +180,10 @@
     </div>
     <p class="statement rv" style="--d:1.4s">映画を観る<em>目的地</em>であり、歌舞伎町を体験する<em>起点</em>でもある。</p>
     <div class="no1 rv" style="--d:1.9s">
-      <div class="lead"><span class="en">TOHO CINEMAS</span><span class="k">ご来場者数</span><b>日本トップシェア</b></div>
-      <div class="m"><span class="count" data-from="0" data-to="4900" data-dur="1800" data-comma="1" style="--d:2.2s">4,900</span><small>万人</small><i>年間入場者数</i></div>
-      <div class="m"><span class="count" data-from="0" data-to="77" data-dur="1400" style="--d:2.3s">77</span><small>サイト</small><i>全国の劇場</i></div>
-      <div class="m"><span class="count" data-from="0" data-to="723" data-dur="1600" style="--d:2.4s">723</span><small>スクリーン</small><i>全国のスクリーン</i></div>
+      <div class="lead"><span class="en">TOHO CINEMAS</span><span class="k">ご来場者数</span><b class="sheen">日本トップシェア</b></div>
+      <div class="m"><span class="odo" style="--d:2.1s">4,900</span><small>万人</small><i>年間入場者数</i></div>
+      <div class="m"><span class="odo" style="--d:2.3s">77</span><small>サイト</small><i>全国の劇場</i></div>
+      <div class="m"><span class="odo" style="--d:2.5s">723</span><small>スクリーン</small><i>全国のスクリーン</i></div>
       <p class="src">出典：TOHOシネマズ 会社概要（77サイト・723スクリーンは2026年6月時点、共同経営を含む）／入場者数は東宝 2026年2月期</p>
     </div>
   </section>
@@ -254,17 +261,17 @@
         <div class="body"><div class="tag">TOHO LINEUP</div><h3>東宝配給作品</h3><p>邦画・アニメ・話題作を軸に、幅広いラインナップとイベント発信の拠点。</p></div>
       </div>
       <div class="card" style="--d:.65s">
-        <div class="pic"><img class="kb" src="img/imax.jpg" alt="IMAX with Laser"></div>
+        <div class="pic"><img class="kb" src="img/imax.jpg" alt="IMAX with Laser"><div class="eq"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
         <div class="stat">12ch</div><div class="shine"></div>
         <div class="body"><div class="tag">IMAX® LASER</div><h3>映像 × 12ch音響</h3><p>4Kレーザー投影、明るさ・色彩・コントラストと12chサウンドによる没入体験。</p></div>
       </div>
       <div class="card" style="--d:.8s">
-        <div class="pic"><img class="kb" src="img/mx4d.jpg" alt="MX4D"></div>
+        <div class="pic wobble"><img src="img/mx4d.jpg" alt="MX4D"><div class="wind"><i></i><i></i><i></i><i></i></div></div>
         <div class="stat">4D</div><div class="shine"></div>
         <div class="body"><div class="tag">MX4D®</div><h3>観るから、<br>体感するへ</h3><p>シートの動きと風・ミスト・香り・振動などの特殊効果が作品と連動。</p></div>
       </div>
       <div class="card" style="--d:.95s">
-        <div class="pic"><img class="kb" src="img/tcx.jpg" alt="TCX Dolby Atmos"></div>
+        <div class="pic"><img class="kb" src="img/tcx.jpg" alt="TCX Dolby Atmos"><div class="ripple"><i></i><i></i><i></i></div></div>
         <div class="stat">EXTRA LARGE</div><div class="shine"></div>
         <div class="body"><div class="tag">TCX® × ATMOS</div><h3>大画面 × 立体音響</h3><p>大型スクリーンとDolby Atmosによる、包み込まれる映像・音響体験。</p></div>
       </div>
@@ -314,8 +321,11 @@
 
   <!-- ============ 10 LEGACY ============ -->
   <section class="scene legacy" data-id="legacy" data-steps="2" data-trans="fade" data-no="10" data-title="変わったもの、変わらないもの">
-    <div class="half then rv-f" style="--d:.2s"><img src="img/koma-interior.jpg" alt=""></div>
-    <div class="half now rv-f" style="--d:.4s"><img src="img/godzilla.jpg" alt=""></div>
+    <div class="ba rv-f" style="--d:.1s">
+      <div class="lay then"><img src="img/koma-interior.jpg" alt=""></div>
+      <div class="lay now"><img src="img/godzilla.jpg" alt=""></div>
+      <div class="split"><span class="knob" title="ドラッグで THEN／NOW を比べられます">‹ ›</span></div>
+    </div>
     <div class="frame">
       <p class="eyebrow rv"><b>10</b><i></i>LEGACY</p>
       <h2 class="h2 mask" style="--d:.15s"><span class="ln"><span>変わったもの、変わらないもの</span></span></h2>
@@ -348,6 +358,7 @@
     </div>
     <div class="end">
       <div class="bg"><img src="img/godzilla.jpg" alt=""></div>
+      <canvas class="embers" width="1920" height="1080"></canvas>
       <div class="copy">
         <p class="kick rv" data-step="2" style="--d:.5s" id="end-kick">歌舞伎町の入口から、<br>新宿の映画の未来へ。</p>
         <p class="thanks split" data-step="2" style="--d:.9s">ありがとう<br>ございました</p>
@@ -370,8 +381,15 @@
   <div id="vignette"></div>
   <div id="grain"></div>
   <div id="blackout"></div>
+<!-- page controls -->
+  <nav id="ctrl" aria-label="ページ操作">
+    <button type="button" id="btn-prev" aria-label="前へ">‹</button>
+    <div id="dots"></div>
+    <button type="button" id="btn-next" aria-label="次へ">次へ<span>›</span></button>
+  </nav>
 </div>
 </div>
+
 
 <!-- rehearsal notes (N) -->
 <div id="notes">
@@ -384,8 +402,9 @@
   <h2>操作一覧</h2>
   <p class="s">PCのキーボード、プレゼン用リモコン（PageUp／PageDown）、マウスで操作できます。</p>
   <dl>
-    <dt><kbd>→</kbd><kbd>Space</kbd><kbd>PageDown</kbd><kbd>クリック</kbd></dt><dd>次へ（画面の中の動きも1段ずつ進みます）</dd>
-    <dt><kbd>←</kbd><kbd>PageUp</kbd><kbd>右クリック</kbd></dt><dd>前へ</dd>
+    <dt><kbd>次へ ›</kbd><kbd>→</kbd><kbd>Space</kbd><kbd>PageDown</kbd></dt><dd>次へ（画面の中の動きも1段ずつ進みます）</dd>
+    <dt><kbd>‹</kbd><kbd>←</kbd><kbd>PageUp</kbd></dt><dd>前へ</dd>
+    <dt><kbd>●</kbd></dt><dd>画面下の点をクリックすると、そのページへ移動</dd>
     <dt><kbd>F</kbd><kbd>F5</kbd></dt><dd>全画面のオン／オフ</dd>
     <dt><kbd>S</kbd></dt><dd>発表者ビュー（台本・タイマー）を別ウィンドウで開く</dd>
     <dt><kbd>N</kbd></dt><dd>台本を画面下に表示（リハーサル用）</dd>
