@@ -336,7 +336,7 @@ body.pre #brandbar { transform: scaleY(0); }
 .position .rings i:nth-child(3) { animation-delay: -3s; }
 .position .rings i:nth-child(4) { animation-delay: -4.5s; }
 @keyframes ring { 0% { transform: scale(.1); opacity: 0; } 15% { opacity: .9; } 100% { transform: scale(1); opacity: 0; } }
-.position .no1 { position: absolute; left: 132px; right: 120px; top: 740px; height: 162px; display: grid; grid-template-columns: 470px 1fr 1fr 1fr; align-items: center;
+.position .no1 { position: absolute; left: 132px; right: 120px; top: 740px; height: 162px; display: grid; grid-template-columns: 520px 1.4fr 1fr; align-items: center;
   border: 1px solid rgba(207,174,107,.45); background: linear-gradient(90deg, rgba(207,174,107,.10), rgba(207,174,107,.02)); padding: 0 40px; }
 .position .no1::before { content: ""; position: absolute; left: -1px; top: -1px; bottom: -1px; width: 6px; background: var(--gold); }
 .position .no1 .lead .en { display: block; font-family: var(--en); font-weight: 800; letter-spacing: .3em; font-size: 20px; color: var(--gold); }
@@ -345,6 +345,7 @@ body.pre #brandbar { transform: scaleY(0); }
 .position .no1 .m { border-left: 1px solid rgba(207,174,107,.3); padding-left: 34px; }
 .position .no1 .m span { font-family: var(--en); font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--gold2); }
 .position .no1 .m small { font-size: 24px; font-weight: 700; margin-left: 6px; color: var(--gold2); }
+.position .no1 .m small.pre { margin: 0 6px 0 0; }
 .position .no1 .m i { display: block; font-style: normal; margin-top: 8px; font-size: 19px; color: var(--muted); }
 .position .no1 .src { position: absolute; left: 0; bottom: -34px; font-size: 14px; color: #6d7079; }
 .position .cols { position: absolute; left: 132px; right: 120px; top: 356px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 60px; }
@@ -448,6 +449,7 @@ body.pre #brandbar { transform: scaleY(0); }
 .strengths .card .shine { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.18) 50%, transparent 60%); transform: translateX(-120%); }
 .strengths .card.go .shine { animation: shine 1.4s var(--ease) forwards; animation-delay: calc(var(--d, 0s) + .6s); }
 @keyframes shine { to { transform: translateX(120%); } }
+.strengths .tm-note { position: absolute; left: 132px; right: 120px; top: 968px; font-size: 13px; color: #5d6069; text-align: right; }
 .strengths .formula { position: absolute; left: 132px; right: 120px; top: 900px; display: flex; justify-content: center; align-items: center; gap: 30px; font-size: 38px; font-weight: 900; }
 .strengths .formula .x { color: var(--red); font-family: var(--en); font-weight: 500; }
 
