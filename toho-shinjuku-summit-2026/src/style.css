@@ -563,10 +563,6 @@ body.idle .legacy .ba .knob { opacity: 0; }
 #wipe .band .r1 { width: 70px; background: var(--red); box-shadow: 0 0 40px rgba(227,38,46,.6); }
 #wipe.run .band { animation: curtain 1.25s cubic-bezier(.65, 0, .35, 1) forwards; }
 @keyframes curtain { from { transform: translateX(-2900px) skewX(-14deg); } to { transform: translateX(2200px) skewX(-14deg); } }
-#flash { position: absolute; inset: 0; z-index: 56; pointer-events: none; opacity: 0;
-  background: radial-gradient(ellipse 120% 110% at 50% 50%, #fff8ea 0%, #f6e3bd 45%, rgba(40, 30, 18, .0) 100%); }
-#flash.run { animation: flash 1.3s ease-out forwards; }
-@keyframes flash { 0% { opacity: 0; } 10% { opacity: .92; } 18% { opacity: .35; } 28% { opacity: .85; } 100% { opacity: 0; } }
 #blackout { position: absolute; inset: 0; z-index: 80; background: #000; opacity: 0; pointer-events: none; transition: opacity .5s var(--ease); }
 body.black #blackout { opacity: 1; }
 
@@ -725,7 +721,6 @@ body.idle #ctrl, body.pre #ctrl, body.counting #ctrl { opacity: 0; pointer-event
 .turning .shift .to .u::after { background: var(--gold); box-shadow: 0 0 20px rgba(207,174,107,.6); }
 .turning .shift .yr { color: rgba(255,255,255,.45); }
 .turning .shift .from.go { transition-delay: 1.4s; }
-.turning .shift .to.go { transition-delay: 1.9s; }
 .turning .shift .to.go .u::after { transition-delay: 3.0s; }
 .turning .shift .yr.go { transition-delay: 3.2s; }
 
@@ -808,3 +803,26 @@ body.calm .cover .title::after { display: none; }
 /* heyday — revolving stage note under the three forces */
 .heyday .forces .koma-note { margin-top: 16px; font-size: 18px; color: var(--muted); }
 .heyday .forces .koma-note b { color: var(--gold); font-weight: 700; }
+
+/* =========================================================
+   CAMERA — every page slowly zooms up / down, alternating by page
+   ========================================================= */
+.cam { position: absolute; inset: 0; transform-origin: var(--co, 50% 50%); }
+.scene.is-active .cam, .scene.is-out .cam { animation: camIn 11s ease-in-out infinite alternate; }
+.scene[data-cam="out"].is-active .cam, .scene[data-cam="out"].is-out .cam { animation-name: camOut; }
+@keyframes camIn { from { transform: scale(1); } to { transform: scale(1.055); } }
+@keyframes camOut { from { transform: scale(1.055); } to { transform: scale(1); } }
+
+/* impact zoom for the key lines */
+.punch { opacity: 0; transform: scale(1.45); filter: blur(10px); }
+.punch.go { animation: punch 1.05s cubic-bezier(.2, .9, .25, 1.1) forwards; animation-delay: var(--d, 0s); }
+@keyframes punch {
+  0% { opacity: 0; transform: scale(1.45); filter: blur(10px); }
+  55% { opacity: 1; transform: scale(.96); filter: blur(0); }
+  78% { transform: scale(1.015); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); } }
+.heyday .stat .v.punch { transform-origin: 20% 60%; }
+.position .no1 .lead b.punch { display: inline-block; transform-origin: 0 60%; }
+.position .no1.go .sheen.punch.go { animation: punch 1.05s cubic-bezier(.2, .9, .25, 1.1) forwards, sheen 2.2s var(--ease-io) 3.2s both, sheenLoop 2.2s var(--ease-io) 8s infinite; animation-delay: var(--d, 0s), 3.2s, 8s; }
+body.calm .cam { animation: none !important; }
+body.calm .punch.go { animation: none !important; opacity: 1; transform: none; filter: none; }

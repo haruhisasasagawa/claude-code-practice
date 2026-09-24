@@ -7,7 +7,7 @@
   var viewport = document.getElementById('viewport');
   var scenes = Array.prototype.slice.call(document.querySelectorAll('.scene'));
   var N = scenes.length;
-  var REVEAL = '.rv,.rv-l,.rv-s,.rv-f,.rv-clip,.rv-up,.rv-line,.rv-vline,.mask,.split,.count,.odo,.slashes,.strengths .card';
+  var REVEAL = '.rv,.rv-l,.rv-s,.rv-f,.rv-clip,.rv-up,.rv-line,.rv-vline,.mask,.split,.punch,.count,.odo,.slashes,.strengths .card';
 
   var state = { started: false, idx: 0, step: 1, busy: false };
   var timers = [];           // pending timeouts for the current scene
@@ -66,6 +66,11 @@
       });
     })(el);
   }
+  scenes.forEach(function (sc) {
+    var cam = document.createElement('div'); cam.className = 'cam';
+    while (sc.firstChild) cam.appendChild(sc.firstChild);
+    sc.appendChild(cam);
+  });
   $$('.split').forEach(splitChars);
 
   /* odometer: each digit becomes a reel that rolls to its value */
@@ -211,9 +216,8 @@
 
     clearTimers();
     var trans = opts.back || instant ? 'none' : (next.dataset.trans || 'fade');
-    var swapDelay = trans === 'wipe' ? 600 : trans === 'flash' ? 130 : 0;
+    var swapDelay = trans === 'wipe' ? 600 : 0;
     if (trans === 'wipe') playOverlay('wipe', 1400);
-    if (trans === 'flash') playOverlay('flash', 1400);
 
     var leave = function () {
       if (prev && prev !== next && prev.classList.contains('is-active')) {
@@ -925,7 +929,7 @@
     var ba = $('.ba', sc), knob = $('.knob', sc);
     var anim = false, drag = false, t = 0;
     function set(v) { ba.style.setProperty('--split', v.toFixed(2) + '%'); }
-    function pct(x) { var r = stage.getBoundingClientRect(); return (x - r.left) / r.width * 100; }
+    function pct(x) { var r = ba.getBoundingClientRect(); return (x - r.left) / r.width * 100; }
     knob.addEventListener('pointerdown', function (e) { drag = true; anim = false; knob.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
     knob.addEventListener('pointermove', function (e) { if (drag) set(Math.max(6, Math.min(94, pct(e.clientX)))); });
     knob.addEventListener('pointerup', function () { drag = false; });
