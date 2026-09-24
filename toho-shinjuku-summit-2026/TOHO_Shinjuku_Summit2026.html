@@ -1634,10 +1634,39 @@ window.TALK = {
     });
     Canvases.step(scene, step);
   }
+  /* ---------------- keynote hero: title first big & centred, then glides into place ---------------- */
+  var HERO = { origin: 1, heyday: 1, turning: 1, position: 1, landscape: 1, strengths: 1, legacy: 1, together: 1 };
+  var HERO_HOLD = 1250, HERO_GLIDE = 1100, HERO_CONTENT = 1550;
+  function heroOf(scene) { return HERO[scene.dataset.id] ? scene.querySelector('.h2.mask') : null; }
+  function stagePos(el) {
+    var x = 0, y = 0, e = el;
+    while (e && e !== stage) { x += e.offsetLeft; y += e.offsetTop; e = e.offsetParent; }
+    return { x: x, y: y };
+  }
+  function heroCenter(h) {
+    var tw = 0;
+    $$('.ln > span', h).forEach(function (sp) { tw = Math.max(tw, sp.offsetWidth); });
+    var th = h.offsetHeight, p = stagePos(h);
+    var S = Math.min(1.7, 1560 / tw, 600 / th);
+    var dx = 960 - tw * S / 2 - p.x, dy = 515 - th * S / 2 - p.y;
+    h.style.transition = 'none';
+    h.style.transformOrigin = '0 0';
+    h.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px) scale(' + S.toFixed(3) + ')';
+  }
+  function heroGlide(h) {
+    h.style.transition = 'transform ' + HERO_GLIDE + 'ms cubic-bezier(.62, 0, .22, 1)';
+    h.style.transform = '';
+    later(function () { h.style.transition = ''; h.style.transformOrigin = ''; }, HERO_GLIDE + 60);
+  }
+  function heroClear(scene) {
+    $$('.h2.mask', scene).forEach(function (h) { h.style.transition = ''; h.style.transform = ''; h.style.transformOrigin = ''; });
+  }
+
   function resetScene(scene) {
     scene.classList.add('instant');
     $$(REVEAL, scene).forEach(function (el) { el.classList.remove('go'); if (el.classList.contains('odo')) setOdo(el, false); });
     scene.dataset.at = 0;
+    heroClear(scene);
     void scene.offsetWidth;
     scene.classList.remove('instant');
   }
@@ -1663,6 +1692,8 @@ window.TALK = {
         void next.offsetWidth;
         next.classList.remove('instant');
       } else {
+        var h = heroOf(next);
+        if (h && h.style.transform) heroGlide(h);
         applyStep(next, step, false);
       }
       state.step = step;
@@ -1707,8 +1738,20 @@ window.TALK = {
         void next.offsetWidth;
         next.classList.remove('instant');
         if (curtainCut) next.style.transition = 'none';
+        var hero = !curtainCut && step === 1 ? heroOf(next) : null;
+        if (hero) heroCenter(hero);
         next.classList.add('is-active');
         if (curtainCut) { void next.offsetWidth; next.style.transition = ''; }
+        if (hero) {
+          requestAnimationFrame(function () { if (scenes[state.idx] === next) hero.classList.add('go'); });
+          later(function () { if (scenes[state.idx] === next) heroGlide(hero); }, HERO_HOLD);
+          later(function () {
+            if (scenes[state.idx] !== next) return;
+            applyStep(next, state.step, false);
+            Canvases.start(next, false);
+          }, HERO_CONTENT);
+          return;
+        }
         requestAnimationFrame(function () { if (scenes[state.idx] === next) applyStep(next, state.step, false); });
       }
       Canvases.start(next, instant);
