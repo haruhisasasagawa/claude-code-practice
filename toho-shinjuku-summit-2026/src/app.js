@@ -641,7 +641,7 @@
       case 'b': case 'B': case '.': case 'w': case 'W': e.preventDefault(); toggleBlack(); break;
       case 't': case 'T': e.preventDefault(); resetClock(); break;
       case 'd': case 'D': e.preventDefault(); openScript(); break;
-      case 'm': case 'M': e.preventDefault(); reduced = !reduced; document.body.classList.toggle('calm', reduced); toast(reduced ? '動きを控えめにしました（M で戻す）' : '動きを通常に戻しました'); break;
+      case 'm': case 'M': e.preventDefault(); reduced = !reduced; document.body.classList.toggle('calm', reduced); toast(reduced ? '軽量モードにしました（M で戻す）' : '通常モードに戻しました'); break;
       case '?': case 'h': case 'H': e.preventDefault(); toggle('help'); break;
       case 'Escape': if (body.classList.contains('black')) toggleBlack(); break;
     }
@@ -766,7 +766,9 @@
       ps.forEach(function (p) {
         var t = Math.max(0, Math.min(1, (p.dens - 1) / 5));
         ctx.fillStyle = p.st === 1 || mode === 'flow' ? mix(GOLD, WHITE, .5) : mix(GOLD, RED, t);
+        ctx.globalAlpha = Math.max(0, Math.min(1, (p.x + 10) / 70));
         ctx.beginPath(); ctx.arc(p.x, p.y, 8.5, 0, 6.2832); ctx.fill();
+        ctx.globalAlpha = 1;
       });
       if (mode === 'jam') {
         var crowd = ps.filter(function (p) { return p.st === 0 && p.x > wallX - 160; }).length;
