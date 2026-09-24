@@ -1235,6 +1235,9 @@ def build_dashboard(wb, maxrows, select=None):
             ch.dataLabels.showSerName = False
             ch.dataLabels.showLeaderLines = False
             ch.dataLabels.showLegendKey = False
+            # 0%（＝使っていない職種の枠）はラベルを出さない。
+            # 条件付き書式（[>0.995]""… ）で100%のラベルを隠すことも試したが、
+            # Excel以外のビューアで無視されて表示が食い違うため、この形のままにする。
             ch.dataLabels.numFmt = "0%;;;"
             ch.dataLabels.txPr = chart_text(8)
         ch.legend = None
