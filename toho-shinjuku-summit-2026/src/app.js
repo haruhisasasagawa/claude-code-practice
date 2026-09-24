@@ -68,8 +68,10 @@
   }
   scenes.forEach(function (sc) {
     var cam = document.createElement('div'); cam.className = 'cam';
-    while (sc.firstChild) cam.appendChild(sc.firstChild);
-    sc.appendChild(cam);
+    Array.prototype.slice.call(sc.childNodes).forEach(function (n) {
+      if (!(n.nodeType === 1 && n.classList.contains('nocam'))) cam.appendChild(n);
+    });
+    sc.insertBefore(cam, sc.firstChild);
   });
   $$('.split').forEach(splitChars);
 
@@ -216,12 +218,15 @@
 
     clearTimers();
     var trans = opts.back || instant ? 'none' : (next.dataset.trans || 'fade');
-    var swapDelay = 0;
+    var curtainCut = trans === 'curtain' && prev && prev.dataset.id === 'turning' && state.step >= 2 && prev.classList.contains('is-active');
+    var swapDelay = curtainCut ? 800 : 0;
+    if (curtainCut) prev.classList.add('exit');
 
     var leave = function () {
       if (prev && prev !== next && prev.classList.contains('is-active')) {
         var p = prev;
         p.classList.remove('is-active');
+        if (curtainCut) { p.classList.remove('exit'); Canvases.stop(p); resetScene(p); return; }
         p.classList.add('is-out');
         Canvases.stop(p);
         clearTimeout(p._outId);
@@ -247,7 +252,9 @@
         next.dataset.at = step;
         void next.offsetWidth;
         next.classList.remove('instant');
+        if (curtainCut) next.style.transition = 'none';
         next.classList.add('is-active');
+        if (curtainCut) { void next.offsetWidth; next.style.transition = ''; }
         requestAnimationFrame(function () { if (scenes[state.idx] === next) applyStep(next, state.step, false); });
       }
       Canvases.start(next, instant);
@@ -297,6 +304,7 @@
   }
   function backToStandby() {
     clearTimers();
+    scenes.forEach(function (s) { s.classList.remove('exit'); });
     clearTimeout(swapId); state.busy = false;
     if (Countdown.running) Countdown.cancel();
     clock.running = false;
@@ -832,10 +840,18 @@
     });
     // embers for the closing card
     var ecv = $('.together canvas.embers'), ectx = ecv.getContext('2d'), embers = [];
-    var endEl = $('.together .end'), sweepT = -1;
-    function setSp(v) { endEl.style.setProperty('--sp', v.toFixed(2) + '%'); }
-    function openNow() { sweepT = -1; setSp(0); endEl.classList.add('opened'); }
-    function closeEnd() { sweepT = -1; setSp(50); endEl.classList.remove('opened'); }
+    var endEl = $('.together .end');
+    function snapEnd(cls) {
+      endEl.classList.add('snap'); endEl.classList.remove('opening', 'opened');
+      if (cls) endEl.classList.add(cls);
+      void endEl.offsetWidth; requestAnimationFrame(function () { endEl.classList.remove('snap'); });
+    }
+    function openNow() { snapEnd('opened'); }
+    function closeEnd() { snapEnd(null); }
+    function playOpen() {
+      snapEnd(null);
+      requestAnimationFrame(function () { requestAnimationFrame(function () { if (stepNow >= 2) endEl.classList.add('opening'); }); });
+    }
     function emberUpdate(dt) {
       while (embers.length < 110) embers.push({ x: Math.random() * 1920, y: 1080 + Math.random() * 400, v: 40 + Math.random() * 90, r: 1 + Math.random() * 2.6, ph: Math.random() * 6.28, life: 0 });
       embers.forEach(function (m) { m.y -= m.v * dt; m.x += Math.sin(m.ph + m.y / 90) * 14 * dt; m.life += dt; });
@@ -852,13 +868,6 @@
     }
     function update(dt, t) {
       if (stepNow >= 2) {
-        if (sweepT >= 0) {
-          sweepT += dt;
-          var p = Math.max(0, Math.min(1, (sweepT - 0.9) / 1.6));
-          var e = p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-          setSp(50 - 50 * e);
-          if (p >= 1) { sweepT = -1; endEl.classList.add('opened'); }
-        }
         emberUpdate(dt); return;
       }
       tIn += dt; acc += dt;
@@ -932,9 +941,28 @@
       step: function (step) {
         var was = stepNow; stepNow = step;
         if (step < 2) { ectx.clearRect(0, 0, 1920, 1080); closeEnd(); }
-        else if (was < 2) { if (reduced) openNow(); else { closeEnd(); sweepT = 0; } }
+        else if (was < 2) { if (reduced) openNow(); else playOpen(); }
       },
       update: update, draw: draw
+    });
+  })();
+
+  /* --- REBIRTH: title on the curtain, then the curtain opens --- */
+  (function () {
+    var op = $('.rebirth .opener'); if (!op) return;
+    function snap(cls) {
+      op.classList.add('snap'); op.classList.remove('t-in', 'open');
+      cls.forEach(function (c) { op.classList.add(c); });
+      void op.offsetWidth; requestAnimationFrame(function () { op.classList.remove('snap'); });
+    }
+    Canvases.register('rebirth', {
+      enter: function (step, instant) {
+        if (instant || reduced) { snap(['t-in', 'open']); return; }
+        snap([]);
+        later(function () { op.classList.add('t-in'); }, 250);
+        later(function () { op.classList.add('open'); }, 3000);
+      },
+      update: function () {}, draw: function () {}
     });
   })();
 
