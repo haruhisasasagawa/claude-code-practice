@@ -1244,9 +1244,11 @@ def build_dashboard(wb, maxrows, select=None):
         plain(ch)
         ch.plot_area.graphicalProperties = GraphicalProperties(noFill=True)
         ch.graphical_properties.noFill = True
-        # リングの位置を固定: グラフはカード幅（7列）×10行（18〜27行）に貼るので、
-        # 描画領域を「幅いっぱい × 高さ RING_FRAC」で上下中央に置くと、円の中心がちょうど行22〜23の境界＝中央列 D:F / T:V の中心に来る
-        ch.plot_area.layout = Layout(manualLayout=ManualLayout(
+        # リングの大きさと位置を固定する。グラフはカード幅（7列）×10行（18〜27行）に貼るので、
+        # 描画領域を「幅いっぱい × 高さ RING_FRAC」で上下中央に置くと、円の中心がちょうど行22〜23の境界＝中央列 D:F / T:V の中心に来る。
+        # openpyxl は保存時に plot_area.layout をグラフの layout で上書きするので、必ず ch.layout に入れること。
+        # ここを固定しないと、データラベルの有無で描画側が円の大きさを勝手に変え、2つのリングの大きさが揃わない。
+        ch.layout = Layout(manualLayout=ManualLayout(
             xMode="edge", yMode="edge", layoutTarget="inner", x=0.0, y=(1 - RING_FRAC) / 2, w=1.0, h=RING_FRAC))
         return ch
 
