@@ -787,7 +787,7 @@ ABS_ROWS = 12                            # 欠勤・当日時間変更の一覧�
 LIST_ROW0 = 60                           # DB計算 の一覧用セルの先頭行
 BUSY_R0 = 100                            # DB計算 の日別ブロックの先頭行
 BUSY_DAYS = 200                          # 日別ブロックの行数（対象期間は最大6ヶ月＝184日）
-BUSY_ROWS = 24                           # 「シフト希望未提出の繁忙日」の表示件数（3列×8行）
+BUSY_ROWS = 24                           # 「出勤していない繁忙日」の表示件数（3列×8行）
 RUN_MIN = 3                              # 連休とみなす連続日数（土日・祝日・繁忙日が3日以上つながったら1本）
 RUN_SHOW = 6                             # 表に出す連休の件数
 WD_ORDER = [(2, "月"), (3, "火"), (4, "水"), (5, "木"), (6, "金"), (7, "土"), (1, "日")]   # WEEKDAY値と表示
@@ -962,10 +962,10 @@ def build_dashboard(wb, maxrows, select=None):
             style(hws[f"{col}{h}"], size=9, fmt=fmt)
 
     # ---- 日別ブロック: 対象期間の各日について、繁忙日の区分と「連休」の切れ目を判定する
-    #      AN 日付 / AO 名称 / AP 登録繁忙日 / AQ 行数 / AR 出勤 / AS 当日欠勤 / AT 区分 / AU 希望未提出の連番
+    #      AN 日付 / AO 名称 / AP 登録繁忙日 / AQ 行数 / AR 出勤 / AS 当日欠勤 / AT 区分 / AU 出勤していない日の連番
     #      AV 連休候補（土日または登録繁忙日） / AW 連休の開始 / AX 連休番号 / AY 連休の日数
-    #      AZ その日が希望未提出 / BA 連休内の希望未提出の日数
-    #      区分 3=出勤 2=当日欠勤 1=事前に休み等（前日までの休み変更・店舗都合） 0=シフト希望未提出
+    #      BM 名称のある日の連休番号（連休名の表示に使う）
+    #      区分 3=出勤 2=当日欠勤 1=事前に休み等（前日までの休み変更・店舗都合） 0=シフトなし（行が1件も無い）
     hol = q(S_HOL)
     hol_a = f"{hol}!$A${HOL_R0}:$A${HOL_R0 + HOL_ROWS - 1}"
     hol_b = f"{hol}!$B${HOL_R0}:$B${HOL_R0 + HOL_ROWS - 1}"
@@ -987,7 +987,7 @@ def build_dashboard(wb, maxrows, select=None):
         return "+".join(parts)
 
     BUSY_LAST = BUSY_R0 + BUSY_DAYS - 1
-    hws[f"{HL}{BUSY_R0 - 1}"] = "日別（AN 日付, AP 繁忙日, AT 区分, AU 連番, AV 連休候補, AX 連休番号, AY 日数, BA 希望未提出数）"
+    hws[f"{HL}{BUSY_R0 - 1}"] = "日別（AN 日付, AP 繁忙日, AT 区分, AU 未出勤の連番, AV 連休候補, AX 連休番号, AY 日数, BM 名称用）"
     style(hws[f"{HL}{BUSY_R0 - 1}"], size=9, bold=True, color=C_MUTED)
     for i in range(BUSY_DAYS):
         h = BUSY_R0 + i
@@ -1002,32 +1002,31 @@ def build_dashboard(wb, maxrows, select=None):
         hws[f"AS{h}"] = f'=IF(OR($AP{h}=0,{sel}=""),"",{busy_count(h, "G")})'
         hws[f"AT{h}"] = (f'=IF(OR($AP{h}=0,{sel}=""),"",'
                          f'IF(N($AQ{h})=0,0,IF(N($AR{h})>0,3,IF(N($AS{h})>0,2,1))))')
-        hws[f"AU{h}"] = f'=IF($AT{h}=0,COUNTIF($AT${BUSY_R0}:$AT{h},0),"")'
+        hws[f"AU{h}"] = f'=IF(OR($AT{h}="",$AT{h}=3),"",COUNTIF($AT${BUSY_R0}:$AT{h},"<3"))'
         hws[f"AW{h}"] = ("=IF($AV%d=0,0,1)" % h) if i == 0 else f'=IF(AND($AV{h}=1,$AV{prev}<>1),1,0)'
         hws[f"AX{h}"] = f'=IF($AV{h}=0,"",SUM($AW${BUSY_R0}:$AW{h}))'
         hws[f"AY{h}"] = f'=IF($AX{h}="","",COUNTIF($AX${BUSY_R0}:$AX${BUSY_LAST},$AX{h}))'
-        hws[f"AZ{h}"] = f'=IF(OR($AV{h}=0,{sel}=""),"",IF(N($AQ{h})=0,1,0))'
-        hws[f"BA{h}"] = f'=IF($AX{h}="","",SUMIF($AX${BUSY_R0}:$AX${BUSY_LAST},$AX{h},$AZ${BUSY_R0}:$AZ${BUSY_LAST}))'
+        # 連休の名称: 名称のある日にだけ連休番号を置き、その連休の最初の名称を拾えるようにする
+        hws[f"BM{h}"] = f'=IF($AX{h}="","",IF($AO{h}="","",$AX{h}))'
         hws[f"BC{h}"] = (f'=IF(AND($AW{h}=1,N($AY{h})>={RUN_MIN}),'
                          f'COUNTIFS($AW${BUSY_R0}:$AW{h},1,$AY${BUSY_R0}:$AY{h},">="&{RUN_MIN}),"")')
         hws[f"BI{h}"] = f'=IF(OR($AV{h}=0,{sel}=""),"",IF(N($AR{h})>0,1,0))'
         hws[f"BJ{h}"] = f'=IF($AX{h}="","",SUMIF($AX${BUSY_R0}:$AX${BUSY_LAST},$AX{h},$BI${BUSY_R0}:$BI${BUSY_LAST}))'
         hws[f"AN{h}"].number_format = "yyyy/mm/dd"
-        for c in ("AP", "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ", "BA", "BC",
-                  "BI", "BJ"):
+        for c in ("AP", "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "BC", "BI", "BJ"):
             hws[f"{c}{h}"].number_format = "0"
     BT = f"$AT${BUSY_R0}:$AT${BUSY_LAST}"
     for rr, label, formula in [(96, "繁忙日（対象期間内）", f'=COUNTIF($AP${BUSY_R0}:$AP${BUSY_LAST},1)'),
                                (97, "　うち出勤", f"=COUNTIF({BT},3)"),
                                (98, "　うち当日欠勤", f"=COUNTIF({BT},2)"),
                                (99, "　うち事前に休み等", f"=COUNTIF({BT},1)"),
-                               (58, "　うちシフト希望未提出", f"=COUNTIF({BT},0)"),
+                               (58, "　うち出勤していない", f'=COUNTIF({BT},"<3")'),
                                (60, f"{RUN_MIN}連休以上の連休（全件）",
                                 f'=COUNT($BC${BUSY_R0}:$BC${BUSY_LAST})')]:
         hws[f"{HL}{rr}"], hws[f"{HC}{rr}"] = label, formula
         style(hws[f"{HL}{rr}"], size=9, color=C_INK2)
         style(hws[f"{HC}{rr}"], size=9)
-    # 表示用: BD/BE = 希望未提出の日付と名称（BUSY_ROWS件）、BF/BG/BH/BK = 3連休以上の連休（RUN_SHOW件）
+    # 表示用: BD/BE = 出勤していない繁忙日の日付と名称（BUSY_ROWS件）、BF/BG/BK/BL = 3連休以上の連休（RUN_SHOW件）
     for j in range(1, BUSY_ROWS + 1):
         h = BUSY_R0 + j - 1
         mt = f'MATCH({j},$AU${BUSY_R0}:$AU${BUSY_LAST},0)'
@@ -1040,12 +1039,17 @@ def build_dashboard(wb, maxrows, select=None):
         mt = f'MATCH({m},$BC${BUSY_R0}:$BC${BUSY_LAST},0)'
         hws[f"BF{h}"] = f'=IFERROR(INDEX($AN${BUSY_R0}:$AN${BUSY_LAST},{mt}),"")'
         hws[f"BG{h}"] = f'=IFERROR(INDEX($AY${BUSY_R0}:$AY${BUSY_LAST},{mt}),"")'
-        hws[f"BH{h}"] = f'=IFERROR(INDEX($BA${BUSY_R0}:$BA${BUSY_LAST},{mt}),"")'
         hws[f"BK{h}"] = f'=IFERROR(INDEX($BJ${BUSY_R0}:$BJ${BUSY_LAST},{mt}),"")'
+        # 連休の名称: その連休に名称のある日があれば最初の1つ、2つ以上あれば「ほか」を付ける
+        rn = f'INDEX($AX${BUSY_R0}:$AX${BUSY_LAST},{mt})'
+        nm = f'INDEX($AO${BUSY_R0}:$AO${BUSY_LAST},MATCH({rn},$BM${BUSY_R0}:$BM${BUSY_LAST},0))'
+        # 「ほか」は名称が2種類以上あるときだけ（お盆が4日続くような場合は付けない）
+        hws[f"BL{h}"] = (f'=IFERROR(IF({nm}="","",{nm}&IF(COUNTIFS($BM${BUSY_R0}:$BM${BUSY_LAST},{rn},'
+                         f'$AO${BUSY_R0}:$AO${BUSY_LAST},"<>"&{nm})>0," ほか","")),"")')
         style(hws[f"BK{h}"], size=9)
         style(hws[f"BF{h}"], size=9, fmt="yyyy/mm/dd")
         style(hws[f"BG{h}"], size=9)
-        style(hws[f"BH{h}"], size=9)
+        style(hws[f"BL{h}"], size=9)
 
     def section(row, text, a="B", b="X"):
         """見出し行: 太字."""
@@ -1425,7 +1429,7 @@ def build_dashboard(wb, maxrows, select=None):
                     ("勤務時間", 16, 18), ("1日平均", 19, 20), ("土日祝", 21, 22), ("前日変更", 23, 24)]
         for title, a, b in tbl_cols:
             ws.merge_cells(f"{L(a)}{hr}:{L(b)}{hr}")
-            head_cell(f"{L(a)}{hr}", title, align=("left" if a == 2 else "center"))
+            head_cell(f"{L(a)}{hr}", title, align=("left" if a in (2, 13) else "center"))
         f1, f6 = hr + 1, hr + NSHEETS
         for k in range(1, NSHEETS + 1):
             r = hr + k
@@ -1520,7 +1524,7 @@ def build_dashboard(wb, maxrows, select=None):
         return r
 
     def busy_block(top):
-        """繁忙日の出勤状況: サマリー＋連休の入り方の表＋シフト希望未提出の繁忙日の日付."""
+        """繁忙日の出勤状況: サマリー＋連休ごとの出勤日数＋出勤していない繁忙日の日付."""
         ws.row_dimensions[top].height = 18
         section(top, "繁忙日（祝日・GW・お盆・年末年始）の出勤状況")
         ws.row_dimensions[top + 1].height = 6
@@ -1532,7 +1536,7 @@ def build_dashboard(wb, maxrows, select=None):
                         f'"対象期間の繁忙日 "&N({P}${HC}$96)&"日　／　出勤 "&N({P}${HC}$97)&"日"'
                         f'&"・当日欠勤 "&N({P}${HC}$98)&"日"'
                         f'&"・事前に休み等 "&N({P}${HC}$99)&"日"'
-                        f'&"・シフト希望未提出 "&N({P}${HC}$58)&"日"'
+                        f'&"・シフトなし "&(N({P}${HC}$96)-N({P}${HC}$97)-N({P}${HC}$98)-N({P}${HC}$99))&"日"'
                         f'))')
         style(ws[f"B{sr}"], size=10, bold=True, bg=C_HEAD, align="left")
         # 自分から手を挙げた応募（相談応募）。プラス材料なので繁忙日の内訳の直後に置く
@@ -1556,11 +1560,11 @@ def build_dashboard(wb, maxrows, select=None):
         #      日数・希望提出・出勤の3つを並べ、読み取りは面談する人に委ねる。
         label(sr + 2, (f'=IF({sel}="","",IF(N({P}${HC}$60)=0,'
                        f'"連休の入り方（土日・祝日・繁忙日が連続する{RUN_MIN}日以上）　― 対象期間にはありません",'
-                       f'"連休の入り方（土日・祝日・繁忙日が連続する{RUN_MIN}日以上）　― 出勤が少ない連休は、希望提出の日数と見くらべてください"'
+                       f'"連休の入り方（土日・祝日・繁忙日が連続する{RUN_MIN}日以上）　― どの連休に何日出勤したか"'
                        f'&IF(N({P}${HC}$60)=1,"　　1 件","　　"&N({P}${HC}$60)&" 件")))'))
         hr = sr + 3
         ws.row_dimensions[hr].height = 17
-        run_cols = [("期間", 2, 12), ("日数", 13, 16), ("希望提出", 17, 20), ("出勤", 21, 24)]
+        run_cols = [("期間", 2, 12), ("繁忙日", 13, 18), ("日数", 19, 21), ("出勤", 22, 24)]
         for title, a, b in run_cols:
             ws.merge_cells(f"{L(a)}{hr}:{L(b)}{hr}")
             head_cell(f"{L(a)}{hr}", title, align=("left" if a == 2 else "center"))
@@ -1568,7 +1572,7 @@ def build_dashboard(wb, maxrows, select=None):
         for m in range(1, RUN_SHOW + 1):
             r = hr + m
             h = BUSY_R0 + m - 1
-            d, ln, ms, wk = f"{P}$BF${h}", f"{P}$BG${h}", f"{P}$BH${h}", f"{P}$BK${h}"
+            d, ln, nm, wk = f"{P}$BF${h}", f"{P}$BG${h}", f"{P}$BL${h}", f"{P}$BK${h}"
             ws.row_dimensions[r].height = 17
             blank = f'OR({sel}="",{d}="")'
             first = (f'=IF({sel}="","",IF(N({P}${HC}$60)=0,"該当なし",'
@@ -1576,9 +1580,9 @@ def build_dashboard(wb, maxrows, select=None):
                      f'&"（"&{wd.format(d + "+" + ln + "-1")}&"）")))')
             cells = [
                 (2, 12, first, None, "left"),
-                (13, 16, f'=IF({blank},"",{ln})', '0"日"', "center"),
-                (17, 20, f'=IF({blank},"",N({ln})-N({ms}))', '0"日"', "center"),
-                (21, 24, f'=IF({blank},"",N({wk}))', '0"日"', "center"),
+                (13, 18, f'=IF({blank},"",{nm})', None, "left"),
+                (19, 21, f'=IF({blank},"",{ln})', '0"日"', "center"),
+                (22, 24, f'=IF({blank},"",N({wk}))', '0"日"', "center"),
             ]
             for a, b, formula, fmt, align in cells:
                 ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
@@ -1587,9 +1591,9 @@ def build_dashboard(wb, maxrows, select=None):
                 for c in range(a, b + 1):
                     ws[f"{L(c)}{r}"].border = Border(bottom=hair)
 
-        # ---- シフト希望を出していない繁忙日の日付
+        # ---- 出勤していない繁忙日の日付（当日欠勤・事前の休み・シフトなしをまとめて）
         lr2 = hr + RUN_SHOW + 1
-        label(lr2, '="シフト希望を出していない繁忙日"')
+        label(lr2, '="出勤していない繁忙日"')
         nrows = (BUSY_ROWS + 2) // 3
         for rr in range(nrows):
             r = lr2 + 1 + rr
@@ -1604,7 +1608,7 @@ def build_dashboard(wb, maxrows, select=None):
                         f'&IF({nm}=""," "," "&{nm}))')
                 if j == 1:
                     body = (f'IF({sel}="","",IF(AND(N({P}${HC}$96)>0,N({P}${HC}$58)=0),'
-                            f'"該当なし（対象期間の繁忙日はすべて希望を出しています）",{body}))')
+                            f'"該当なし（対象期間の繁忙日はすべて出勤しています）",{body}))')
                 ws.merge_cells(f"{L(a)}{r}:{L(b)}{r}")
                 ws[f"{L(a)}{r}"] = "=" + body
                 style(ws[f"{L(a)}{r}"], size=10, bg="FFFFFF", align="left")
@@ -1618,7 +1622,7 @@ def build_dashboard(wb, maxrows, select=None):
                        f'"日付は最初の{BUSY_ROWS}日まで（ほか "&(N({P}${HC}$58)-{BUSY_ROWS})&" 日）。",""))'
                        f'&IF(N({P}${HC}$60)>{RUN_SHOW},"連休は ほか "&(N({P}${HC}$60)-{RUN_SHOW})&" 件。","")'
                        f'&"連休＝土日・祝日・繁忙日が{RUN_MIN}日以上連続する期間（土日も日数に数えます）。"'
-                       f'&"希望提出＝その日のシフト希望の記録がある日数。出勤が少なくても希望提出が多い日は、劇場側で調整した日です。"')
+                       f'&"出勤していない繁忙日には、当日欠勤・事前の休み・そもそもシフトが無かった日が含まれます。理由は本人に確認してください。"')
         style(ws[f"B{r}"], size=8, color=C_MUTED, align="left")
         return r
 
@@ -1860,7 +1864,7 @@ def build_howto(wb, maxrows):
         ("勤務時間", "「変更後の開始・終了時間」（無ければ募集時間）から休憩1〜3を引いた、シフト上の時間です。"),
         ("深夜勤務時間", "勤務時間のうち、設定シートの深夜時間帯（既定 22:00〜翌5:00）に重なる時間。スタッフ一覧に表示します。"),
         ("土日祝出勤率", f"土日・祝日・繁忙日に出勤した日数 ÷ 出勤日数。その人の出勤のうち、繁忙日がどれくらいを占めるかを表します。土日は自動判定、祝日と繁忙日（GW・お盆・年末年始など）は「{S_HOL}」シートの日付で判定します。"),
-        ("繁忙日の出勤状況", f"「{S_HOL}」シートに登録した日のうち対象期間に入る日を、出勤／当日欠勤／事前に休み等（前日までの休み変更・店舗都合）／シフト希望未提出（その日のシフト希望を出していない）に分けて数えます。シフトの募集は基本的に毎日あるため、行が1件も無い日は本人が希望を出していない日とみなします（人数の少ない職種では、その日にたまたま誰も入っていないこともあります）。希望未提出の日付はダッシュボード下部に一覧で出ます。土日はこの4区分には含めません（土日を含む割合は土日祝出勤率で見ます）。あわせて、土日・祝日・繁忙日が連続して{RUN_MIN}日以上になる期間（土日だけ、祝日だけのどちらでも成立します）を、期間・日数・希望提出・出勤の表にします（土日も日数に数えます）。勤務日数は人によって大きく違うため、ツールでは○×の判定を出しません。出勤が少ない連休は希望提出の日数と見くらべ、劇場側で調整した日かどうかを確かめてください。"),
+        ("繁忙日の出勤状況", f"「{S_HOL}」シートに登録した日のうち対象期間に入る日を、出勤／当日欠勤／事前に休み等（前日までの休み変更・店舗都合）／シフトなし（その日の行が1件も無い）に分けて数えます。出勤しなかった日の日付と名称は、ダッシュボード下部に一覧で出ます（最大{BUSY_ROWS}日）。土日はこの4区分には含めません（土日を含む割合は土日祝出勤率で見ます）。あわせて、土日・祝日・繁忙日が連続して{RUN_MIN}日以上になる期間（土日だけ、祝日だけのどちらでも成立します）を、期間・繁忙日の名称・日数・出勤の表にします（土日も日数に数えます）。シフト希望を出したかどうかは数えません。CSVは行がある日しか残らないため、劇場側がシフトに組まなかった日と本人が希望を出していない日を区別できないからです。確認できる事実（出勤したか）だけを出し、理由は面談で本人に確認してください。"),
         ("追加応募", "募集を見て、あとから自分で応募した件数（CSVの「相談応募の開始時間」が入っている行）。シフト作成時にまとめて出す通常のシフト希望とは別に、自分から手を挙げた回数です。確定したかどうかに関わらず「応募した」回数を数えます（店舗側が採らなかった分も含みます）。ダッシュボードの繁忙日の出勤状況と、スタッフ一覧に表示します。"),
         ("当日遅出／当日早退", "確定した勤務シフトが、シフト当日に「変更後の開始時間」を募集の開始より遅く（当日遅出）／「変更後の終了時間」を募集の終了より早く（当日早退）変更された日数。シフト上の変更を数えたもので、打刻による遅刻・早退ではありません。店側の都合による変更も含まれるため、参考情報として一覧に日付・時間を表示します。当日遅出率・当日早退率は各日数 ÷ 確定シフト日数です。"),
         ("総合判定", "出勤率のみを基準にした目安。◎ 良好（設定の基準1以上）／△ 注意（基準2以上）／✕ 要改善（基準2未満）。確定シフト日数が設定の日数未満の人は判定を保留し「参考値」と表示します。"),
