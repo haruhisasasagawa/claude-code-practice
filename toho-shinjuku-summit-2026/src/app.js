@@ -492,29 +492,42 @@
     renderCtrl();
   }
 
-  /* ---------------- page controls (buttons + dots) ---------------- */
-  var dotsEl = $('#dots');
-  scenes.forEach(function (s, i) {
-    var b = document.createElement('button'); b.type = 'button';
-    b.dataset.label = (s.dataset.no ? s.dataset.no + '  ' : '表紙  ') + s.dataset.title;
-    b.setAttribute('aria-label', b.dataset.label);
-    b.addEventListener('click', function () { goto(i, 1); });
-    dotsEl.appendChild(b);
-  });
+  /* ---------------- edge arrows (left half = back, right half = next) ---------------- */
+  var navL = $('#nav-l'), navR = $('#nav-r');
   function renderCtrl() {
-    $$('#dots button').forEach(function (b, i) {
-      b.classList.toggle('on', state.started && i === state.idx);
-      b.classList.toggle('done', state.started && i < state.idx);
-    });
-    var atEnd = state.idx === N - 1 && state.step >= stepsOf(N - 1);
-    var nb = $('#btn-next'); nb.classList.toggle('end', atEnd);
-    nb.firstChild.textContent = atEnd ? 'おわり' : '次へ';
-    $('#btn-prev').disabled = !state.started;
+    navL.classList.toggle('off', !state.started || (state.idx === 0 && state.step <= 1));
+    navR.classList.toggle('off', !state.started || (state.idx === N - 1 && state.step >= stepsOf(N - 1)));
   }
-  $('#btn-next').addEventListener('click', function () { next(); });
-  $('#btn-prev').addEventListener('click', function () { prev(); });
+  function sideOf(clientX) {
+    var r = viewport.getBoundingClientRect();
+    return (clientX - r.left) / r.width < 0.5 ? 'l' : 'r';
+  }
+  function tapArrow(side) {
+    var a = side === 'l' ? navL : navR;
+    a.classList.remove('tap'); void a.offsetWidth; a.classList.add('tap');
+  }
   $('#sb-start').addEventListener('click', function (e) { e.stopPropagation(); next(); });
-  $$('#ctrl button, #sb-start').forEach(function (b) { b.addEventListener('mousedown', function (e) { e.preventDefault(); }); });
+  $('#sb-start').addEventListener('mousedown', function (e) { e.preventDefault(); });
+  // things on a slide you can drag or click without turning the page
+  var NO_NAV = '.knob, .knob2, button, a, input, .no-nav';
+  var downPt = null;
+  viewport.addEventListener('pointerdown', function (e) { downPt = { x: e.clientX, y: e.clientY }; });
+  viewport.addEventListener('click', function (e) {
+    if (e.button !== 0) return;
+    if (e.target.closest && e.target.closest(NO_NAV)) return;
+    if (downPt && Math.abs(e.clientX - downPt.x) + Math.abs(e.clientY - downPt.y) > 12) return;   // a drag, not a click
+    if (!state.started) { next(); return; }
+    var side = sideOf(e.clientX);
+    tapArrow(side);
+    if (side === 'l') prev(); else next();
+  });
+  viewport.addEventListener('mousemove', function (e) {
+    var side = e.target.closest && e.target.closest(NO_NAV) ? '' : sideOf(e.clientX);
+    navL.classList.toggle('hot', side === 'l');
+    navR.classList.toggle('hot', side === 'r');
+  });
+  viewport.addEventListener('mouseleave', function () { navL.classList.remove('hot'); navR.classList.remove('hot'); });
+  viewport.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   /* ---------------- notes panel (N) ---------------- */
   function renderNotes() {
@@ -745,13 +758,10 @@
   var idleId = 0;
   function wake() {
     document.body.classList.remove('idle'); clearTimeout(idleId);
-    idleId = setTimeout(function () { if (!onCtrl) document.body.classList.add('idle'); }, 2500);
+    idleId = setTimeout(function () { document.body.classList.add('idle'); }, 2500);
   }
   document.addEventListener('mousemove', wake);
   document.addEventListener('mousedown', wake);
-  var ctrlEl = $('#ctrl'), onCtrl = false;
-  ctrlEl.addEventListener('mouseenter', function () { onCtrl = true; });
-  ctrlEl.addEventListener('mouseleave', function () { onCtrl = false; wake(); });
   document.addEventListener('touchstart', wake, { passive: true });
   // keyboard / presentation remote: keep the controls and cursor out of the way
   document.addEventListener('keydown', function () { clearTimeout(idleId); document.body.classList.add('idle'); });
@@ -915,6 +925,7 @@
     cv.addEventListener('pointerleave', function () { hover = -1; });
     cv.addEventListener('click', function (e) {
       var k = nodeAt(e); if (k < 0) return;
+      e.stopPropagation();
       nodes[k].flash = 1;
       edges.forEach(function (ed) { if (ed.a === k || ed.b === k) pulses.push({ e: ed, p: 0, hop: 1, from: k }); });
     });

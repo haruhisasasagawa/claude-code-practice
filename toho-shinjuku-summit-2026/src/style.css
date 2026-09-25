@@ -624,29 +624,22 @@ body.calm .split .ch { transform: none !important; }
 .theme.inline { position: static; }
 
 /* =========================================================
-   PAGE CONTROLS (buttons + dots) — outside the stage
+   EDGE ARROWS — faint ‹ › that show while the mouse moves
+   (click/tap the left half = back, right half = next)
    ========================================================= */
-#ctrl { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 66; display: flex; align-items: center; gap: 18px;
-  padding: 10px; border-radius: 999px; background: rgba(14,15,19,.94); border: 1px solid rgba(255,255,255,.14);
-  transition: opacity .5s var(--ease), transform .5s var(--ease); font-family: var(--jp); }
-body.idle #ctrl, body.pre #ctrl, body.counting #ctrl { opacity: 0; pointer-events: none; transform: translate(-50%, 14px); }
-#ctrl button { font: inherit; border: 0; cursor: pointer; color: #fff; border-radius: 999px; height: 56px; display: inline-flex; align-items: center; justify-content: center; transition: background .2s, transform .15s; }
-#ctrl button:active { transform: scale(.94); }
-#btn-prev { width: 56px; background: rgba(255,255,255,.08); font-size: 40px; line-height: 1; padding-bottom: 4px; }
-#btn-prev:hover { background: rgba(255,255,255,.18); }
-#btn-prev:disabled { opacity: .3; cursor: default; }
-#btn-next { padding: 0 26px 0 30px; background: var(--red); font-size: 20px; font-weight: 700; gap: 12px; box-shadow: 0 0 24px rgba(227,38,46,.4); }
-#btn-next span { font-size: 30px; line-height: 1; margin-top: -3px; }
-#btn-next:hover { background: var(--red2); }
-#btn-next.end { background: #2a2d35; box-shadow: none; }
-#dots { display: flex; gap: 11px; padding: 0 4px; }
-#dots button { width: 13px; height: 13px; padding: 0; border-radius: 50%; background: rgba(255,255,255,.22); position: relative; }
-#dots button:hover { background: rgba(255,255,255,.55); }
-#dots button.on { background: var(--red); width: 36px; border-radius: 7px; }
-#dots button.done { background: rgba(255,255,255,.5); }
-#dots button::after { content: attr(data-label); position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 18px; color: #ddd;
-  background: rgba(14,15,19,.95); border: 1px solid #2c2f37; padding: 4px 10px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .15s; }
-#dots button:hover::after { opacity: 1; }
+.navarrow { position: absolute; top: 50%; width: 46px; height: 92px; margin-top: -46px; z-index: 66; pointer-events: none;
+  opacity: 0; transition: opacity .6s ease, transform .35s ease; }
+.navarrow.l { left: 36px; }
+.navarrow.r { right: 24px; }
+.navarrow svg { width: 100%; height: 100%; overflow: visible; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgba(0,0,0,.6)); }
+body:not(.idle):not(.pre):not(.counting) .navarrow { opacity: .16; }
+body:not(.idle):not(.pre):not(.counting) .navarrow.hot { opacity: .5; }
+.navarrow.l.hot { transform: translateX(-5px); }
+.navarrow.r.hot { transform: translateX(5px); }
+body .navarrow.off { opacity: 0 !important; }
+.navarrow.tap svg { animation: navtap .5s ease-out; }
+@keyframes navtap { 0% { transform: scale(1.18); stroke: var(--gold2); } 100% { transform: scale(1); } }
 
 /* =========================================================
    GIMMICKS

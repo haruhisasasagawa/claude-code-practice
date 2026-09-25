@@ -21,7 +21,7 @@
     <div class="sb-sub">新宿映画館 ―私たちの現在地と挑戦―</div>
     <button class="sb-go" id="sb-start" type="button"><i></i>START</button>
     <div class="sb-hint">
-      <span><kbd>→</kbd>または START で開始</span>
+      <span><kbd>→</kbd>／START／画面の右側クリックで開始</span>
       <span><kbd>F</kbd>全画面</span>
       <span><kbd>S</kbd>発表者ビュー</span>
       <span><kbd>N</kbd>台本</span>
@@ -396,12 +396,9 @@
   <div id="vignette"></div>
   <div id="grain"></div>
   <div id="blackout"></div>
-<!-- page controls -->
-  <nav id="ctrl" aria-label="ページ操作">
-    <button type="button" id="btn-prev" aria-label="前へ">‹</button>
-    <div id="dots"></div>
-    <button type="button" id="btn-next" aria-label="次へ">次へ<span>›</span></button>
-  </nav>
+<!-- edge arrows: click/tap the left half to go back, the right half to go forward -->
+  <div id="nav-l" class="navarrow l" aria-hidden="true"><svg viewBox="0 0 40 80"><path d="M30 6 L9 40 L30 74"/></svg></div>
+  <div id="nav-r" class="navarrow r" aria-hidden="true"><svg viewBox="0 0 40 80"><path d="M10 6 L31 40 L10 74"/></svg></div>
 </div>
 </div>
 
@@ -417,9 +414,8 @@
   <h2>操作一覧</h2>
   <p class="s">PCのキーボード、プレゼン用リモコン（PageUp／PageDown）、マウスで操作できます。</p>
   <dl>
-    <dt><kbd>次へ ›</kbd><kbd>→</kbd><kbd>Space</kbd><kbd>PageDown</kbd></dt><dd>次へ（画面の中の動きも1段ずつ進みます）</dd>
-    <dt><kbd>‹</kbd><kbd>←</kbd><kbd>PageUp</kbd></dt><dd>前へ</dd>
-    <dt><kbd>●</kbd></dt><dd>画面下の点をクリックすると、そのページへ移動</dd>
+    <dt><kbd>画面の右側をクリック／タップ</kbd><kbd>→</kbd><kbd>Space</kbd><kbd>PageDown</kbd></dt><dd>次へ（画面の中の動きも1段ずつ進みます）</dd>
+    <dt><kbd>画面の左側をクリック／タップ</kbd><kbd>←</kbd><kbd>PageUp</kbd></dt><dd>前へ（マウスを動かすと、左右の端に薄い ‹ › が出ます）</dd>
     <dt><kbd>F</kbd><kbd>F5</kbd></dt><dd>全画面のオン／オフ</dd>
     <dt><kbd>S</kbd></dt><dd>発表者ビュー（台本・タイマー）を別ウィンドウで開く</dd>
     <dt><kbd>N</kbd></dt><dd>台本を画面下に表示（リハーサル用）</dd>
