@@ -654,6 +654,7 @@ def build_roster(wb, maxrows):
 
     # --- 和集合（マスター）と半年集計
     sets = q(S_SET)
+    flt = f"{q(S_DASH)}!$D$5"          # ダッシュボードの絞り込み入力
     for n in range(1, MAXSTAFF + 1):
         r = n + 1
         key = f"$I{r}"
@@ -701,6 +702,12 @@ def build_roster(wb, maxrows):
         ws[f"AT{r}"] = f'=IFERROR(INDEX($J$2:$J${MAXSTAFF + 1},MATCH({n},$V$2:$V${MAXSTAFF + 1},0)),"")'
         ws[f"AU{r}"] = f'=IFERROR(INDEX($I$2:$I${MAXSTAFF + 1},MATCH({n},$V$2:$V${MAXSTAFF + 1},0)),"")'
         ws[f"AV{r}"] = f'=IFERROR(MATCH({n},$V$2:$V${MAXSTAFF + 1},0),"")'
+        # 絞り込み: ダッシュボードの入力に、名前か従業員番号の一部が含まれる人だけを詰めて並べる
+        ws[f"CG{r}"] = (f'=IF($AT{r}="","",IF({flt}="",1,'
+                        f'IF(OR(ISNUMBER(SEARCH({flt},$AT{r})),ISNUMBER(SEARCH({flt},$AU{r}&""))),1,0)))')
+        ws[f"CH{r}"] = f'=IF(N($CG{r})=1,SUM($CG$2:$CG{r}),"")'
+        ws[f"CI{r}"] = (f'=IF(N($CJ$2)=0,IFERROR(INDEX($AT$2:$AT${MAXSTAFF + 1},{n}),""),'
+                        f'IFERROR(INDEX($AT$2:$AT${MAXSTAFF + 1},MATCH({n},$CH$2:$CH${MAXSTAFF + 1},0)),""))')
         for c in ("P", "Q"):
             ws[f"{c}{r}"].number_format = "0.0%"
         for c in ("R", "S", "T"):
@@ -727,6 +734,15 @@ def build_roster(wb, maxrows):
     for r, label, formula, fmt in summary:
         ws[f"AX{r}"], ws[f"AY{r}"] = label, formula
         ws[f"AY{r}"].number_format = fmt
+
+    # 絞り込みの件数。0件（＝一致なし）のときは全員を候補に戻す
+    ws["CJ1"] = "絞り込み"
+    style(ws["CJ1"], size=9, bold=True, color="FFFFFF", bg=C_INK2)
+    ws.column_dimensions["CJ"].width = 12
+    ws["CJ2"] = f"=SUM($CG$2:$CG${ML})"
+    ws["CJ3"] = f'=IF(N($CJ$2)=0,N($AY$2),N($CJ$2))'
+    for rr in (2, 3):
+        ws[f"CJ{rr}"].number_format = "0"
 
     ws["BP12"] = "所属別（設定シートの所属の一覧。空欄の行は空）"
     style(ws["BP12"], size=9, bold=True, color="FFFFFF", bg=C_INK2)
@@ -1085,11 +1101,24 @@ def build_dashboard(wb, maxrows, select=None):
     style(ws["O3"], size=9, color=C_DARK_TXT, bg=C_DARK, align="right")
     ws.conditional_formatting.add("O3", FormulaRule(formula=['LEFT($O$3,1)="※"'], font=Font(name=FONT, bold=True, size=9, color=C_WARN)))
 
-    # ---- スタッフ選択
-    ws.row_dimensions[5].height = 14
+    # ---- スタッフ選択（人数が多いので、まず絞り込んでから▼で選べるようにする）
+    ws.row_dimensions[5].height = 17
     ws.row_dimensions[6].height = 15
     ws.row_dimensions[7].height = 22
     ws.row_dimensions[8].height = 22
+    ws["B5"] = "絞り込み"
+    style(ws["B5"], size=9, color=C_INK2, align="left")
+    ws.merge_cells("D5:F5")
+    style(ws["D5"], size=10, bg=C_INPUT_FILL, align="left")
+    box_range(ws, "D5:F5")
+    ws.merge_cells("G5:X5")
+    ws["G5"] = (f'=IF($D$5="","　← 名前の一部（例：太田）や従業員番号の一部（例：5616）を入れると、下の▼の候補がその人だけになります",'
+                f'IF(N({ros}!$CJ$2)=0,"　「"&$D$5&"」に一致するスタッフはいません。▼は全員を表示しています",'
+                f'"　「"&$D$5&"」に一致 "&N({ros}!$CJ$2)&"名　― 下の▼から選んでください（空欄にすると全員に戻ります）"))')
+    style(ws["G5"], size=9, color=C_MUTED, align="left")
+    ws.conditional_formatting.add(
+        "G5", FormulaRule(formula=[f'AND($D$5<>"",N({ros}!$CJ$2)=0)'],
+                          font=Font(name=FONT, size=9, bold=True, color=C_CRIT)))
     ws["B6"] = "スタッフ（▼から選択）"
     style(ws["B6"], size=9, color=C_INK2)
     ws.merge_cells("B7:H8")
@@ -1823,6 +1852,7 @@ def build_howto(wb, maxrows):
         ("3", "このブックの「CSV_1」シートのA1セルを選択して貼り付けます（Ctrl+V）。2ヶ月目は「CSV_2」、以降「CSV_3」…「CSV_6」へ。順番は古い月から新しい月の順が見やすいです。"),
         ("4", "「ダッシュボード」シートで、スタッフ名をドロップダウンから選ぶ（または氏名を入力する）と、その人の実績が表示されます。見出し・グラフ・月別の実績・欠勤の一覧・繁忙日の出勤状況まで、そのままA4縦1枚に収まります（Ctrl+P で確認できます）。"),
         ("5", "PDFにして渡すときは「ダッシュボード」シートのまま、ファイル → エクスポート → PDF/XPS ドキュメントの作成（または 印刷 → Microsoft Print to PDF）。用紙はA4縦1枚です。"),
+        ("スタッフの絞り込み", "ダッシュボード上部の黄色いセルに、名前の一部（例：太田）や従業員番号の一部（例：5616）を入れると、すぐ下の▼に出る候補がその条件に合う人だけになります。人数が多いときに使ってください。空欄にすると全員に戻ります。一致する人がいないときは全員を表示し、その旨を右側に表示します。"),
         ("6", "全員の一覧・順位・所属別の集計は「スタッフ一覧」シートで確認できます。判定の基準値などは「設定」シート、土日祝出勤率で使う祝日・繁忙日の日付は「祝日・繁忙日」シートで変更できます。"),
         ("★", "貼り直すときは、貼付シートの古いデータをすべて削除（Ctrl+A → Delete）してから貼り付けてください。行数が前より少ない月を上書きすると、古い行が残ってしまいます。"),
     ]
@@ -1947,7 +1977,7 @@ def build(output, csv_paths=(), maxrows=5000, select=None, paste_mode="excel"):
 
     ML = MAXSTAFF + 1
     wb.defined_names["StaffNames"] = DefinedName(
-        "StaffNames", attr_text=f"{q(S_ROSTER)}!$AT$2:INDEX({q(S_ROSTER)}!$AT$2:$AT${ML},MAX(1,N({q(S_ROSTER)}!$AY$2)))")
+        "StaffNames", attr_text=f"{q(S_ROSTER)}!$CI$2:INDEX({q(S_ROSTER)}!$CI$2:$CI${ML},MAX(1,N({q(S_ROSTER)}!$CJ$3)))")
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
     for name in [S_ROSTER, S_DBCALC] + [S_CALC.format(k) for k in range(1, NSHEETS + 1)]:
         wb[name].sheet_state = "hidden"
