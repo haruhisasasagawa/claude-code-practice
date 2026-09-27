@@ -14,7 +14,7 @@ import datetime as dt
 import re
 
 from openpyxl import Workbook
-from openpyxl.chart import BarChart, DoughnutChart, Reference
+from openpyxl.chart import BarChart, DoughnutChart, LineChart, Reference
 from openpyxl.chart._chart import ChartBase
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.layout import Layout, ManualLayout
@@ -329,8 +329,10 @@ CALC_COLS = [
     ("S", "初出"), ("T", "番号累積"), ("U", "休み日(初回)"), ("V", "更新時刻(JST)"), ("W", "選択者一覧連番"),
     ("X", "元開始"), ("Y", "元終了"), ("AV", "勤務キー"), ("AW", "休みキー"), ("AX", "当日休みキー"),
     ("AY", "遅出行"), ("AZ", "早退行"), ("BA", "時間変更キー"), ("BB", "時間変更日(初回)"),
-    ("BC", "繁忙日"), ("BD", "追加応募行"), ("BE", "追加応募・確定"),
+    ("BC", "繁忙日"), ("BD", "追加応募行"), ("BE", "追加応募・確定"), ("BF", "所属"),
+    ("BG", "朝h"), ("BH", "昼h"), ("BI", "夕h"), ("BJ", "夜h"),
 ]
+TIME_BANDS = [("朝 〜12時", 5, 12), ("昼 12〜17時", 12, 17), ("夕 17〜22時", 17, 22), ("夜 22時〜", 22, 29)]   # 出勤時間帯の区切り（ラベルは横軸で折り返さない長さに）
 
 
 def build_calc_sheet(wb, k, maxrows):
@@ -419,6 +421,10 @@ def build_calc_sheet(wb, k, maxrows):
             # 追加応募＝相談応募の開始時間が入っている行（募集を見てあとから自分で手を挙げたもの）
             "BD": f'=IF($A{r}="","",IF({idx("相談応募の開始時間")}="",0,1))',
             "BE": f'=IF($A{r}="","",IF(AND($BD{r}=1,$C{r}=1),1,0))',
+            "BF": f'=IF($A{r}="","",{idx("応募者の職種")}&"")',
+            # 出勤時間帯: 勤務行の開始〜終了が各時間帯に重なる時間（h）
+            **{c: f'=IF($E{r}<>1,"",MAX(0,MIN($K{r},{b}/24)-MAX($J{r},{a}/24))*24)'
+               for c, (_, a, b) in zip(("BG", "BH", "BI", "BJ"), TIME_BANDS)},
             "BA": f'=IF(OR($AY{r}=1,$AZ{r}=1),IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
             "BB": f'=IF($A{r}="","",IF(OR($AY{r}=1,$AZ{r}=1),IF(MATCH($BA{r},$BA$2:$BA${last},0)=ROW()-1,1,0),0))',
             "Q": f'=IF($A{r}="","",IF(ISNUMBER(SEARCH("却下",{status})),1,0))',
@@ -927,6 +933,36 @@ def build_dashboard(wb, maxrows, select=None):
         r = 25 + i
         hws[f"{HL}{r}"] = wd
         hws[f"{HC}{r}"] = f'=IF({sel}="",0,{sum6sel("H", "O", code)})'
+    # 出勤時間帯: 勤務時間のうち朝・昼・夕・夜の各帯に入っている割合（本人／全体／同所属。各系列の合計＝100%）
+    HB0 = 70                                     # 70〜73行が4つの時間帯、74行が合計
+    def sumb(col, extra):
+        """6シート分の SUMIFS(時間帯の列, 勤務行=1, extra...) の合計."""
+        parts = []
+        for k in range(1, NSHEETS + 1):
+            a = f"SUMIFS({calc_rng(k, col, maxrows)},{calc_rng(k, 'E', maxrows)},1"
+            for c, crit in extra:
+                a += f",{calc_rng(k, c, maxrows)},{crit}"
+            parts.append(a + ")")
+        return "+".join(parts)
+    dept = f"{P}${HC}$5"
+    HBT = HB0 + len(TIME_BANDS)                  # 合計行
+    hws[f"{HL}{HB0 - 1}"], hws[f"{HC}{HB0 - 1}"], hws[f"AD{HB0 - 1}"], hws[f"AE{HB0 - 1}"] = "出勤時間帯（勤務時間の割合）", "本人", "全体", "同所属"
+    for c in (HL, HC, "AD", "AE"):
+        style(hws[f"{c}{HB0 - 1}"], size=9, bold=True, color=C_INK2)
+    for i, (label, a, b) in enumerate(TIME_BANDS):
+        r = HB0 + i
+        col = ("BG", "BH", "BI", "BJ")[i]
+        hws[f"{HL}{r}"] = label
+        hws[f"{HC}{r}"] = f'=IF(OR({sel}="",N(${HC}${HBT})=0),0,({sumb(col, [("A", sel)])})/${HC}${HBT})'
+        hws[f"AD{r}"] = f'=IF(N($AD${HBT})=0,0,({sumb(col, [])})/$AD${HBT})'
+        hws[f"AE{r}"] = f'=IF(OR({dept}="",N($AE${HBT})=0),0,({sumb(col, [("BF", dept)])})/$AE${HBT})'
+        for c in (HC, "AD", "AE"):
+            hws[f"{c}{r}"].number_format = "0%"
+    hws[f"{HL}{HBT}"] = "時間帯の合計h（分母: 本人／全体／同所属）"
+    hws[f"{HC}{HBT}"] = f'=IF({sel}="",0,' + "+".join(f'({sumb(c, [("A", sel)])})' for c in ("BG", "BH", "BI", "BJ")) + ")"
+    hws[f"AD{HBT}"] = "=" + "+".join(f'({sumb(c, [])})' for c in ("BG", "BH", "BI", "BJ"))
+    hws[f"AE{HBT}"] = f'=IF({dept}="",0,' + "+".join(f'({sumb(c, [("BF", dept)])})' for c in ("BG", "BH", "BI", "BJ")) + ")"
+
     hws[f"{HL}34"], hws[f"{HC}34"] = "本人", f"=N({P}${HC}$6)"
     hws[f"{HL}35"], hws[f"{HC}35"] = "全体平均", f"=N({ros}!$AY$6)"
     hws[f"{HL}36"] = f'=IF({P}${HC}$5="","同所属","同所属（"&IFERROR(INDEX({ros}!$BQ$14:$BQ$33,MATCH({P}${HC}$5,{ros}!$BP$14:$BP$33,0)),{P}${HC}$5)&"）")'
@@ -1204,7 +1240,8 @@ def build_dashboard(wb, maxrows, select=None):
     ws.merge_cells("B15:X15")
     ws["B15"] = (f'=IF({P}${HC}$4="","",IF(N({P}${HC}$10)=0,"対象期間に確定シフトがありません。",'
                  f'"確定シフト "&{P}${HC}$10&"日のうち出勤 "&{V("M")}&"日、当日欠勤 "&{V("N")}&"日。'
-                 f'出勤率 "&TEXT({P}${HC}$6,"0.0%")&"（全体平均 "&TEXT({P}${HC}$35,"0.0%")&"、"&{ros}!$AY$8&"人中 "&{V("W")}&"位）"))')
+                 f'出勤率 "&TEXT({P}${HC}$6,"0.0%")&"（全体平均 "&TEXT({P}${HC}$35,"0.0%")'
+                 f'&IF({P}${HC}$5="","","・同所属 "&TEXT({P}${HC}$36,"0.0%"))&"、"&{ros}!$AY$8&"人中 "&{V("W")}&"位）"))')
     style(ws["B15"], size=10, bold=True, color=C_INK, align="left")
     ws.row_dimensions[16].height = 16
     ws.merge_cells("B16:X16")
@@ -1357,7 +1394,7 @@ def build_dashboard(wb, maxrows, select=None):
     for r in range(34, 48):
         ws.row_dimensions[r].height = 16.5
     section(33, "曜日別の出勤日数", "B", "H")
-    section(33, "出勤率の比較", "J", "P")
+    section(33, "出勤時間帯（勤務時間の割合）", "J", "P")
     section(33, "休み・時間変更のタイミング", "R", "X")
     for a, b in (("B", "H"), ("J", "P"), ("R", "X")):
         card(f"{a}34:{b}47")
@@ -1387,23 +1424,23 @@ def build_dashboard(wb, maxrows, select=None):
     ch.legend = None
     ws.add_chart(plain(ch), span(2, 34, 8, 46))
 
+    # 出勤時間帯: 朝・昼・夕・夜の4つの帯に、勤務時間の何％が入っているかを本人・全体・同所属の3本の棒で比べる
     ch = BarChart()
-    ch.type, ch.gapWidth = "bar", 50
-    ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!${HC}$34:${HC}$36"), titles_from_data=False)
-    ch.set_categories(Reference(hws, range_string=f"{q(S_DBCALC)}!${HL}$34:${HL}$36"))
-    ch.series[0].graphicalProperties = gp(C_GRAY_BAR)
-    pt = DataPoint(idx=0)
-    pt.graphicalProperties = gp(C_BLUE)
-    ch.series[0].dPt.append(pt)
-    ch.dataLabels = DataLabelList()
-    ch.dataLabels.showVal = True
-    ch.dataLabels.showSerName = False
-    ch.dataLabels.showCatName = False
-    ch.dataLabels.showLegendKey = False
-    ch.dataLabels.numFmt = "0.0%"
-    ch.dataLabels.txPr = chart_text(8)
-    ch.x_axis.scaling.orientation = "maxMin"
-    ch.y_axis.scaling.min, ch.y_axis.scaling.max = 0, 1
+    ch.type, ch.grouping, ch.gapWidth, ch.overlap = "col", "clustered", 80, -10
+    HB_L, HB_R = HB0, HB0 + len(TIME_BANDS) - 1
+    for col, color in ((HC, C_NAVY), ("AD", C_GRAY_BAR), ("AE", C_GOOD)):
+        ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!${col}${HB_L}:${col}${HB_R}"), titles_from_data=False)
+        s_ = ch.series[-1]
+        s_.graphicalProperties = gp(color)
+        s_.dLbls = DataLabelList()
+        s_.dLbls.showVal = True
+        s_.dLbls.showSerName = False
+        s_.dLbls.showCatName = False
+        s_.dLbls.showLegendKey = False
+        s_.dLbls.numFmt = "0%;;;"
+        s_.dLbls.txPr = chart_text(7.5)
+    ch.set_categories(Reference(hws, range_string=f"{q(S_DBCALC)}!${HL}${HB_L}:${HL}${HB_R}"))
+    ch.y_axis.scaling.min = 0
     ch.y_axis.number_format = "0%"
     ch.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill=C_GRID))
     ch.x_axis.delete = False
@@ -1412,6 +1449,11 @@ def build_dashboard(wb, maxrows, select=None):
     ch.y_axis.txPr = chart_text(8)
     ch.legend = None
     ws.add_chart(plain(ch), span(10, 34, 16, 46))
+    # 凡例（グラフの下）: 線の色と同じ文字色
+    for a, b, text, color in (("J", "K", "■ 本人", C_NAVY), ("L", "M", "■ 全体", "6E7A8A"), ("N", "P", "■ 同所属", C_GOOD_TXT)):
+        ws.merge_cells(f"{a}47:{b}47")
+        ws[f"{a}47"] = text if text != "■ 同所属" else f'=IF({P}${HC}$5="","■ 同所属","■ 同所属（"&IFERROR(INDEX({ros}!$BQ$14:$BQ$33,MATCH({P}${HC}$5,{ros}!$BP$14:$BP$33,0)),{P}${HC}$5)&"）")'
+        style(ws[f"{a}47"], size=8.5, bold=True, color=color, bg="FFFFFF", align="center")
 
     ws.row_dimensions[35].height = 18
     ws.merge_cells("R35:U35")
@@ -1893,6 +1935,7 @@ def build_howto(wb, maxrows):
         ("出勤率／当欠率", "出勤日数 ÷ 確定シフト日数 ／ 当日欠勤日数 ÷ 確定シフト日数。当欠率が設定の基準（既定5%）以上のスタッフには、ダッシュボードに警告行、スタッフ一覧に赤い塗りが出ます。"),
         ("勤務時間", "「変更後の開始・終了時間」（無ければ募集時間）から休憩1〜3を引いた、シフト上の時間です。"),
         ("深夜勤務時間", "勤務時間のうち、設定シートの深夜時間帯（既定 22:00〜翌5:00）に重なる時間。スタッフ一覧に表示します。"),
+        ("出勤時間帯", "勤務シフトの時間を 朝（〜12時）／昼（12〜17時）／夕（17〜22時）／夜（22時〜）の4つに分け、それぞれに入っている時間の割合（合計100%）を本人・全体・同所属で比べます。休憩は引かず、シフトの開始〜終了で数えます。本人の割合が全体や同所属より高い帯がその人の得意な時間帯、低い帯が入ってもらいにくい時間帯です。出勤率の全体平均・同所属平均は、ページ上部の一文サマリーに出ます。"),
         ("土日祝出勤率", f"土日・祝日・繁忙日に出勤した日数 ÷ 出勤日数。その人の出勤のうち、繁忙日がどれくらいを占めるかを表します。土日は自動判定、祝日と繁忙日（GW・お盆・年末年始など）は「{S_HOL}」シートの日付で判定します。"),
         ("繁忙日の出勤状況", f"「{S_HOL}」シートに登録した日のうち対象期間に入る日を、出勤／当日欠勤／事前に休み等（前日までの休み変更・店舗都合）／シフトなし（その日の行が1件も無い）に分けて数えます。出勤しなかった日の日付と名称は、ダッシュボード下部に一覧で出ます（最大{BUSY_ROWS}日）。土日はこの4区分には含めません（土日を含む割合は土日祝出勤率で見ます）。あわせて、土日・祝日・繁忙日が連続して{RUN_MIN}日以上になる期間（土日だけ、祝日だけのどちらでも成立します）を、期間・繁忙日の名称・日数・出勤の表にします（土日も日数に数えます）。シフト希望を出したかどうかは数えません。CSVは行がある日しか残らないため、劇場側がシフトに組まなかった日と本人が希望を出していない日を区別できないからです。確認できる事実（出勤したか）だけを出し、理由は面談で本人に確認してください。"),
         ("追加応募", "募集を見て、あとから自分で応募した件数（CSVの「相談応募の開始時間」が入っている行）。シフト作成時にまとめて出す通常のシフト希望とは別に、自分から手を挙げた回数です。確定したかどうかに関わらず「応募した」回数を数えます（店舗側が採らなかった分も含みます）。ダッシュボードの繁忙日の出勤状況と、スタッフ一覧に表示します。"),
