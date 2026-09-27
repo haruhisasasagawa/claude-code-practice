@@ -847,6 +847,7 @@ RUN_MIN = 3                              # 連休とみなす連続日数（土�
 RUN_SHOW = 6                             # 表に出す連休の件数
 WD_ORDER = [(2, "月"), (3, "火"), (4, "水"), (5, "木"), (6, "金"), (7, "土"), (1, "日")]   # WEEKDAY値と表示
 C_NAVY = "1B4F9E"
+RADAR_TABLE = True   # 出勤時間帯の下に本人／全体／同所属の数字の表を出す（False で表なし・凡例1行の形）
 
 
 def chart_text(size=9, bold=False, color=None):
@@ -1474,39 +1475,72 @@ def build_dashboard(wb, maxrows, select=None):
     ws.add_chart(plain(ch), span(2, 34, 8, 46))
 
     # 出勤時間帯: 1日を5つの時間帯に分け、勤務時間の何％が入っているかを五角形のレーダーで比べる。
-    #   本人は薄い面＋太線、全体・同所属は線だけ。形の偏りで「朝型／夜型」が一目で分かる
+    #   本人は薄い面＋線、全体は灰色の破線、同所属はオレンジの線（本人の面に埋もれないよう、比較の線は太く上に重ねる）。
+    #   グラフの下の小さな表が凡例を兼ね、3つの数字を並べて見せる
+    C_ALL, C_DEPT = "5B6675", "E08A1E"
     ch = RadarChart()
     ch.type = "filled"
     HB_L, HB_R = HB0, HB0 + len(TIME_BANDS) - 1
-    for col, fill_, line, width in ((HC, "D3E3F6", C_NAVY, 28575), ("AD", None, "8A96A6", 19050), ("AE", None, C_GOOD_TXT, 19050)):
+    for col, fill_, line, width, dash in ((HC, "DCE8F7", C_NAVY, 22225, None), ("AD", None, C_ALL, 25400, "dash"), ("AE", None, C_DEPT, 25400, None)):
         ch.add_data(Reference(hws, range_string=f"{q(S_DBCALC)}!${col}${HB_L}:${col}${HB_R}"), titles_from_data=False)
         s_ = ch.series[-1]
         g = GraphicalProperties(solidFill=fill_) if fill_ else GraphicalProperties(noFill=True)
         g.line.solidFill = line
         g.line.width = width
+        if dash:
+            g.line.prstDash = dash
         s_.graphicalProperties = g
-    lab = ch.series[0]                            # 数値は本人だけに出す
-    lab.dLbls = DataLabelList()
-    lab.dLbls.showVal = True
-    lab.dLbls.showSerName = False
-    lab.dLbls.showCatName = False
-    lab.dLbls.showLegendKey = False
-    lab.dLbls.numFmt = "0%;;;"
-    lab.dLbls.txPr = chart_text(7.5, bold=True, color=C_NAVY)
+    if not RADAR_TABLE:
+        lab = ch.series[0]                        # 数値は本人だけに出す（表があるときは表で見せる）
+        lab.dLbls = DataLabelList()
+        lab.dLbls.showVal = True
+        lab.dLbls.showSerName = False
+        lab.dLbls.showCatName = False
+        lab.dLbls.showLegendKey = False
+        lab.dLbls.numFmt = "0%;;;"
+        lab.dLbls.txPr = chart_text(7.5, bold=True, color=C_NAVY)
     ch.set_categories(Reference(hws, range_string=f"{q(S_DBCALC)}!${HL}${HB_L}:${HL}${HB_R}"))
     ch.y_axis.scaling.min = 0
     ch.y_axis.number_format = "0%"
     ch.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill=C_GRID))
-    ch.y_axis.delete = True                       # 目盛りの数字は出さない（本人の値はラベルで出す）
+    ch.y_axis.delete = True                       # 目盛りの数字は出さない
     ch.x_axis.delete = False
     ch.x_axis.txPr = chart_text(8)
     ch.legend = None
-    ws.add_chart(plain(ch), span(10, 34, 16, 46))
-    # 凡例（グラフの下）: 線の色と同じ文字色
-    for a, b, text, color in (("J", "K", "■ 本人", C_NAVY), ("L", "M", "― 全体", "6E7A8A"), ("N", "P", "― 同所属", C_GOOD_TXT)):
-        ws.merge_cells(f"{a}47:{b}47")
-        ws[f"{a}47"] = text if text != "― 同所属" else f'=IF({P}${HC}$5="","― 同所属","― 同所属（"&IFERROR(INDEX({ros}!$BQ$14:$BQ$33,MATCH({P}${HC}$5,{ros}!$BP$14:$BP$33,0)),{P}${HC}$5)&"）")'
-        style(ws[f"{a}47"], size=8.5, bold=True, color=color, bg="FFFFFF", align="center")
+    dept_label = f'IFERROR(INDEX({ros}!$BQ$14:$BQ$33,MATCH({P}${HC}$5,{ros}!$BP$14:$BP$33,0)),{P}${HC}$5)'
+    if RADAR_TABLE:
+        # 43行: 見出し、44〜46行: 本人／全体／同所属、47行: 余白（カードの枠に文字が付かないように）
+        for r in range(34, 43):
+            ws.row_dimensions[r].height = 18
+        for r in range(43, 47):
+            ws.row_dimensions[r].height = 14
+        ws.row_dimensions[47].height = 8
+        ch.layout = Layout(manualLayout=ManualLayout(x=0.17, y=0.13, w=0.66, h=0.74))   # 五角形を大きめに（周りは時間帯の文字の分だけ）
+        ws.add_chart(plain(ch), span(10, 34, 16, 42))
+        short = ["朝", "午前", "午後", "夕", "夜"]
+        ws.merge_cells("J43:K43")
+        for c in "JKLMNOP":
+            style(ws[f"{c}43"], size=8, bold=True, color=C_INK2, bg="FFFFFF", align="center", border=Border(bottom=hair))
+        for i, name in enumerate(short):
+            ws[f"{L(12 + i)}43"] = name
+        rows = ((44, "■ 本人", C_NAVY, HC), (45, "- - 全体", C_ALL, "AD"), (46, "― 同所属", C_DEPT, "AE"))
+        for r, text, color, col in rows:
+            ws.merge_cells(f"J{r}:K{r}")
+            ws[f"J{r}"] = text
+            style(ws[f"J{r}"], size=8, bold=True, color=color, bg="FFFFFF", align="left")
+            ws[f"J{r}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+            for i in range(len(TIME_BANDS)):
+                c = L(12 + i)
+                ws[f"{c}{r}"] = f'=IF({sel}="","",{P}${col}${HB0 + i})'
+                style(ws[f"{c}{r}"], size=8.5, bold=(col == HC), color=color, bg="FFFFFF", align="center", fmt="0%")
+    else:
+        ws.row_dimensions[47].height = 8
+        ws.add_chart(plain(ch), span(10, 34, 16, 45))
+        # 凡例（グラフの下、47行は余白）: 線の色と同じ文字色
+        for a, b, text, color in (("J", "K", "■ 本人", C_NAVY), ("L", "M", "- - 全体", C_ALL), ("N", "P", "― 同所属", C_DEPT)):
+            ws.merge_cells(f"{a}46:{b}46")
+            ws[f"{a}46"] = text if text != "― 同所属" else f'=IF({P}${HC}$5="","― 同所属","― 同所属（"&{dept_label}&"）")'
+            style(ws[f"{a}46"], size=8.5, bold=True, color=color, bg="FFFFFF", align="center")
 
     ws.row_dimensions[35].height = 18
     ws.merge_cells("R35:U35")
@@ -2055,7 +2089,7 @@ def build_howto(wb, maxrows):
         ("出勤率／当欠率", "出勤日数 ÷ 確定シフト日数 ／ 当日欠勤日数 ÷ 確定シフト日数。当欠率が設定の基準（既定5%）以上のスタッフには、ダッシュボードに警告行、スタッフ一覧に赤い塗りが出ます。"),
         ("勤務時間", "「変更後の開始・終了時間」（無ければ募集時間）から休憩1〜3を引いた、シフト上の時間です。"),
         ("深夜勤務時間", "勤務時間のうち、設定シートの深夜時間帯（既定 22:00〜翌5:00）に重なる時間。スタッフ一覧に表示します。"),
-        ("出勤時間帯", "勤務シフトの時間を 朝（〜10時）／午前（10〜13時）／午後（13〜17時）／夕（17〜21時）／夜（21時〜）の5つに分け、それぞれに入っている時間の割合（合計100%）を五角形のグラフで比べます。塗りつぶしが本人、線が全体と同所属です。休憩は引かず、シフトの開始〜終了で数えます。本人の形が全体より張り出している方向がその人の得意な時間帯、へこんでいる方向が入ってもらいにくい時間帯です。出勤率の全体平均・同所属平均は、ページ上部の一文サマリーに出ます。"),
+        ("出勤時間帯", "勤務シフトの時間を 朝（〜10時）／午前（10〜13時）／午後（13〜17時）／夕（17〜21時）／夜（21時〜）の5つに分け、それぞれに入っている時間の割合（合計100%）を五角形のグラフで比べます。塗りつぶしが本人、灰色の破線が全体、オレンジの線が同所属で、グラフの下の表に3つの数字が並びます。休憩は引かず、シフトの開始〜終了で数えます。本人の形が全体より張り出している方向がその人の得意な時間帯、へこんでいる方向が入ってもらいにくい時間帯です。出勤率の全体平均・同所属平均は、ページ上部の一文サマリーに出ます。"),
         ("土日祝出勤率", f"土日・祝日・繁忙日に出勤した日数 ÷ 出勤日数。その人の出勤のうち、繁忙日がどれくらいを占めるかを表します。土日は自動判定、祝日と繁忙日（GW・お盆・年末年始など）は「{S_HOL}」シートの日付で判定します。"),
         ("繁忙日の出勤状況", f"「{S_HOL}」シートに登録した日のうち対象期間に入る日を、出勤／当日欠勤／事前に休み等（前日までの休み変更・店舗都合）／シフトなし（その日の行が1件も無い）に分けて数えます。出勤しなかった日の日付と名称は、ダッシュボード下部に一覧で出ます（最大{BUSY_ROWS}日）。土日はこの4区分には含めません（土日を含む割合は土日祝出勤率で見ます）。あわせて、土日・祝日・繁忙日が連続して{RUN_MIN}日以上になる期間（土日だけ、祝日だけのどちらでも成立します）を、期間・繁忙日の名称・日数・出勤の表にします（土日も日数に数えます）。シフト希望を出したかどうかは数えません。CSVは行がある日しか残らないため、劇場側がシフトに組まなかった日と本人が希望を出していない日を区別できないからです。確認できる事実（出勤したか）だけを出し、理由は面談で本人に確認してください。"),
         ("追加応募", "募集を見て、あとから自分で応募した件数（CSVの「相談応募の開始時間」が入っている行）。シフト作成時にまとめて出す通常のシフト希望とは別に、自分から手を挙げた回数です。確定したかどうかに関わらず「応募した」回数を数えます（劇場側が採らなかった分も含みます）。ダッシュボードの繁忙日の出勤状況と、スタッフ一覧に表示します。"),
