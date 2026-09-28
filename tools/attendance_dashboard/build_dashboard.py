@@ -1202,9 +1202,7 @@ def build_dashboard(wb, maxrows, select=None):
         ws["B7"] = f'=IF({ros}!$AT$2="","まずCSVを貼り付けてください",{ros}!$AT$2)'
     style(ws["B7"], size=14, bold=True, bg="FFFFFF", align="left")
     box_range(ws, "B7:H8", Side(style="medium", color=C_BLUE))
-    dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False,
-                        showInputMessage=True, promptTitle="スタッフの選択",
-                        prompt="▼から選んでください。人数が多いときは、上の黄色い欄に名前か従業員番号の一部を入れると候補が絞れます。")
+    dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)   # 選択欄は説明のポップアップを出さない
     ws.add_data_validation(dv)
     dv.add("B7")
 
