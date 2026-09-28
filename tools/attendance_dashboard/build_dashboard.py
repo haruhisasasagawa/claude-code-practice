@@ -1181,10 +1181,7 @@ def build_dashboard(wb, maxrows, select=None):
     ws.merge_cells("D5:F5")
     style(ws["D5"], size=10, bg=C_INPUT_FILL, align="left")
     box_range(ws, "D5:F5")
-    dvf = DataValidation(showInputMessage=True, promptTitle="スタッフの絞り込み",
-                         prompt="名前の一部（例：太田）や従業員番号の一部（例：5616）を入れると、下の▼の候補がその人だけになります。空欄にすると全員に戻ります。")
-    ws.add_data_validation(dvf)
-    dvf.add("D5")
+    # 絞り込み欄も説明のポップアップは出さない（使い方は「使い方」シートとガイドに記載。入力後は右に一致人数が出る）
     ws.merge_cells("G5:X5")
     ws["G5"] = (f'=IF($D$5="","",'
                 f'IF(N({ros}!$CJ$2)=0,"　「"&$D$5&"」に一致するスタッフはいません。▼は全員を表示しています",'
@@ -1202,7 +1199,7 @@ def build_dashboard(wb, maxrows, select=None):
         ws["B7"] = f'=IF({ros}!$AT$2="","まずCSVを貼り付けてください",{ros}!$AT$2)'
     style(ws["B7"], size=14, bold=True, bg="FFFFFF", align="left")
     box_range(ws, "B7:H8", Side(style="medium", color=C_BLUE))
-    dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)   # 選択欄は説明のポップアップを出さない
+    dv = DataValidation(type="list", formula1="StaffNames", allow_blank=True, showErrorMessage=False)
     ws.add_data_validation(dv)
     dv.add("B7")
 
