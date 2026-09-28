@@ -594,7 +594,7 @@ def build_settings(wb, maxrows):
         style(ws[f"A{r}"], bg=C_INPUT_FILL, border=BOX)
         style(ws[f"B{r}"], bg=C_INPUT_FILL, border=BOX)
         ws[f"C{r}"] = csv_count("R", f"$A{r}")
-        style(ws[f"C{r}"], size=9, color=C_INK2, fmt=cnt_fmt)
+        style(ws[f"C{r}"], size=9, color=C_INK2, fmt=cnt_fmt, align="left")   # 名前のすぐ右に読めるよう左寄せ
     ws[f"A{JOB_OTHER}"], ws[f"B{JOB_OTHER}"] = "（上記以外）", "その他"
     style(ws[f"B{JOB_OTHER}"], bg=C_INPUT_FILL, border=BOX)
 
@@ -614,7 +614,7 @@ def build_settings(wb, maxrows):
         style(ws[f"A{r}"], bg=C_INPUT_FILL, border=BOX)
         style(ws[f"B{r}"], bg=C_INPUT_FILL, border=BOX)
         ws[f"C{r}"] = csv_count("BF", f"$A{r}")
-        style(ws[f"C{r}"], size=9, color=C_INK2, fmt=cnt_fmt)
+        style(ws[f"C{r}"], size=9, color=C_INK2, fmt=cnt_fmt, align="left")   # 名前のすぐ右に読めるよう左寄せ
     return ws
 
 
