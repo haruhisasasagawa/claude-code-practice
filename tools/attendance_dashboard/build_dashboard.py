@@ -333,7 +333,7 @@ CALC_COLS = [
     ("X", "元開始"), ("Y", "元終了"), ("AV", "勤務キー"), ("AW", "休みキー"), ("AX", "当日休みキー"),
     ("AY", "遅出行"), ("AZ", "早退行"), ("BA", "時間変更キー"), ("BB", "時間変更日(初回)"),
     ("BC", "繁忙日"), ("BD", "追加応募行"), ("BE", "追加応募・確定"), ("BF", "所属"),
-    ("BG", "朝h"), ("BH", "午前h"), ("BI", "午後h"), ("BJ", "夕h"), ("BK", "夜h"),
+    ("BG", "朝h"), ("BH", "午前h"), ("BI", "午後h"), ("BJ", "夕h"), ("BK", "夜h"), ("BL", "人・日キー"),
 ]
 # 出勤時間帯の区切り（開館準備〜早番／午前／午後／夕方〜中番／遅番〜閉館）。5つで五角形のレーダーにする
 TIME_BANDS = [("朝 〜10時", 5, 10), ("午前 10〜13時", 10, 13), ("午後 13〜17時", 13, 17),
@@ -389,7 +389,7 @@ def build_calc_sheet(wb, k, maxrows):
 
     def tconv(name):
         x = idx(name)
-        return f"IF(ISNUMBER({x}),{x},IFERROR(VALUE({x}),0))"
+        return f"IFERROR(VALUE({x}),0)"                 # 数値はそのまま、文字の時刻は数値に、空欄は0（参照は1回だけ）
 
     num, date_, status, kind, upd = idx("応募者の従業員番号"), idx("募集シフトの日付"), idx("応募ステータス"), idx("勤務種別"), idx("更新時間")
     brk = "+".join(f"({tconv(f'休憩{i}終了時間')}-{tconv(f'休憩{i}開始時間')})" for i in (1, 2, 3))
@@ -431,7 +431,7 @@ def build_calc_sheet(wb, k, maxrows):
             # 出勤時間帯: 勤務行の開始〜終了が各時間帯に重なる時間（h）
             **{c: f'=IF($E{r}<>1,"",MAX(0,MIN($K{r},{b}/24)-MAX($J{r},{a}/24))*24)'
                for c, (_, a, b) in zip(BAND_COLS, TIME_BANDS)},
-            "BA": f'=IF(OR($AY{r}=1,$AZ{r}=1),IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
+            "BA": f'=IF(OR($AY{r}=1,$AZ{r}=1),$BL{r},"")',
             "BB": f'=IF($A{r}="","",IF(OR($AY{r}=1,$AZ{r}=1),IF(MATCH($BA{r},$BA$2:$BA${last},0)=ROW()-1,1,0),0))',
             "Q": f'=IF($A{r}="","",IF(ISNUMBER(SEARCH("却下",{status})),1,0))',
             "R": f'=IF($A{r}="","",{idx("募集シフトの職種")}&"")',
@@ -445,9 +445,11 @@ def build_calc_sheet(wb, k, maxrows):
                   f'IF(OR($AY{r}=1,$AZ{r}=1),{tconv("募集シフトの開始時間")},"")))'),
             "Y": f'=IF($A{r}="","",IF($X{r}="","",{tconv("募集シフトの終了時間")}))',
             "S": f'=IF($A{r}="","",IF(MATCH($A{r},$A$2:$A${last},0)=ROW()-1,1,0))',
-            "AV": f'=IF($E{r}=1,IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
-            "AW": f'=IF(AND($C{r}=1,$D{r}=4),IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
-            "AX": f'=IF($G{r}=1,IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}),"")',
+            # 人・日のキー（従業員番号と日付）は BL で1回だけ作り、勤務・休み・当日休み・時間変更のキーはそれを参照する
+            "BL": f'=IF($A{r}="","",IF(AND(ISNUMBER($A{r}),ISNUMBER($B{r})),$A{r}*100000+$B{r},$A{r}&"_"&$B{r}))',
+            "AV": f'=IF($E{r}=1,$BL{r},"")',
+            "AW": f'=IF(AND($C{r}=1,$D{r}=4),$BL{r},"")',
+            "AX": f'=IF($G{r}=1,$BL{r},"")',
             # 繁忙日: 土日、または「祝日・繁忙日」シートに登録された日
             "BC": (f'=IF($A{r}="","",IF($B{r}="",0,IF(OR(WEEKDAY($B{r},2)>=6,'
                    f'COUNTIF({q(S_HOL)}!$A${HOL_R0}:$A${HOL_R0 + HOL_ROWS - 1},$B{r})>0),1,0)))'),
@@ -466,7 +468,7 @@ def build_calc_sheet(wb, k, maxrows):
         ws[f"V{r}"].number_format = "yyyy/mm/dd hh:mm"
         ws[f"X{r}"].number_format = "[h]:mm"
         ws[f"Y{r}"].number_format = "[h]:mm"
-        for c in ("AV", "AW", "AX", "BA", "BC", "BD", "BE"):      # 日付を含む式は日付書式を引き継ぐので、キー・フラグは数値書式に固定
+        for c in ("AV", "AW", "AX", "BA", "BC", "BD", "BE", "BL"):      # 日付を含む式は日付書式を引き継ぐので、キー・フラグは数値書式に固定
             ws[f"{c}{r}"].number_format = "0"
     ws.freeze_panes = "A2"
     return ws

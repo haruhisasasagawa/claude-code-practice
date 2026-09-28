@@ -68,7 +68,7 @@ cp out.xlsx recalc.xlsx && soffice --headless ... (xlsx スキルの recalc.py �
 python inject_values.py out.xlsx recalc.xlsx 勤務実績ダッシュボード.xlsx
 ```
 
-`share_formulas.py`（縦に並ぶ同じ数式を OOXML の共有数式に書き換えて容量を 1/3 にする）は、Excel で開くと「名簿」「計算1〜6」の数式が修復で削除されるため使わない。LibreOffice は問題なく開くが Excel が受け付けない。テンプレートは約17MB、6ヶ月分を貼ると約21MB になる。
+`share_formulas.py`（縦に並ぶ同じ数式を OOXML の共有数式に書き換えて容量を 1/3 にする）は、Excel で開くと「名簿」「計算1〜6」の数式が修復で削除されるため使わない。LibreOffice は問題なく開くが Excel が受け付けない。テンプレートは約16MB、6ヶ月分を貼ると約20MB になる。容量の大半は計算1〜6の数式セル（6,000行×約40列×6シート）で、同じ文字列が行ごとに繰り返されるほど圧縮が効く。行ごとに異なる参照（$A2:$AZ2 など）に書き換えると式は短くなるが圧縮が効かず逆に大きくなる（試して確認済み）ので、CSV の参照は INDEX(…,ROW(),列) の形のままにしている。
 
 ## 検証
 
