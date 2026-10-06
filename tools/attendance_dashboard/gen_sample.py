@@ -2,7 +2,9 @@
 """動作確認用の架空シフトCSV（6ヶ月分）を生成する.
 
 実際の1ヶ月分CSVから各スタッフの「曜日ごとのシフトの型」を抽出し、乱数で6ヶ月分を作り直す。
-名前・従業員番号・所属・資格は元CSVの値を流用し、シフトの内容は架空。
+シフトの内容は架空。名前・従業員番号・電話番号・連携IDは架空の値に置き換え、時給も少しずらす
+（名前の先頭の部門記号と末尾の資格記号だけは残す）。所属・資格はそのまま。
+出力に実在のスタッフを特定できる値は残らない。
 途中退職・途中加入・資格変更による名前の記号変更・欠勤の多い人・繁忙月などを混ぜる。
 
 使い方: python gen_sample.py 元CSV 出力先ディレクトリ [--seed 1]
@@ -12,6 +14,7 @@ import calendar
 import csv
 import datetime as dt
 import random
+import re
 import uuid
 from collections import defaultdict
 
@@ -35,6 +38,51 @@ def fmt(minutes):
 
 def ts(dtobj):
     return str(int(dtobj.timestamp() * 1000))
+
+
+# ---------------------------------------------------------------- 匿名化（名前・番号を架空の値に）
+SURNAMES = ["佐藤", "鈴木", "高橋", "田中", "伊藤", "渡辺", "山本", "中村", "小林", "加藤", "吉田", "山田", "佐々木", "山口", "松本",
+            "井上", "木村", "林", "斎藤", "清水", "山崎", "森", "池田", "橋本", "阿部", "石川", "山下", "中島", "石井", "小川",
+            "前田", "岡田", "長谷川", "藤田", "後藤", "近藤", "村上", "遠藤", "青木", "坂本", "福田", "太田", "西村", "藤井", "岡本",
+            "三浦", "藤原", "金子", "中野", "原", "松田", "竹内", "上田", "和田", "中山", "石田", "森田", "小島", "柴田", "原田"]
+GIVEN = ["陽翔", "結衣", "大翔", "葵", "蓮", "凛", "悠真", "紬", "陽菜", "湊", "結菜", "樹", "咲良", "朝陽", "莉子", "颯真", "芽依",
+         "蒼", "凪", "琴音", "律", "美月", "悠人", "杏", "新", "心春", "海翔", "花", "大和", "楓", "奏太", "柚希", "晴", "千尋",
+         "翔太", "美咲", "健太", "愛", "拓海", "七海", "直人", "彩", "翼", "明日香", "亮", "沙希", "遼", "真央", "航", "日向"]
+KATA_S = ["キム", "パク", "リー", "チャン", "グエン", "ワン", "チェン", "ホアン", "ファム", "リン"]
+KATA_G = ["ミンジ", "ジウ", "ハルト", "アン", "リン", "ユナ", "ソラ", "ミン", "ティエン", "ナム"]
+_NAME_RE = re.compile(r"^(?P<prefix>[^)]*\))?(?P<core>.*?)(?P<suffix>[A-Z]*)$")
+
+
+def make_anonymizer(rows, rng):
+    """実在の名前・従業員番号 → 架空の値。同じ人は全月で同じ架空の値になる."""
+    numbers = sorted({r["応募者の従業員番号"] for r in rows})
+    fake_nums = list(range(700001, 700001 + len(numbers)))
+    rng.shuffle(fake_nums)
+    num_map = {n: str(f) for n, f in zip(numbers, fake_nums)}
+    core_map, used = {}, set()
+    def fake_core(core):
+        if core not in core_map:
+            kata = " " in core.strip() or re.search(r"[ァ-ヶ]", core) is not None
+            while True:
+                full = (rng.choice(KATA_S) + " " + rng.choice(KATA_G)) if kata else (rng.choice(SURNAMES) + rng.choice(GIVEN))
+                if full not in used:
+                    break
+            used.add(full)
+            core_map[core] = full
+        return core_map[core]
+    def anon(r):
+        r = dict(r)
+        m = _NAME_RE.match(r["応募者の名前"])
+        r["応募者の名前"] = (m["prefix"] or "") + fake_core(m["core"]) + (m["suffix"] or "")
+        r["応募者の従業員番号"] = num_map[r["応募者の従業員番号"]]
+        r["応募者の電話番号"] = "090-0000-0000"
+        r["連携ID"] = str(uuid.uuid4())
+        try:
+            r["時給"] = str(int(r["時給"]) + rng.choice([-30, -20, -10, 0, 10, 20, 30]))
+        except ValueError:
+            pass
+        return r
+    return anon
 
 
 def load_profiles(path):
@@ -221,8 +269,10 @@ def main():
     state = build_state(prof, rng)
     import os
     os.makedirs(a.outdir, exist_ok=True)
-    for (y, m) in MONTHS:
-        rows = make_month(prof, y, m, rng, state, header)
+    months = [(y, m, make_month(prof, y, m, rng, state, header)) for (y, m) in MONTHS]
+    anon = make_anonymizer([r for _, _, rows in months for r in rows], random.Random(a.seed + 1000))
+    for (y, m, rows) in months:
+        rows = [anon(r) for r in rows]
         last = calendar.monthrange(y, m)[1]
         path = os.path.join(a.outdir, f"TC___{y}{m:02d}01-{y}{m:02d}{last:02d}_sample.csv")
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
