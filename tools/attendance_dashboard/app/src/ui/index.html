@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>勤務実績ダッシュボード</title>
+<!--STYLE-->
+<style id="page-style">@page { size: A4 portrait; margin: 7.62mm 6.35mm; }</style>
+</head>
+<body class="no-data">
+<header class="app-bar no-print">
+  <div class="app-title">勤務実績ダッシュボード</div>
+  <div class="app-privacy" id="privacy-pill">データはこのパソコンの外に送られません・保存されません</div>
+</header>
+
+<nav class="tabs no-print" role="tablist" aria-label="画面の切り替え">
+  <button type="button" class="tab t-howto" role="tab" id="tabbtn-howto" data-tab="howto" aria-controls="tab-howto">使い方</button>
+  <button type="button" class="tab t-dash" role="tab" id="tabbtn-dash" data-tab="dash" aria-controls="tab-dash">ダッシュボード</button>
+  <button type="button" class="tab t-list" role="tab" id="tabbtn-list" data-tab="list" aria-controls="tab-list">スタッフ一覧</button>
+  <button type="button" class="tab t-sum" role="tab" id="tabbtn-sum" data-tab="sum" aria-controls="tab-sum">全体サマリー</button>
+  <button type="button" class="tab t-set" role="tab" id="tabbtn-set" data-tab="set" aria-controls="tab-set">設定</button>
+  <button type="button" class="tab t-hol" role="tab" id="tabbtn-hol" data-tab="hol" aria-controls="tab-hol">祝日・繁忙日</button>
+</nav>
+
+<div id="banner" class="banner no-print" role="status" aria-live="polite" hidden></div>
+
+<main id="app">
+
+<!-- ===================================================== 使い方 -->
+<section id="tab-howto" class="tab-panel" role="tabpanel" aria-labelledby="tabbtn-howto">
+  <div class="doc">
+    <h1 class="doc-title">勤務実績ダッシュボード　使い方</h1>
+    <p class="doc-lead">シェアフルシフトの月次シフトCSVを読み込むだけで、スタッフごとの出勤日数・出勤率・当欠率（当日欠勤率）などを集計します。</p>
+
+    <div class="privacy-box">
+      <strong>データはこのパソコンの外に送られません・保存されません。</strong>
+      読み込んだCSVはこのページの中（パソコンのメモリ上）だけで計算し、インターネットには送りません。ページを閉じる・再読み込みするとCSVの内容は消えます。保存されるのは「設定」と「祝日・繁忙日」の内容だけで、このブラウザの中に残ります（<span id="storage-state">確認中</span>）。
+    </div>
+
+    <h2 class="doc-h2">CSVファイルを読み込む</h2>
+    <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-describedby="dropzone-help">
+      <div class="dz-main">ここにCSVファイルをドラッグ＆ドロップ</div>
+      <div class="dz-sub" id="dropzone-help">または <span class="dz-btn">ファイルを選ぶ</span>（最大6ヶ月分。複数まとめて選べます）</div>
+      <input type="file" id="file-input" accept=".csv,text/csv" multiple hidden>
+    </div>
+    <div id="load-msg" class="load-msg" role="status" aria-live="polite"></div>
+
+    <h2 class="doc-h2">貼付状況（読み込み状況）</h2>
+    <table class="tbl paste-tbl">
+      <colgroup><col style="width:9%"><col style="width:31%"><col style="width:14%"><col style="width:10%"><col style="width:30%"><col style="width:6%"></colgroup>
+      <thead><tr><th>シート</th><th>ファイル</th><th>月</th><th class="r">貼付行数</th><th>状態</th><th><span class="sr-only">削除</span></th></tr></thead>
+      <tbody id="paste-body"></tbody>
+    </table>
+    <p id="howto-warning" class="howto-warning"></p>
+    <div class="row-actions">
+      <button type="button" id="btn-clear-data" class="btn btn-danger">読み込んだデータを消去</button>
+      <button type="button" id="btn-go-dash" class="btn btn-primary">ダッシュボードを見る</button>
+    </div>
+
+    <p class="tabcolor-line">タブの色　灰＝使い方／紺＝一人ずつのページ（ダッシュボード）／青＝見る・印刷するページ／オレンジ＝劇場ごとの設定（黄色い欄だけ変更）</p>
+
+    <h2 class="doc-h2">手順</h2>
+    <ol class="steps">
+      <li><span class="step-no">1</span><span>シェアフルシフトから1ヶ月分のシフトCSVを出力します（Excelで開かずに、ファイルのままで構いません）。</span></li>
+      <li><span class="step-no">2</span><span>上の「CSVファイルを読み込む」の枠にCSVファイルをドラッグ＆ドロップするか、「ファイルを選ぶ」から選びます。最大6ヶ月分をまとめて選べます（7ヶ月分以上を選んだときは、新しい6ヶ月分だけを使います）。</span></li>
+      <li><span class="step-no">3</span><span>読み込んだファイルは、月を読み取って自動で古い月から新しい月の順に並べます。「貼付状況」の状態がすべて「OK」になっていることを確認してください。</span></li>
+      <li><span class="step-no">4</span><span>「ダッシュボード」タブで、スタッフ名を▼から選ぶと、その人の実績がA4縦1枚に表示されます。人数が多いときは、上の黄色い「絞り込み」欄に名前か従業員番号の一部（例：太田、5616）を入れると、▼の候補がその人だけになります。「◀ 前へ」「次へ ▶」で順番に見ることもできます。</span></li>
+      <li><span class="step-no">5</span><span>PDFにして渡すときは「ダッシュボード」タブの「印刷」ボタンを押し、送信先（プリンター）で「PDFに保存」（または Microsoft Print to PDF）を選びます。用紙はA4縦1枚です。全員分をまとめてPDFにするときは「全員分を印刷」を使います（1人1ページ）。</span></li>
+      <li><span class="step-no">6</span><span>全員の一覧・順位は「スタッフ一覧」、劇場全体・所属別の集計と当欠率ワースト10は「全体サマリー」タブで確認できます。判定の基準値などは「設定」タブ、土日祝出勤率で使う祝日・繁忙日の日付は「祝日・繁忙日」タブで変更できます。</span></li>
+      <li><span class="step-no">★</span><span>読み込み直すときは「読み込んだデータを消去」を押してから、使う月のCSVをまとめて選び直してください。同じ月のCSVをあとから追加で読み込むと、その月は新しいファイルに置き換わります。</span></li>
+    </ol>
+
+    <h2 class="doc-h2">指標の定義</h2>
+    <dl class="defs">
+      <dt>出勤日数</dt><dd>ステータスが「確定」系（確定／確定（シフト作成）／確定（アサイン））で、勤務種別が勤務（1）のシフトがある日数。同じ日の複数区分は1日と数えます。</dd>
+      <dt>欠勤日数</dt><dd>確定していたシフトが、シフト当日に「休み」（勤務種別4）へ変更された日数。CSVの「更新時間」を日本時間に直し、暦日がシフト日と同じ場合のみ欠勤とします。前日までの変更やシフト日より後の更新は欠勤にも分母にも含めません（ダッシュボードの「休み・時間変更のタイミング」に表示）。</dd>
+      <dt>確定シフト日数</dt><dd>出勤日数 ＋ 欠勤日数。事前に休みへ変更した日は含めません。</dd>
+      <dt>出勤率／当欠率</dt><dd>出勤日数 ÷ 確定シフト日数 ／ 当日欠勤日数 ÷ 確定シフト日数。当欠率が設定の基準（既定5%）以上のスタッフには、ダッシュボードに警告行、スタッフ一覧に赤い塗りが出ます。</dd>
+      <dt>勤務時間</dt><dd>「変更後の開始・終了時間」（無ければ募集時間）から休憩1〜3を引いた、シフト上の時間です。</dd>
+      <dt>深夜勤務時間</dt><dd>勤務時間のうち、「設定」タブの深夜時間帯（既定 22:00〜翌5:00）に重なる時間。スタッフ一覧に表示します。</dd>
+      <dt>出勤時間帯</dt><dd>勤務シフトの時間を 朝（〜10時）／午前（10〜13時）／午後（13〜17時）／夕（17〜21時）／夜（21時〜）の5つに分け、それぞれに入っている時間の割合（合計100%）を五角形のグラフで比べます。紺の太線（点付き）が本人、緑の線が全体、オレンジの線が同所属で、グラフの下の表に3つの数字が並びます。休憩は引かず、シフトの開始〜終了で数えます。本人の形が全体より張り出している方向がその人の得意な時間帯、へこんでいる方向が入ってもらいにくい時間帯です。出勤率の全体平均・同所属平均は、ページ上部の一文サマリーに出ます。</dd>
+      <dt>土日祝出勤率</dt><dd>土日・祝日・繁忙日に出勤した日数 ÷ 出勤日数。その人の出勤のうち、繁忙日がどれくらいを占めるかを表します。土日は自動判定、祝日と繁忙日（GW・お盆・年末年始など）は「祝日・繁忙日」タブの日付で判定します。</dd>
+      <dt>繁忙日の出勤状況</dt><dd>「祝日・繁忙日」タブに登録した日のうち対象期間に入る日を、出勤／当日欠勤／事前に休み等（前日までの休み変更・店舗都合）／シフトなし（その日の行が1件も無い）に分けて数えます。出勤しなかった日の日付と名称は、ダッシュボード下部に一覧で出ます（最大24日）。土日はこの4区分には含めません（土日を含む割合は土日祝出勤率で見ます）。あわせて、土日・祝日・繁忙日が連続して3日以上になる期間（土日だけ、祝日だけのどちらでも成立します）を、期間・繁忙日の名称・日数・出勤の表にします（土日も日数に数えます）。シフト希望を出したかどうかは数えません。CSVは行がある日しか残らないため、劇場側がシフトに組まなかった日と本人が希望を出していない日を区別できないからです。確認できる事実（出勤したか）だけを出し、理由は面談で本人に確認してください。</dd>
+      <dt>追加応募</dt><dd>募集を見て、あとから自分で応募した件数（CSVの「相談応募の開始時間」が入っている行）。シフト作成時にまとめて出す通常のシフト希望とは別に、自分から手を挙げた回数です。確定したかどうかに関わらず「応募した」回数を数えます（劇場側が採らなかった分も含みます）。ダッシュボードの繁忙日の出勤状況と、スタッフ一覧に表示します。</dd>
+      <dt>当日遅出／当日早退</dt><dd>確定した勤務シフトが、シフト当日に「変更後の開始時間」を募集の開始より遅く（当日遅出）／「変更後の終了時間」を募集の終了より早く（当日早退）変更された日数。シフト上の変更を数えたもので、打刻による遅刻・早退ではありません。劇場側の都合による変更も含まれるため、参考情報として一覧に日付・時間を表示します。当日遅出率・当日早退率は各日数 ÷ 確定シフト日数です。</dd>
+      <dt>総合判定</dt><dd>出勤率のみを基準にした目安。◎ 良好（設定の基準1以上）／△ 注意（基準2以上）／✕ 要改善（基準2未満）。確定シフト日数が設定の日数未満の人は判定を保留し「参考値」と表示します。</dd>
+      <dt>順位</dt><dd>出勤率の高い順。同率は同じ順位（上位の人数＋1）。判定保留の人は順位を出さず「参考」と表示します。</dd>
+    </dl>
+
+    <h2 class="doc-h2">他の劇場で使うときに変更する項目</h2>
+    <dl class="defs">
+      <dt>劇場名</dt><dd>「設定」タブの劇場名。ダッシュボードの見出しに表示されます。</dd>
+      <dt>判定の基準</dt><dd>「設定」タブの ◎の基準（既定95%）、△の基準（既定90%）、判定を保留する確定シフト日数（既定20日）、当欠率のアラート基準（既定5%）。</dd>
+      <dt>深夜の時間帯</dt><dd>「設定」タブの深夜勤務の開始・終了時刻（既定 22:00〜29:00）。</dd>
+      <dt>職種の区分</dt><dd>「設定」タブの職種の区分（最大20件）。CSVの「募集シフトの職種」の値（例 02コンセ、01ボックス）と表示名。劇場によってセクションの割り振りが違うので、自劇場の職種をすべて登録します。使わない行は空欄のままで構いません。</dd>
+      <dt>所属の一覧</dt><dd>「設定」タブの所属の一覧（最大20件）。CSVの「応募者の職種」の値と表示名。所属別集計と「同所属平均」に使います。</dd>
+      <dt>祝日・繁忙日</dt><dd>「祝日・繁忙日」タブ。土日は自動で繁忙日として数えます。平日の祝日と、劇場として出勤してほしい繁忙日をここに登録すると「土日祝出勤率」に反映されます。</dd>
+      <dt>設定の共有</dt><dd>「設定」タブの「設定を書き出す」で保存したファイル（JSON）を、別のパソコンや他の劇場で「設定を読み込む」から読み込むと、同じ設定（職種・所属・基準値・祝日・繁忙日）をそのまま使えます。</dd>
+      <dt>それ以外</dt><dd>CSVの列名（1行目）が同じであれば、他に変更する箇所はありません。列名が変わった場合は「貼付状況」に警告が出ます。</dd>
+    </dl>
+
+    <h2 class="doc-h2">注意事項</h2>
+    <ul class="cautions">
+      <li>・印刷するダッシュボードは、A4縦1枚に収めるため、一覧の表示件数（欠勤・当日の時間変更は12件、連休は6件、出勤していない繁忙日は24日）に上限があります。画面では「すべて表示」で全件を確認できます。</li>
+      <li>・スタッフは「応募者の従業員番号」で同一人物を判定し、名前は最新月のものを表示します（名前の前後の記号が月によって変わっても同じ人として集計されます）。</li>
+      <li>・CSVの列名（1行目）で列を探すため、列の順番が変わっても動作します。列名が変わった場合は「貼付状況」に警告が出ます。</li>
+      <li>・計算はすべてこのファイルの中で行います。インターネット接続は不要で、CSVの内容はどこにも送られず、ページを閉じると消えます。6ヶ月分を読み込むと集計に数秒かかることがあります。</li>
+      <li>・欠勤（当日休み変更）には、本人都合だけでなく劇場側の都合による当日カットなどが含まれる可能性があります。理由はCSVにないため、必ず本人に事情を確認したうえで評価してください。</li>
+      <li>・「更新時間」は行の最終更新時刻です。シフト日より後に休み行を編集すると「シフト日より後」に分類され欠勤から外れます。その区分が0日でない人は当日の実態を確認してください。</li>
+      <li>・印刷・PDFにした紙には個人の勤務情報が含まれます。取り扱いにご注意ください。</li>
+    </ul>
+    <p class="build-stamp">版 <!--BUILD--></p>
+  </div>
+</section>
+
+<!-- ===================================================== ダッシュボード -->
+<section id="tab-dash" class="tab-panel" role="tabpanel" aria-labelledby="tabbtn-dash" hidden>
+  <div class="toolbar no-print">
+    <button type="button" id="btn-prev" class="btn">◀ 前へ</button>
+    <button type="button" id="btn-next" class="btn">次へ ▶</button>
+    <span id="nav-pos" class="nav-pos"></span>
+    <span class="tb-spacer"></span>
+    <button type="button" id="btn-print-dash" class="btn btn-primary">印刷（A4縦1枚）</button>
+    <button type="button" id="btn-print-all" class="btn">全員分を印刷</button>
+  </div>
+  <div id="nodata-note" class="nodata-note no-print">CSVファイルがまだ読み込まれていません。「使い方」タブでCSVファイルを読み込んでください。</div>
+  <div id="dash-fit" class="dash-fit">
+    <div id="dash-host"></div>
+  </div>
+</section>
+
+<!-- ===================================================== スタッフ一覧 -->
+<section id="tab-list" class="tab-panel" role="tabpanel" aria-labelledby="tabbtn-list" hidden>
+  <div class="doc wide">
+    <h1 class="sheet-title">スタッフ一覧（半年集計）</h1>
+    <p class="sheet-sub" id="list-period"></p>
+    <p class="sheet-link no-print">→ 名前をクリックすると、その人のダッシュボードを開きます</p>
+    <div class="filter-row no-print">
+      <label class="fl">名前・従業員番号 <input type="search" id="list-q" class="inp" placeholder="名前か番号の一部"></label>
+      <label class="fl">所属 <select id="list-dept" class="inp"><option value="">すべて</option></select></label>
+      <label class="fl">判定 <select id="list-judge" class="inp"><option value="">すべて</option></select></label>
+      <span id="list-count" class="list-count"></span>
+      <span class="tb-spacer"></span>
+      <button type="button" id="btn-print-list" class="btn btn-primary">印刷（A4横）</button>
+    </div>
+    <h2 class="sheet-h2">スタッフ別 集計（半年）</h2>
+    <div class="tbl-scroll" id="list-scroll">
+      <table class="tbl staff-tbl" id="staff-tbl">
+        <thead id="staff-head"></thead>
+        <tbody id="staff-body"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== 全体サマリー -->
+<section id="tab-sum" class="tab-panel" role="tabpanel" aria-labelledby="tabbtn-sum" hidden>
+  <div class="doc wide" id="sum-doc">
+    <div class="filter-row no-print"><span class="tb-spacer"></span><button type="button" id="btn-print-sum" class="btn btn-primary">印刷（A4横1枚）</button></div>
+    <div id="sum-host"></div>
+  </div>
+</section>
+
+<!-- ===================================================== 設定 -->
+<section id="tab-set" class="tab-panel" role="tabpanel" aria-labelledby="tabbtn-set" hidden>
+  <div class="doc wide">
+    <h1 class="sheet-title">設定</h1>
+    <p class="sheet-sub">黄色い欄だけ変更してください。変更するとすぐに集計し直します。設定はこのブラウザに保存されます（<span id="storage-state-2">確認中</span>）。</p>
+    <div class="row-actions no-print">
+      <button type="button" id="btn-set-export" class="btn">設定を書き出す（JSON）</button>
+      <button type="button" id="btn-set-import" class="btn">設定を読み込む（JSON）</button>
+      <input type="file" id="set-import-file" accept=".json,application/json" hidden>
+      <button type="button" id="btn-set-default" class="btn btn-danger">設定を既定値に戻す</button>
+    </div>
+    <div id="set-msg" class="load-msg" role="status" aria-live="polite"></div>
+    <div id="set-host"></div>
+  </div>
+</section>
+
+<!-- ===================================================== 祝日・繁忙日 -->
+<section id="tab-hol" class="tab-panel" role="tabpanel" aria-labelledby="tabbtn-hol" hidden>
+  <div class="doc wide">
+    <h1 class="sheet-title sm">祝日・繁忙日の一覧（この日付に出勤した日を「土日祝・繁忙日」として数えます）</h1>
+    <h2 class="sheet-h2">使い方</h2>
+    <ul class="tips">
+      <li>・土曜・日曜は自動で「繁忙日」として数えます。ここに登録するのは平日の祝日と、劇場として忙しい日だけです。</li>
+      <li>・初期値として国民の祝日（振替休日・国民の休日を含む）と、ゴールデンウィーク・お盆・年末年始を入れてあります。</li>
+      <li>・自劇場に合わせて、行の追加・削除ができます（日付の順番は問いません）。使わない行は空欄のままにしてください。</li>
+      <li>・例：地域のイベント日、レイトショーの特別興行、大型作品の公開初週など、出勤してほしい日を足せます。</li>
+      <li>・国民の祝日は 2025年〜2032年分を入れてあります。2033年以降を使うときは、その年の祝日を足してください。</li>
+      <li>・日付は yyyy/mm/dd の形式（例 2026/09/21）で入力します。日付は400件まで登録できます。</li>
+      <li>・名称はダッシュボードの「連休の入り方」「出勤していない繁忙日」にそのまま出ます（面談で本人も見ます）。GW・お盆・公開初週のような、短く分かりやすい名前にしてください。</li>
+      <li>・ここを変えると、ダッシュボードの「土日祝出勤率」とスタッフ一覧の集計がすぐに変わります。一覧はこのブラウザに保存されます。</li>
+    </ul>
+    <h2 class="sheet-h2">登録状況（自動）</h2>
+    <ul class="hol-msgs" id="hol-msgs"></ul>
+    <div class="row-actions no-print">
+      <button type="button" id="btn-hol-add" class="btn">行を追加</button>
+      <button type="button" id="btn-hol-sort" class="btn">日付順に並べ替え</button>
+      <button type="button" id="btn-hol-default" class="btn btn-danger">既定の一覧に戻す</button>
+      <span id="hol-count" class="list-count"></span>
+    </div>
+    <div class="tbl-scroll hol-scroll">
+      <table class="tbl hol-tbl">
+        <colgroup><col style="width:3.5em"><col style="width:9.5em"><col style="width:3em"><col><col style="width:4.5em"></colgroup>
+        <thead><tr><th>#</th><th>日付</th><th>曜</th><th class="l">名称（任意）</th><th><span class="sr-only">削除</span></th></tr></thead>
+        <tbody id="hol-body"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div id="print-root" class="print-root" aria-hidden="true"></div>
+<div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+<div id="busy" class="busy no-print" hidden><div class="busy-box"><div class="spinner" aria-hidden="true"></div><div id="busy-text">集計しています…</div></div></div>
+
+<!--SCRIPT-->
+</body>
+</html>
