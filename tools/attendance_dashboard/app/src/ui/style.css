@@ -190,7 +190,7 @@ main { padding: 0 0 40px; }
 .filter-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 .fl { display: inline-flex; gap: 6px; align-items: center; font-size: 9pt; color: var(--ink2); }
 .list-count { color: var(--ink2); font-size: 9pt; }
-.tbl-scroll { overflow: auto; background: #fff; border: 1px solid var(--grid); }
+.tbl-scroll { overflow: auto; background: #fff; border: 1px solid var(--grid); max-height: calc(100vh - 230px); }   /* 横スクロールバーが画面内に出るように */
 
 /* ---------------------------------------------------------------- スタッフ一覧 */
 #list-scroll { max-height: calc(100vh - 230px); }

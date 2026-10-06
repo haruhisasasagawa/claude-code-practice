@@ -394,12 +394,24 @@
     for (let i = 0; i < 20; i++) { out.jobs.push(normRow(jobs[i])); out.depts.push(normRow(depts[i])); }
     return out;
   }
+  function settingsProblems(s) {
+    const out = [];
+    for (const k of ['rateGood', 'rateWarn', 'alertRate']) if (!(isNum(s[k]) && s[k] >= 0 && s[k] <= 1)) out.push(k);
+    if (!(Number.isInteger(s.minDays) && s.minDays >= 0 && s.minDays <= 60)) out.push('minDays');
+    for (const k of ['nightStart', 'nightEnd']) if (!isNum(s[k])) out.push(k);
+    return out;
+  }
   function loadSettings() {
     const def = defaultSettings();
     let s = null;
     const txt = store.get(LS_SETTINGS);
     if (txt) { try { s = JSON.parse(txt); } catch (e) { s = null; } }
-    if (def) return s ? normSettings(s, def) : def;
+    if (def) {
+      if (!s) return def;
+      const n = normSettings(s, def);
+      for (const k of settingsProblems(n)) n[k] = def[k];     // a value outside the 設定 ranges falls back to the default
+      return n;
+    }
     return s ? normSettings(s, null) : normSettings({}, null);
   }
   function saveSettings() { return store.set(LS_SETTINGS, JSON.stringify(state.settings)); }
@@ -644,7 +656,7 @@
     hideBusy();
     const first = state.files.length > 0 && !state.loadedOnce;
     state.loadedOnce = state.loadedOnce || state.files.length > 0;
-    recompute(() => { if (first && state.WB) switchTab('dash'); });
+    recompute(() => { if (first && state.WB && !warn) switchTab('dash'); });
   }
   function clearData() {
     if (!state.files.length) { setLoadMsg('読み込んだデータはありません。'); return; }
@@ -727,7 +739,25 @@
    * Build one A4 dashboard page for a view.
    * opts.live: interactive (filter input + staff select attached); otherwise static (print).
    */
-  function buildDashboard(view, opts) {
+  // the engine keeps the Excel texts (parity); the page shows the words that fit this app
+  const UI_WORDING = [
+    ['まずCSVを貼り付けてください', 'まずCSVを読み込んでください'],
+    ['データがまだありません。下のタブ「CSV_1」にシェアフルシフトのシフトCSVを貼り付けると、ここに集計が出ます（手順は「使い方」シート）。',
+     'データがまだありません。「使い方」タブでシェアフルシフトのシフトCSVを読み込むと、ここに集計が出ます。'],
+    ['※ 貼付データに問題があります。「使い方」の貼付状況をご確認ください', '※ 読み込んだデータに問題があります。「使い方」タブの読み込み状況をご確認ください'],
+    ['（CSV未貼付）', '（CSV未読み込み）'],
+  ];
+  function fixWording(el) {
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      let t = n.nodeValue;
+      for (const [a, b] of UI_WORDING) if (t.indexOf(a) >= 0) t = t.split(a).join(b);
+      if (t !== n.nodeValue) n.nodeValue = t;
+    }
+    return el;
+  }
+  function buildDashboard(view, opts) { return fixWording(buildDashboardRaw(view, opts)); }
+  function buildDashboardRaw(view, opts) {
     view = view || {};
     opts = opts || {};
     const live = !!opts.live;
@@ -1176,6 +1206,7 @@
   }
 
   function renderDash() {
+    const refocus = document.activeElement === state.ui.staffSelect;
     const host = clear($('dash-host'));
     const name = currentName();
     state.view = computeView(name);
@@ -1184,6 +1215,7 @@
     host.appendChild(page);
     fitDash();
     updateNav();
+    if (refocus) state.ui.staffSelect.focus();
     state.dirty.dash = false;
   }
   function fitDash() {
@@ -1222,6 +1254,11 @@
     $('btn-next').disabled = !(i >= 0 && i < list.length - 1) && !(i < 0 && list.length > 0);
     $('nav-pos').textContent = list.length ? (i >= 0 ? (i + 1) + ' / ' + list.length + ' 名' : list.length + ' 名') : '';
     $('btn-print-all').disabled = allNames().length === 0;
+    const a = document.activeElement;               // a nav button that just became disabled would drop the focus to <body>
+    if (a && a.disabled && (a.id === 'btn-prev' || a.id === 'btn-next')) {
+      const other = $(a.id === 'btn-prev' ? 'btn-next' : 'btn-prev');
+      (other.disabled ? state.ui.staffSelect : other).focus();
+    }
   }
   function selectStaff(name) {
     state.selName = name;
@@ -1382,7 +1419,9 @@
     if (L.sortKey !== k) { L.sortKey = k; L.sortDir = 1; }
     else if (L.sortDir === 1) L.sortDir = -1;
     else { L.sortKey = null; L.sortDir = 0; }
+    const a = document.activeElement, col = a && a.dataset ? a.dataset.col : null;
     renderList();
+    if (col) { const th = document.querySelector('.staff-tbl th[data-col="' + col + '"]'); if (th) th.focus(); }
   }
   function drawListBody() {
     const L = state.list;
@@ -1522,7 +1561,7 @@
   }
 
   /* ================================================================ 設定 */
-  const PCT_ERR = ['割合で入力してください', '0〜1 の値で入力してください（95% は 95% または 0.95）'];
+  const PCT_ERR = ['割合で入力してください', '0〜100 の値で入力してください（95% は 95 または 95% と入力）'];
   const DAY_ERR = ['日数で入力してください', '0〜60 の整数で入力してください'];
   function fmtSetting(key, v) {
     if (v === '' || v === null || v === undefined) return '';
@@ -1544,7 +1583,7 @@
       const pct = /%$/.test(t);
       const num = Number(t.replace(/%$/, '').replace(/,/g, ''));
       if (!isFinite(num)) return { ok: false, err: PCT_ERR };
-      const v = pct || num > 1 ? num / 100 : num;
+      const v = num / 100;                          // Excel の % セルと同じ: 95 → 95%、0.5 → 0.5%
       if (!(v >= 0 && v <= 1)) return { ok: false, err: PCT_ERR };
       return { ok: true, v: Number(v.toPrecision(15)) };
     }
@@ -1691,9 +1730,15 @@
       $('set-msg').textContent = '読み込めませんでした：設定のファイルではありません。';
       return;
     }
-    if (!root.confirm('今の設定を、読み込んだファイルの内容に置き換えます。よろしいですか？')) return;
     const def = defaultSettings();
-    state.settings = normSettings(src, def || state.settings);
+    const next = normSettings(src, def || state.settings);
+    const bad = settingsProblems(next);
+    if (bad.length) {
+      $('set-msg').textContent = '読み込めませんでした：基準値の範囲が正しくありません（◎・△・当欠率は 0〜100%、判定保留の日数は 0〜60、深夜時刻は 時:分）。';
+      return;
+    }
+    if (!root.confirm('今の設定を、読み込んだファイルの内容に置き換えます。よろしいですか？')) return;
+    state.settings = next;
     let msg = '設定を読み込みました。';
     if (data && Array.isArray(data.holidays)) {
       const l = holFromStore(data.holidays);
@@ -1735,7 +1780,11 @@
       });
       ni.addEventListener('change', () => { row.name = ni.value; holidaysChanged(); });
       const del = h('button', { type: 'button', class: 'btn btn-small', 'aria-label': (i + 1) + '行目を削除' }, '削除');
-      del.addEventListener('click', () => { state.holidays.splice(i, 1); renderHol(); holidaysChanged(); });
+      del.addEventListener('click', () => {
+        state.holidays.splice(i, 1); renderHol(); holidaysChanged();
+        const btns = $('hol-body').querySelectorAll('button');
+        (btns.length ? btns[Math.min(i, btns.length - 1)] : $('btn-hol-add')).focus();
+      });
       frag.appendChild(h('tr', null, h('td', { class: 'c' }, String(i + 1)), h('td', null, di), wd, h('td', null, ni), h('td', { class: 'c' }, del)));
     });
     tb.appendChild(frag);

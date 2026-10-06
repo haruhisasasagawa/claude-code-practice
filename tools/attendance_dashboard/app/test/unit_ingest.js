@@ -68,14 +68,14 @@ test('pasteValue: dates, times, numbers, text (generator regexes)', () => {
   assert.strictEqual(AE.csv.pasteValue('2026/02/30'), '2026/02/30');      // impossible date: text (generator crashes)
   assert.strictEqual(AE.csv.pasteValue('29:00'), 29 / 24);
   assert.strictEqual(AE.csv.pasteValue('5:00:00'), '5:00:00');
-  assert.strictEqual(AE.csv.pasteValue('0561306'), 561306);
+  assert.strictEqual(AE.csv.pasteValue('0712345'), 712345);
   assert.strictEqual(AE.csv.pasteValue('1.50'), 1.5);
   assert.strictEqual(AE.csv.pasteValue(' 12'), ' 12');
 });
 
 // ---------------------------------------------------------------- coercion helpers
 test('xl helpers: VALUE, DATEVALUE, General text, ROUND, WEEKDAY', () => {
-  assert.strictEqual(X.value(' 561306'), 561306);
+  assert.strictEqual(X.value(' 712345'), 712345);
   assert.strictEqual(X.value('1,234'), 1234);
   assert.strictEqual(X.value('12%'), 0.12);
   assert.strictEqual(X.value('5:00:00'), 5 / 24);
