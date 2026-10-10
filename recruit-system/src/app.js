@@ -3,6 +3,7 @@
  * ----------------------------------------------------------------------
  * Step1 応募情報 → Step2 面接者への申し送り（留意点） → Step3 面接評価 → Step4 採用可否判定
  * 右側のサマリーパネルは入力のたびに更新する。
+ * 判定ロジックは rules.js の公開関数を使い、UI 側に重複させない。
  */
 ;(function (global) {
   'use strict';
@@ -18,7 +19,7 @@
   const STEPS = [
     { n: 1, label: '応募情報', hint: '採用担当が入力' },
     { n: 2, label: '面接者への申し送り', hint: '留意点を確認・共有' },
-    { n: 3, label: '面接評価', hint: '面接者が採点' },
+    { n: 3, label: '面接評価', hint: '面接者が採点・シフト確認' },
     { n: 4, label: '採用可否判定', hint: '判定結果・保存' }
   ];
 
@@ -29,33 +30,75 @@
     profile: null,
     applicant: null,
     handoff: null,
+    handoffStale: false,   // 応募情報・設定が変わり、handoff の作り直しが必要
+    judgmentStale: false,  // 判定後に入力・設定が変わり、判定のやり直しが必要（state.judgment は null）
     handoffChecks: {},
     handoffNote: '',
     scores: {},
     interviewNotes: '',
     judgment: null,
+    legacyRecord: null,    // 旧形式（v1）のファイルを読み込んだときの保存時判定
+    lastHandoffText: '',   // 最後にコピーした申し送り文（確認用）
     savedAt: null,
     dirty: false
   };
+
+  // 表示用の短い名前（設定のラベルは長いことがあるため）
+  const PART_SHORT = { busy: '繁忙期', weekend: '土日', holiday: '祝日', allNight: 'オールナイト', close: 'クローズ/深夜', open: 'オープン', weeklyDays: '週日数', period: '勤務期間' };
+  // 「面接で確認すること」に出す問いかけ（得点率が低い項目）
+  const CONFIRM_HINT = {
+    busy: '繁忙期（3連休・長期休暇）に出られる日数を増やせるか',
+    weekend: '土日の出勤頻度を増やせるか',
+    holiday: '祝日に入れる日があるか',
+    allNight: 'オールナイトの可否と頻度',
+    close: 'クローズ（夜遅く）の勤務に入れるか',
+    open: 'オープン（朝）の勤務に入れるか',
+    weeklyDays: '週の勤務日数を増やせるか',
+    period: '勤務期間（卒業後も継続できるか）'
+  };
+  const RESULT_SHORT = { recommend: '推奨', review: '上長', reject: '不採用' };
+  const RESULT_TONE = { recommend: 'ok', review: 'warn', reject: 'danger' };
+  const BAND_TONE = { high: 'ok', mid: 'warn', low: 'danger' };
+  const ADJUST_SHORT = {
+    contribution_incomplete: 'シフト条件が未確定のため調整',
+    overall_cutoff: '総合判断の足切りで調整',
+    highschool_hold: '高校生の採用方針のため調整',
+    legal_hold: '法令の要判断が未確認のため調整',
+    unresolved_block: '要判断未確認のため調整'
+  };
+  const CONTINUE_OPTS = [
+    { value: 'yes', label: '継続する', tone: 'ok' },
+    { value: 'undecided', label: '未定', tone: 'warn' },
+    { value: 'no', label: '継続しない', tone: 'danger' }
+  ];
+  const MIGRATION_MSG = '劇場ルールを新しい形式に更新しました（高校生の扱い・繁忙期・オールナイト・2軸判定を追加）。設定画面で確認してください。';
 
   // =====================================================================
   // 初期化
   // =====================================================================
   function init() {
-    state.profile = S.loadProfile();
+    const rep = {};
+    state.profile = S.loadProfile(rep);
     state.applicant = emptyApplicant(state.profile);
     applyTheme(S.loadTheme());
     renderBrand();
     bindGlobal();
     showView('judge');
+    if (rep.migratedFrom) {
+      S.saveProfile(state.profile);
+      toast(MIGRATION_MSG);
+    }
   }
 
   function emptyApplicant(profile) {
     const shifts = {};
     R.DAYS.forEach(function (d) { shifts[d.key] = { start: '', end: '', nextDay: false }; });
     shifts.any = { start: '', end: '', nextDay: false };
-    const vacation = {};
-    ((profile.options || {}).vacationItems || []).forEach(function (v) { vacation[v.id] = ''; });
+    const vacation = {}, vacationDays = {};
+    ((profile.options || {}).vacationItems || []).forEach(function (v) {
+      if (!v || !v.id) return;
+      vacation[v.id] = ''; vacationDays[v.id] = '';
+    });
     return {
       name: '', gender: '', age: '', category: '', graduationDate: '',
       commuteMethod: '', commuteMinutes: '', nearestStation: '',
@@ -63,12 +106,45 @@
       shifts: shifts,
       workPeriod: '', sideJob: '', sideJobDetail: '',
       vacation: vacation,
+      vacationDays: vacationDays,
+      holidayWork: '',
+      weekendFreq: '',
+      allNight: { availability: '', frequency: '', note: '' },
+      highschool: { careerDecided: '', careerPath: '', destination: '' },
+      continueAfterGraduation: '',
+      sideJobHoursPerWeek: '',
       lateNight: { availability: '', returnMethod: '', lastTrain: '', taxiFare: '' },
       foreign: { isForeign: '', residenceStatus: '', workPermit: '', residenceExpiry: '', japaneseLevel: '' },
       department: '', applicationRoute: '',
       reviewerNotes: ''
     };
   }
+
+  // ---------- 小さなヘルパー ----------
+  function feat() { return (state.profile && state.profile.features) || {}; }
+  function contribOn() { return feat().contribution !== false; }
+  // 面接前（Step1・2）は貢献度の点数を出さない設定か（採点者のバイアス対策。Step3 以降は表示）
+  // Step3「シフト条件の最終確認」を出すか：2軸判定・オールナイト、または「シフト条件の未確認」留意点が ON のとき
+  // （旧プロファイルから移行した他劇場＝2軸 OFF・留意点 OFF では従来どおり出さない）
+  function shiftConfirmOn() {
+    const rule = ((state.profile && state.profile.handoffRules) || []).find(function (r) { return r.id === 'shift_unanswered'; });
+    return contribOn() || !!feat().allNight || !!(rule && rule.enabled !== false && (feat().vacation || feat().holidayWork || feat().weekendFreq));
+  }
+  function hidePointsBeforeInterview() {
+    return ((state.profile && state.profile.contribution) || {}).showBeforeInterview === false && state.step <= 2;
+  }
+  function fmtNum(n) { return n == null || n === '' || isNaN(Number(n)) ? '—' : String(R.round1(Number(n))); }
+  function partShort(pt) { return PART_SHORT[pt.id] || pt.label; }
+  function resultTitle(r) { const t = (state.profile.texts || {})[r]; return (t && t.title) || r || ''; }
+  function lateHour() { return R.num((state.profile.params || {}).lateNightStartHour, 22); }
+  function adjustSummary(j) {
+    return (j.adjustments || []).map(function (ad) { return ADJUST_SHORT[ad.code] || ad.code; }).join('・');
+  }
+  function liveRuleText(live, id) {
+    const hit = ((live && live.items) || []).find(function (i) { return i.id === id; });
+    return hit ? hit.text : '';
+  }
+  function setText(sel, text) { const el = $(sel); if (el) el.textContent = text; }
 
   function bindGlobal() {
     $$('.nav-item').forEach(function (b) { b.addEventListener('click', function () { showView(b.dataset.view); }); });
@@ -144,8 +220,10 @@
           state.profile = S.normalizeProfile(p);
           S.saveProfile(state.profile);
           renderBrand();
-          // 新しい長期休暇項目などに合わせて応募者データのキーを補う
+          // 新しい繁忙期の項目などに合わせて応募者データのキーを補う
           state.applicant = U.deepMerge(emptyApplicant(state.profile), state.applicant);
+          state.handoffStale = true;
+          invalidateJudgment();
           toast('設定を保存しました', 'ok');
           Settings.render($('#view-settings'), state.profile, this);
         },
@@ -158,6 +236,9 @@
           state.profile = S.resetProfile();
           S.saveProfile(state.profile);
           renderBrand();
+          state.applicant = U.deepMerge(emptyApplicant(state.profile), state.applicant);
+          state.handoffStale = true;
+          invalidateJudgment();
           toast('初期設定に戻しました', 'ok');
           showView('settings');
         },
@@ -173,16 +254,47 @@
   // ステップ制御
   // =====================================================================
   function goStep(n) {
-    if (n === 2) state.handoff = R.buildHandoff(state.applicant, state.profile);
+    if (n >= 2 && (!state.handoff || state.handoffStale)) rebuildHandoff();
     if (n === 4) {
-      if (!state.handoff) state.handoff = R.buildHandoff(state.applicant, state.profile);
       state.judgment = R.evaluateHiring(state.applicant, state.scores, state.profile, state.handoff, state.handoffChecks);
+      state.judgmentStale = false;
     }
     state.step = n;
     state.maxStepReached = Math.max(state.maxStepReached, n);
     renderStepNav(); renderStep(); renderSummary();
     const top = $('#view-judge').getBoundingClientRect().top + window.scrollY - 70;
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+
+  // 判定後に入力・チェック・面接点・設定が変わったら判定を無効にする。
+  // Step4 を開くと再判定し、保存時は保存前に再判定する（古い判定を記録に残さない）
+  function invalidateJudgment() {
+    if (state.judgment) {
+      state.judgment = null;
+      state.judgmentStale = true;
+    }
+  }
+
+  // 留意点を作り直す。文言が変わった項目・消えた項目のチェックは外す
+  function rebuildHandoff() {
+    const old = state.handoff;
+    state.handoff = R.buildHandoff(state.applicant, state.profile);
+    const now = {};
+    state.handoff.items.forEach(function (i) { now[i.id] = i.text; });
+    let changed = 0;
+    if (old) {
+      old.items.forEach(function (i) {
+        if (Object.prototype.hasOwnProperty.call(now, i.id) && now[i.id] !== i.text && state.handoffChecks[i.id]) {
+          delete state.handoffChecks[i.id];
+          changed++;
+        }
+      });
+    }
+    Object.keys(state.handoffChecks).forEach(function (id) {
+      if (!Object.prototype.hasOwnProperty.call(now, id)) delete state.handoffChecks[id];
+    });
+    state.handoffStale = false;
+    if (changed > 0) toast('内容が変わった留意点のチェックを外しました（' + changed + '件）');
   }
 
   function renderStepNav() {
@@ -200,16 +312,26 @@
   function renderStep() {
     const c = $('#stepContent');
     switch (state.step) {
-      case 1: c.innerHTML = inputStepHtml(); applyVisibility(); updateTimeDisplays(); break;
-      case 2: c.innerHTML = handoffStepHtml(); break;
-      case 3: c.innerHTML = interviewStepHtml(); updateScoreUI(); break;
-      case 4: c.innerHTML = resultStepHtml(); break;
+      case 1: c.innerHTML = inputStepHtml(); applyVisibility(); updateTimeDisplays(); updateContribMeters(); break;
+      case 2:
+        if (!state.handoff || state.handoffStale) rebuildHandoff();
+        c.innerHTML = handoffStepHtml(); renderHandoffProgress(); break;
+      case 3:
+        if (!state.handoff || state.handoffStale) rebuildHandoff();
+        c.innerHTML = interviewStepHtml(); updateScoreUI(); applyVisibility(); updateContribMeters(); break;
+      case 4:
+        if (!state.handoff || state.handoffStale) rebuildHandoff();
+        if (!state.judgment) {
+          state.judgment = R.evaluateHiring(state.applicant, state.scores, state.profile, state.handoff, state.handoffChecks);
+          state.judgmentStale = false;
+        }
+        c.innerHTML = resultStepHtml(); break;
       default: c.innerHTML = '';
     }
   }
 
   // =====================================================================
-  // Step1: 応募情報
+  // Step1: 応募情報（フォーム部品）
   // =====================================================================
   function optHtml(options, value) {
     return (options || []).map(function (o) {
@@ -219,11 +341,16 @@
     }).join('');
   }
 
+  function labelHtml(label, o) {
+    if (o.bare || label === '') return '';
+    return '<label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>';
+  }
+
   function fSelect(path, label, options, o) {
     o = o || {};
     const value = U.getPath(state.applicant, path) || '';
-    return '<div class="field"' + (o.id ? ' id="' + o.id + '"' : '') + '><label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>' +
-      '<select data-field="' + path + '"' + (o.required ? ' data-required' : '') + '><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select>' +
+    return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + '>' + labelHtml(label, o) +
+      '<select data-field="' + esc(path) + '"' + (o.required ? ' data-required' : '') + (o.bare ? ' aria-label="' + esc(label) + '"' : '') + '><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select>' +
       (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
   }
 
@@ -232,7 +359,7 @@
     const value = U.getPath(state.applicant, path);
     const attrs = [
       'type="' + (o.type || 'text') + '"',
-      'data-field="' + path + '"',
+      'data-field="' + esc(path) + '"',
       'value="' + esc(value == null ? '' : value) + '"',
       o.required ? 'data-required' : '',
       o.placeholder ? 'placeholder="' + esc(o.placeholder) + '"' : '',
@@ -240,10 +367,11 @@
       o.max !== undefined ? 'max="' + o.max + '"' : '',
       o.step !== undefined ? 'step="' + o.step + '"' : '',
       o.list ? 'list="' + o.list + '"' : '',
-      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : ''
+      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : '',
+      (o.bare || label === '') && o.ariaLabel ? 'aria-label="' + esc(o.ariaLabel) + '"' : ''
     ].filter(Boolean).join(' ');
     const input = '<input ' + attrs + '>';
-    return '<div class="field"' + (o.id ? ' id="' + o.id + '"' : '') + '><label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>' +
+    return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + '>' + labelHtml(label, o) +
       (o.suffix ? '<div class="inline">' + input + '<span class="suffix">' + esc(o.suffix) + '</span></div>' : input) +
       (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
   }
@@ -251,22 +379,54 @@
   function fTextarea(path, label, o) {
     o = o || {};
     return '<div class="field"><label>' + esc(label) + '</label>' +
-      '<textarea data-field="' + path + '" rows="' + (o.rows || 3) + '" placeholder="' + esc(o.placeholder || '') + '">' + esc(U.getPath(state.applicant, path) || '') + '</textarea></div>';
+      '<textarea data-field="' + esc(path) + '" rows="' + (o.rows || 3) + '" placeholder="' + esc(o.placeholder || '') + '">' + esc(U.getPath(state.applicant, path) || '') + '</textarea></div>';
   }
 
   // ラジオ風セグメント。options: [{value,label,tone}]
+  //   o.required … ラベルに * を出し、.field に data-required-seg を付ける（checkRequired の対象）
+  //   o.bare     … ラベルを出さない（表の行内用）
   function fSeg(path, label, options, o) {
     o = o || {};
     const cur = U.getPath(state.applicant, path) || '';
-    return '<div class="field"' + (o.id ? ' id="' + o.id + '"' : '') + '><label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>' +
-      '<div class="seg" data-seg="' + path + '">' + options.map(function (op) {
+    return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + (o.required ? ' data-required-seg="' + esc(path) + '"' : '') + '>' + labelHtml(label, o) +
+      '<div class="seg" data-seg="' + esc(path) + '" role="radiogroup" aria-label="' + esc(label) + '">' + options.map(function (op) {
         return '<label class="seg-opt' + (op.tone ? ' tone-' + op.tone : '') + (cur === op.value ? ' on' : '') + '">' +
-          '<input type="radio" name="seg-' + path + '" value="' + esc(op.value) + '" data-field="' + path + '"' + (cur === op.value ? ' checked' : '') + '><span>' + esc(op.label) + '</span></label>';
+          '<input type="radio" name="seg-' + esc(path) + '" value="' + esc(op.value) + '" data-field="' + esc(path) + '"' + (cur === op.value ? ' checked' : '') + '><span>' + esc(op.label) + '</span></label>';
       }).join('') + '</div>' +
       (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
   }
 
   const TRI = [{ value: 'ok', label: '○ 可能', tone: 'ok' }, { value: 'consult', label: '△ 要相談', tone: 'warn' }, { value: 'ng', label: '× 不可', tone: 'danger' }];
+
+  function alertHtml(id, tone, ico, textId, html) {
+    return '<div class="alert ' + tone + ' hidden" id="' + id + '"><span class="ico">' + ico + '</span><span' + (textId ? ' id="' + textId + '"' : '') + '>' + (html || '') + '</span></div>';
+  }
+
+  // 見出し右の「貢献度に反映」＋現在点（ids はカンマ区切りの貢献度項目 id、または total）
+  function meterHtml(ids) {
+    if (!contribOn()) return '';
+    // 面接前に点数を見せない設定（showBeforeInterview=false）では Step1 の見出しにも点数を出さない
+    if (hidePointsBeforeInterview()) return '<span class="badge info">貢献度に反映</span>';
+    return '<span class="badge info">貢献度に反映</span><span class="contrib-meter" data-meter="' + esc(ids) + '"></span>';
+  }
+
+  // 可視の必須欄を検査し、未入力に .invalid を付ける（Step1 と Step3 で共用）
+  function checkRequired(scopeSel) {
+    const missing = [];
+    $$(scopeSel + ' [data-required]').forEach(function (el) {
+      const visible = !el.closest('.hidden');
+      if (visible && !String(el.value || '').trim()) { el.classList.add('invalid'); missing.push(el); }
+      else el.classList.remove('invalid');
+    });
+    $$(scopeSel + ' [data-required-seg]').forEach(function (fld) {
+      const visible = !fld.closest('.hidden');
+      const v = U.getPath(state.applicant, fld.getAttribute('data-required-seg'));
+      if (visible && !v) { fld.classList.add('invalid'); missing.push(fld); }
+      else fld.classList.remove('invalid');
+    });
+    missing.sort(function (x, y) { return (x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1; });
+    return missing;
+  }
 
   function timeRowHtml(key, label) {
     const s = state.applicant.shifts[key] || { start: '', end: '', nextDay: false };
@@ -280,25 +440,122 @@
     '</div>';
   }
 
+  // 区分プルダウンの表示ラベル（value は変えない）
+  function categoryOptions() {
+    const p = state.profile;
+    return (p.options.categories || []).map(function (c) {
+      const st = R.highschoolStatus({ category: c.value }, p);
+      let suffix = '';
+      if (st.applicable && st.status === 'excluded') suffix = '（原則対象外）';
+      else if (st.isExceptionCategory) suffix = '（条件付き）';
+      return { value: c.value, label: c.value + suffix };
+    });
+  }
+
+  // 高校3年生の例外条件
+  function hsExceptionHtml() {
+    const p = state.profile;
+    const hp = p.highschoolPolicy || {};
+    if (hp.mode === 'allow') return '';
+    const allowed = hp.allowedCareerPaths || {};
+    const paths = ((p.options || {}).careerPaths || []).map(function (c) {
+      return { value: c.value, label: c.label + (allowed[c.value] !== true ? '（例外対象外）' : '') };
+    });
+    return '<div class="subpanel hidden" id="grp-hs-exception">' +
+      '<div class="subpanel-head"><h3>高校3年生の例外条件</h3><span class="badge warn" id="hsExceptionStatus">未入力あり</span></div>' +
+      '<div class="field-row">' +
+        fSeg('highschool.careerDecided', '進路', [{ value: 'yes', label: '決定済み', tone: 'ok' }, { value: 'no', label: '未決定', tone: 'danger' }]) +
+        fSelect('highschool.careerPath', '進路の種別', paths, { id: 'grp-hs-path' }) +
+      '</div>' +
+      fInput('highschool.destination', '進学先（任意）', { placeholder: '例：〇〇大学 文学部（指定校推薦で合格）', id: 'grp-hs-dest' }) +
+      '<div class="hint">進路決定済み（進学）・卒業後も継続する（上の「卒業後も当劇場で継続」）の両方がそろった場合のみ例外として選考対象です。満たさない場合も入力は続けられ、採用担当が判断します。</div>' +
+      '<div class="hint hs-reasons" id="hsExceptionReasons"></div>' +
+    '</div>';
+  }
+
+  // 繁忙期・土日祝の入力欄（Step1 と Step3 で共用。req=true で判定前の必須扱い）
+  function busyFieldsHtml(req) {
+    const p = state.profile;
+    const f = p.features || {};
+    const o = p.options || {};
+    let html = '';
+    const row = [];
+    if (f.weekendFreq) row.push(fSelect('weekendFreq', '土日の出勤頻度', o.weekendFrequencies || [], { id: 'grp-weekend-freq', required: req }));
+    if (f.holidayWork) row.push(fSeg('holidayWork', '祝日（平日の祝日・振替休日）の勤務', TRI, { id: 'grp-holiday', required: req }));
+    if (row.length) html += '<div class="field-row">' + row.join('') + '</div>';
+
+    const items = R.busyItems(p);
+    if (f.vacation && items.length) {
+      html += '<div class="busy-head"><h4>繁忙期ごとの可否' + (f.vacationDays ? 'と出られる日数の目安' : '') + '</h4><div class="spacer"></div>' +
+          '<button type="button" class="btn sm" data-action="busy-all-ok">すべて ○ にする</button>' +
+          '<button type="button" class="btn sm ghost" data-action="busy-clear">未確認に戻す</button>' +
+        '</div>' +
+        '<div class="busy-table' + (f.vacationDays ? '' : ' no-days') + '">' + items.map(function (v) {
+          const r = !!req && v.weight > 0;
+          return '<div class="busy-row" data-busy="' + esc(v.id) + '">' +
+            '<div class="busy-label"><div><b>' + esc(v.label) + '</b>' +
+              (v.critical && v.weight > 0 ? ' <span class="badge warn">重点</span>' : '') +
+              (v.weight <= 0 ? ' <span class="badge">記録のみ</span>' : '') +
+              (r ? '<span class="req">*</span>' : '') + '</div>' +
+              (v.periodNote ? '<div class="hint">' + esc(v.periodNote) + '</div>' : '') + '</div>' +
+            fSeg('vacation.' + v.id, v.label, TRI, { bare: true, required: r }) +
+            (f.vacationDays
+              ? fInput('vacationDays.' + v.id, '', { type: 'number', min: 0, max: v.maxDays, step: 1, suffix: R.UNIT_LABEL[v.unit] + '（満点' + v.refDays + '）', id: 'grp-vdays-' + v.id, placeholder: '日数', required: r, ariaLabel: v.label + ' の日数' })
+              : '') +
+          '</div>';
+        }).join('') + '</div>';
+    }
+    return html;
+  }
+
+  // オールナイト上映の入力欄（Step1 と Step3 で共用）
+  function allNightFieldsHtml(req) {
+    const p = state.profile;
+    const o = p.options || {};
+    const night = R.nightStatus(state.applicant, p);
+    return alertHtml('allNightLegal', 'danger', '⚠', 'allNightLegalText') +
+      fSeg('allNight.availability', 'オールナイトのシフト', TRI, { id: 'grp-allnight-avail', required: !!req && !night.restricted }) +
+      '<div class="field-row">' +
+        fSelect('allNight.frequency', '入れる頻度', o.allNightFrequencies || [], { id: 'grp-allnight-freq', required: req }) +
+        fInput('allNight.note', '条件・メモ', { id: 'grp-allnight-note', placeholder: '例：金曜のみ、始発で帰宅' }) +
+      '</div>' +
+      alertHtml('allNightConflict', 'warn', '⚠', 'allNightConflictText');
+  }
+
+  function allNightIntroText() {
+    const p = state.profile;
+    const prm = p.params || {};
+    return U.fill((p.texts || {}).allNightIntro || '', {
+      allNightShiftStart: prm.allNightShiftStart, allNightShiftEnd: prm.allNightShiftEnd, lateNightStartHour: lateHour()
+    });
+  }
+
   function inputStepHtml() {
     const a = state.applicant;
     const p = state.profile;
     const o = p.options;
     const f = p.features;
     const prm = p.params;
+    const texts = p.texts || {};
 
     let html = '';
 
-    html += '<div class="card"><div class="card-head"><h2>基本情報</h2><p>応募書類・応募フォームの内容を入力してください。<span class="req">*</span> は必須です。</p></div>' +
+    html += '<div class="card"><div class="card-head"><h2>基本情報</h2><p>応募書類・応募フォームの内容を入力してください。<span class="req">*</span> は必須です。分からない項目は空欄のまま進めれば、面接での確認事項として申し送られます。</p></div>' +
       '<div class="field-row">' +
         fInput('name', '応募者名', { required: true, placeholder: '例：山田 太郎', autocomplete: 'off' }) +
         fSelect('gender', '性別', o.genders) +
       '</div>' +
       '<div class="field-row cols-3">' +
-        fInput('age', '年齢', { type: 'number', min: 15, max: 99, suffix: '歳', required: true }) +
-        fSelect('category', '区分', o.categories.map(function (c) { return c.value; }), { required: true }) +
+        fInput('age', '年齢', { type: 'number', min: 15, max: 99, step: 1, suffix: '歳', required: true }) +
+        fSelect('category', '区分', categoryOptions(), { required: true }) +
         (f.graduationDate ? fInput('graduationDate', '卒業予定年月', { type: 'month', id: 'grp-graduation' }) : '') +
       '</div>' +
+      alertHtml('hsPolicyAlert', 'danger', '⛔', 'hsPolicyAlertText') +
+      alertHtml('minorNotice', 'info', 'ℹ', '', '18歳未満：22:00〜翌5:00の勤務・オールナイトはできません（労働基準法第61条）。') +
+      alertHtml('ageCategoryWarn', 'warn', '⚠', 'ageCategoryWarnText') +
+      // 高3の例外判定（決定事項 B）に必須のため、卒業予定年月の ON/OFF に関係なく描画する（表示条件は applyVisibility）
+      fSeg('continueAfterGraduation', '卒業後も当劇場で継続', CONTINUE_OPTS, { id: 'grp-continue', hint: '進学・就職後もアルバイトを続ける意思（任意）。高校3年生の例外判定と勤務期間の見込みに使います。' }) +
+      hsExceptionHtml() +
     '</div>';
 
     html += '<div class="card"><div class="card-head"><h2>通勤</h2></div>' +
@@ -320,9 +577,11 @@
           '<label class="chip chip-any' + (a.anyDay ? ' on' : '') + '"><input type="checkbox" data-field="anyDay"' + (a.anyDay ? ' checked' : '') + '><span>曜日問わず</span></label>' +
         '</div></div>' +
       '<div class="field-row">' +
-        fInput('daysMin', '週の最低勤務日数', { type: 'number', min: 1, max: 7, suffix: '日' }) +
-        fInput('daysMax', '週の最大勤務日数', { type: 'number', min: 1, max: 7, suffix: '日' }) +
+        fInput('daysMin', '週の最低勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日' }) +
+        fInput('daysMax', '週の最大勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日' }) +
       '</div>' +
+      alertHtml('daysError', 'danger', '⚠', '', '週の最低勤務日数が最大勤務日数を上回っています。') +
+      alertHtml('daysWarn', 'warn', '⚠', 'daysWarnText') +
       '<div class="field"><label>勤務希望時間<span class="req">*</span></label>' +
         '<div class="time-rows" id="timeRows">' +
           timeRowHtml('any', '曜日問わず') +
@@ -330,29 +589,45 @@
           '<div class="time-empty" id="timeEmpty">勤務可能曜日を選ぶと、曜日ごとの時間入力欄が表示されます。</div>' +
         '</div>' +
         '<div class="hint">終了時間が開始時間より早い場合は自動的に「翌日」扱いになります。</div>' +
-        '<div class="alert danger hidden" id="hsWarn"><span class="ico">⚠</span><span>高校生は ' + esc(prm.highschoolLatestEnd || '22:00') + ' を超える勤務はできません。入力内容を確認してください。</span></div>' +
+        alertHtml('hsWarn', 'danger', '⚠', '', '高校生は ' + esc(prm.highschoolLatestEnd || '22:00') + ' を超える勤務はできません。入力内容を確認してください。') +
       '</div>' +
       '<div class="field-row">' +
         fSelect('workPeriod', '勤務期間', o.workPeriods, { required: true }) +
         fSeg('sideJob', 'かけもち', [{ value: 'no', label: 'なし' }, { value: 'yes', label: 'あり', tone: 'warn' }]) +
       '</div>' +
-      '<div id="grp-sidejob-detail">' + fInput('sideJobDetail', 'かけもち先・週の勤務時間など', { placeholder: '例：コンビニ 週2日 10時間程度' }) + '</div>' +
-      (f.vacation && (o.vacationItems || []).length ? (
-        '<h3 class="sub">長期休暇の対応</h3><div class="field-row cols-' + Math.min(o.vacationItems.length, 4) + '">' +
-          o.vacationItems.map(function (v) { return fSeg('vacation.' + v.id, v.label, TRI); }).join('') +
-        '</div>') : '') +
+      '<div id="grp-sidejob-detail"><div class="field-row">' +
+        fInput('sideJobDetail', 'かけもち先・勤務内容など', { placeholder: '例：コンビニ 週2日' }) +
+        fInput('sideJobHoursPerWeek', 'かけもち先の週あたり時間', { type: 'number', min: 0, max: 60, step: 1, suffix: '時間/週', hint: '外国籍の方は週' + esc(prm.foreignWeeklyHourCap || 28) + '時間の判定に合算します' }) +
+      '</div></div>' +
     '</div>';
 
+    if (f.vacation || f.holidayWork || f.weekendFreq) {
+      html += '<div class="card" id="busyCard"><div class="card-head"><h2>繁忙期・土日祝</h2><div class="spacer"></div>' + meterHtml('busy,weekend,holiday') +
+        '<p>' + esc(texts.busyIntro || '') + '</p></div>' +
+        busyFieldsHtml(false) +
+      '</div>';
+    }
+
     if (f.lateNight) {
-      html += '<div class="card"><div class="card-head"><h2>深夜帯（' + esc(prm.lateNightStartHour || 22) + '時以降）</h2><p>クローズ要員の見込みと、帰宅手段を確認します。</p></div>' +
+      html += '<div class="card" id="lateNightCard"><div class="card-head"><h2>深夜帯（' + esc(lateHour()) + '時以降）</h2><div class="spacer"></div>' + meterHtml('close') +
+        '<p>クローズ要員の見込みと、帰宅手段を確認します。' + (f.allNight ? 'オールナイト（翌朝までの通し）は下の「オールナイト上映」で別に確認します。' : '') + '</p></div>' +
+        alertHtml('lateNightLegal', 'danger', '⚠', 'lateNightLegalText') +
         '<div class="field-row">' +
-          fSeg('lateNight.availability', esc(prm.lateNightStartHour || 22) + '時以降の勤務', TRI) +
+          fSeg('lateNight.availability', lateHour() + '時以降の勤務', TRI) +
           fSelect('lateNight.returnMethod', '深夜帯の帰宅手段', o.returnMethods) +
         '</div>' +
         '<div class="field-row">' +
-          fInput('lateNight.lastTrain', '終電時刻（最寄り駅発）', { type: 'time', id: 'grp-lasttrain', hint: 'クローズ後に間に合うか確認します。' }) +
+          fInput('lateNight.lastTrain', '終電時刻（劇場最寄り駅 → 自宅方面の最終）', { type: 'time', id: 'grp-lasttrain', hint: R.num(prm.dayBoundaryHour, 5) + ':00 より前の時刻は翌日として扱います。' }) +
           (f.taxi ? fInput('lateNight.taxiFare', 'タクシー料金の目安（自宅まで）', { type: 'number', min: 0, step: 100, suffix: '円', id: 'grp-taxi', hint: '規定金額: ' + Number(prm.taxiLimitYen || 0).toLocaleString('ja-JP') + '円' }) : '') +
         '</div>' +
+        alertHtml('lastTrainWarn', 'warn', '⚠', 'lastTrainWarnText') +
+      '</div>';
+    }
+
+    if (f.allNight) {
+      html += '<div class="card" id="allNightCard"><div class="card-head"><h2>オールナイト上映</h2><div class="spacer"></div>' + meterHtml('allNight') +
+        '<p>' + esc(allNightIntroText()) + '</p></div>' +
+        allNightFieldsHtml(false) +
       '</div>';
     }
 
@@ -389,11 +664,19 @@
     if (el) el.classList.toggle('hidden', !on);
   }
 
+  // 表示/非表示と、入力に応じて変わる注意書きをここに集約する（Step1・Step3 共通。無い要素は無視）
   function applyVisibility() {
     const a = state.applicant;
-    const f = state.profile.features;
-    const group = R.categoryGroup(state.profile, a.category);
-    show('#grp-graduation', !!f.graduationDate && R.isStudentGroup(group));
+    const p = state.profile;
+    const f = p.features || {};
+    const prm = p.params || {};
+    const group = R.categoryGroup(p, a.category);
+    const isStudent = R.isStudentGroup(group);
+    const ln = a.lateNight || {};
+    const an = a.allNight || {};
+    const hsA = a.highschool || {};
+
+    show('#grp-graduation', !!f.graduationDate && isStudent);
     show('#grp-station', a.commuteMethod === '公共交通機関');
     show('#grp-sidejob-detail', a.sideJob === 'yes');
     $$('.time-row[data-day]').forEach(function (row) {
@@ -401,17 +684,89 @@
       show(row, k === 'any' ? a.anyDay : (!a.anyDay && a.workDays.indexOf(k) >= 0));
     });
     show('#timeEmpty', !a.anyDay && a.workDays.length === 0);
-    show('#grp-lasttrain', a.lateNight.returnMethod === 'train');
-    show('#grp-taxi', !!f.taxi && a.lateNight.returnMethod === 'taxi');
-    show('#grp-foreign-detail', a.foreign.isForeign === 'yes');
+    show('#grp-lasttrain', ln.returnMethod === 'train');
+    show('#grp-taxi', !!f.taxi && ln.returnMethod === 'taxi');
+    show('#grp-foreign-detail', (a.foreign || {}).isForeign === 'yes');
 
-    const sh = R.analyzeShifts(a, state.profile);
-    const limit = R.toMinutes(state.profile.params.highschoolLatestEnd || '22:00');
+    const sh = R.analyzeShifts(a, p);
+    const hs = R.highschoolStatus(a, p);
+    const night = R.nightStatus(a, p);
+    const limit = R.toMinutes(prm.highschoolLatestEnd || '22:00');
     show('#hsWarn', group === 'highschool' && sh.latestEndAbs != null && limit != null && sh.latestEndAbs > limit);
+
+    // 高校生の方針
+    show('#hsPolicyAlert', hs.status === 'excluded');
+    if (hs.status === 'excluded') {
+      const el = $('#hsPolicyAlertText');
+      if (el) el.innerHTML = '<b>原則対象外</b>：' + esc(a.category) + 'は当劇場の採用対象外です。' + esc((p.highschoolPolicy || {}).notice || '') +
+        ' 入力は続けられます（申し送りに「要判断」として記載されます）。';
+    }
+    show('#minorNotice', night.isMinor);
+    const ac = R.ageCategoryCheck(a, p);
+    show('#ageCategoryWarn', ac.mismatch);
+    if (ac.mismatch) setText('#ageCategoryWarnText', '年齢' + a.age + '歳と区分「' + a.category + '」が一致しません（想定 ' + ac.ageRange + '）。入力を確認してください。');
+    show('#grp-hs-exception', hs.isExceptionCategory);
+    // 卒業後の継続：卒業予定年月が OFF でも、高3例外の対象区分なら必ず表示する
+    show('#grp-continue', isStudent && (f.graduationDate !== false || hs.isExceptionCategory));
+    show('#grp-hs-path', hsA.careerDecided === 'yes');
+    show('#grp-hs-dest', hsA.careerDecided === 'yes');
+    const pill = $('#hsExceptionStatus');
+    if (pill) {
+      const m = { exception_met: ['ok', '例外対象（条件充足）'], exception_unmet: ['danger', '例外条件 未充足（要判断）'], exception_incomplete: ['warn', '未入力あり'] }[hs.status] || ['', ''];
+      pill.className = 'badge ' + m[0];
+      pill.textContent = m[1];
+    }
+    setText('#hsExceptionReasons', hs.isExceptionCategory && hs.reasonsText ? '不足・未充足: ' + hs.reasonsText : '');
+
+    // 週の勤務日数
+    const dc = R.weeklyDaysCheck(a);
+    show('#daysError', dc.order);
+    show('#daysWarn', dc.mismatch && !dc.order);
+    if (dc.mismatch) setText('#daysWarnText', '勤務可能曜日は' + dc.dayCount + '日分ですが、週の最大勤務日数が' + dc.claimDays + '日です。実際に入れる曜日と日数を確認してください。');
+
+    // 繁忙期・土日祝
+    show('#grp-weekend-freq', !!f.weekendFreq && sh.weekendCount > 0);
+    R.busyItems(p).forEach(function (v) {
+      show(document.getElementById('grp-vdays-' + v.id), !!f.vacationDays && R.isTri((a.vacation || {})[v.id]));
+    });
+
+    // 深夜帯・オールナイト
+    show('#lateNightLegal', night.restricted);
+    if (night.restricted) {
+      setText('#lateNightLegalText', night.isMinor
+        ? '18歳未満は22:00〜翌5:00の勤務ができません（労働基準法第61条）。'
+        : '高校在学中は当劇場の運用で' + (prm.highschoolLatestEnd || '22:00') + '以降の勤務はできません（卒業まで）。');
+    }
+    show('#allNightLegal', night.restricted);
+    if (night.restricted) {
+      setText('#allNightLegalText', night.reason + 'のため、オールナイト勤務はできません（貢献度は0点で計算）。' +
+        (R.isTri(an.availability) ? '入力済みの「' + R.TRI_LABELS[an.availability] + '」は無効として扱います。' : ''));
+    }
+    show('#grp-allnight-freq', R.isTri(an.availability) && !night.restricted);
+    show('#grp-allnight-note', R.isTri(an.availability) && !night.restricted);
+
+    // ルールと同じ条件・文言の注意書き（ルールが OFF でも表示する）
+    if ($('#allNightConflict') || $('#lastTrainWarn')) {
+      const ctx = R.buildContext(a, p);
+      const live = R.buildHandoff(a, p);
+      let conflict = false;
+      try { conflict = !!R.CONDITIONS.allnight_latenight_conflict(ctx); } catch (e) { conflict = false; }
+      show('#allNightConflict', conflict);
+      if (conflict) {
+        setText('#allNightConflictText', liveRuleText(live, 'allnight_latenight_conflict') ||
+          'オールナイトは「' + R.TRI_LABELS[an.availability] + '」ですが、' + lateHour() + '時以降の勤務は「× 不可」です。終電の都合による不可であれば、始発帰宅のオールナイトは可能か確認してください。');
+      }
+      const lt = ctx.lastTrain;
+      show('#lastTrainWarn', !!lt.conflict);
+      if (lt.conflict) {
+        setText('#lastTrainWarnText', liveRuleText(live, 'late_night_last_train_early') ||
+          '希望シフトの最も遅い終了（' + R.fmtAbs(lt.compareEndAbs) + '）から終電（' + ln.lastTrain + '）まで' + R.num(prm.lastTrainBufferMinutes, 15) + '分の余裕がありません。クローズ後に帰宅できるか、終了時刻の調整・帰宅手段を確認してください。');
+      }
+    }
   }
 
   function updateTimeDisplays() {
-    const late = (Number(state.profile.params.lateNightStartHour) || 22) * 60;
+    const late = lateHour() * 60;
     $$('.time-row[data-day]').forEach(function (row) {
       const k = row.dataset.day;
       const s = state.applicant.shifts[k];
@@ -427,12 +782,59 @@
       const min = R.duration(s.start, s.end, s.nextDay);
       if (min == null) { out.textContent = ''; out.classList.remove('late'); return; }
       const endAbs = sm + min;
+      // 深夜帯（劇場の開始時刻〜翌5:00）と重なるか。早朝勤務（0:30〜5:00 など）も検出する
+      const isLate = R.periodicOverlap(sm, endAbs, late, 1440 + R.LAW.NIGHT_END) > 0;
       let txt = R.fmtDuration(min);
       if (s.nextDay) txt += '（翌' + s.end + 'まで）';
-      if (endAbs > late) txt += ' ・深夜帯あり';
+      if (isLate) txt += ' ・深夜帯あり';
       out.textContent = txt;
-      out.classList.toggle('late', endAbs > late);
+      out.classList.toggle('late', isLate);
     });
+  }
+
+  // 貢献度のライブ表示（Step1 のカード見出し・Step3 の確認カード）
+  function updateContribMeters() {
+    const meters = $$('[data-meter]');
+    const status = $('#shiftConfirmStatus');
+    if (!meters.length && !status) return;
+    const p = state.profile;
+    const c = R.computeContribution(state.applicant, p);
+    meters.forEach(function (el) {
+      const key = el.getAttribute('data-meter');
+      if (key === 'total') {
+        el.textContent = fmtNum(c.total) + ' / ' + fmtNum(c.max) + '（' + (c.bandLabel || '—') + (c.incomplete ? '・暫定' : '') + '）';
+        el.className = 'contrib-meter ' + (BAND_TONE[c.band] || '');
+        return;
+      }
+      const txt = key.split(',').map(function (id) {
+        const pt = c.parts.find(function (x) { return x.id === id; });
+        return pt && pt.applicable ? partShort(pt) + ' ' + fmtNum(pt.score) + '/' + fmtNum(pt.max) : '';
+      }).filter(Boolean).join('・');
+      el.textContent = txt;
+      show(el, !!txt);
+    });
+    if (status) {
+      const co = p.contribution || {};
+      const strict = contribOn() && c.enabled && co.requireComplete !== false;
+      const shiftOn = shiftConfirmOn();
+      const hs = R.highschoolStatus(state.applicant, p);
+      const hsMissing = hs.isExceptionCategory ? hs.missing : [];
+      const lines = [];
+      if (shiftOn && c.missing.length) {
+        lines.push('未確認：' + esc(c.missing.join('・')) + '。' + (strict ? '判定の前に入力してください。' : '面接で確認できた項目を入力してください。'));
+      }
+      if (hsMissing.length) {
+        // 高校生の例外は判定を止めない（決定事項 B）。未入力のままだと上長最終判断要になる旨を示す
+        lines.push('高3例外: ' + esc(hsMissing.join('・')) + 'が未入力です（未入力のまま判定すると上長最終判断要になります）。');
+      }
+      if (lines.length) {
+        status.className = 'alert warn';
+        status.innerHTML = '<span class="ico">⚠</span><span>' + lines.join('<br>') + '</span>';
+      } else {
+        status.className = 'alert ok';
+        status.innerHTML = '<span class="ico">✓</span><span>' + (shiftOn ? 'シフト条件はすべて確認済みです。' : '例外条件はすべて入力済みです。') + '</span>';
+      }
+    }
   }
 
   function onFieldEvent(e) {
@@ -455,14 +857,31 @@
         const seg = t.closest('.seg');
         if (seg) $$('.seg-opt', seg).forEach(function (l) { l.classList.toggle('on', l.contains(t)); });
       } else {
-        U.setPath(state.applicant, path, t.value);
+        let val = t.value;
+        // 繁忙期の日数は 0〜上限の整数に丸める（変わったら入力欄にも書き戻す）
+        if (path.indexOf('vacationDays.') === 0 && val !== '') {
+          const id = path.slice('vacationDays.'.length);
+          const it = R.busyItems(state.profile).find(function (v) { return v.id === id; });
+          const n = Number(val);
+          if (it && !isNaN(n)) {
+            const c = String(Math.min(it.maxDays, Math.max(0, Math.floor(n))));
+            if (c !== val) { val = c; t.value = c; }
+          }
+        }
+        U.setPath(state.applicant, path, val);
       }
       const chip = t.closest('.chip');
       if (chip && t.type === 'checkbox') chip.classList.toggle('on', t.checked);
-      if (t.hasAttribute('data-required')) t.classList.remove('invalid');
+      if (t.hasAttribute('data-required') || path === 'daysMin' || path === 'daysMax') t.classList.remove('invalid');
+      const fld = t.closest('.field.invalid');
+      if (fld && U.getPath(state.applicant, path)) fld.classList.remove('invalid');
       state.dirty = true;
+      state.handoffStale = true;
+      invalidateJudgment();
       applyVisibility();
       updateTimeDisplays();
+      updateContribMeters();
+      if (state.step === 3) refreshUnresolvedAlert();
       renderSummary();
       return;
     }
@@ -472,6 +891,7 @@
       const item = t.closest('.handoff-item');
       if (item) item.classList.toggle('done', t.checked);
       state.dirty = true;
+      invalidateJudgment();
       renderHandoffProgress();
       renderSummary();
       return;
@@ -495,7 +915,7 @@
         copyHandoffText();
         break;
       case 'judge':
-        if (validateScores()) goStep(4);
+        if (validateScores() && validateDays() && validateContribution()) goStep(4);
         break;
       case 'score': {
         const id = b.dataset.item;
@@ -503,7 +923,24 @@
         state.scores[id] = state.scores[id] === v ? undefined : v;
         if (state.scores[id] === undefined) delete state.scores[id];
         state.dirty = true;
+        invalidateJudgment();
         updateScoreUI();
+        renderSummary();
+        break;
+      }
+      case 'busy-all-ok':
+      case 'busy-clear': {
+        const a = state.applicant;
+        a.vacation = a.vacation || {};
+        a.vacationDays = a.vacationDays || {};
+        R.busyItems(state.profile).forEach(function (v) {
+          if (b.dataset.action === 'busy-all-ok') a.vacation[v.id] = 'ok';
+          else { a.vacation[v.id] = ''; a.vacationDays[v.id] = ''; }
+        });
+        state.dirty = true;
+        state.handoffStale = true;
+        invalidateJudgment();
+        renderStep();
         renderSummary();
         break;
       }
@@ -518,13 +955,15 @@
     }
   }
 
+  function focusFirst(el, msg) {
+    toast(msg, 'error');
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el.focus) el.focus();
+  }
+
   function validateInput() {
-    const missing = [];
-    $$('#stepContent [data-required]').forEach(function (el) {
-      const visible = !el.closest('.hidden');
-      if (visible && !String(el.value || '').trim()) { el.classList.add('invalid'); missing.push(el); }
-      else el.classList.remove('invalid');
-    });
+    const missing = checkRequired('#stepContent');
     const a = state.applicant;
     if (!a.anyDay && a.workDays.length === 0) {
       toast('勤務可能曜日を1つ以上選んでください', 'error');
@@ -538,17 +977,152 @@
       return false;
     }
     if (missing.length) {
-      toast('必須項目（' + missing.length + '件）が未入力です', 'error');
-      missing[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-      missing[0].focus();
+      focusFirst(missing[0], '必須項目（' + missing.length + '件）が未入力です');
+      return false;
+    }
+    // 明らかな入力ミスだけ止める（高校生方針・繁忙期の未入力などは止めない）
+    if (String(a.age).trim() !== '' && !isIntText(a.age)) {
+      const el = $('[data-field="age"]'); if (el) el.classList.add('invalid');
+      focusFirst(el, '年齢は整数で入力してください');
+      return false;
+    }
+    return validateDays();
+  }
+
+  function isIntText(v) { return /^\d+$/.test(String(v).trim()); }
+
+  // 週の勤務日数（Step1 と Step3「シフト条件の最終確認」で共用）：1〜7の整数・最低≦最大
+  function validateDays() {
+    const a = state.applicant;
+    const isInt = isIntText;
+    const badDays = ['daysMin', 'daysMax'].filter(function (k) {
+      const v = String(a[k] == null ? '' : a[k]).trim();
+      return v !== '' && (!isInt(v) || Number(v) < 1 || Number(v) > 7);
+    });
+    if (badDays.length) {
+      badDays.forEach(function (k) { const el = $('[data-field="' + k + '"]'); if (el) el.classList.add('invalid'); });
+      focusFirst($('[data-field="' + badDays[0] + '"]'), '週の勤務日数は1〜7の整数で入力してください');
+      return false;
+    }
+    if (R.weeklyDaysCheck(a).order) {
+      ['daysMin', 'daysMax'].forEach(function (k) { const el = $('[data-field="' + k + '"]'); if (el) el.classList.add('invalid'); });
+      focusFirst($('#daysError'), '週の最低勤務日数が最大勤務日数を上回っています');
       return false;
     }
     return true;
   }
 
+  // Step3→4: 判定の前にシフト条件（貢献度の未確認）をゼロにする
+  function validateContribution() {
+    const p = state.profile;
+    const co = p.contribution || {};
+    if (!contribOn() || co.requireComplete === false) return true;
+    const c = R.computeContribution(state.applicant, p);
+    if (!c.enabled || !c.incomplete) return true;
+    const missing = checkRequired('#shiftConfirm');
+    toast('判定の前にシフト条件を確定してください：' + c.missing.join('・'), 'error');
+    const card = $('#shiftConfirm');
+    const target = missing[0] || card;
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return false;
+  }
+
+  // =====================================================================
+  // 共通の表示部品（Step2・Step4）
+  // =====================================================================
+  function flagBadges(flags) {
+    return (flags || []).map(function (fl) {
+      if (fl === 'unanswered') return '<span class="badge warn">未確認</span>';
+      if (fl === 'restricted') return '<span class="badge danger">法令/運用で対象外</span>';
+      if (fl === 'estimated') return '<span class="badge">推定</span>';
+      return '';
+    }).join('');
+  }
+
+  // シフト貢献度の内訳バー（ラベル・内容｜バー｜点数）
+  function contribBarsHtml(c) {
+    const tone = function (r) { return r < 0.35 ? 'lo' : r < 0.6 ? 'mid' : 'hi'; };
+    return '<div class="bars contrib">' + c.parts.map(function (pt) {
+      return '<div class="bar-row' + (pt.applicable ? '' : ' na') + '" data-part="' + esc(pt.id) + '">' +
+        '<div class="bar-label"><div class="bar-name">' + esc(pt.label) + ' ' + flagBadges(pt.flags) + '</div>' +
+          (pt.detail ? '<div class="bar-detail">' + esc(pt.detail) + '</div>' : '') + '</div>' +
+        '<div class="bar-track"><div class="bar-fill ' + (pt.applicable ? tone(pt.ratio) : '') + '" style="width:' + Math.round((pt.applicable ? pt.ratio : 0) * 100) + '%"></div></div>' +
+        '<div class="bar-val num">' + (pt.applicable ? fmtNum(pt.score) + '<small>/' + fmtNum(pt.max) + '</small>' : '<small>対象外</small>') + '</div>' +
+      '</div>';
+    }).join('') +
+      '<div class="bar-row total"><div class="bar-label"><b>合計</b>' + (c.bandLabel ? ' <span class="badge ' + (BAND_TONE[c.band] || '') + '">' + esc(c.bandLabel) + '</span>' : '') + '</div>' +
+        '<div class="bar-track"><div class="bar-fill ' + (c.band === 'high' ? 'hi' : c.band === 'mid' ? 'mid' : 'lo') + '" style="width:' + Math.min(100, Math.round(c.pct)) + '%"></div></div>' +
+        '<div class="bar-val num">' + fmtNum(c.total) + '<small>/' + fmtNum(c.max) + '</small></div></div>' +
+    '</div>';
+  }
+
+  // 繁忙期の表（期間｜○△×｜日数）。未確認のセルは色を付ける
+  function busyTableHtml(c) {
+    const f = feat();
+    const rows = (c && c.busyRows) || [];
+    if (!rows.length) return '<p class="empty">繁忙期の設定がありません。</p>';
+    return '<table class="table busy-mini"><thead><tr><th>期間</th><th>可否</th>' + (f.vacationDays ? '<th>日数</th>' : '') + '</tr></thead><tbody>' +
+      rows.map(function (r) {
+        const unk = !r.avail;
+        const tri = R.isTri(r.avail);
+        const daysUnk = f.vacationDays && tri && r.days == null;
+        const daysTxt = !tri ? '—' : r.days == null ? '未確認' : r.days + R.UNIT_LABEL[r.unit] + ' ／ 満点' + r.refDays;
+        return '<tr data-busy="' + esc(r.id) + '"' + (r.weight <= 0 ? ' class="muted"' : '') + '><td>' + esc(r.label) +
+            (r.critical && r.weight > 0 ? ' <span class="badge warn">重点</span>' : '') + (r.weight <= 0 ? ' <span class="badge">記録のみ</span>' : '') + '</td>' +
+          '<td class="' + (unk ? 'unk' : 'tri-' + esc(r.avail)) + '">' + esc(unk ? '未確認' : (R.TRI_LABELS[r.avail] || r.avail)) + '</td>' +
+          (f.vacationDays ? '<td class="' + (daysUnk ? 'unk' : '') + '">' + esc(daysTxt) + '</td>' : '') + '</tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  // 「面接で確認すること」: 未確認の項目＋得点率の低い項目
+  function confirmList(c, withPoints) {
+    const out = (c.missing || []).slice();
+    (c.parts || []).forEach(function (pt) {
+      if (!pt.applicable || pt.ratio >= 0.5) return;
+      const fl = pt.flags || [];
+      if (fl.indexOf('unanswered') >= 0 || fl.indexOf('restricted') >= 0) return;
+      out.push((CONFIRM_HINT[pt.id] || pt.label) + (withPoints ? '（現在 ' + fmtNum(pt.score) + '/' + fmtNum(pt.max) + '点）' : ''));
+    });
+    return out;
+  }
+
+  // 旧形式（v1）の保存ファイルを読み込んだときのバナー（Step2〜4）
+  function legacyBannerHtml() {
+    const lr = state.legacyRecord;
+    if (!lr) return '';
+    let msg = '旧形式（v1）で保存されたデータです。';
+    if (contribOn()) {
+      const c = R.computeContribution(state.applicant, state.profile);
+      msg += c.incomplete
+        ? '繁忙期の日数・祝日・オールナイト等が未入力のため、シフト貢献度は未確定です（採用推奨には留めません）。'
+        : 'シフト条件は入力済みです。';
+    }
+    const sj = lr.savedJudgment;
+    if (sj) msg += '保存時の判定: ' + (sj.title || resultTitle(sj.result)) + '（' + sj.total + '/' + sj.max + '点・面接評価のみ）';
+    return '<div class="alert warn legacy-banner"><span class="ico">ℹ</span><span>' + esc(msg) +
+      (state.step !== 3 ? ' <button type="button" class="btn link" data-action="to-step" data-step="3">シフト条件を入力する</button>' : '') + '</span></div>';
+  }
+
   // =====================================================================
   // Step2: 面接者への申し送り
   // =====================================================================
+  function contribPreviewHtml(c) {
+    const p = state.profile;
+    if (!contribOn() || !c) return '';
+    const co = p.contribution || {};
+    const showPts = co.showBeforeInterview !== false && c.enabled;
+    const confirm = confirmList(c, showPts);
+    return '<div class="card" id="contribPreview"><div class="card-head"><h2>シフト貢献度（面接前の見込み）</h2><div class="spacer"></div>' +
+        (showPts ? '<span class="badge lg ' + (BAND_TONE[c.band] || '') + '">' + fmtNum(c.total) + ' / ' + fmtNum(c.max) + '点（' + esc(c.bandLabel) + '・暫定）</span>' : '') +
+        '<p>' + esc((p.texts || {}).contributionIntro || '') + '</p></div>' +
+      (showPts ? contribBarsHtml(c) : '') +
+      (feat().vacation ? '<h3 class="sub">繁忙期</h3>' + busyTableHtml(c) : '') +
+      '<h3 class="sub">面接で確認すること</h3>' +
+      (confirm.length ? '<ul class="list-plain confirm-list">' + confirm.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'
+        : '<p class="empty">特にありません（シフト条件はすべて入力済みです）。</p>') +
+    '</div>';
+  }
+
   function handoffStepHtml() {
     const h = state.handoff;
     const a = state.applicant;
@@ -558,17 +1132,23 @@
       return { key: k, meta: sev[k], items: h.items.filter(function (i) { return i.severity === k; }) };
     });
     const shiftRows = R.describeShifts(a, p);
+    const hsRow = R.describeApplicant(a, p).find(function (r) { return r.label === '高校生の例外'; });
+    const hs = h.hs || R.highschoolStatus(a, p);
 
-    let html = '<div class="card"><div class="card-head"><h2>面接者への申し送り</h2>' +
+    let html = legacyBannerHtml();
+    html += '<div class="card"><div class="card-head"><h2>面接者への申し送り</h2>' +
       '<div class="spacer"></div><span class="badge accent lg">' + esc(a.name) + ' さん</span>' +
       '<p>' + esc(p.texts.handoffIntro || '') + '</p></div>' +
       '<div class="grid-2">' +
         '<div><h3 class="sub">応募者</h3><table class="table kv">' +
           [['区分', a.category + (a.age ? '（' + a.age + '歳）' : '')],
+           hsRow ? ['高校生', hsRow.value + (hs.status === 'excluded' ? '（' + a.category + '）' : ''), hs.status === 'exception_met' ? 'ok' : 'danger'] : null,
            ['通勤', [a.commuteMethod, a.commuteMinutes ? a.commuteMinutes + '分' : '', a.nearestStation].filter(Boolean).join(' / ')],
            ['勤務期間', R.labelOf(p.options.workPeriods, a.workPeriod)],
            ['週勤務日数', (a.daysMin || a.daysMax) ? (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日' : '未入力']
-          ].map(function (r) { return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1] || '未入力') + '</td></tr>'; }).join('') +
+          ].filter(Boolean).map(function (r) {
+            return '<tr' + (r[2] ? ' class="row-' + r[2] + '"' : '') + '><th>' + esc(r[0]) + '</th><td>' + esc(r[1] || '未入力') + '</td></tr>';
+          }).join('') +
         '</table></div>' +
         '<div><h3 class="sub">希望シフト</h3>' +
           (shiftRows.length ? '<ul class="list-plain">' + shiftRows.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>' : '<p class="empty">未入力</p>') +
@@ -577,6 +1157,8 @@
       '</div>' +
       (h.strengths.length ? '<h3 class="sub">強み（面接者へ共有）</h3><ul class="strength-list">' + h.strengths.map(function (s) { return '<li>' + esc(s.text) + '</li>'; }).join('') + '</ul>' : '') +
     '</div>';
+
+    html += contribPreviewHtml(h.contribution || R.computeContribution(a, p));
 
     html += '<div class="card"><div class="card-head"><h2>留意点 <span class="muted" style="font-weight:500">' + h.items.length + '件</span></h2>' +
       '<div class="spacer"></div><div class="progress" id="handoffProgress" style="min-width:220px"></div>' +
@@ -591,9 +1173,10 @@
       html += '<div class="handoff-group"><div class="handoff-group-head"><span class="badge ' + tone + '">' + esc(g.meta.label) + '</span><h3>' + g.items.length + '件</h3><span class="desc">' + esc(g.meta.desc) + '</span></div>' +
         '<div class="handoff-list">' + g.items.map(function (i) {
           const done = !!state.handoffChecks[i.id];
-          return '<label class="handoff-item sev-' + i.severity + (done ? ' done' : '') + '">' +
+          const catTone = i.category === 'legal' ? ' tag-danger' : i.category === 'highschool' ? ' tag-warn' : '';
+          return '<label class="handoff-item sev-' + i.severity + (done ? ' done' : '') + '" data-item-id="' + esc(i.id) + '">' +
             '<input type="checkbox" data-check="' + esc(i.id) + '"' + (done ? ' checked' : '') + '>' +
-            '<div><div class="handoff-meta"><span class="tag">' + esc(i.categoryLabel) + '</span></div><div class="handoff-text">' + esc(i.text) + '</div></div>' +
+            '<div><div class="handoff-meta"><span class="tag' + catTone + '">' + esc(i.categoryLabel) + '</span></div><div class="handoff-text">' + esc(i.text) + '</div></div>' +
           '</label>';
         }).join('') + '</div></div>';
     });
@@ -619,6 +1202,11 @@
   }
 
   function buildHandoffText() {
+    if (!state.handoff || state.handoffStale) {
+      rebuildHandoff();
+      // 画面の一覧とコピー文を一致させる
+      if (state.view === 'judge' && (state.step === 2 || state.step === 3)) { renderStep(); renderSummary(); }
+    }
     const h = state.handoff;
     const a = state.applicant;
     const p = state.profile;
@@ -629,12 +1217,32 @@
       if (['氏名', '年齢', '区分', '担当者所見'].indexOf(r.label) >= 0) return;
       lines.push(r.label + '：' + r.value);
     });
+    if (contribOn()) {
+      const c = h.contribution || R.computeContribution(a, p);
+      const showPts = (p.contribution || {}).showBeforeInterview !== false && c.enabled;
+      if (showPts) {
+        lines.push('');
+        lines.push('■シフト貢献度（面接前の見込み）' + fmtNum(c.total) + '/' + fmtNum(c.max) + '点（' + c.bandLabel + '・暫定）');
+        lines.push(c.parts.filter(function (pt) { return pt.applicable; }).map(function (pt) {
+          return partShort(pt) + ' ' + fmtNum(pt.score) + '/' + fmtNum(pt.max);
+        }).join('・'));
+      }
+      const conf = confirmList(c, false);
+      if (conf.length) {
+        lines.push('');
+        lines.push('■面接で確認すること');
+        conf.forEach(function (x) { lines.push('・' + x); });
+      }
+    }
     ['block', 'warn', 'info'].forEach(function (k) {
       const items = h.items.filter(function (i) { return i.severity === k; });
       if (!items.length) return;
       lines.push('');
       lines.push('■' + R.SEVERITY[k].label + '（' + R.SEVERITY[k].desc + '）');
-      items.forEach(function (i) { lines.push((state.handoffChecks[i.id] ? '☑ ' : '☐ ') + i.text); });
+      items.forEach(function (i) {
+        const prefix = i.category === 'legal' ? '[法令]' : i.category === 'highschool' ? '[高校生]' : '';
+        lines.push((state.handoffChecks[i.id] ? '☑ ' : '☐ ') + prefix + i.text);
+      });
     });
     if (h.strengths.length) {
       lines.push('');
@@ -648,6 +1256,7 @@
 
   function copyHandoffText() {
     const text = buildHandoffText();
+    state.lastHandoffText = text; // テスト・確認用
     const done = function () { toast('申し送り文をコピーしました', 'ok'); };
     const fallback = function () {
       const ta = document.createElement('textarea');
@@ -663,19 +1272,66 @@
   // =====================================================================
   // Step3: 面接評価
   // =====================================================================
+  // シフト条件の最終確認（面接で確認した内容で確定させる）
+  function shiftConfirmHtml() {
+    const p = state.profile;
+    const f = feat();
+    const hs = R.highschoolStatus(state.applicant, p);
+    const shiftOn = shiftConfirmOn();
+    if (!shiftOn && !hs.isExceptionCategory) return '';
+    const night = R.nightStatus(state.applicant, p);
+    let body = '<div id="shiftConfirmStatus" class="alert"></div>';
+    // 高3の例外条件（合格通知など面接で確認した結果をここで記録できるように。Step1 と同じ data-field）
+    if (hs.isExceptionCategory) {
+      body += '<h3 class="sub">高校3年生の例外条件</h3><div id="shiftConfirmHs">' +
+        fSeg('continueAfterGraduation', '卒業後も当劇場で継続', CONTINUE_OPTS, { id: 'grp-continue', hint: '進学・就職後もアルバイトを続ける意思。高校3年生の例外判定と勤務期間の見込みに使います。' }) +
+        hsExceptionHtml() + '</div>';
+    }
+    if (!shiftOn) {
+      return '<div class="card" id="shiftConfirm"><div class="card-head"><h2>高校3年生の例外条件の確認（面接で確認）</h2>' +
+        '<p>進路（合格通知など）と卒業後の継続意思を面接で確認し、入力してください。ここで変えた内容は応募情報にも反映されます。</p></div>' + body + '</div>';
+    }
+    if (f.vacation || f.holidayWork || f.weekendFreq) body += '<h3 class="sub">繁忙期・土日祝</h3>' + busyFieldsHtml(true);
+    if (f.allNight) body += '<h3 class="sub">オールナイト上映</h3>' + allNightFieldsHtml(true);
+    body += '<h3 class="sub">深夜帯・週の勤務日数</h3><div class="field-row cols-3">' +
+      (f.lateNight ? fSeg('lateNight.availability', lateHour() + '時以降の勤務', TRI, { required: !night.restricted, hint: night.restricted ? night.reason + 'のため、' + lateHour() + '時以降の勤務は貢献度に数えません。' : '' }) : '') +
+      fInput('daysMin', '週の最低勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日' }) +
+      fInput('daysMax', '週の最大勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日', required: true }) +
+    '</div>' +
+    alertHtml('daysError', 'danger', '⚠', '', '週の最低勤務日数が最大勤務日数を上回っています。') +
+    alertHtml('daysWarn', 'warn', '⚠', 'daysWarnText');
+    return '<div class="card" id="shiftConfirm"><div class="card-head"><h2>シフト条件の最終確認（面接で確認）</h2><div class="spacer"></div>' +
+        (contribOn() ? '<span class="badge info">シフト貢献度</span><span class="contrib-meter" data-meter="total"></span>' : '') +
+        '<p>面接で確認した内容で、繁忙期・土日祝・オールナイトなどのシフト条件を確定してください。Step1 と同じ項目で、ここで変えた内容は応募情報にも反映されます。</p></div>' +
+      body + '</div>';
+  }
+
+  // Step3 上部「未確認の留意点 N 件」。h の各項目について、チェック済みでも文言が変わった項目は未確認として数える
+  // （rebuildHandoff と同じ扱い。state は書き換えない）
+  function unresolvedAlertHtml(h) {
+    const prevText = {};
+    if (state.handoff) state.handoff.items.forEach(function (i) { prevText[i.id] = i.text; });
+    const unresolved = h ? h.items.filter(function (i) { return !(state.handoffChecks[i.id] && prevText[i.id] === i.text); }) : [];
+    if (!unresolved.length) return '';
+    const unresolvedBlock = unresolved.filter(function (i) { return i.severity === 'block'; });
+    return '<div class="alert ' + (unresolvedBlock.length ? 'danger' : 'warn') + '"><span class="ico">⚠</span><span>未確認の留意点が <b class="num" id="unresolvedCount">' + unresolved.length + '</b> 件あります' +
+      (unresolvedBlock.length ? '（うち要判断 ' + unresolvedBlock.length + ' 件）' : '') + '。' +
+      '<button type="button" class="btn link" data-action="to-step" data-step="2">申し送りを確認する</button></span></div>';
+  }
+
+  // Step3 でシフト条件などを変えたとき、上部の件数だけ作り直す（全体の再描画は入力中のフォーカスを失うため）
+  function refreshUnresolvedAlert() {
+    const box = $('#unresolvedAlert');
+    if (!box) return;
+    box.innerHTML = unresolvedAlertHtml(R.buildHandoff(state.applicant, state.profile));
+  }
+
   function interviewStepHtml() {
     const ev = state.profile.evaluation;
     const scale = Number(ev.scaleMax) || 5;
-    const h = state.handoff;
-    const unresolved = h ? h.items.filter(function (i) { return !state.handoffChecks[i.id]; }) : [];
-    const unresolvedBlock = unresolved.filter(function (i) { return i.severity === 'block'; });
 
-    let html = '';
-    if (unresolved.length) {
-      html += '<div class="alert ' + (unresolvedBlock.length ? 'danger' : 'warn') + '"><span class="ico">⚠</span><span>未確認の留意点が ' + unresolved.length + ' 件あります' +
-        (unresolvedBlock.length ? '（うち要判断 ' + unresolvedBlock.length + ' 件）' : '') + '。' +
-        '<button type="button" class="btn link" data-action="to-step" data-step="2">申し送りを確認する</button></span></div>';
-    }
+    let html = legacyBannerHtml();
+    html += '<div id="unresolvedAlert">' + unresolvedAlertHtml(state.handoff) + '</div>';
 
     html += '<div class="card"><div class="card-head"><h2>面接評価</h2><div class="spacer"></div><span class="badge accent lg">' + esc(state.applicant.name) + ' さん</span>' +
       '<p>各項目を 1〜' + scale + ' 点で評価してください。同じ点を再度押すと取り消せます。</p></div>' +
@@ -693,6 +1349,8 @@
       '<div class="score-total">合計 <strong id="scoreTotal">0</strong><span class="max">/ ' + ((ev.items || []).length * scale) + '点</span><span class="pct" id="scorePct"></span></div>' +
       '<div class="alert warn hidden" id="overallWarn" style="margin-top:10px"><span class="ico">⚠</span><span>面接者の総合判断が低評価です。採用可否は慎重に判断してください。</span></div>' +
     '</div>';
+
+    html += shiftConfirmHtml();
 
     html += '<div class="card"><div class="card-head"><h2>面接所見</h2></div>' +
       '<textarea data-note="interview" rows="4" placeholder="特記事項、面接での受け答えの印象、確認できた事項など">' + esc(state.interviewNotes) + '</textarea></div>';
@@ -718,7 +1376,7 @@
     });
     const max = (ev.items || []).length * scale;
     const t = $('#scoreTotal'); if (t) t.textContent = total;
-    const pctEl = $('#scorePct'); if (pctEl) pctEl.textContent = max ? Math.round(total / max * 100) + '%' : '';
+    const pctEl = $('#scorePct'); if (pctEl) pctEl.textContent = max ? R.round1(total / max * 100) + '%' : '';
     const ov = state.scores[ev.overallItemId];
     show('#overallWarn', ov != null && ov < (Number(ev.overallWarnBelow) || 3));
   }
@@ -734,25 +1392,94 @@
   }
 
   // =====================================================================
-  // Step4: 採用可否判定
+  // Step4: 採用可否判定（面接評価 × シフト貢献度）
   // =====================================================================
+  function bandLabelOf(k) {
+    const bl = (state.profile.texts || {}).bandLabels || {};
+    return bl[k] || { high: '高', mid: '中', low: '低' }[k] || '';
+  }
+
+  function matrixTableHtml(j) {
+    const m = j.matrix || {};
+    const t = m.table || {};
+    const b = m.bands || {};
+    const bi = b.interview || {}, bc = b.contribution || {};
+    const keys = ['high', 'mid', 'low'];
+    const range = function (bb, k) { return k === 'high' ? bb.high + '%以上' : k === 'mid' ? bb.mid + '〜' + bb.high + '%' : bb.mid + '%未満'; };
+    return '<table class="matrix"><caption>面接評価 × シフト貢献度</caption>' +
+      '<thead><tr><th class="corner">面接＼貢献度</th>' + keys.map(function (k) {
+        return '<th scope="col">' + esc(bandLabelOf(k)) + '<small>' + esc(range(bc, k)) + '</small></th>';
+      }).join('') + '</tr></thead><tbody>' +
+      keys.map(function (ik) {
+        return '<tr><th scope="row">' + esc(bandLabelOf(ik)) + '<small>' + esc(range(bi, ik)) + '</small></th>' + keys.map(function (ck) {
+          const key = ik + '_' + ck;
+          const r = t[key];
+          const cur = m.cellKey === key;
+          return '<td class="' + esc(r || '') + (cur ? ' current' : '') + '" data-cell="' + key + '" title="' + esc(resultTitle(r)) + '">' + (cur ? '▶ ' : '') + esc(RESULT_SHORT[r] || '—') + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table>' +
+      (j.mode === 'incomplete' ? '<div class="hint">シフト貢献度が未確定のため、マトリクスは適用していません（面接評価のみで判定）。</div>' : '');
+  }
+
+  function adjustmentsHtml(j) {
+    if (!j.adjustments || !j.adjustments.length) return '';
+    const head = (j.mode === 'matrix' ? 'マトリクス' : '面接評価のみ') + ': ' + resultTitle(j.baseResult) + ' → 最終: ' + resultTitle(j.result);
+    return '<div class="adjust-box"><div class="adjust-head">' + esc(head) + '</div><ul class="list-plain">' +
+      j.adjustments.map(function (ad) { return '<li>' + esc(resultTitle(ad.from) + ' → ' + resultTitle(ad.to) + '：' + ad.reason) + '</li>'; }).join('') +
+    '</ul></div>';
+  }
+
+  function axisMetricsHtml(j) {
+    const c = j.contribution;
+    const iv = j.interview;
+    const cBand = j.mode === 'incomplete' ? ['warn', '未確定'] : [BAND_TONE[c.band] || '', c.bandLabel || '—'];
+    return '<div class="axis-grid">' +
+      '<div class="metric axis" data-axis="interview"><div class="metric-lbl">面接評価</div>' +
+        '<div class="metric-val num">' + iv.total + ' <small>/ ' + iv.max + '点</small></div>' +
+        '<div class="metric-sub"><span class="num">' + fmtNum(iv.pct) + '%</span> <span class="badge ' + (BAND_TONE[iv.band] || '') + '">' + esc(iv.bandLabel) + '</span></div></div>' +
+      '<div class="metric axis" data-axis="contribution"><div class="metric-lbl">シフト貢献度</div>' +
+        '<div class="metric-val num">' + fmtNum(c.total) + ' <small>/ ' + fmtNum(c.max) + '点</small></div>' +
+        '<div class="metric-sub"><span class="num">' + fmtNum(c.pct) + '%</span> <span class="badge ' + cBand[0] + '">' + esc(cBand[1]) + '</span></div></div>' +
+      '<div class="metric matrix-wrap">' + matrixTableHtml(j) + '</div>' +
+    '</div>' + adjustmentsHtml(j);
+  }
+
+  function legacyMetricsHtml(j) {
+    const p = state.profile;
+    return '<div class="metrics">' +
+      '<div class="metric"><div class="metric-val num">' + j.total + ' <small>/ ' + j.max + '点</small></div><div class="metric-lbl">面接評価 合計</div></div>' +
+      '<div class="metric"><div class="metric-val num">' + j.pct + '<small>%</small></div><div class="metric-lbl">得点率</div></div>' +
+      '<div class="metric"><div class="metric-val num">' + j.thresholds.recommendPts + '<small>点以上</small></div><div class="metric-lbl">' + esc(p.texts.recommend.title) + '（' + j.thresholds.recommendPct + '%）</div></div>' +
+      '<div class="metric"><div class="metric-val num">' + j.thresholds.reviewPts + '<small>点以上</small></div><div class="metric-lbl">' + esc(p.texts.review.title) + '（' + j.thresholds.reviewPct + '%）</div></div>' +
+    '</div>' + adjustmentsHtml(j);
+  }
+
+  function interviewBarsHtml(j) {
+    const scale = Number(state.profile.evaluation.scaleMax) || 5;
+    return '<div class="bars">' + j.breakdown.map(function (b) {
+      const s = b.score == null ? 0 : b.score;
+      const pct = Math.round(s / scale * 100);
+      const tone = s <= 2 ? 'lo' : s === 3 ? 'mid' : 'hi';
+      return '<div class="bar-row' + (b.isOverall ? ' overall' : '') + '"><div class="bar-label">' + esc(b.label) + '</div><div class="bar-track"><div class="bar-fill ' + tone + '" style="width:' + pct + '%"></div></div><div class="bar-val num">' + (b.score == null ? '-' : b.score) + '</div></div>';
+    }).join('') + '</div>';
+  }
+
   function resultStepHtml() {
     const j = state.judgment;
     const a = state.applicant;
     const p = state.profile;
-    const scale = Number(p.evaluation.scaleMax) || 5;
+    const f = feat();
     const icon = j.result === 'recommend' ? '🎉' : j.result === 'review' ? '⚖' : '✖';
+    const twoAxis = !!j.mode && j.mode !== 'interviewOnly';
+    const c = j.contribution || null;
 
-    let html = '<div class="result-card ' + j.result + '">' +
+    let html = legacyBannerHtml();
+    html += '<div class="result-card ' + j.result + '" data-mode="' + esc(j.mode || 'interviewOnly') + '">' +
       '<div class="result-kicker">採用可否判定 ・ ' + esc(a.name) + ' さん</div>' +
       '<div class="result-title"><span>' + icon + '</span><span>' + esc(j.title) + '</span></div>' +
       '<div class="result-body">' + esc(j.body) + '</div>' +
-      '<div class="metrics">' +
-        '<div class="metric"><div class="metric-val num">' + j.total + ' <small>/ ' + j.max + '点</small></div><div class="metric-lbl">面接評価 合計</div></div>' +
-        '<div class="metric"><div class="metric-val num">' + j.pct + '<small>%</small></div><div class="metric-lbl">得点率</div></div>' +
-        '<div class="metric"><div class="metric-val num">' + j.thresholds.recommendPts + '<small>点以上</small></div><div class="metric-lbl">' + esc(p.texts.recommend.title) + '（' + j.thresholds.recommendPct + '%）</div></div>' +
-        '<div class="metric"><div class="metric-val num">' + j.thresholds.reviewPts + '<small>点以上</small></div><div class="metric-lbl">' + esc(p.texts.review.title) + '（' + j.thresholds.reviewPct + '%）</div></div>' +
-      '</div>' +
+      (j.matrix && j.matrix.note ? '<div class="result-note">' + esc(j.matrix.note) + '</div>' : '') +
+      (twoAxis && c ? axisMetricsHtml(j) : legacyMetricsHtml(j)) +
       '<div class="result-disclaimer">' + esc(j.disclaimer) + '</div>' +
     '</div>';
 
@@ -764,12 +1491,28 @@
       '</div>';
     }
 
-    html += '<div class="card"><div class="card-head"><h3>評価内訳</h3></div><div class="bars">' + j.breakdown.map(function (b) {
-      const s = b.score == null ? 0 : b.score;
-      const pct = Math.round(s / scale * 100);
-      const tone = s <= 2 ? 'lo' : s === 3 ? 'mid' : 'hi';
-      return '<div class="bar-row' + (b.isOverall ? ' overall' : '') + '"><div class="bar-label">' + esc(b.label) + '</div><div class="bar-track"><div class="bar-fill ' + tone + '" style="width:' + pct + '%"></div></div><div class="bar-val num">' + (b.score == null ? '-' : b.score) + '</div></div>';
-    }).join('') + '</div></div>';
+    if (contribOn() && c && c.parts && c.parts.length) {
+      html += '<div class="grid-2">' +
+        '<div class="card"><div class="card-head"><h3>面接評価の内訳</h3><div class="spacer"></div><span class="badge ' + (BAND_TONE[(j.interview || {}).band] || '') + '">' + fmtNum(j.pct) + '%</span></div>' + interviewBarsHtml(j) + '</div>' +
+        '<div class="card"><div class="card-head"><h3>シフト貢献度の内訳</h3><div class="spacer"></div><span class="badge ' + (j.mode === 'incomplete' ? 'warn' : (BAND_TONE[c.band] || '')) + '">' + fmtNum(c.pct) + '%' + (j.mode === 'incomplete' ? '・未確定' : '') + '</span></div>' +
+          contribBarsHtml(c) +
+          (c.missing && c.missing.length ? '<div class="alert warn" style="margin-top:10px"><span class="ico">⚠</span><span>未確認：' + esc(c.missing.join('・')) + '</span></div>' : '') +
+        '</div>' +
+      '</div>';
+    } else {
+      html += '<div class="card"><div class="card-head"><h3>評価内訳</h3></div>' + interviewBarsHtml(j) + '</div>';
+    }
+
+    if (f.vacation || f.allNight || f.holidayWork || f.weekendFreq) {
+      const desc = R.describeApplicant(a, p).filter(function (r) {
+        return ['祝日', '土日の頻度', 'オールナイト'].indexOf(r.label) >= 0 || r.label.indexOf('深夜帯') === 0;
+      });
+      const cc = c || R.computeContribution(a, p);
+      html += '<div class="card" id="busyAllNightResult"><div class="card-head"><h3>繁忙期・オールナイト</h3></div><div class="grid-2">' +
+        '<div>' + (f.vacation ? busyTableHtml(cc) : '<p class="empty">繁忙期の入力は OFF です。</p>') + '</div>' +
+        '<div><table class="table kv">' + (desc.length ? desc.map(function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; }).join('') : '<tr><td class="empty">未入力</td></tr>') + '</table></div>' +
+      '</div></div>';
+    }
 
     html += '<div class="grid-2">' +
       '<div class="card"><div class="card-head"><h3>面接での強み</h3></div>' + (j.strengths.length ? '<ul class="list-check">' + j.strengths.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>' : '<p class="empty">4点以上の項目はありません。</p>') + '</div>' +
@@ -784,10 +1527,13 @@
       R.describeApplicant(a, p).map(function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; }).join('') + '</table></div>';
 
     const h = state.handoff;
+    const adj = adjustSummary(j);
+    const axisTxt = twoAxis && c ? '　面接' + (j.interview || {}).bandLabel + '×貢献' + (j.mode === 'incomplete' ? '未確定' : c.bandLabel) : '';
     html += '<div class="card"><div class="card-head"><h3>判定履歴</h3></div><ul class="timeline">' +
       '<li class="tl-item"><div><div>Step 2　留意点 ' + (h ? h.items.length : 0) + ' 件（要判断 ' + (h ? h.counts.block : 0) + '・要確認 ' + (h ? h.counts.warn : 0) + '・共有 ' + (h ? h.counts.info : 0) + '）／確認済み ' + (h ? h.items.filter(function (i) { return state.handoffChecks[i.id]; }).length : 0) + ' 件</div><div class="when">' + esc(U.fmtDateTime(h ? h.generatedAt : '')) + '</div></div></li>' +
       '<li class="tl-item"><div><div>Step 3　面接評価 合計 ' + j.total + ' / ' + j.max + ' 点</div></div></li>' +
-      '<li class="tl-item"><div><div>Step 4　' + esc(j.title) + (j.adjusted ? '（要判断未確認のため調整）' : '') + '</div><div class="when">' + esc(U.fmtDateTime(j.evaluatedAt)) + '</div></div></li>' +
+      (contribOn() && c ? '<li class="tl-item"><div><div>Step 3　シフト貢献度 ' + fmtNum(c.total) + ' / ' + fmtNum(c.max) + '（' + esc(j.mode === 'incomplete' ? '未確定' : (c.bandLabel || '—')) + '）</div></div></li>' : '') +
+      '<li class="tl-item"><div><div>Step 4　' + esc(j.title) + esc(axisTxt) + (adj ? '（' + esc(adj) + '）' : '') + '</div><div class="when">' + esc(U.fmtDateTime(j.evaluatedAt)) + '</div></div></li>' +
       (state.savedAt ? '<li class="tl-item"><div><div>保存済み</div><div class="when">' + esc(U.fmtDateTime(state.savedAt)) + '</div></div></li>' : '') +
     '</ul></div>';
 
@@ -801,6 +1547,37 @@
   // =====================================================================
   // 右サマリー
   // =====================================================================
+  function contribSummaryHtml(live) {
+    const p = state.profile;
+    const co = live.contribution;
+    const shiftBadges = live.badges.filter(function (b) { return b.key !== 'hs' && b.key !== 'minor'; });
+    const badgesHtml = shiftBadges.length
+      ? '<div class="badges">' + shiftBadges.map(function (b) { return '<span class="badge ' + b.tone + '">' + esc(b.label) + '</span>'; }).join('') + '</div>'
+      : '';
+    if (!contribOn() || !co || !co.enabled) {
+      return '<div class="summary-card"><h4>シフト適合</h4>' +
+        (badgesHtml || '<p class="empty">勤務曜日・時間を入力すると表示されます。</p>') + '</div>';
+    }
+    const missingHtml = co.missing.length ? '<div class="sum-missing"><span class="badge warn">未確認 ' + co.missing.length + '</span><span>' + esc(co.missing.join('・')) + '</span></div>' : '';
+    if (hidePointsBeforeInterview()) {
+      return '<div class="summary-card" id="sumContrib"><h4>シフト貢献度</h4>' +
+        '<p class="empty" id="sumContribHidden">点数は面接評価（Step3）から表示します。</p>' +
+        missingHtml + badgesHtml + '</div>';
+    }
+    const bands = (p.contribution || {}).bands || {};
+    const hi = Math.max(0, Math.min(100, R.num(bands.highPct, 60)));
+    const mid = Math.max(0, Math.min(100, R.num(bands.midPct, 35)));
+    return '<div class="summary-card" id="sumContrib"><h4>シフト貢献度</h4>' +
+      '<div class="contrib-sum"><span class="num big">' + fmtNum(co.total) + '</span><span class="muted"> / ' + fmtNum(co.max) + '</span>' +
+        '<span class="badge ' + (BAND_TONE[co.band] || '') + '">' + esc(co.bandLabel) + (co.incomplete ? '・暫定' : '') + '</span>' +
+        '<span class="pct num">' + fmtNum(co.pct) + '%</span></div>' +
+      '<div class="contrib-gauge" title="中 ' + mid + '% / 高 ' + hi + '%"><span class="fill ' + esc(co.band || '') + '" style="width:' + Math.min(100, Math.max(0, co.pct)) + '%"></span>' +
+        '<i style="left:' + mid + '%"></i><i style="left:' + hi + '%"></i></div>' +
+      missingHtml +
+      badgesHtml +
+    '</div>';
+  }
+
   function renderSummary() {
     const a = state.applicant;
     const p = state.profile;
@@ -809,11 +1586,13 @@
     const max = (ev.items || []).length * scale;
     let total = 0, scored = 0;
     (ev.items || []).forEach(function (it) { const v = state.scores[it.id]; if (v != null) { total += Number(v); scored++; } });
-    const pct = max ? Math.round(total / max * 100) : 0;
+    const pct = max ? R.round1(total / max * 100) : 0;
+    const th = ev.thresholds || {};
+    const iBand = scored ? R.bandOf(pct, R.num(th.recommendPct, 70), R.num(th.reviewPct, 40)) : null;
 
-    const live = R.buildHandoff(a, p); // 入力途中でもバッジ・件数をライブ表示
-    const badges = live.badges;
+    const live = R.buildHandoff(a, p); // 入力途中でもバッジ・件数・貢献度をライブ表示
     const counts = live.counts;
+    const attrBadges = live.badges.filter(function (b) { return b.key === 'hs' || b.key === 'minor'; });
     const checked = state.handoff ? state.handoff.items.filter(function (i) { return state.handoffChecks[i.id]; }).length : 0;
     const j = state.judgment;
 
@@ -822,20 +1601,20 @@
     chip.innerHTML = '<span class="dot"></span><span>' + (a.name ? '<strong>' + esc(a.name) + '</strong> さん' : '未入力') + (state.dirty ? '・未保存' : state.savedAt ? '・保存済み' : '') + '</span>';
 
     const r = 36, c = 2 * Math.PI * r;
-    const dash = (pct / 100) * c;
+    const dash = (Math.min(100, pct) / 100) * c;
     const gaugeCls = j ? j.result : '';
+    const twoAxis = j && j.mode && j.mode !== 'interviewOnly';
 
     $('#summaryPanel').innerHTML =
       '<div class="summary-card"><h4>応募者</h4>' +
         '<div class="sum-name">' + (a.name ? esc(a.name) + ' <span class="muted" style="font-size:13px;font-weight:600">さん</span>' : '<span class="muted">未入力</span>') + '</div>' +
         '<div class="sum-sub">' + esc([a.category, a.age ? a.age + '歳' : '', a.gender].filter(Boolean).join('・') || '区分・年齢未入力') + '</div>' +
+        (attrBadges.length ? '<div class="badges" style="margin-top:6px">' + attrBadges.map(function (b) { return '<span class="badge ' + b.tone + '">' + esc(b.label) + '</span>'; }).join('') + '</div>' : '') +
         '<div class="sum-row"><span class="sum-label">通勤</span><span class="sum-val">' + esc([a.commuteMethod, a.commuteMinutes ? a.commuteMinutes + '分' : ''].filter(Boolean).join(' ') || '—') + '</span></div>' +
         '<div class="sum-row"><span class="sum-label">勤務期間</span><span class="sum-val">' + esc(R.labelOf(p.options.workPeriods, a.workPeriod) || '—') + '</span></div>' +
         '<div class="sum-row"><span class="sum-label">週日数</span><span class="sum-val">' + esc((a.daysMin || a.daysMax) ? (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日' : '—') + '</span></div>' +
       '</div>' +
-      '<div class="summary-card"><h4>シフト適合</h4>' +
-        (badges.length ? '<div class="badges">' + badges.map(function (b) { return '<span class="badge ' + b.tone + '">' + esc(b.label) + '</span>'; }).join('') + '</div>' : '<p class="empty">勤務曜日・時間を入力すると表示されます。</p>') +
-      '</div>' +
+      contribSummaryHtml(live) +
       '<div class="summary-card"><h4>留意点</h4>' +
         '<div class="sum-counts">' +
           '<div class="sum-count block"><b>' + counts.block + '</b><span>要判断</span></div>' +
@@ -849,10 +1628,17 @@
         '<circle class="fill ' + gaugeCls + '" cx="42" cy="42" r="' + r + '" fill="none" stroke-width="8" stroke-linecap="round" transform="rotate(-90 42 42)" stroke-dasharray="' + dash.toFixed(1) + ' ' + c.toFixed(1) + '"/>' +
         '<text x="42" y="40" text-anchor="middle">' + total + '</text><text class="small" x="42" y="54" text-anchor="middle">/ ' + max + '点</text></svg>' +
         '<div><div class="sum-row" style="border:none;padding:2px 0"><span class="sum-label">入力</span><span class="sum-val">' + scored + ' / ' + (ev.items || []).length + ' 項目</span></div>' +
-        '<div class="sum-row" style="border:none;padding:2px 0"><span class="sum-label">得点率</span><span class="sum-val">' + pct + '%</span></div></div>' +
+        '<div class="sum-row" style="border:none;padding:2px 0"><span class="sum-label">得点率</span><span class="sum-val">' + pct + '%' +
+          (iBand ? ' <span class="badge ' + BAND_TONE[iBand] + '">' + esc(bandLabelOf(iBand)) + '</span>' : '') + '</span></div></div>' +
       '</div></div>' +
-      '<div class="summary-card"><h4>判定</h4>' +
-        (j ? '<span class="badge lg ' + (j.result === 'recommend' ? 'ok' : j.result === 'review' ? 'warn' : 'danger') + '">' + esc(j.title) + '</span>' : '<p class="empty">面接評価を入力後に判定します。</p>') +
+      '<div class="summary-card" id="sumJudgment"><h4>判定</h4>' +
+        (j
+          ? '<span class="badge lg ' + RESULT_TONE[j.result] + '">' + esc(j.title) + '</span>' +
+            (twoAxis ? '<div class="sum-sub" style="margin-top:6px">面接 ' + esc((j.interview || {}).bandLabel) + ' × 貢献 ' + esc(j.mode === 'incomplete' ? '未確定' : (j.contribution || {}).bandLabel) + '</div>' : '') +
+            (j.adjusted ? '<div class="sum-sub">（' + esc(adjustSummary(j) || '調整あり') + '）</div>' : '')
+          : state.judgmentStale
+            ? '<p class="empty" id="sumJudgmentStale">判定後に入力・設定が変わりました。Step4 で再判定してください（保存時は現在の内容で再判定して記録します）。</p>'
+            : '<p class="empty">' + (contribOn() ? '面接評価とシフト貢献度の2軸で判定します。' : '面接評価を入力後に判定します。') + '</p>') +
         (state.savedAt ? '<div class="sum-sub" style="margin-top:8px">最終保存 ' + esc(U.fmtDateTime(state.savedAt)) + '</div>' : '') +
       '</div>';
   }
@@ -863,7 +1649,17 @@
   function saveRecord() {
     const a = state.applicant;
     if (!a.name) { toast('応募者名を入力してから保存してください', 'error'); return; }
-    if (!state.handoff) state.handoff = R.buildHandoff(a, state.profile);
+    if (!state.handoff || state.handoffStale) {
+      rebuildHandoff();
+      if (state.step === 2 || state.step === 3) renderStep();
+    }
+    // 判定後に入力・設定が変わっていたら、古い判定を記録に残さず現在の内容で再判定する
+    let rejudged = false;
+    if (state.judgmentStale && !state.judgment) {
+      state.judgment = R.evaluateHiring(state.applicant, state.scores, state.profile, state.handoff, state.handoffChecks);
+      state.judgmentStale = false;
+      rejudged = true;
+    }
     const rec = S.buildRecord(state);
     const html = S.generateReportHTML(rec, state.profile);
     S.download('応募者_' + S.safeName(a.name) + '_' + U.fmtDate(new Date()) + '.html', html, 'text/html;charset=utf-8');
@@ -871,7 +1667,7 @@
     state.dirty = false;
     renderSummary();
     if (state.step === 4) renderStep();
-    toast(a.name + ' さんの情報を保存しました', 'ok');
+    toast(a.name + ' さんの情報を保存しました' + (rejudged ? '（判定後に入力・設定が変わったため、現在の内容で再判定しました：' + state.judgment.title + '）' : ''), 'ok');
   }
 
   function onFileChosen(e) {
@@ -885,27 +1681,45 @@
       if (!rec) { toast('このアプリで保存したファイルではないか、データが見つかりません', 'error'); return; }
       if (state.dirty && !window.confirm('入力中の内容を破棄して読み込みますか？')) return;
       applyRecord(rec);
-      toast((rec.applicant.name || '応募者') + ' さんのデータを読み込みました', 'ok');
     };
     reader.readAsText(file, 'utf-8');
   }
 
   function applyRecord(rec) {
-    state.applicant = U.deepMerge(emptyApplicant(state.profile), rec.applicant || {});
-    state.handoffChecks = (rec.handoff && rec.handoff.checks) || {};
+    const p = state.profile;
+    // 新しい項目（繁忙期の日数・オールナイト等）は空で補われる
+    state.applicant = U.deepMerge(emptyApplicant(p), rec.applicant || {});
+    const ver = Number(rec.schemaVersion) || 1;
+    const isLegacy = ver < 2 && !(rec.applicant && rec.applicant.vacationDays);
+    const sj = rec.judgment || null;
+    state.legacyRecord = isLegacy
+      ? { savedJudgment: sj ? { result: sj.result, title: sj.title, total: sj.total, max: sj.max, pct: sj.pct } : null }
+      : null;
+    state.handoffChecks = U.deepClone((rec.handoff && rec.handoff.checks) || {});
     state.handoffNote = (rec.handoff && rec.handoff.note) || '';
-    state.scores = rec.scores || {};
+    state.scores = U.deepClone(rec.scores || {});
     state.interviewNotes = rec.interviewNotes || '';
     state.judgment = null;
+    state.judgmentStale = false;
     state.savedAt = rec.savedAt || null;
     state.dirty = false;
-    const target = rec.judgment ? 4 : Object.keys(state.scores).length ? 3 : 2;
+    // 前の応募者の留意点が残らないよう、必ず作り直す
+    state.handoff = R.buildHandoff(state.applicant, p);
+    state.handoffStale = false;
+    const target = sj ? 4 : Object.keys(state.scores).length ? 3 : 2;
+    state.step = target;
     state.maxStepReached = target;
-    if (rec.profile && rec.profile.theaterName && rec.profile.theaterName !== state.profile.meta.theaterName) {
-      toast('このファイルは「' + rec.profile.theaterName + '」の設定で保存されています。現在の設定で再判定します。');
-    }
     showView('judge');
     goStep(target);
+
+    let msg = (state.applicant.name || '応募者') + ' さんのデータを読み込みました';
+    if (rec.profile && rec.profile.theaterName && rec.profile.theaterName !== p.meta.theaterName) {
+      msg = 'このファイルは「' + rec.profile.theaterName + '」の設定で保存されています。現在の設定で再判定します。';
+    }
+    if (target === 4 && sj && state.judgment && sj.result !== state.judgment.result) {
+      msg = '保存時の判定（' + (sj.title || resultTitle(sj.result)) + '）と現在の設定での再判定（' + state.judgment.title + '）が異なります';
+    }
+    toast(msg, 'ok');
   }
 
   function onProfileFileChosen(e) {
@@ -918,21 +1732,25 @@
 
   function importProfileText(text) {
     let p;
-    try { p = S.parseProfileJSON(text); } catch (err) { toast('読み込めません: ' + err.message, 'error'); return; }
+    const rep = {};
+    try { p = S.parseProfileJSON(text, rep); } catch (err) { toast('読み込めません: ' + err.message, 'error'); return; }
     if (!window.confirm('「' + p.meta.theaterName + '」のプロファイルを読み込み、現在の設定を置き換えます。よろしいですか？')) return;
     state.profile = p;
     S.saveProfile(p);
     renderBrand();
     state.applicant = U.deepMerge(emptyApplicant(p), state.applicant);
-    toast('プロファイルを読み込みました', 'ok');
+    state.handoffStale = true;
+    invalidateJudgment();
+    toast(rep.migratedFrom ? MIGRATION_MSG : 'プロファイルを読み込みました', 'ok');
     showView('settings');
   }
 
   function newRecord() {
     if (state.dirty && !window.confirm('入力中の内容を破棄して新規作成しますか？')) return;
     state.applicant = emptyApplicant(state.profile);
-    state.handoff = null; state.handoffChecks = {}; state.handoffNote = '';
-    state.scores = {}; state.interviewNotes = ''; state.judgment = null;
+    state.handoff = null; state.handoffStale = false; state.handoffChecks = {}; state.handoffNote = '';
+    state.scores = {}; state.interviewNotes = ''; state.judgment = null; state.judgmentStale = false;
+    state.legacyRecord = null;
     state.savedAt = null; state.dirty = false;
     state.step = 1; state.maxStepReached = 1;
     showView('judge');
@@ -946,14 +1764,15 @@
     const m = state.profile.meta;
     return '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>アルバイト採用の判断基準を統一するためのツールです。面接前は「留意点の申し送り」、面接後は「採用可否の判定」を行います。</p></div>' +
       '<div class="help-steps">' +
-        '<div class="help-step"><span class="n">1</span><h3>応募情報を入力</h3><p>採用担当が応募書類・連絡内容をもとに入力します。必須は氏名・年齢・区分・通勤・曜日・時間・勤務期間です。</p></div>' +
-        '<div class="help-step"><span class="n">2</span><h3>面接者へ申し送り</h3><p>条件に応じた留意点（要判断・要確認・共有）と強みが自動で出ます。「申し送り文をコピー」でチャット等に貼り付けて共有できます。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>面接評価</h3><p>面接者が各項目を採点します。総合判断が低いときは警告が出ます。</p></div>' +
-        '<div class="help-step"><span class="n">4</span><h3>採用可否判定</h3><p>得点率で「採用推奨／上長最終判断要／不採用推奨」を判定します。「要判断」の留意点が未確認なら採用推奨に留めません。</p></div>' +
+        '<div class="help-step"><span class="n">1</span><h3>応募情報を入力</h3><p>採用担当が応募書類・連絡内容をもとに入力します。必須は氏名・年齢・区分・通勤・曜日・時間・勤務期間です。繁忙期・祝日・オールナイトなど分からない項目は空欄のままで構いません（面接で確認する項目として申し送られます）。</p></div>' +
+        '<div class="help-step"><span class="n">2</span><h3>面接者へ申し送り</h3><p>条件に応じた留意点（要判断・要確認・共有）と強み、シフト貢献度の見込みが自動で出ます。「申し送り文をコピー」でチャット等に貼り付けて共有できます。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>面接評価・シフト確認</h3><p>面接者が各項目を採点し、「シフト条件の最終確認」で繁忙期・土日祝・オールナイトなどを確定します。未確認が残っていると判定に進めません。</p></div>' +
+        '<div class="help-step"><span class="n">4</span><h3>採用可否判定</h3><p>面接評価とシフト貢献度の2軸（マトリクス）で「採用推奨／上長最終判断要／不採用推奨」を判定します。「要判断」の留意点が未確認・高校生の採用方針に該当する場合は採用推奨に留めません。</p></div>' +
       '</div></div>' +
       '<div class="card"><div class="card-head"><h3>保存と読み込み</h3></div>' +
         '<ul class="list-plain"><li><b>保存（HTML）</b>：応募者ごとに1ファイル。ブラウザで開けば判定レポートとして読め、アプリの「読み込み」でそのまま再開できます。</li>' +
         '<li>途中段階でも保存できます。読み込むと保存時点のステップに戻ります。</li>' +
+        '<li>旧形式のファイルも読み込めます。繁忙期の日数などは未確認になるため、Step3 で入力してから再判定してください。</li>' +
         '<li>応募者データはこの端末のブラウザには残りません（保存したファイルのみが記録です）。</li></ul></div>' +
       '<div class="card"><div class="card-head"><h3>設定（劇場プロファイル）</h3></div>' +
         '<ul class="list-plain"><li>留意点の文言・ON/OFF・重要度、しきい値、評価項目、結果文言を画面から変更できます。</li>' +
@@ -975,5 +1794,5 @@
   }
 
   document.addEventListener('DOMContentLoaded', init);
-  global.RecruitApp = { state: state, goStep: goStep, showView: showView };
+  global.RecruitApp = { state: state, goStep: goStep, showView: showView, buildHandoffText: buildHandoffText, emptyApplicant: emptyApplicant };
 })(window);

@@ -1,0 +1,536 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "theaterName": "TOHOシネマズ テスト",
+    "appTitle": "リクルート判定システム",
+    "version": "5.0.0-alpha",
+    "footer": "© 2025 Haruhisa Sasagawa｜このツールの著作権は制作者に帰属します。無断転用・改変を禁じます。"
+  },
+  "features": {
+    "graduationDate": true,
+    "vacation": true,
+    "lateNight": true,
+    "taxi": true,
+    "foreignNational": true,
+    "department": false,
+    "applicationRoute": false
+  },
+  "options": {
+    "genders": [
+      "男性",
+      "女性",
+      "回答しない"
+    ],
+    "categories": [
+      {
+        "value": "高校1年生",
+        "group": "highschool"
+      },
+      {
+        "value": "高校2年生",
+        "group": "highschool"
+      },
+      {
+        "value": "高校3年生",
+        "group": "highschool"
+      },
+      {
+        "value": "大学1年生",
+        "group": "university"
+      },
+      {
+        "value": "大学2年生",
+        "group": "university"
+      },
+      {
+        "value": "大学3年生",
+        "group": "university"
+      },
+      {
+        "value": "大学4年生",
+        "group": "university"
+      },
+      {
+        "value": "大学院生",
+        "group": "university"
+      },
+      {
+        "value": "専門学校生1年生",
+        "group": "vocational"
+      },
+      {
+        "value": "専門学校生2年生",
+        "group": "vocational"
+      },
+      {
+        "value": "専門学校生3年生",
+        "group": "vocational"
+      },
+      {
+        "value": "フリーター",
+        "group": "freeter"
+      },
+      {
+        "value": "主婦・主夫",
+        "group": "homemaker"
+      },
+      {
+        "value": "ダブルワーカー",
+        "group": "doubleworker"
+      },
+      {
+        "value": "その他",
+        "group": "other"
+      }
+    ],
+    "commuteMethods": [
+      "徒歩",
+      "自転車",
+      "公共交通機関",
+      "バイク（原付）",
+      "マイカー"
+    ],
+    "stationHints": [
+      "新宿",
+      "新宿三丁目",
+      "西武新宿",
+      "新宿西口",
+      "東新宿",
+      "新宿御苑前",
+      "代々木"
+    ],
+    "workPeriods": [
+      {
+        "value": "long",
+        "label": "長期（1年以上）"
+      },
+      {
+        "value": "mid",
+        "label": "中期（半年以上〜1年未満）"
+      },
+      {
+        "value": "short",
+        "label": "短期（半年以下）"
+      }
+    ],
+    "vacationItems": [
+      {
+        "id": "summer",
+        "label": "夏休み"
+      },
+      {
+        "id": "obon",
+        "label": "お盆"
+      },
+      {
+        "id": "yearend",
+        "label": "年末年始"
+      },
+      {
+        "id": "gw",
+        "label": "GW"
+      }
+    ],
+    "returnMethods": [
+      {
+        "value": "train",
+        "label": "終電で帰宅"
+      },
+      {
+        "value": "taxi",
+        "label": "タクシーで帰宅"
+      },
+      {
+        "value": "walk_bike",
+        "label": "徒歩・自転車"
+      },
+      {
+        "value": "other",
+        "label": "その他"
+      }
+    ],
+    "residenceStatuses": [
+      "留学",
+      "家族滞在",
+      "永住者",
+      "定住者",
+      "日本人の配偶者等",
+      "特定活動",
+      "技術・人文知識・国際業務",
+      "その他"
+    ],
+    "workPermitStates": [
+      {
+        "value": "yes",
+        "label": "あり（資格外活動許可済）"
+      },
+      {
+        "value": "no",
+        "label": "なし"
+      },
+      {
+        "value": "unknown",
+        "label": "未確認"
+      },
+      {
+        "value": "na",
+        "label": "不要（就労制限なし）"
+      }
+    ],
+    "japaneseLevels": [
+      "ネイティブ",
+      "ビジネス（N1相当）",
+      "日常会話（N2相当）",
+      "基礎（N3相当以下）"
+    ],
+    "departments": [
+      "コンセッション",
+      "フロア",
+      "ボックス（チケット）",
+      "特に希望なし"
+    ],
+    "applicationRoutes": [
+      "求人サイト",
+      "店頭ポスター",
+      "紹介",
+      "公式サイト",
+      "その他"
+    ]
+  },
+  "params": {
+    "maxAge": 60,
+    "minShiftMinutes": 180,
+    "lowMaxDays": 2,
+    "commuteWarnMinutes": 60,
+    "commuteBlockMinutes": 90,
+    "openStartFrom": 7,
+    "openStartTo": 8,
+    "closeEndHour": 22,
+    "daytimeStartBefore": 15,
+    "lateNightStartHour": 22,
+    "taxiLimitYen": 3000,
+    "highschoolLatestEnd": "22:00",
+    "foreignWeeklyHourCap": 28,
+    "foreignVacationWeeklyHourCap": 40,
+    "residenceExpiryWarnMonths": 6
+  },
+  "handoffRules": [
+    {
+      "id": "age_limit",
+      "enabled": true,
+      "severity": "block",
+      "category": "general",
+      "text": "{age}歳のため年齢基準（{maxAge}歳以上）に該当します。面接実施の可否を採用担当で判断してください。"
+    },
+    {
+      "id": "short_period",
+      "enabled": true,
+      "severity": "block",
+      "category": "general",
+      "text": "短期（半年以下）の勤務希望です。研修期間・シフト貢献度を踏まえ、面接実施の可否を採用担当で判断してください。"
+    },
+    {
+      "id": "weekly_days_one",
+      "enabled": true,
+      "severity": "block",
+      "category": "general",
+      "text": "週最大勤務日数が1日のため、シフト貢献度の観点で条件を満たしません。"
+    },
+    {
+      "id": "commute_block",
+      "enabled": true,
+      "severity": "block",
+      "category": "general",
+      "text": "通勤時間{commuteTime}分は長すぎるため、継続勤務が難しい可能性があります。面接実施の可否を判断してください。"
+    },
+    {
+      "id": "vacation_ng",
+      "enabled": true,
+      "severity": "block",
+      "category": "general",
+      "text": "長期休暇期間（{vacationLabels}）の勤務ができません。繁忙期対応の観点から面接実施の可否を判断してください。"
+    },
+    {
+      "id": "graduation_midterm",
+      "enabled": true,
+      "severity": "warn",
+      "category": "general",
+      "text": "来年3月卒業予定で勤務期間が「中期」です。実際に中期で勤務できるか面接時に確認してください。"
+    },
+    {
+      "id": "weekly_days_low",
+      "enabled": true,
+      "severity": "warn",
+      "category": "general",
+      "text": "週最大勤務日数が{maxDays}日のためシフト貢献度が低めです。増やせる見込みがあるか確認してください。"
+    },
+    {
+      "id": "weekly_days_unknown",
+      "enabled": true,
+      "severity": "info",
+      "category": "general",
+      "text": "週の勤務日数が未入力です。希望日数を面接時に確認してください。"
+    },
+    {
+      "id": "shift_times_missing",
+      "enabled": true,
+      "severity": "info",
+      "category": "general",
+      "text": "勤務希望時間が未入力の曜日があります。面接時に具体的な時間帯を確認してください。"
+    },
+    {
+      "id": "short_shift",
+      "enabled": true,
+      "severity": "warn",
+      "category": "general",
+      "text": "1日{minShiftHours}時間に満たない勤務希望日があります。シフト組みの観点で確認してください。"
+    },
+    {
+      "id": "weekday_daytime",
+      "enabled": true,
+      "severity": "warn",
+      "category": "general",
+      "text": "平日の朝〜夕方は既存スタッフでシフトが埋まりやすい時間帯です。希望通りに入れない可能性を事前に説明してください。"
+    },
+    {
+      "id": "weekend_missing",
+      "enabled": true,
+      "severity": "warn",
+      "category": "general",
+      "text": "土日両日にチェックが入っていません。土日勤務の可否と頻度を確認してください。"
+    },
+    {
+      "id": "commute_warn",
+      "enabled": true,
+      "severity": "warn",
+      "category": "general",
+      "text": "独自文言 {commuteTime}分"
+    },
+    {
+      "id": "commute_car",
+      "enabled": true,
+      "severity": "info",
+      "category": "general",
+      "text": "マイカー通勤希望です。当劇場の駐車場事情（スタッフ用駐車場なし）を説明してください。"
+    },
+    {
+      "id": "side_job_student",
+      "enabled": true,
+      "severity": "info",
+      "category": "general",
+      "text": "かけもちあり（学生）。扶養控除内であれば当劇場でどの程度の収入を希望しているか確認してください。"
+    },
+    {
+      "id": "side_job_nonstudent",
+      "enabled": true,
+      "severity": "info",
+      "category": "general",
+      "text": "かけもちあり。扶養控除内の希望収入、および週40時間超の時間外手当を当劇場では支払えない旨を説明してください。"
+    },
+    {
+      "id": "freeter_insurance",
+      "enabled": true,
+      "severity": "info",
+      "category": "general",
+      "text": "フリーターの方は社会保険の加入希望について確認してください。"
+    },
+    {
+      "id": "vacation_consult",
+      "enabled": true,
+      "severity": "warn",
+      "category": "general",
+      "text": "長期休暇期間（{vacationLabels}）が要相談です。具体的にどの程度入れるか確認してください。"
+    },
+    {
+      "id": "highschool_permission",
+      "enabled": true,
+      "severity": "warn",
+      "category": "highschool",
+      "text": "所属高校のアルバイト許可を得ているか確認してください。"
+    },
+    {
+      "id": "highschool_hours",
+      "enabled": true,
+      "severity": "warn",
+      "category": "highschool",
+      "text": "高校生は法令上22:00まで。当劇場では{highschoolLatestEnd}までの勤務としている旨を伝えてください。"
+    },
+    {
+      "id": "highschool_time_violation",
+      "enabled": true,
+      "severity": "block",
+      "category": "highschool",
+      "text": "{highschoolLatestEnd}を超える勤務希望時間が入力されています。高校生は深夜帯勤務不可のため入力内容を確認してください。"
+    },
+    {
+      "id": "vocational_permission",
+      "enabled": true,
+      "severity": "warn",
+      "category": "vocational",
+      "text": "所属専門学校のアルバイト許可を得ているか確認してください。"
+    },
+    {
+      "id": "foreign_permit_missing",
+      "enabled": true,
+      "severity": "block",
+      "category": "foreign",
+      "text": "資格外活動許可が確認できていません。在留カード裏面の許可印を必ず確認してください（許可なしでは就労不可）。"
+    },
+    {
+      "id": "foreign_hour_cap",
+      "enabled": true,
+      "severity": "warn",
+      "category": "foreign",
+      "text": "資格外活動は週{foreignWeeklyHourCap}時間（長期休暇中は{foreignVacationWeeklyHourCap}時間）が上限です。かけもち分も含めて超えないか確認してください。"
+    },
+    {
+      "id": "foreign_hour_cap_exceeded",
+      "enabled": true,
+      "severity": "block",
+      "category": "foreign",
+      "text": "希望シフトの合計（週{weeklyHours}時間目安）が週{foreignWeeklyHourCap}時間の上限を超えています。シフト調整の可否を判断してください。"
+    },
+    {
+      "id": "foreign_expiry",
+      "enabled": true,
+      "severity": "warn",
+      "category": "foreign",
+      "text": "在留期限（{residenceExpiry}）が近い、または未入力です。更新予定を確認してください。"
+    },
+    {
+      "id": "foreign_japanese",
+      "enabled": true,
+      "severity": "warn",
+      "category": "foreign",
+      "text": "日本語レベルが「{japaneseLevel}」です。接客・案内業務が可能か面接での会話を通じて確認してください。"
+    },
+    {
+      "id": "late_night_ng",
+      "enabled": true,
+      "severity": "info",
+      "category": "lateNight",
+      "text": "{lateNightStartHour}時以降の勤務が不可です。クローズ要員としては見込めないため、日中〜夕方帯での配置を前提に検討してください。"
+    },
+    {
+      "id": "late_night_consult",
+      "enabled": true,
+      "severity": "warn",
+      "category": "lateNight",
+      "text": "{lateNightStartHour}時以降の勤務が要相談です。可能な曜日・頻度を確認してください。"
+    },
+    {
+      "id": "late_night_shift_conflict",
+      "enabled": true,
+      "severity": "warn",
+      "category": "lateNight",
+      "text": "{lateNightStartHour}時以降の勤務時間が入力されていますが、深夜帯は「不可」となっています。入力内容を確認してください。"
+    },
+    {
+      "id": "late_night_last_train",
+      "enabled": true,
+      "severity": "warn",
+      "category": "lateNight",
+      "text": "深夜帯勤務の希望がありますが終電時刻が未入力です。クローズ（{closeEndHour}時以降）後に帰宅手段があるか確認してください。"
+    },
+    {
+      "id": "late_night_taxi_over",
+      "enabled": true,
+      "severity": "block",
+      "category": "lateNight",
+      "text": "タクシー帰宅の料金目安{taxiFare}円が規定（{taxiLimitYen}円）を超えています。深夜帯の採用可否を採用担当で判断してください。"
+    },
+    {
+      "id": "late_night_taxi_unknown",
+      "enabled": true,
+      "severity": "warn",
+      "category": "lateNight",
+      "text": "タクシー帰宅希望ですが料金目安が未入力です。自宅までの料金が規定（{taxiLimitYen}円）内か確認してください。"
+    },
+    {
+      "id": "late_night_taxi_ok",
+      "enabled": true,
+      "severity": "info",
+      "category": "lateNight",
+      "text": "タクシー帰宅（料金目安{taxiFare}円）は規定（{taxiLimitYen}円）内です。利用ルールを説明してください。"
+    }
+  ],
+  "evaluation": {
+    "scaleMax": 5,
+    "items": [
+      {
+        "id": "greeting",
+        "label": "挨拶はできていたか"
+      },
+      {
+        "id": "first_impression",
+        "label": "第一印象は良かったか"
+      },
+      {
+        "id": "communication",
+        "label": "明るくハキハキとしていたか"
+      },
+      {
+        "id": "eye_contact",
+        "label": "話をするときに目を見て話していたか"
+      },
+      {
+        "id": "appearance",
+        "label": "服装、身だしなみはきちんとしていたか"
+      },
+      {
+        "id": "explanation",
+        "label": "意見を判りやすく説明できていたか"
+      },
+      {
+        "id": "motivation",
+        "label": "志望動機に好感が持てたか"
+      },
+      {
+        "id": "self_analysis",
+        "label": "長所や短所などの自己分析ができていたか"
+      },
+      {
+        "id": "service_mindset",
+        "label": "接客する上で大切にしたいことを答えられたか"
+      },
+      {
+        "id": "overall_judgment",
+        "label": "面接者から見ての総合判断"
+      }
+    ],
+    "overallItemId": "overall_judgment",
+    "overallWarnBelow": 3,
+    "thresholds": {
+      "recommendPct": 70,
+      "reviewPct": 40
+    },
+    "holdOnUnresolvedBlock": true
+  },
+  "texts": {
+    "recommend": {
+      "title": "採用推奨",
+      "body": "{name}は面接評価が優秀（{total}/{max}点）で、採用を強く推奨します。"
+    },
+    "review": {
+      "title": "上長最終判断要",
+      "body": "{name}は面接評価が標準的（{total}/{max}点）です。面接評価を踏まえた上長の最終判断が必要です。"
+    },
+    "reject": {
+      "title": "不採用推奨",
+      "body": "{name}は面接評価が低く（{total}/{max}点）、不採用を推奨します。"
+    },
+    "disclaimer": "※本判定は基準統一のための参考値です。最終判断は上長が行います。",
+    "handoffIntro": "応募情報から自動抽出した留意点です。面接者へ共有し、面接時に確認してください。「要判断」は採用担当が面接実施の可否を判断する項目です。",
+    "strengths": {
+      "open": "オープン要員として期待できます",
+      "close": "クローズ要員として期待できます",
+      "weekend": "土日両日の勤務が可能です",
+      "longTerm": "長期勤務希望で安定が見込めます",
+      "days3": "週{minDays}日以上の勤務が可能です",
+      "vacationOk": "長期休暇期間すべてに対応可能です",
+      "commuteNear": "通勤{commuteTime}分で通勤負担が小さいです",
+      "longShift": "1日{minShiftHours}時間以上の勤務が可能です",
+      "lateNightOk": "深夜帯（{lateNightStartHour}時以降）の勤務が可能です"
+    }
+  }
+}
