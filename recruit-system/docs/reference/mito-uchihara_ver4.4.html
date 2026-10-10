@@ -1,0 +1,2427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOHOシネマズ水戸内原リクルートシステム</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #34495E 0%, #2C3E50 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(52, 152, 219, 0.1) 0%, rgba(155, 89, 182, 0.1) 100%);
+        }
+        
+        .header h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .form-container {
+            padding: 40px;
+            background: white;
+        }
+        
+        .form-section {
+            margin-bottom: 30px;
+            background: #f9f9f9;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e5e5;
+        }
+        
+        .form-section h3 {
+            color: #2C3E50;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            border-left: 4px solid #3498DB;
+            padding-left: 15px;
+            font-weight: 600;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #495057;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #DEE2E6;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #3498DB;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+            background: #FBFCFD;
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 10px;
+            padding: 15px;
+            background: #F8F9FA;
+            border-radius: 8px;
+            border: 2px solid #DEE2E6;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            font-weight: normal;
+            margin-bottom: 0;
+            padding: 8px;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
+        }
+        
+        .checkbox-item:hover {
+            background: rgba(52, 152, 219, 0.05);
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+            accent-color: #3498DB;
+        }
+        
+        .time-input-group {
+            background: #F8F9FA;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #DEE2E6;
+        }
+        
+        .time-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .time-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .time-row label {
+            min-width: 50px;
+            font-weight: 600;
+            margin-bottom: 0;
+            color: #495057;
+            font-size: 0.9em;
+        }
+        
+        .time-row input[type="time"] {
+            width: 140px;
+            padding: 10px 12px;
+        }
+        
+        .time-row span {
+            font-weight: 600;
+            color: #6C757D;
+        }
+        
+        .time-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .next-day-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: #F8F9FA;
+            border-radius: 6px;
+            border: 1px solid #DEE2E6;
+            font-size: 0.85em;
+            color: #495057;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .next-day-checkbox:hover {
+            background: #E9ECEF;
+            border-color: #CED4DA;
+        }
+        
+        .next-day-checkbox.checked {
+            background: #FFE5E5;
+            border-color: #E74C3C;
+            color: #E74C3C;
+            font-weight: 600;
+        }
+        
+        .next-day-checkbox input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            accent-color: #E74C3C;
+        }
+        
+        .time-display {
+            font-size: 0.85em;
+            color: #6C757D;
+            margin-left: 8px;
+            font-style: italic;
+        }
+        
+        .time-display.next-day {
+            color: #E74C3C;
+            font-weight: 600;
+        }
+        
+        .btn-container {
+            text-align: center;
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .btn {
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-width: 160px;
+        }
+        
+        .btn-interview {
+            background: linear-gradient(135deg, #3498DB, #2980B9);
+            color: white;
+        }
+        
+        .btn-hire {
+            background: linear-gradient(135deg, #2C3E50, #34495E);
+            color: white;
+        }
+        
+        .btn-clear {
+            background: linear-gradient(135deg, #95A5A6, #7F8C8D);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .interview-form {
+            margin-top: 30px;
+            padding: 25px;
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.05), rgba(46, 204, 113, 0.05));
+            border-radius: 12px;
+            border: 2px solid #3498DB;
+            display: none;
+        }
+        
+        .interview-form h4 {
+            color: #2C3E50;
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+        
+        .result-container {
+            margin-top: 30px;
+            padding: 25px;
+            border-radius: 12px;
+            display: none;
+        }
+        
+        .result-pass {
+            background: linear-gradient(135deg, #27AE60, #2ECC71);
+            color: white;
+        }
+        
+        .result-fail {
+            background: linear-gradient(135deg, #E74C3C, #C0392B);
+            color: white;
+        }
+        
+        .result-caution {
+            background: linear-gradient(135deg, #F39C12, #E67E22);
+            color: white;
+        }
+        
+        .result-pre-check {
+            background: linear-gradient(135deg, #F1C40F, #F39C12);
+            color: #2C3E50;
+        }
+        
+        .result-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+        
+        .result-details {
+            line-height: 1.6;
+        }
+        
+        .pre-check-message {
+            color: #E74C3C;
+            font-weight: 700;
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(231, 76, 60, 0.1);
+            border-radius: 8px;
+            border: 2px solid #E74C3C;
+        }
+
+        .proceed-btn {
+            background: linear-gradient(135deg, #27AE60, #2ECC71);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .proceed-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        }
+
+        .save-btn {
+            background: linear-gradient(135deg, #8E44AD, #9B59B6);
+            color: white;
+        }
+        
+        .btn-load {
+            background: linear-gradient(135deg, #16A085, #1ABC9C);
+            color: white;
+        }
+        
+        .load-instruction {
+            background: #E8F8F5;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #1ABC9C;
+            margin: 20px 0;
+            color: #0E6655;
+            display: none;
+        }
+        
+        .load-instruction h4 {
+            margin-top: 0;
+            color: #0E6655;
+        }
+        
+        .file-input-container {
+            margin: 15px 0;
+        }
+        
+        .file-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px dashed #1ABC9C;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .file-input:hover {
+            background: #F0FDF4;
+            border-color: #16A085;
+        }
+        
+        .file-input input[type="file"] {
+            opacity: 0;
+            position: absolute;
+            z-index: -1;
+        }
+        
+        .judgment-history {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+        
+        .judgment-step {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+        }
+        
+        .judgment-step:last-child {
+            margin-bottom: 0;
+        }
+        
+        .step-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .holiday-section {
+            background: #F8F9FA;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #DEE2E6;
+        }
+        
+        .holiday-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #E9ECEF;
+        }
+        
+        .holiday-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .holiday-label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 0;
+            flex: 1;
+        }
+        
+        .holiday-item select {
+            width: 140px;
+            margin-left: 15px;
+        }
+        
+        .evaluation-section {
+            margin-bottom: 25px;
+        }
+        
+        .evaluation-section h5 {
+            color: #2C3E50;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+        
+        .evaluation-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .evaluation-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #E9ECEF;
+        }
+        
+        .evaluation-item label {
+            flex: 1;
+            margin-bottom: 0;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .evaluation-item select {
+            width: 140px;
+            margin-left: 15px;
+            padding: 8px 12px;
+        }
+        
+        .score-display {
+            text-align: center;
+            padding: 15px;
+            background: #E8F4FD;
+            border-radius: 8px;
+            border: 2px solid #3498DB;
+            font-size: 1.1em;
+        }
+        
+        #totalScore {
+            color: #2C3E50;
+            font-weight: 700;
+        }
+        
+        .warning-message {
+            background: linear-gradient(135deg, #F39C12, #E67E22);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 600;
+            text-align: center;
+            border: 2px solid #E67E22;
+            display: none;
+        }
+
+        .highschool-warning {
+            background: linear-gradient(135deg, #E74C3C, #C0392B);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 600;
+            text-align: center;
+            border: 2px solid #C0392B;
+            display: none;
+        }
+
+        /* チェックリスト関連のスタイル */
+        .checklist-section {
+            background: #F8F9FA;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #DEE2E6;
+            margin: 15px 0;
+        }
+
+        .checklist-title {
+            font-weight: 700;
+            color: #2C3E50;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #E9ECEF;
+            transition: background-color 0.2s ease;
+        }
+
+        .checklist-item:hover {
+            background: #F0F8FF;
+        }
+
+        .checklist-item.checked {
+            background: #E8F5E8;
+            border-color: #28A745;
+        }
+
+        .checklist-item input[type="checkbox"] {
+            margin-right: 12px;
+            margin-top: 3px;
+            accent-color: #28A745;
+            transform: scale(1.2);
+        }
+
+        .checklist-item label {
+            flex: 1;
+            font-weight: normal;
+            color: #495057;
+            line-height: 1.5;
+            cursor: pointer;
+            margin-bottom: 0;
+        }
+
+        .checklist-progress {
+            text-align: right;
+            font-size: 0.9em;
+            color: #6C757D;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        .progress-complete {
+            color: #28A745;
+        }
+        
+        small a {
+            color: #3498DB;
+            text-decoration: none;
+        }
+        
+        small a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .checkbox-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .container {
+                margin: 10px;
+            }
+            
+            .form-container {
+                padding: 20px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .btn-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                min-width: 200px;
+            }
+            
+            .time-row {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+            
+            .time-row input[type="time"],
+            .custom-time-input {
+                width: 100%;
+            }
+            
+            .next-day-checkbox {
+                margin-top: 8px;
+            }
+            
+            .holiday-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .holiday-item select {
+                width: 100%;
+                margin-left: 0;
+                margin-top: 8px;
+            }
+            
+            .evaluation-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .evaluation-item select {
+                width: 100%;
+                margin-left: 0;
+                margin-top: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="advice-area" class="advice-box" style="margin:20px 0;"></div>
+    <div class="container">
+        <div class="header">
+            <h1>TOHOシネマズ水戸内原</h1>
+            <p>リクルートシステム</p>
+            <p style="font-size: 0.9em; opacity: 0.7; margin-top: 5px;">© 2025 Haruhisa Sasagawa｜このツールの著作権は制作者に帰属します。無断転用・改変を禁じます。</p>
+            <p style="font-size: 0.85em; opacity: 0.6; margin-top: 3px;">Version 4.4 - クローズ要員判定基準拡張</p>
+        </div>
+
+        <div class="form-container">
+            <form id="recruitmentForm">
+                <div class="form-section">
+                    <h3>基本情報</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="name">応募者名 *</label>
+                            <input type="text" id="name" name="name" required placeholder="例：田中太郎">
+                        </div>
+                        <div class="form-group">
+                            <label for="gender">性別 *</label>
+                            <select id="gender" name="gender" required>
+                                <option value="">選択してください</option>
+                                <option value="男性">男性</option>
+                                <option value="女性">女性</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="age">年齢 *</label>
+                            <input type="number" id="age" name="age" required min="15" max="70" placeholder="例：20">
+                        </div>
+                        <div class="form-group">
+                            <label for="category">区分 *</label>
+                            <select id="category" name="category" required onchange="checkHighSchoolTimeRestriction(); toggleGraduationInput()">
+                                <option value="">選択してください</option>
+                                <option value="高校1年生">高校1年生</option>
+                                <option value="高校2年生">高校2年生</option>
+                                <option value="高校3年生">高校3年生</option>
+                                <option value="大学1年生">大学1年生</option>
+                                <option value="大学2年生">大学2年生</option>
+                                <option value="大学3年生">大学3年生</option>
+                                <option value="大学4年生">大学4年生</option>
+                                <option value="専門学校生1年生">専門学校生1年生</option>
+                                <option value="専門学校生2年生">専門学校生2年生</option>
+                                <option value="専門学校生3年生">専門学校生3年生</option>
+                                <option value="フリーター">フリーター</option>
+                                <option value="主婦">主婦</option>
+                                <option value="ダブルワーカー">ダブルワーカー</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- 卒業年月入力欄 -->
+                    <div class="form-group" id="graduation_group" style="display: none;">
+                        <label for="graduation_date">卒業予定年月</label>
+                        <input type="month" id="graduation_date" name="graduation_date" placeholder="例：2025-03">
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>応募条件詳細</h3>
+                    
+                    <!-- ①通勤方法 -->
+                    <div class="form-group">
+                        <label>①通勤方法 *</label>
+                        <select id="commute_method" name="commute_method" required onchange="toggleStationInput()">
+                            <option value="">選択してください</option>
+                            <option value="徒歩">徒歩</option>
+                            <option value="自転車">自転車</option>
+                            <option value="マイカー">マイカー</option>
+                            <option value="バイク（原付）">バイク（原付）</option>
+                            <option value="公共交通機関">公共交通機関</option>
+                        </select>
+                    </div>
+                    
+                    <!-- ②通勤時間 -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="commute_time">②通勤時間（分） *</label>
+                            <input type="number" id="commute_time" name="commute_time" required min="1" max="120" placeholder="例：15">
+                        </div>
+                        <div class="form-group" id="station_group" style="display: none;">
+                            <label for="nearest_station">最寄り駅／バス停（公共交通機関の場合）</label>
+                            <input type="text" id="nearest_station" name="nearest_station" placeholder="例：水戸駅">
+                            <small><a href="https://www.jorudan.co.jp" target="_blank">乗換案内はこちら</a></small>
+                        </div>
+                    </div>
+                    
+                    <!-- ③勤務日数 -->
+                    <div class="form-group">
+                        <label>③勤務可能曜日 *</label>
+                        <div class="checkbox-grid">
+                            <label class="checkbox-item"><input type="checkbox" name="work_days" value="月" onchange="updateTimeSlots()"> 月</label>
+                            <label class="checkbox-item"><input type="checkbox" name="work_days" value="火" onchange="updateTimeSlots()"> 火</label>
+                            <label class="checkbox-item"><input type="checkbox" name="work_days" value="水" onchange="updateTimeSlots()"> 水</label>
+                            <label class="checkbox-item"><input type="checkbox" name="work_days" value="木" onchange="updateTimeSlots()"> 木</label>
+                            <label class="checkbox-item"><input type="checkbox" name="work_days" value="金" onchange="updateTimeSlots()"> 金</label>
+                            <label class="checkbox-item"><input type="checkbox" name="work_days" value="土" onchange="updateTimeSlots()"> 土</label>
+                            <label class="checkbox-item"><input type="checkbox" name="work_days" value="日" onchange="updateTimeSlots()"> 日</label>
+                            <label class="checkbox-item"><input type="checkbox" name="work_days" value="曜日問わず" onchange="updateTimeSlots()"> 曜日問わず</label>
+                        </div>
+                        <div class="form-row" style="margin-top: 15px;">
+                            <div class="form-group">
+                                <label for="work_days_min">週最低勤務日数</label>
+                                <input type="number" id="work_days_min" name="work_days_min" min="1" max="7" placeholder="例：2">
+                            </div>
+                            <div class="form-group">
+                                <label for="work_days_max">週最大勤務日数</label>
+                                <input type="number" id="work_days_max" name="work_days_max" min="1" max="7" placeholder="例：4">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ④勤務時間 -->
+                    <div class="form-group">
+                        <label>④勤務時間 *</label>
+                        <div class="time-input-group" id="timeInputGroup">
+                            <!-- ここに動的に時間入力欄が表示されます -->
+                        </div>
+                        <span class="time-help-text">※ 終了時間が開始時間より早い場合、自動的に翌日として扱われます</span>
+                        <!-- 高校生の時間制限警告 -->
+                        <div id="highSchoolWarning" class="highschool-warning">
+                            ⚠️ 高校生は22：00以降の勤務は禁止されています。
+                        </div>
+                    </div>
+                    
+                    <!-- ⑤勤務期間 -->
+                    <div class="form-group">
+                        <label for="work_period">⑤勤務期間 *</label>
+                        <select id="work_period" name="work_period" required>
+                            <option value="">選択してください</option>
+                            <option value="長期（1年以上）">長期（1年以上）</option>
+                            <option value="中期（半年以上〜1年未満）">中期（半年以上〜1年未満）</option>
+                            <option value="短期（半年以下）">短期（半年以下）</option>
+                        </select>
+                    </div>
+                    
+                    <!-- ⑥かけもち -->
+                    <div class="form-group">
+                        <label for="side_job">⑥かけもち *</label>
+                        <select id="side_job" name="side_job" required onchange="toggleSideJobInput()">
+                            <option value="">選択してください</option>
+                            <option value="なし">なし</option>
+                            <option value="あり">あり</option>
+                        </select>
+                    </div>
+                    
+                    <!-- ⑦長期休暇 -->
+                    <div class="form-group">
+                        <label>⑦長期休暇対応 *</label>
+                        <div class="holiday-section">
+                            <div class="holiday-item">
+                                <label class="holiday-label">夏休み</label>
+                                <select name="summer_vacation" required>
+                                    <option value="">選択してください</option>
+                                    <option value="○">○（対応可能）</option>
+                                    <option value="△">△（要相談）</option>
+                                    <option value="×">×（対応不可）</option>
+                                </select>
+                            </div>
+                            <div class="holiday-item">
+                                <label class="holiday-label">お盆休み</label>
+                                <select name="obon_vacation" required>
+                                    <option value="">選択してください</option>
+                                    <option value="○">○（対応可能）</option>
+                                    <option value="△">△（要相談）</option>
+                                    <option value="×">×（対応不可）</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ⑧確認者所見 -->
+                    <div class="form-group">
+                        <label for="reviewer_notes">⑧確認者所見</label>
+                        <textarea id="reviewer_notes" name="reviewer_notes" placeholder="確認者の所見を記入してください"></textarea>
+                    </div>
+                </div>
+            </form>
+            
+            <!-- ファイル読み込み用のインストラクション -->
+            <div id="loadInstruction" class="load-instruction">
+                <h4>📁 保存データの読み込み</h4>
+                <p>以前に保存した応募者情報のHTMLファイルを選択してください。データが自動的にフォームに反映されます。</p>
+                <div class="file-input-container">
+                    <label class="file-input">
+                        📂 ファイルを選択
+                        <input type="file" id="fileInput" accept=".html" onchange="handleFileLoad(event)">
+                    </label>
+                </div>
+                <button type="button" class="btn btn-clear" onclick="cancelLoad()" style="margin-top: 10px;">キャンセル</button>
+            </div>
+            
+            <!-- 面接可否判定ボタン -->
+            <div class="btn-container">
+                <button type="button" class="btn btn-interview" id="judge-button" onclick="handleJudge()">面接可否判定</button>
+                <button type="button" class="btn save-btn" onclick="saveCurrentState()">進行中情報を保存</button>
+                <button type="button" class="btn btn-load" onclick="loadSavedData()">保存データを読み込み</button>
+            </div>
+            
+            <!-- 面接可否判定結果 -->
+            <div id="interviewResultContainer" class="result-container">
+                <div class="result-title" id="interviewResultTitle"></div>
+                <div class="result-details" id="interviewResultDetails"></div>
+                
+                <!-- チェックリスト表示エリア -->
+                <div id="checklistContainer" style="display: none;"></div>
+            </div>
+            
+            <!-- 面接後の評価情報入力フォーム -->
+            <div id="interviewForm" class="interview-form">
+                <h4>📋 面接後の評価情報</h4>
+                
+                <div class="evaluation-section">
+                    <h5>面接評価項目（各項目1〜5点で評価）</h5>
+                    
+                    <div class="evaluation-grid">
+                        <div class="evaluation-item">
+                            <label for="greeting">挨拶はできていたか</label>
+                            <select id="greeting" name="greeting" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="first_impression">第一印象は良かったか</label>
+                            <select id="first_impression" name="first_impression" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="communication">明るくハキハキとしていたか</label>
+                            <select id="communication" name="communication" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="eye_contact">話をするときに目を見て話していたか</label>
+                            <select id="eye_contact" name="eye_contact" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="appearance">服装、身だしなみはきちんとしていたか</label>
+                            <select id="appearance" name="appearance" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="explanation">意見を判りやすく説明できていたか</label>
+                            <select id="explanation" name="explanation" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="motivation">志望動機に好感が持てたか</label>
+                            <select id="motivation" name="motivation" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="self_analysis">長所や短所などの自己分析ができていたか</label>
+                            <select id="self_analysis" name="self_analysis" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="service_mindset">接客する上で大切にしたいことを答えられたか</label>
+                            <select id="service_mindset" name="service_mindset" onchange="updateTotalScore()">
+                                <option value="">-</option>
+                                <option value="1">1点（悪い）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（良い）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="evaluation-item">
+                            <label for="overall_judgment">面接者から見ての総合判断</label>
+                            <select id="overall_judgment" name="overall_judgment" onchange="updateTotalScore(); checkOverallJudgment()">
+                                <option value="">-</option>
+                                <option value="1">1点（不採用）</option>
+                                <option value="2">2点</option>
+                                <option value="3">3点（普通）</option>
+                                <option value="4">4点</option>
+                                <option value="5">5点（採用）</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- 総合判断警告メッセージ -->
+                    <div id="overallJudgmentWarning" class="warning-message">
+                        ⚠️ 面接者の評価が良くないので要確認
+                    </div>
+                    
+                    <div class="score-display">
+                        <strong>合計スコア: <span id="totalScore">0</span>/50点</strong>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="interviewNotes">その他所見</label>
+                    <textarea id="interviewNotes" name="interviewNotes" placeholder="特記事項があれば記入してください"></textarea>
+                </div>
+                
+                <!-- 採用可否判定ボタン -->
+                <div class="btn-container">
+                    <button type="button" class="btn btn-hire" onclick="judgeHiring()">採用可否判定</button>
+                    <button type="button" class="btn save-btn" onclick="saveCurrentState()">進行中情報を保存</button>
+                </div>
+            </div>
+            
+            <!-- 採用可否判定結果 -->
+            <div id="hiringResultContainer" class="result-container">
+                <div class="result-title" id="hiringResultTitle"></div>
+                <div class="result-details" id="hiringResultDetails"></div>
+                <div id="judgmentHistory" class="judgment-history" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let judgments = { interview: null, hiring: null };
+        let checklistData = {}; // チェックリストの状態を保存
+        
+        const EVAL_FIELDS = ['greeting', 'first_impression', 'communication', 'eye_contact', 'appearance', 'explanation', 'motivation', 'self_analysis', 'service_mindset', 'overall_judgment'];
+        const DAY_MAP = { '月': 'monday', '火': 'tuesday', '水': 'wednesday', '木': 'thursday', '金': 'friday', '土': 'saturday', '日': 'sunday' };
+        const DAY_LABELS = ['月曜', '火曜', '水曜', '木曜', '金曜', '土曜', '日曜'];
+        
+        function toggleStationInput() {
+            const method = document.getElementById('commute_method').value;
+            const group = document.getElementById('station_group');
+            const input = document.getElementById('nearest_station');
+            
+            if (method === '公共交通機関') {
+                group.style.display = 'block';
+                input.required = true;
+            } else {
+                group.style.display = 'none';
+                input.required = false;
+                input.value = '';
+            }
+        }
+        
+        function toggleSideJobInput() {
+            const sideJob = document.getElementById('side_job').value;
+            const group = document.getElementById('side_job_detail_group');
+            const detail = document.getElementById('side_job_detail');
+            
+            if (group) {
+                if (sideJob === 'あり') {
+                    group.style.display = 'block';
+                } else {
+                    group.style.display = 'none';
+                    if (detail) detail.value = '';
+                }
+            }
+        }
+
+        function toggleGraduationInput() {
+            const category = document.getElementById('category').value;
+            const group = document.getElementById('graduation_group');
+            const input = document.getElementById('graduation_date');
+            
+            const isStudent = ['高校1年生', '高校2年生', '高校3年生', 
+                             '大学1年生', '大学2年生', '大学3年生', '大学4年生',
+                             '専門学校生1年生', '専門学校生2年生', '専門学校生3年生'].includes(category);
+            
+            if (isStudent) {
+                group.style.display = 'block';
+                input.required = true;
+            } else {
+                group.style.display = 'none';
+                input.required = false;
+                input.value = '';
+            }
+        }
+        
+        function updateTimeSlots() {
+            const checkedDays = Array.from(document.querySelectorAll('input[name="work_days"]:checked')).map(cb => cb.value);
+            const timeInputGroup = document.getElementById('timeInputGroup');
+            const hasAnyday = checkedDays.includes('曜日問わず');
+            
+            timeInputGroup.innerHTML = '';
+            
+            if (hasAnyday) {
+                timeInputGroup.innerHTML = `
+                    <div class="time-row">
+                        <label>勤務時間:</label>
+                        <input type="time" name="anyday_start" required onchange="checkHighSchoolTimeRestriction(); updateTimeDisplay(this)">
+                        <span>～</span>
+                        <input type="time" name="anyday_end" required onchange="checkHighSchoolTimeRestriction(); updateTimeDisplay(this)">
+                        <label class="next-day-checkbox" onclick="toggleNextDayCheckbox(this)">
+                            <input type="checkbox" name="anyday_nextday" onchange="checkHighSchoolTimeRestriction(); updateTimeDisplay(this)">
+                            翌日
+                        </label>
+                        <span class="time-display" id="anyday_display"></span>
+                    </div>`;
+            } else if (checkedDays.length > 0) {
+                checkedDays.forEach(day => {
+                    if (DAY_MAP[day]) {
+                        const dayKey = DAY_MAP[day];
+                        timeInputGroup.innerHTML += `
+                            <div class="time-row">
+                                <label>${day}曜:</label>
+                                <input type="time" name="${dayKey}_start" onchange="checkHighSchoolTimeRestriction(); updateTimeDisplay(this)">
+                                <span>～</span>
+                                <input type="time" name="${dayKey}_end" onchange="checkHighSchoolTimeRestriction(); updateTimeDisplay(this)">
+                                <label class="next-day-checkbox" onclick="toggleNextDayCheckbox(this)">
+                                    <input type="checkbox" name="${dayKey}_nextday" onchange="checkHighSchoolTimeRestriction(); updateTimeDisplay(this)">
+                                    翌日
+                                </label>
+                                <span class="time-display" id="${dayKey}_display"></span>
+                            </div>`;
+                    }
+                });
+            }
+            
+            checkHighSchoolTimeRestriction();
+        }
+        
+        function toggleNextDayCheckbox(label) {
+            const checkbox = label.querySelector('input[type="checkbox"]');
+            checkbox.checked = !checkbox.checked;
+            checkbox.dispatchEvent(new Event('change'));
+            
+            if (checkbox.checked) {
+                label.classList.add('checked');
+            } else {
+                label.classList.remove('checked');
+            }
+        }
+        
+        function updateTimeDisplay(element) {
+            const row = element.closest('.time-row');
+            const startInput = row.querySelector('input[type="time"][name$="_start"]');
+            const endInput = row.querySelector('input[type="time"][name$="_end"]');
+            const nextDayCheckbox = row.querySelector('input[type="checkbox"][name$="_nextday"]');
+            const displaySpan = row.querySelector('.time-display');
+            
+            if (!startInput || !endInput || !displaySpan) return;
+            
+            const startTime = startInput.value;
+            const endTime = endInput.value;
+            
+            if (startTime && endTime) {
+                // 時間を分単位に変換して比較
+                const [startHours, startMinutes] = startTime.split(':').map(Number);
+                const [endHours, endMinutes] = endTime.split(':').map(Number);
+                const startTotalMinutes = startHours * 60 + startMinutes;
+                const endTotalMinutes = endHours * 60 + endMinutes;
+                
+                // 自動的に翌日判定（終了時間が開始時間より早い場合のみ）
+                if (endTotalMinutes < startTotalMinutes && !nextDayCheckbox.checked) {
+                    nextDayCheckbox.checked = true;
+                    nextDayCheckbox.closest('.next-day-checkbox').classList.add('checked');
+                }
+                
+                if (nextDayCheckbox.checked) {
+                    const adjustedHours = endHours + 24;
+                    displaySpan.textContent = `(～${adjustedHours}:${endMinutes.toString().padStart(2, '0')})`;
+                    displaySpan.classList.add('next-day');
+                } else {
+                    displaySpan.textContent = '';
+                    displaySpan.classList.remove('next-day');
+                }
+            }
+        }
+
+        function checkHighSchoolTimeRestriction() {
+            const category = document.getElementById('category').value;
+            const warningElement = document.getElementById('highSchoolWarning');
+            
+            const isHighSchool = ['高校1年生', '高校2年生', '高校3年生'].includes(category);
+            
+            if (!isHighSchool) {
+                warningElement.style.display = 'none';
+                return;
+            }
+            
+            const timeRows = document.querySelectorAll('.time-row');
+            let hasViolation = false;
+            
+            timeRows.forEach(row => {
+                const endInput = row.querySelector('input[type="time"][name$="_end"]');
+                const nextDayCheckbox = row.querySelector('input[type="checkbox"][name$="_nextday"]');
+                
+                if (endInput && endInput.value) {
+                    const [hours] = endInput.value.split(':').map(Number);
+                    
+                    // 翌日の場合、または22時以降の場合は違反
+                    if (nextDayCheckbox && nextDayCheckbox.checked) {
+                        hasViolation = true;
+                    } else if (hours >= 22) {
+                        hasViolation = true;
+                    }
+                }
+            });
+            
+            warningElement.style.display = hasViolation ? 'block' : 'none';
+        }
+        
+        // チェックリスト関連の新しい関数
+        function createChecklistItem(id, text, category) {
+            const isChecked = checklistData[id] || false;
+            return `
+                <div class="checklist-item ${isChecked ? 'checked' : ''}">
+                    <input type="checkbox" id="${id}" ${isChecked ? 'checked' : ''} onchange="updateChecklistItem('${id}', '${category}')">
+                    <label for="${id}">${text}</label>
+                </div>`;
+        }
+        
+        function updateChecklistItem(id, category) {
+            const checkbox = document.getElementById(id);
+            const item = checkbox.closest('.checklist-item');
+            
+            checklistData[id] = checkbox.checked;
+            
+            if (checkbox.checked) {
+                item.classList.add('checked');
+            } else {
+                item.classList.remove('checked');
+            }
+            
+            updateChecklistProgress(category);
+        }
+        
+        function updateChecklistProgress(category) {
+            const categoryItems = Object.keys(checklistData).filter(key => key.startsWith(category));
+            const checkedItems = categoryItems.filter(key => checklistData[key]);
+            const progress = categoryItems.length > 0 ? Math.round((checkedItems.length / categoryItems.length) * 100) : 0;
+            
+            const progressElement = document.getElementById(`progress_${category}`);
+            if (progressElement) {
+                progressElement.textContent = `確認済み: ${checkedItems.length}/${categoryItems.length} (${progress}%)`;
+                if (progress === 100) {
+                    progressElement.classList.add('progress-complete');
+                } else {
+                    progressElement.classList.remove('progress-complete');
+                }
+            }
+        }
+        
+        function generateChecklistHTML(warnings, category) {
+            if (!warnings || warnings.length === 0) return '';
+            
+            const sectionTitle = category === 'general' ? '【確認事項】' : 
+                               category === 'highschool' ? '【高校生面接時の確認事項】' : 
+                               '【専門学校生面接時の確認事項】';
+            
+            let html = `
+                <div class="checklist-section">
+                    <div class="checklist-title">${sectionTitle}</div>`;
+            
+            warnings.forEach((warning, index) => {
+                const id = `${category}_${index}`;
+                html += createChecklistItem(id, warning, category);
+            });
+            
+            html += `
+                    <div class="checklist-progress" id="progress_${category}"></div>
+                </div>`;
+            
+            return html;
+        }
+        
+        function handleJudge() {
+            judgeInterview();
+        }
+        
+        function getFormData() {
+            const formData = new FormData(document.getElementById('recruitmentForm'));
+            const data = Object.fromEntries(formData);
+            
+            // チェックボックスの値を配列として取得
+            data.work_days = Array.from(document.querySelectorAll('input[name="work_days"]:checked')).map(cb => cb.value);
+            
+            // 時間データを追加（翌日フラグも含む）
+            const timeInputs = document.querySelectorAll('#timeInputGroup input[type="time"]');
+            timeInputs.forEach(input => {
+                if (input.value) {
+                    data[input.name] = input.value;
+                }
+            });
+            
+            // 翌日チェックボックスの状態も取得
+            const nextDayCheckboxes = document.querySelectorAll('#timeInputGroup input[type="checkbox"][name$="_nextday"]');
+            nextDayCheckboxes.forEach(checkbox => {
+                data[checkbox.name] = checkbox.checked;
+            });
+            
+            return data;
+        }
+        
+        function loadSavedData() {
+            const loadInstruction = document.getElementById('loadInstruction');
+            loadInstruction.style.display = 'block';
+            setTimeout(() => loadInstruction.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+        
+        function cancelLoad() {
+            document.getElementById('loadInstruction').style.display = 'none';
+            document.getElementById('fileInput').value = '';
+        }
+        
+        function handleFileLoad(event) {
+            const file = event.target.files[0];
+            if (!file || !file.name.endsWith('.html')) {
+                alert('HTMLファイルを選択してください。');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const loadedData = extractDataFromHTML(e.target.result);
+                if (loadedData) {
+                    populateForm(loadedData);
+                    alert(`${loadedData.basicInfo.name || '応募者'}さんのデータを読み込みました。`);
+                    cancelLoad();
+                    
+                    // 読み込み後に自動で面接判定を実行
+                    setTimeout(() => {
+                        handleJudge();
+                    }, 500);
+                } else {
+                    alert('ファイルからデータを読み込めませんでした。正しい保存ファイルかご確認ください。');
+                }
+            };
+            reader.readAsText(file);
+        }
+        
+        function extractDataFromHTML(htmlContent) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+            
+            const basicInfo = {};
+            const evaluationData = {};
+            const savedChecklistData = {};
+            
+            // 基本情報の抽出
+            const infoItems = doc.querySelectorAll('.info-item');
+            infoItems.forEach(item => {
+                const text = item.textContent || '';
+                
+                const extractValue = (label) => {
+                    if (text.includes(label)) {
+                        return text.replace(label, '').trim();
+                    }
+                    return null;
+                };
+                
+                const value = extractValue('氏名:') || extractValue('性別:') || extractValue('年齢:') || 
+                             extractValue('区分:') || extractValue('通勤方法:') || extractValue('通勤時間:') ||
+                             extractValue('最寄駅:') || extractValue('勤務可能曜日:') || extractValue('週最低勤務日数:') ||
+                             extractValue('週最大勤務日数:') || extractValue('勤務期間:') || extractValue('かけもち:') ||
+                             extractValue('夏休み対応:') || extractValue('お盆休み対応:') || extractValue('確認者所見:') ||
+                             extractValue('卒業予定年月:');
+                
+                if (value && value !== '未入力') {
+                    if (text.includes('氏名:')) basicInfo.name = value;
+                    else if (text.includes('性別:')) basicInfo.gender = value;
+                    else if (text.includes('年齢:')) basicInfo.age = value.replace('歳', '');
+                    else if (text.includes('区分:')) basicInfo.category = value;
+                    else if (text.includes('通勤方法:')) basicInfo.commute_method = value;
+                    else if (text.includes('通勤時間:')) basicInfo.commute_time = value.replace('分', '');
+                    else if (text.includes('最寄駅:')) basicInfo.nearest_station = value;
+                    else if (text.includes('勤務可能曜日:')) basicInfo.work_days = value.split('、');
+                    else if (text.includes('週最低勤務日数:')) basicInfo.work_days_min = value.replace('日', '');
+                    else if (text.includes('週最大勤務日数:')) basicInfo.work_days_max = value.replace('日', '');
+                    else if (text.includes('勤務期間:')) basicInfo.work_period = value;
+                    else if (text.includes('かけもち:')) basicInfo.side_job = value;
+                    else if (text.includes('夏休み対応:')) basicInfo.summer_vacation = value;
+                    else if (text.includes('お盆休み対応:')) basicInfo.obon_vacation = value;
+                    else if (text.includes('確認者所見:')) basicInfo.reviewer_notes = value;
+                    else if (text.includes('卒業予定年月:')) basicInfo.graduation_date = value;
+                }
+            });
+            
+            // チェックリストデータの抽出
+            const checklistItems = doc.querySelectorAll('.checklist-item input[type="checkbox"]');
+            checklistItems.forEach(checkbox => {
+                const id = checkbox.id;
+                const isChecked = checkbox.checked;
+                if (id) {
+                    savedChecklistData[id] = isChecked;
+                }
+            });
+            
+            // 時間データの抽出
+            const timeItems = doc.querySelectorAll('.time-info');
+            timeItems.forEach(item => {
+                const text = item.textContent || '';
+                Object.keys(DAY_MAP).forEach(day => {
+                    if (text.includes(`${day}曜:`)) {
+                        const timeMatch = text.match(/(\d{1,2}:\d{2})\s*～\s*(\d{1,2}:\d{2})/);
+                        if (timeMatch) {
+                            const dayKey = DAY_MAP[day];
+                            basicInfo[`${dayKey}_start`] = timeMatch[1];
+                            basicInfo[`${dayKey}_end`] = timeMatch[2];
+                            // 翌日フラグの抽出
+                            if (text.includes('（翌日）')) {
+                                basicInfo[`${dayKey}_nextday`] = true;
+                            }
+                        }
+                    }
+                });
+                
+                if (text.includes('勤務時間:')) {
+                    const timeMatch = text.match(/(\d{1,2}:\d{2})\s*～\s*(\d{1,2}:\d{2})/);
+                    if (timeMatch) {
+                        basicInfo.anyday_start = timeMatch[1];
+                        basicInfo.anyday_end = timeMatch[2];
+                        // 翌日フラグの抽出
+                        if (text.includes('（翌日）')) {
+                            basicInfo.anyday_nextday = true;
+                        }
+                    }
+                }
+            });
+            
+            // 面接評価の抽出
+            const scoreRows = doc.querySelectorAll('.score-table tr');
+            const evaluationMap = {
+                '挨拶はできていたか': 'greeting',
+                '第一印象は良かったか': 'first_impression',
+                '明るくハキハキとしていたか': 'communication',
+                '話をするときに目を見て話していたか': 'eye_contact',
+                '服装、身だしなみはきちんとしていたか': 'appearance',
+                '意見を判りやすく説明できていたか': 'explanation',
+                '志望動機に好感が持てたか': 'motivation',
+                '長所や短所などの自己分析ができていたか': 'self_analysis',
+                '接客する上で大切にしたいことを答えられたか': 'service_mindset',
+                '面接者から見ての総合判断': 'overall_judgment'
+            };
+            
+            scoreRows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 2) {
+                    const question = cells[0].textContent.trim();
+                    const score = cells[1].textContent.replace('点', '').trim();
+                    if (evaluationMap[question] && score) {
+                        evaluationData[evaluationMap[question]] = score;
+                    }
+                }
+            });
+            
+            // その他所見の抽出
+            infoItems.forEach(item => {
+                const text = item.textContent || '';
+                if (text.includes('その他所見:')) {
+                    evaluationData.interviewNotes = text.replace('その他所見:', '').trim();
+                }
+            });
+            
+            return { basicInfo, evaluationData, checklistData: savedChecklistData };
+        }
+        
+        function populateForm(loadedData) {
+            const { basicInfo, evaluationData, checklistData: savedChecklistData } = loadedData;
+            
+            clearForm();
+            
+            // チェックリストデータを復元
+            if (savedChecklistData) {
+                checklistData = { ...savedChecklistData };
+            }
+            
+            // Step 1: 基本情報を設定（曜日以外）
+            Object.keys(basicInfo).forEach(key => {
+                if (key === 'work_days') return; // 曜日は後で処理
+                
+                const element = document.getElementById(key);
+                if (element) {
+                    element.value = basicInfo[key];
+                } else {
+                    const selectElement = document.querySelector(`select[name="${key}"]`);
+                    if (selectElement) selectElement.value = basicInfo[key];
+                }
+            });
+            
+            // Step 2: 勤務可能曜日をチェック
+            if (basicInfo.work_days && Array.isArray(basicInfo.work_days)) {
+                basicInfo.work_days.forEach(day => {
+                    const checkbox = document.querySelector(`input[name="work_days"][value="${day}"]`);
+                    if (checkbox) checkbox.checked = true;
+                });
+            }
+            
+            // Step 3: 関連する表示更新（時間入力欄を生成）
+            toggleStationInput();
+            toggleGraduationInput();
+            updateTimeSlots();
+            
+            // Step 4: 時間データを復元（時間入力欄生成後に実行）
+            setTimeout(() => {
+                Object.keys(basicInfo).forEach(key => {
+                    if (key.includes('_start') || key.includes('_end') || key === 'anyday_start' || key === 'anyday_end') {
+                        const timeInput = document.querySelector(`input[name="${key}"]`);
+                        if (timeInput && basicInfo[key]) {
+                            timeInput.value = basicInfo[key];
+                        }
+                    }
+                    
+                    // 翌日フラグの復元
+                    if (key.includes('_nextday') || key === 'anyday_nextday') {
+                        const checkbox = document.querySelector(`input[name="${key}"]`);
+                        if (checkbox && (basicInfo[key] === true || basicInfo[key] === 'true')) {
+                            checkbox.checked = true;
+                            checkbox.closest('.next-day-checkbox').classList.add('checked');
+                        }
+                    }
+                });
+                
+                // 時間表示を更新
+                document.querySelectorAll('.time-row').forEach(row => {
+                    const inputs = row.querySelectorAll('input[type="time"]');
+                    if (inputs.length > 0) {
+                        updateTimeDisplay(inputs[0]);
+                    }
+                });
+                
+                checkHighSchoolTimeRestriction();
+            }, 200);
+            
+            // Step 5: 面接評価データを設定
+            if (Object.keys(evaluationData).length > 0) {
+                Object.keys(evaluationData).forEach(key => {
+                    const element = document.getElementById(key);
+                    if (element) element.value = evaluationData[key];
+                });
+                
+                updateTotalScore();
+                checkOverallJudgment();
+                
+                if (Object.keys(evaluationData).some(key => key !== 'interviewNotes')) {
+                    document.getElementById('interviewForm').style.display = 'block';
+                }
+            }
+        }
+        
+        function validateForm() {
+            const form = document.getElementById('recruitmentForm');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return false;
+            }
+            
+            const checkedDays = document.querySelectorAll('input[name="work_days"]:checked');
+            if (checkedDays.length === 0) {
+                alert('勤務可能曜日を少なくとも1つ選択してください。');
+                return false;
+            }
+            
+            const commuteMethod = document.getElementById('commute_method').value;
+            const nearestStation = document.getElementById('nearest_station').value;
+            if (commuteMethod === '公共交通機関' && !nearestStation.trim()) {
+                alert('公共交通機関を選択した場合は最寄駅を入力してください。');
+                return false;
+            }
+            
+            const timeInputs = document.querySelectorAll('#timeInputGroup input[type="time"]');
+            if (timeInputs.length === 0) {
+                alert('勤務時間を入力してください。');
+                return false;
+            }
+            
+            return true;
+        }
+        
+        function judgeInterview() {
+            if (!validateForm()) return;
+            
+            const data = getFormData();
+            const nameWithSan = data.name + 'さん';
+            const judgment = evaluateInterview(data, nameWithSan);
+            
+            judgments.interview = judgment;
+            displayInterviewResult(judgment, nameWithSan);
+            
+            if (judgment.result !== 'pass') {
+                document.getElementById('interviewForm').style.display = 'none';
+                document.getElementById('hiringResultContainer').style.display = 'none';
+            }
+        }
+        
+        function judgeHiring() {
+            if (!judgments.interview || judgments.interview.result !== 'pass') {
+                alert('面接判定で合格していないため、採用判定は実行できません。');
+                return;
+            }
+            
+            const data = getFormData();
+            const nameWithSan = data.name + 'さん';
+            
+            const evaluationScores = {};
+            let totalScore = 0;
+            
+            EVAL_FIELDS.forEach(field => {
+                const value = parseInt(document.getElementById(field).value) || 0;
+                evaluationScores[field] = value;
+                totalScore += value;
+            });
+            
+            const interviewNotes = document.getElementById('interviewNotes').value || '';
+            const judgment = evaluateHiring(data, nameWithSan, totalScore, evaluationScores, interviewNotes);
+            
+            judgments.hiring = judgment;
+            displayHiringResult(judgment, nameWithSan);
+        }
+        
+        function clearForm() {
+            document.getElementById('recruitmentForm').reset();
+            
+            EVAL_FIELDS.forEach(field => {
+                const element = document.getElementById(field);
+                if (element) element.value = '';
+            });
+            
+            document.getElementById('interviewNotes').value = '';
+            document.getElementById('totalScore').textContent = '0';
+            document.getElementById('interviewResultContainer').style.display = 'none';
+            document.getElementById('hiringResultContainer').style.display = 'none';
+            document.getElementById('interviewForm').style.display = 'none';
+            document.getElementById('overallJudgmentWarning').style.display = 'none';
+            document.getElementById('highSchoolWarning').style.display = 'none';
+            document.getElementById('timeInputGroup').innerHTML = '';
+            document.getElementById('checklistContainer').style.display = 'none';
+            
+            toggleStationInput();
+            toggleGraduationInput();
+            judgments = { interview: null, hiring: null };
+            checklistData = {}; // チェックリストデータもクリア
+        }
+        
+        function evaluateInterview(data, nameWithSan) {
+            let score = 0;
+            let issues = [];
+            let positives = [];
+            let warnings = [];
+            let highschoolNotes = [];
+            let specialschoolNotes = [];
+            let requiresPreCheck = false;  // ✋面接判断前要確認フラグ
+            
+            const age = parseInt(data.age) || 0;
+            if (age >= 60) {
+                return {
+                    result: 'fail',
+                    reason: '年齢制限のため不採用',
+                    details: `${nameWithSan}は60歳以上のため、条件に関わらず不採用となります。`,
+                    warnings: [],
+                    highschoolNotes: [],
+                    specialschoolNotes: []
+                };
+            }
+            
+            if (data.work_period === '短期（半年以下）') {
+                return {
+                    result: 'fail',
+                    reason: '短期勤務のため不採用',
+                    details: `${nameWithSan}は短期勤務希望のため、研修期間やシフト貢献度を考慮すると採用は適さないと判断されます。`,
+                    warnings: [],
+                    highschoolNotes: [],
+                    specialschoolNotes: []
+                };
+            }
+            
+            // 卒業年月日チェック（翌年3月で勤務期間が中期の場合）
+            if (data.graduation_date && data.work_period === '中期（半年以上〜1年未満）') {
+                const currentYear = new Date().getFullYear();
+                const nextYear = currentYear + 1;
+                const nextMarchString = `${nextYear}-03`;
+                
+                if (data.graduation_date === nextMarchString) {
+                    requiresPreCheck = true;
+                    warnings.push('来年3月の卒業で設定されています。中期で勤務できるか最終確認をお願いいたします。');
+                }
+            }
+            
+            if (data.side_job === 'あり') {
+                const isStudent = ['高校1年生', '高校2年生', '高校3年生', '大学1年生', '大学2年生', '大学3年生', '大学4年生', '専門学校生1年生', '専門学校生2年生', '専門学校生3年生'].includes(data.category);
+                if (isStudent) {
+                    warnings.push('かけもちの方は扶養の控除内であればTOHOシネマズではどれくらいの収入を希望しているか確認をとりましょう。');
+                } else {
+                    warnings.push('かけもちの方は扶養の控除内であればTOHOシネマズではどれくらいの収入を希望しているか、学生以外の方は週40時間超の残業代をお支払いできない確認をとりましょう。');
+                }
+            }
+            
+            if (data.work_days_min && data.work_days_max) {
+                const minDays = parseInt(data.work_days_min) || 0;
+                const maxDays = parseInt(data.work_days_max) || 0;
+                
+                if (maxDays < 2) {
+                    issues.push('週最大勤務日数が1日のため条件を満たしません。');
+                } else if (maxDays === 2) {
+                    requiresPreCheck = true;
+                    warnings.push('週最大勤務日数が2日のため、シフト貢献度が低く要確認です。');
+                    score += 1;
+                } else if (maxDays < 3) {
+                    warnings.push('週最大勤務日数が3日未満のため要検討です。');
+                    score += 1;
+                } else if (minDays >= 3) {
+                    positives.push(`週${minDays}日以上の勤務が可能です。`);
+                    score += 2;
+                } else {
+                    positives.push(`週${minDays}〜${maxDays}日の勤務が可能です。`);
+                    score += 1;
+                }
+            } else {
+                warnings.push('勤務日数が明確でないため確認が必要です。');
+            }
+            
+            function formatHoursAndMinutes(minutes) {
+                const h = Math.floor(minutes / 60);
+                const m = minutes % 60;
+                return `${h}h${m.toString().padStart(2, '0')}m`;
+            }
+
+            // 勤務時間チェック（1日3時間以上）+ オープン・クローズ要員判定 + 日中勤務チェック
+            let hasLongShift = false;
+            let workingDays = [];
+            let isOpenStaff = false;
+            let isCloseStaff = false;
+            let hasDaytimeWeekdayShift = false;
+            let hasShortShift = false;
+            let hasWeekdayMorningToAfternoonShift = false;
+
+            function calculateMinutes(start, end, isNextDay) {
+                const [sh, sm] = start.split(":").map(Number);
+                const [eh, em] = end.split(":").map(Number);
+                const startMins = sh * 60 + sm;
+                let endMins = eh * 60 + em;
+                
+                // 翌日フラグがtrue、または終了時間が開始時間より早い場合は翌日として扱う
+                if (isNextDay || endMins < startMins) {
+                    endMins += 1440; // 24時間を追加
+                }
+                
+                return endMins - startMins;
+            }
+
+            if (data.anyday_start && data.anyday_end) {
+                const isNextDay = data.anyday_nextday === true || data.anyday_nextday === 'true';
+                const duration = calculateMinutes(data.anyday_start, data.anyday_end, isNextDay);
+                if (duration >= 180) {
+                    hasLongShift = true;
+                    workingDays.push(`勤務時間(${formatHoursAndMinutes(duration)})`);
+                } else {
+                    hasShortShift = true;
+                }
+                
+                const startHour = parseInt(data.anyday_start.split(":")[0]);
+                const endHour = parseInt(data.anyday_end.split(":")[0]);
+                
+                // オープン要員判定
+                if (startHour >= 7 && startHour <= 8) isOpenStaff = true;
+                
+                // クローズ要員判定（翌日フラグがある場合、22時以降、または0時台の場合）
+                if (isNextDay || endHour >= 22 || endHour <= 2) isCloseStaff = true;
+                
+                // 日中勤務判定
+                if (startHour < 15 && startHour >= 7) hasDaytimeWeekdayShift = true;
+                if (startHour < 15 && endHour >= 15 && startHour >= 7) {
+                    hasWeekdayMorningToAfternoonShift = true;
+                }
+            } else {
+                Object.keys(DAY_MAP).forEach((day, index) => {
+                    const dayKey = DAY_MAP[day];
+                    const start = data[`${dayKey}_start`];
+                    const end = data[`${dayKey}_end`];
+                    const isNextDay = data[`${dayKey}_nextday`] === true || data[`${dayKey}_nextday`] === 'true';
+                    
+                    if (start && end) {
+                        const duration = calculateMinutes(start, end, isNextDay);
+                        if (duration >= 180) {
+                            hasLongShift = true;
+                            workingDays.push(`${DAY_LABELS[index]}(${formatHoursAndMinutes(duration)})`);
+                        } else {
+                            hasShortShift = true;
+                        }
+                        
+                        const startHour = parseInt(start.split(":")[0]);
+                        const endHour = parseInt(end.split(":")[0]);
+                        
+                        // オープン要員判定
+                        if (startHour >= 7 && startHour <= 8) isOpenStaff = true;
+                        
+                        // クローズ要員判定（翌日フラグがある場合、22時以降、または0時台の場合）
+                        if (isNextDay || endHour >= 22 || endHour <= 2) isCloseStaff = true;
+                        
+                        const isWeekday = ['月', '火', '水', '木', '金'].includes(day);
+                        if (isWeekday && startHour < 15 && startHour >= 7) {
+                            hasDaytimeWeekdayShift = true;
+                        }
+                        if (isWeekday && startHour < 15 && endHour >= 15 && startHour >= 7) {
+                            hasWeekdayMorningToAfternoonShift = true;
+                        }
+                    }
+                });
+            }
+
+            if (hasShortShift) {
+                requiresPreCheck = true;
+                warnings.push('1日3時間に満たない日があります。ご確認ください。');
+            } else if (hasLongShift) {
+                positives.push(`1日3時間以上の勤務が可能です。（${workingDays.join('、')}）`);
+                score += 2;
+            } else {
+                issues.push('勤務時間が未設定または不十分です。');
+            }
+            
+            if (isOpenStaff) {
+                positives.push('オープン要員としての活躍が見込めます。');
+                score += 1;
+            }
+            if (isCloseStaff) {
+                positives.push('クローズ要員としての活躍が見込めます。');
+                score += 1;
+            }
+            
+            if (hasWeekdayMorningToAfternoonShift) {
+                requiresPreCheck = true;
+                warnings.push('平日の朝から夕方ごろは既存の社保スタッフでシフトラインが埋まってしまう可能性が高い為事前の説明が必要です。');
+            }
+
+            // 土日祝日勤務チェック
+            let needsWeekendConfirmation = false;
+            if (data.work_days && Array.isArray(data.work_days)) {
+                const hasSaturday = data.work_days.includes('土');
+                const hasSunday = data.work_days.includes('日');
+                const hasAnyday = data.work_days.includes('曜日問わず');
+                
+                if (hasAnyday || (hasSaturday && hasSunday)) {
+                    positives.push('土日両日の勤務が可能です。');
+                    score += 2;
+                } else {
+                    needsWeekendConfirmation = true;
+                    warnings.push('土日両日にチェックが入っていません。応募者と上長に確認を取ってから判断しましょう。');
+                }
+            } else {
+                warnings.push('勤務可能曜日が選択されていません。');
+            }
+            
+            if (data.commute_method === 'マイカー') {
+                positives.push('マイカー通勤のため通勤面で有利です。');
+                score += 1;
+            }
+            
+            if (data.commute_method === '公共交通機関' && data.nearest_station) {
+                if (data.nearest_station.includes('内原')) {
+                    positives.push('内原駅利用で立地的に適しています。');
+                    score += 1;
+                } else {
+                    positives.push(`最寄駅：${data.nearest_station}からの通勤です。`);
+                }
+            }
+            
+            const commuteTime = parseInt(data.commute_time) || 0;
+            if (commuteTime >= 90) {
+                issues.push(`通勤時間${commuteTime}分は長すぎるため採用は困難です。`);
+            } else if (commuteTime > 60) {
+                warnings.push(`通勤時間${commuteTime}分は長めでマイナス要素です。`);
+                score -= 1;
+            } else if (commuteTime <= 30) {
+                positives.push(`通勤時間${commuteTime}分で通勤に問題ありません。`);
+                score += 1;
+            } else {
+                positives.push(`通勤時間${commuteTime}分で許容範囲内です。`);
+            }
+            
+            if (data.work_period === '長期（1年以上）') {
+                positives.push('長期勤務希望で安定性があります。');
+                score += 2;
+            }
+            
+            if (data.category === 'フリーター') {
+                warnings.push('社会保険の加入希望について確認が必要です。');
+            }
+            
+            if (data.summer_vacation === '×' || data.obon_vacation === '×') {
+                issues.push('長期休暇期間の勤務ができないため採用は困難です。');
+            } else {
+                if (data.summer_vacation === '△' || data.obon_vacation === '△') {
+                    requiresPreCheck = true;  // 無条件に面接判断前要確認に分類
+                    warnings.push('長期休暇期間の勤務について要相談のため検討が必要です。');
+                    // スコア加算なし（要確認事項）
+                } else if (data.summer_vacation === '○' && data.obon_vacation === '○') {
+                    positives.push('長期休暇期間の勤務に対応可能です。');
+                    score += 2;
+                }
+            }
+            
+            // 高校生・専門学校生の確認事項を設定
+            if (['高校1年生', '高校2年生', '高校3年生'].includes(data.category)) {
+                highschoolNotes.push('面接時、所属する高校の許可を得ているか最終確認してください。');
+                highschoolNotes.push('面接時、高校生の労働時間は22:00までとしているが当劇場は基本的に21:00までとさせていただいていることを伝えましょう。');
+            } else if (['専門学校生1年生', '専門学校生2年生', '専門学校生3年生'].includes(data.category)) {
+                specialschoolNotes.push('面接時、所属する専門学校の許可を得ているか最終確認してください。');
+            }
+            
+            // 総合判定
+            if (issues.length > 0) {
+                return {
+                    result: 'fail',
+                    reason: '採用条件未達のため面接不可',
+                    details: `${nameWithSan}について以下の問題があります：\n\n${issues.join('\n')}`,
+                    warnings: [],
+                    highschoolNotes: [],
+                    specialschoolNotes: []
+                };
+            }
+            
+            // ✋面接判断前要確認が必要な場合
+            if (requiresPreCheck || needsWeekendConfirmation) {
+                return {
+                    result: 'pass',
+                    reason: '面接判断前要確認',
+                    details: `${nameWithSan}は一部確認事項が残っています。確認してから進めてください。\n\n${positives.length > 0 ? '【評価ポイント】\n' + positives.join('\n') : ''}`,
+                    warnings: warnings,
+                    highschoolNotes: highschoolNotes,
+                    specialschoolNotes: specialschoolNotes,
+                    warningCount: warnings.length
+                };
+            }
+            
+            if (score >= 4) {
+                return {
+                    result: 'pass',
+                    reason: '面接進行可',
+                    details: `${nameWithSan}は採用条件を満たしており、面接に進めることをお勧めします。\n\n【評価ポイント】\n${positives.join('\n')}`,
+                    warnings: warnings,
+                    highschoolNotes: highschoolNotes,
+                    specialschoolNotes: specialschoolNotes,
+                    warningCount: warnings.length
+                };
+            } else {
+                return {
+                    result: 'caution',
+                    reason: '要検討',
+                    details: `${nameWithSan}は慎重な検討が必要です。\n\n${positives.length > 0 ? '【評価ポイント】\n' + positives.join('\n') : ''}`,
+                    warnings: warnings,
+                    highschoolNotes: highschoolNotes,
+                    specialschoolNotes: specialschoolNotes,
+                    warningCount: warnings.length
+                };
+            }
+        }
+        
+        function evaluateHiring(data, nameWithSan, totalScore, evaluationScores, interviewNotes) {
+            let issues = [];
+            let positives = ['面接可否判定を通過済み'];
+            let warnings = [];
+            
+            if (totalScore >= 35) {
+                positives.push(`面接評価が優秀です。（合計${totalScore}/50点）`);
+                return {
+                    result: 'pass',
+                    reason: '採用推奨',
+                    details: `${nameWithSan}は採用を強く推奨します。\n\n【評価ポイント】\n${positives.join('\n')}\n\n【面接スコア詳細】\n合計: ${totalScore}/50点\n\n※最終判断は上長にお任せします。`
+                };
+            } else if (totalScore >= 20) {
+                warnings.push(`面接評価は普通レベルです。（合計${totalScore}/50点）`);
+                return {
+                    result: 'caution',
+                    reason: '上長最終判断要',
+                    details: `${nameWithSan}については上長の最終判断をお待ちください。\n\n【評価ポイント】\n${positives.join('\n')}\n\n【確認事項】\n${warnings.join('\n')}\n\n【面接スコア詳細】\n合計: ${totalScore}/50点\n\n※採用条件は満たしていますが、面接評価を踏まえた上長の判断が必要です。`
+                };
+            } else {
+                issues.push(`面接評価が低く不採用を推奨します。（合計${totalScore}/50点）`);
+                return {
+                    result: 'fail',
+                    reason: '面接評価不良のため不採用',
+                    details: `${nameWithSan}について面接評価が不良のため不採用を推奨します。\n\n【懸念事項】\n${issues.join('\n')}\n\n【面接スコア詳細】\n合計: ${totalScore}/50点\n\n※最終判断は上長にお任せします。`
+                };
+            }
+        }
+        
+        function displayInterviewResult(judgment, nameWithSan) {
+            const container = document.getElementById('interviewResultContainer');
+            const title = document.getElementById('interviewResultTitle');
+            const details = document.getElementById('interviewResultDetails');
+            const checklistContainer = document.getElementById('checklistContainer');
+            
+            container.className = 'result-container';
+            
+            let titleText = '';
+            let showPreCheckMessage = false;
+            
+            if (judgment.result === 'pass') {
+                if (judgment.reason === '面接判断前要確認') {
+                    container.classList.add('result-pre-check');
+                    titleText = '✋ 面接判断前要確認';
+                    showPreCheckMessage = true;
+                } else {
+                    container.classList.add('result-pass');
+                    titleText = '✅ 面接進行推奨';
+                    showPreCheckMessage = true;
+                }
+            } else if (judgment.result === 'fail') {
+                container.classList.add('result-fail');
+                titleText = '❌ 面接不可・不採用';
+            } else {
+                if (judgment.reason === '面接判断前要確認') {
+                    container.classList.add('result-pre-check');
+                    titleText = '✋ 面接判断前要確認';
+                    showPreCheckMessage = true;
+                } else {
+                    container.classList.add('result-caution');
+                    titleText = '⚠️ 要検討・上長判断';
+                }
+            }
+            
+            title.textContent = titleText;
+            details.innerHTML = judgment.details.replace(/\n/g, '<br>');
+            
+            // チェックリストの表示
+            let checklistHTML = '';
+            if (judgment.warnings && judgment.warnings.length > 0) {
+                checklistHTML += generateChecklistHTML(judgment.warnings, 'general');
+            }
+            if (judgment.highschoolNotes && judgment.highschoolNotes.length > 0) {
+                checklistHTML += generateChecklistHTML(judgment.highschoolNotes, 'highschool');
+            }
+            if (judgment.specialschoolNotes && judgment.specialschoolNotes.length > 0) {
+                checklistHTML += generateChecklistHTML(judgment.specialschoolNotes, 'specialschool');
+            }
+            
+            if (checklistHTML) {
+                checklistContainer.innerHTML = checklistHTML;
+                checklistContainer.style.display = 'block';
+                
+                // チェックリスト項目の進捗を更新
+                ['general', 'highschool', 'specialschool'].forEach(category => {
+                    updateChecklistProgress(category);
+                });
+            } else {
+                checklistContainer.style.display = 'none';
+            }
+            
+            if (showPreCheckMessage) {
+                const preCheckMessage = document.createElement('div');
+                preCheckMessage.className = 'pre-check-message';
+                
+                if (judgment.reason === '面接判断前要確認') {
+                    preCheckMessage.innerHTML = '要検討事項を確認して事前にクリアにできるものはメッセージで確認してください。<br><button class="proceed-btn" onclick="proceedToInterview()">応募者または上長確認が取れたので面接へ進む</button>';
+                } else {
+                    preCheckMessage.innerHTML = '<button class="proceed-btn" onclick="proceedToInterview()">面接へ進む</button>';
+                    preCheckMessage.style.background = 'rgba(46, 204, 113, 0.1)';
+                    preCheckMessage.style.borderColor = '#2ECC71';
+                    preCheckMessage.style.color = '#27AE60';
+                }
+                details.appendChild(preCheckMessage);
+            }
+            
+            container.style.display = 'block';
+            setTimeout(() => container.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+        
+        function displayHiringResult(judgment, nameWithSan) {
+            const container = document.getElementById('hiringResultContainer');
+            const title = document.getElementById('hiringResultTitle');
+            const details = document.getElementById('hiringResultDetails');
+            
+            container.className = 'result-container';
+            
+            let titleText = '';
+            if (judgment.result === 'pass') {
+                container.classList.add('result-pass');
+                titleText = '🎉 採用推奨';
+            } else if (judgment.result === 'fail') {
+                container.classList.add('result-fail');
+                titleText = '❌ 不採用推奨';
+            } else {
+                container.classList.add('result-caution');
+                titleText = '⚠️ 上長最終判断要';
+            }
+            
+            title.textContent = titleText;
+            details.innerHTML = judgment.details.replace(/\n/g, '<br>');
+            
+            updateJudgmentHistory();
+            container.style.display = 'block';
+            setTimeout(() => container.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+        
+        function updateJudgmentHistory() {
+            const history = document.getElementById('judgmentHistory');
+            
+            if (judgments.interview || judgments.hiring) {
+                history.style.display = 'block';
+                let historyHtml = '<h4>📋 判定履歴</h4>';
+
+                if (judgments.interview) {
+                    historyHtml += `
+                        <div class="judgment-step">
+                            <div class="step-title">Step 1: 面接可否判定</div>
+                            <div>結果: ${judgments.interview.reason}</div>
+                        </div>`;
+                }
+                
+                if (judgments.hiring) {
+                    historyHtml += `
+                        <div class="judgment-step">
+                            <div class="step-title">Step 2: 採用可否判定</div>
+                            <div>結果: ${judgments.hiring.reason}</div>
+                        </div>`;
+                }
+                
+                history.innerHTML = historyHtml;
+            } else {
+                history.style.display = 'none';
+            }
+        }
+        
+        function updateTotalScore() {
+            let total = 0;
+            EVAL_FIELDS.forEach(field => {
+                const element = document.getElementById(field);
+                if (element) {
+                    const value = parseInt(element.value) || 0;
+                    total += value;
+                }
+            });
+            
+            const scoreElement = document.getElementById('totalScore');
+            if (scoreElement) scoreElement.textContent = total;
+        }
+        
+        function checkOverallJudgment() {
+            const value = parseInt(document.getElementById('overall_judgment').value) || 0;
+            const warningElement = document.getElementById('overallJudgmentWarning');
+            warningElement.style.display = (value === 1 || value === 2) ? 'block' : 'none';
+        }
+        
+        function proceedToInterview() {
+            document.getElementById('interviewForm').style.display = 'block';
+            setTimeout(() => document.getElementById('interviewForm').scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+
+        function saveCurrentState() {
+            const data = getFormData();
+            if (!data || !data.name) {
+                alert('応募者名を入力してから保存してください。');
+                return;
+            }
+            
+            // 面接評価データも含める
+            const evaluationData = {};
+            EVAL_FIELDS.forEach(field => {
+                const element = document.getElementById(field);
+                if (element && element.value) {
+                    evaluationData[field] = element.value;
+                }
+            });
+            
+            const interviewNotes = document.getElementById('interviewNotes').value;
+            if (interviewNotes) evaluationData.interviewNotes = interviewNotes;
+            
+            // 保存用HTMLを生成
+            const saveData = {
+                basicInfo: data,
+                evaluationData: evaluationData,
+                judgments: judgments,
+                checklistData: checklistData, // チェックリストデータを追加
+                timestamp: new Date().toLocaleString('ja-JP')
+            };
+            
+            const htmlContent = generateSaveHTML(saveData);
+            
+            // ダウンロード用のBlobを作成
+            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            
+            // ダウンロードリンクを作成
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `応募者_${data.name}_${new Date().toISOString().slice(0, 10)}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            alert(`${data.name}さんの情報を保存しました。`);
+        }
+        
+        function generateSaveHTML(saveData) {
+            const { basicInfo, evaluationData, judgments, checklistData, timestamp } = saveData;
+            
+            // 時間情報の生成（翌日フラグ対応）
+            let timeInfoHtml = '';
+            if (basicInfo.anyday_start && basicInfo.anyday_end) {
+                const isNextDay = basicInfo.anyday_nextday === true || basicInfo.anyday_nextday === 'true';
+                const endTimeDisplay = isNextDay ? `${basicInfo.anyday_end}（翌日）` : basicInfo.anyday_end;
+                timeInfoHtml += `<div class="time-info">勤務時間: ${basicInfo.anyday_start} ～ ${endTimeDisplay}</div>`;
+            } else {
+                Object.keys(DAY_MAP).forEach((day, index) => {
+                    const dayKey = DAY_MAP[day];
+                    const startTime = basicInfo[`${dayKey}_start`];
+                    const endTime = basicInfo[`${dayKey}_end`];
+                    const isNextDay = basicInfo[`${dayKey}_nextday`] === true || basicInfo[`${dayKey}_nextday`] === 'true';
+                    if (startTime && endTime) {
+                        const endTimeDisplay = isNextDay ? `${endTime}（翌日）` : endTime;
+                        timeInfoHtml += `<div class="time-info">${day}曜: ${startTime} ～ ${endTimeDisplay}</div>`;
+                    }
+                });
+            }
+
+            // チェックリストHTML生成
+            let checklistSaveHTML = '';
+            if (checklistData && Object.keys(checklistData).length > 0) {
+                checklistSaveHTML = '<div class="section"><h3>確認事項チェックリスト</h3>';
+                
+                const categories = {
+                    general: '【確認事項】',
+                    highschool: '【高校生面接時の確認事項】',
+                    specialschool: '【専門学校生面接時の確認事項】'
+                };
+                
+                Object.keys(categories).forEach(category => {
+                    const categoryItems = Object.keys(checklistData).filter(key => key.startsWith(category));
+                    if (categoryItems.length > 0) {
+                        checklistSaveHTML += `<div class="checklist-section">
+                            <div class="checklist-title">${categories[category]}</div>`;
+                        
+                        categoryItems.forEach(itemId => {
+                            const isChecked = checklistData[itemId];
+                            const itemText = document.getElementById(itemId)?.nextElementSibling?.textContent || '確認項目';
+                            checklistSaveHTML += `
+                                <div class="checklist-item ${isChecked ? 'checked' : ''}">
+                                    <input type="checkbox" id="${itemId}" ${isChecked ? 'checked' : ''}>
+                                    <label for="${itemId}">${itemText}</label>
+                                </div>`;
+                        });
+                        
+                        checklistSaveHTML += '</div>';
+                    }
+                });
+                
+                checklistSaveHTML += '</div>';
+            }
+            
+            return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>応募者情報 - ${basicInfo.name}さん</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .header { background: #2C3E50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .section { background: #f9f9f9; padding: 20px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #ddd; }
+        .section h3 { color: #2C3E50; margin-top: 0; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .info-item { padding: 8px; background: white; border-radius: 4px; }
+        .time-info { padding: 8px; background: #e8f4fd; border-radius: 4px; margin-bottom: 5px; }
+        .label { font-weight: bold; color: #555; }
+        .result { padding: 15px; border-radius: 8px; margin: 10px 0; }
+        .pass { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .fail { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .caution { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; }
+        .pre-check { background: linear-gradient(135deg, #F1C40F, #F39C12); color: #2C3E50; }
+        .score-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .score-table th, .score-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .score-table th { background: #f8f9fa; }
+        .checklist-section { background: #F8F9FA; padding: 15px; border-radius: 8px; border: 1px solid #DEE2E6; margin: 10px 0; }
+        .checklist-title { font-weight: 700; color: #2C3E50; margin-bottom: 10px; }
+        .checklist-item { display: flex; align-items: flex-start; margin-bottom: 8px; padding: 8px; background: white; border-radius: 4px; }
+        .checklist-item.checked { background: #E8F5E8; border-left: 4px solid #28A745; }
+        .checklist-item input[type="checkbox"] { margin-right: 8px; margin-top: 3px; }
+        .checklist-item label { flex: 1; font-weight: normal; color: #495057; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>TOHOシネマズ水戸内原 応募者情報</h1>
+        <p>応募者: ${basicInfo.name}さん | 保存日時: ${timestamp}</p>
+    </div>
+    
+    <div class="section">
+        <h3>基本情報</h3>
+        <div class="info-grid">
+            <div class="info-item"><span class="label">氏名:</span> ${basicInfo.name}</div>
+            <div class="info-item"><span class="label">性別:</span> ${basicInfo.gender || '未入力'}</div>
+            <div class="info-item"><span class="label">年齢:</span> ${basicInfo.age || '未入力'}歳</div>
+            <div class="info-item"><span class="label">区分:</span> ${basicInfo.category || '未入力'}</div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>応募条件詳細</h3>
+        <div class="info-item"><span class="label">通勤方法:</span> ${basicInfo.commute_method || '未入力'}</div>
+        <div class="info-item"><span class="label">通勤時間:</span> ${basicInfo.commute_time || '未入力'}分</div>
+        ${basicInfo.nearest_station ? `<div class="info-item"><span class="label">最寄駅:</span> ${basicInfo.nearest_station}</div>` : ''}
+        <div class="info-item"><span class="label">勤務可能曜日:</span> ${Array.isArray(basicInfo.work_days) ? basicInfo.work_days.join('、') : '未入力'}</div>
+        <div class="info-item"><span class="label">週最低勤務日数:</span> ${basicInfo.work_days_min || '未入力'}日</div>
+        <div class="info-item"><span class="label">週最大勤務日数:</span> ${basicInfo.work_days_max || '未入力'}日</div>
+        ${timeInfoHtml}
+        <div class="info-item"><span class="label">勤務期間:</span> ${basicInfo.work_period || '未入力'}</div>
+        <div class="info-item"><span class="label">かけもち:</span> ${basicInfo.side_job || '未入力'}</div>
+        <div class="info-item"><span class="label">夏休み対応:</span> ${basicInfo.summer_vacation || '未入力'}</div>
+        <div class="info-item"><span class="label">お盆休み対応:</span> ${basicInfo.obon_vacation || '未入力'}</div>
+        ${basicInfo.graduation_date ? `<div class="info-item"><span class="label">卒業予定年月:</span> ${basicInfo.graduation_date}</div>` : ''}
+        ${basicInfo.reviewer_notes ? `<div class="info-item"><span class="label">確認者所見:</span> ${basicInfo.reviewer_notes}</div>` : ''}
+    </div>
+    
+    ${judgments.interview ? `
+    <div class="section">
+        <h3>面接可否判定結果</h3>
+        <div class="result ${judgments.interview.reason === '面接判断前要確認' ? 'pre-check' : (judgments.interview.result === 'pass' ? 'pass' : judgments.interview.result === 'fail' ? 'fail' : 'caution')}">
+            <strong>${judgments.interview.reason}</strong><br>
+            ${judgments.interview.details.replace(/\n/g, '<br>')}
+        </div>
+    </div>` : ''}
+    
+    ${checklistSaveHTML}
+    
+    ${Object.keys(evaluationData).length > 0 ? `
+    <div class="section">
+        <h3>面接評価</h3>
+        <table class="score-table">
+            <tr><th>評価項目</th><th>スコア</th></tr>
+            ${evaluationData.greeting ? `<tr><td>挨拶はできていたか</td><td>${evaluationData.greeting}点</td></tr>` : ''}
+            ${evaluationData.first_impression ? `<tr><td>第一印象は良かったか</td><td>${evaluationData.first_impression}点</td></tr>` : ''}
+            ${evaluationData.communication ? `<tr><td>明るくハキハキとしていたか</td><td>${evaluationData.communication}点</td></tr>` : ''}
+            ${evaluationData.eye_contact ? `<tr><td>話をするときに目を見て話していたか</td><td>${evaluationData.eye_contact}点</td></tr>` : ''}
+            ${evaluationData.appearance ? `<tr><td>服装、身だしなみはきちんとしていたか</td><td>${evaluationData.appearance}点</td></tr>` : ''}
+            ${evaluationData.explanation ? `<tr><td>意見を判りやすく説明できていたか</td><td>${evaluationData.explanation}点</td></tr>` : ''}
+            ${evaluationData.motivation ? `<tr><td>志望動機に好感が持てたか</td><td>${evaluationData.motivation}点</td></tr>` : ''}
+            ${evaluationData.self_analysis ? `<tr><td>長所や短所などの自己分析ができていたか</td><td>${evaluationData.self_analysis}点</td></tr>` : ''}
+            ${evaluationData.service_mindset ? `<tr><td>接客する上で大切にしたいことを答えられたか</td><td>${evaluationData.service_mindset}点</td></tr>` : ''}
+            ${evaluationData.overall_judgment ? `<tr><td>面接者から見ての総合判断</td><td>${evaluationData.overall_judgment}点</td></tr>` : ''}
+        </table>
+        ${evaluationData.interviewNotes ? `<div class="info-item" style="margin-top: 10px;"><span class="label">その他所見:</span> ${evaluationData.interviewNotes}</div>` : ''}
+    </div>` : ''}
+    
+    ${judgments.hiring ? `
+    <div class="section">
+        <h3>採用可否判定結果</h3>
+        <div class="result ${judgments.hiring.result === 'pass' ? 'pass' : judgments.hiring.result === 'fail' ? 'fail' : 'caution'}">
+            <strong>${judgments.hiring.reason}</strong><br>
+            ${judgments.hiring.details.replace(/\n/g, '<br>')}
+        </div>
+    </div>` : ''}
+</body>
+</html>`;
+        }
+
+        // 初期化処理
+        document.addEventListener('DOMContentLoaded', function() {
+            const workDayCheckboxes = document.querySelectorAll('input[name="work_days"]');
+            workDayCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', updateTimeSlots);
+            });
+        });
+
+        // ページ読み込み時に自動実行
+        window.addEventListener("load", function() {
+            document.getElementById("judge-button").click();
+        });
+
+    </script>
+</body>
+</html>

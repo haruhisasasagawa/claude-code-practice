@@ -1,0 +1,3065 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>リクルート判定システム</title>
+  <meta name="description" content="アルバイト採用の基準統一を支援する判定アプリ。応募情報から面接者への留意点を自動生成し、面接評価から採用可否を判定します。">
+  <style>
+/* =====================================================================
+   リクルート判定システム — スタイル
+   デザイントークン → レイアウト → コンポーネント → 画面別 → 印刷
+   ===================================================================== */
+
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #eef2f6;
+  --text: #1a2233;
+  --muted: #5b6675;
+  --border: #dde3ea;
+  --border-strong: #c7d0db;
+
+  --accent: #1f5fbf;
+  --accent-hover: #184c99;
+  --accent-soft: #e6eefb;
+  --on-accent: #ffffff;
+
+  --ok: #0e9f6e;      --ok-soft: #e3f6ee;
+  --warn: #d97706;    --warn-soft: #fdf1dc;
+  --danger: #dc2626;  --danger-soft: #fde8e8;
+  --info: #2563eb;    --info-soft: #e5edff;
+
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .10);
+  --shadow-lg: 0 8px 24px rgba(16, 24, 40, .12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --sidebar-w: 248px;
+  --summary-w: 312px;
+  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f141a;
+  --surface: #171e27;
+  --surface-2: #1d2631;
+  --surface-3: #232e3b;
+  --text: #e6ebf1;
+  --muted: #93a1b1;
+  --border: #263140;
+  --border-strong: #35435500;
+  --border-strong: #354355;
+  --accent: #5b9cff;
+  --accent-hover: #7cb0ff;
+  --accent-soft: #1b2a44;
+  --on-accent: #0b1220;
+  --ok: #34c38f;      --ok-soft: #12302a;
+  --warn: #f5a623;    --warn-soft: #3a2a12;
+  --danger: #f06565;  --danger-soft: #3b1a1d;
+  --info: #6ea2ff;    --info-soft: #1a2742;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a;
+    --surface: #171e27;
+    --surface-2: #1d2631;
+    --surface-3: #232e3b;
+    --text: #e6ebf1;
+    --muted: #93a1b1;
+    --border: #263140;
+    --border-strong: #354355;
+    --accent: #5b9cff;
+    --accent-hover: #7cb0ff;
+    --accent-soft: #1b2a44;
+    --on-accent: #0b1220;
+    --ok: #34c38f;      --ok-soft: #12302a;
+    --warn: #f5a623;    --warn-soft: #3a2a12;
+    --danger: #f06565;  --danger-soft: #3b1a1d;
+    --info: #6ea2ff;    --info-soft: #1a2742;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+
+/* ---------- ベース ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { font-size: 15px; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { margin: 0; line-height: 1.35; }
+p { margin: 0; }
+a { color: var(--accent); }
+button { font-family: inherit; }
+code, .mono { font-family: var(--mono); font-size: .85em; }
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.num { font-variant-numeric: tabular-nums; }
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  width: 100%;
+  transition: border-color .15s, box-shadow .15s;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+input[type="time"], input[type="month"], input[type="number"] { width: auto; min-width: 9em; }
+input[type="checkbox"], input[type="radio"] { width: auto; accent-color: var(--accent); }
+textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent); }
+
+/* ---------- アプリ骨格 ---------- */
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 14px;
+  overflow-y: auto;
+}
+.brand { display: flex; gap: 10px; align-items: center; padding: 4px 6px; }
+.brand-mark {
+  width: 38px; height: 38px; border-radius: 10px; flex: none;
+  background: linear-gradient(135deg, var(--accent), #6f3fd1);
+  color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 17px; letter-spacing: .02em;
+}
+.brand-title { font-weight: 700; font-size: 13.5px; line-height: 1.3; letter-spacing: -.01em; }
+.brand-sub { font-size: 12px; color: var(--muted); line-height: 1.3; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 8px; border: none; background: none;
+  color: var(--text); font-size: 14px; font-weight: 500; text-align: left; cursor: pointer;
+}
+.nav-item:hover { background: var(--surface-3); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.nav-item .ico { width: 18px; text-align: center; font-size: 15px; opacity: .85; }
+
+.side-section-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--muted);
+  text-transform: uppercase; padding: 0 8px; margin-bottom: 6px;
+}
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.step {
+  display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start;
+  padding: 8px 8px; border-radius: 8px; cursor: pointer; position: relative;
+}
+.step:hover:not(.disabled) { background: var(--surface-3); }
+.step.disabled { cursor: not-allowed; opacity: .55; }
+.step-num {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; border: 2px solid var(--border-strong); color: var(--muted); background: var(--surface);
+}
+.step.current .step-num { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.step.done .step-num { border-color: var(--ok); background: var(--ok); color: #fff; }
+.step-label { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.step.current .step-label { color: var(--accent); }
+.step-hint { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+
+.sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 0 4px; }
+.sidebar-foot .version { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+.main { min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 28px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.top-title { font-size: 17px; font-weight: 700; }
+.chip-applicant {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border);
+  font-size: 12.5px; color: var(--muted);
+}
+.chip-applicant strong { color: var(--text); }
+.chip-applicant .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.chip-applicant.dirty .dot { background: var(--warn); }
+.chip-applicant.saved .dot { background: var(--ok); }
+.top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.view { padding: 22px 28px 60px; }
+.view-footer { margin-top: 36px; font-size: 11.5px; color: var(--muted); text-align: center; }
+
+.judge-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--summary-w);
+  gap: 22px;
+  align-items: start;
+}
+.work { min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+.summary { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 12px; }
+
+@media (max-width: 1180px) {
+  .judge-layout { grid-template-columns: 1fr; }
+  .summary { position: static; }
+}
+@media (max-width: 840px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; }
+  .topbar, .view { padding-left: 16px; padding-right: 16px; }
+  .field-row { grid-template-columns: 1fr !important; }
+}
+
+/* ---------- ボタン ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 16px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--surface-3); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong)); }
+.btn.danger:hover { background: var(--danger-soft); }
+.btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.btn.sm { padding: 6px 11px; font-size: 13px; border-radius: 7px; }
+.btn.link { border: none; background: none; color: var(--accent); padding: 2px 4px; font-weight: 500; }
+.btn.link:hover { text-decoration: underline; background: none; }
+.btn.block { width: 100%; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.actions.end { justify-content: flex-end; }
+.actions.between { justify-content: space-between; }
+
+/* ---------- カード ---------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+}
+.card-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.card-head h2 { font-size: 16px; font-weight: 700; }
+.card-head h3 { font-size: 15px; font-weight: 700; }
+.card-head p { font-size: 13px; color: var(--muted); width: 100%; }
+.card-head .spacer { flex: 1; }
+.card h3.sub {
+  font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .04em;
+  margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.card h3.sub:first-child { margin-top: 0; }
+.card.compact { padding: 14px 16px; }
+
+/* ---------- フォーム ---------- */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; min-width: 0; }
+.field > label { font-size: 13px; font-weight: 600; color: var(--text); }
+.req { color: var(--danger); font-weight: 700; margin-left: 2px; }
+.hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.field-row { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field-row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.field-row.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.suffix { font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+.chip-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; padding: 8px 14px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  font-size: 14px; font-weight: 600; cursor: pointer; user-select: none;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.chip:hover { background: var(--surface-3); }
+.chip input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; margin: 0; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chip.chip-any.on { background: #6f3fd1; border-color: #6f3fd1; color: #fff; }
+.chip.chip-sm { padding: 5px 10px; font-size: 12.5px; min-width: 0; }
+.chip.chip-sm.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+.chip:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+.time-rows { display: flex; flex-direction: column; gap: 8px; }
+.time-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.time-label { width: 5.5em; font-weight: 700; font-size: 13.5px; }
+.time-row input[type="time"] { min-width: 7.5em; padding: 7px 10px; }
+.tilde { color: var(--muted); }
+.time-dur { font-size: 12.5px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+.time-dur.late { color: var(--warn); font-weight: 600; }
+.time-empty { padding: 14px; text-align: center; color: var(--muted); font-size: 13px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
+
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg-opt { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 8px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; border-right: 1px solid var(--border); user-select: none; color: var(--muted); }
+.seg-opt:last-child { border-right: none; }
+.seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.seg-opt:hover { background: var(--surface-3); }
+.seg-opt.on { color: var(--on-accent); background: var(--accent); }
+.seg-opt.tone-ok.on { background: var(--ok); color: #fff; }
+.seg-opt.tone-warn.on { background: var(--warn); color: #fff; }
+.seg-opt.tone-danger.on { background: var(--danger); color: #fff; }
+
+/* ---------- アラート・バッジ ---------- */
+.alert {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 11px 14px; border-radius: var(--radius-sm); border: 1px solid; font-size: 13.5px; line-height: 1.5;
+}
+.alert.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.alert.danger { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+.alert.info { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 45%, transparent); }
+.alert.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.alert .ico { flex: none; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  background: var(--surface-3); color: var(--muted); border: 1px solid transparent;
+}
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.danger { background: var(--danger-soft); color: var(--danger); }
+.badge.info { background: var(--info-soft); color: var(--info); }
+.badge.accent { background: var(--accent-soft); color: var(--accent); }
+.badge.lg { font-size: 14px; padding: 5px 14px; }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 11.5px; color: var(--muted); padding: 1px 7px; border: 1px solid var(--border); border-radius: 4px; white-space: nowrap; }
+
+/* ---------- 申し送り ---------- */
+.handoff-group { margin-bottom: 18px; }
+.handoff-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.handoff-group-head h3 { font-size: 14px; font-weight: 700; }
+.handoff-group-head .desc { font-size: 12.5px; color: var(--muted); }
+.handoff-list { display: flex; flex-direction: column; gap: 8px; }
+.handoff-item {
+  display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start;
+  padding: 11px 14px; border: 1px solid var(--border); border-left-width: 4px;
+  border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; transition: background .15s;
+}
+.handoff-item:hover { background: var(--surface-2); }
+.handoff-item input { margin-top: 3px; width: 17px; height: 17px; }
+.handoff-item.sev-block { border-left-color: var(--danger); }
+.handoff-item.sev-warn { border-left-color: var(--warn); }
+.handoff-item.sev-info { border-left-color: var(--info); }
+.handoff-item.done { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); }
+.handoff-item.done .handoff-text { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 50%, transparent); }
+.handoff-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 3px; }
+.handoff-text { font-size: 14px; line-height: 1.55; }
+
+.progress { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.progress-bar { flex: 1; height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.progress-bar > span { display: block; height: 100%; background: var(--ok); border-radius: 999px; transition: width .25s; }
+
+.strength-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.strength-list li { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+.strength-list li::before { content: "✓"; color: var(--ok); font-weight: 800; flex: none; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.table th, .table td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.table th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
+.table.kv th { width: 9em; }
+.table td.num, .table th.num { text-align: right; }
+
+/* ---------- 面接評価 ---------- */
+.eval-list { display: flex; flex-direction: column; gap: 8px; }
+.eval-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+}
+.eval-item.overall { border-color: var(--accent); background: var(--accent-soft); }
+.eval-item.missing { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); }
+.eval-label { font-size: 14px; font-weight: 600; }
+.eval-label .n { display: inline-block; width: 1.6em; color: var(--muted); font-weight: 700; }
+.eval-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.score-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg-btn {
+  width: 46px; height: 40px; border: none; border-right: 1px solid var(--border); background: transparent;
+  font-size: 15px; font-weight: 700; color: var(--muted); cursor: pointer;
+}
+.seg-btn:last-child { border-right: none; }
+.seg-btn:hover { background: var(--surface-3); }
+.seg-btn.active { background: var(--accent); color: var(--on-accent); }
+.seg-btn.active.s1, .seg-btn.active.s2 { background: var(--danger); color: #fff; }
+.seg-btn.active.s3 { background: var(--warn); color: #fff; }
+.seg-btn.active.s4, .seg-btn.active.s5 { background: var(--ok); color: #fff; }
+.scale-legend { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); width: 230px; margin-left: auto; padding: 0 4px; }
+.score-total {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-top: 16px; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border);
+}
+.score-total strong { font-size: 26px; font-weight: 800; }
+.score-total .max { color: var(--muted); font-size: 15px; }
+.score-total .pct { margin-left: auto; font-weight: 700; }
+
+/* ---------- 判定結果 ---------- */
+.result-card { border: 2px solid; border-radius: var(--radius); padding: 22px 24px; box-shadow: var(--shadow); background: var(--surface); }
+.result-card.recommend { border-color: var(--ok); background: linear-gradient(180deg, var(--ok-soft), var(--surface) 70%); }
+.result-card.review { border-color: var(--warn); background: linear-gradient(180deg, var(--warn-soft), var(--surface) 70%); }
+.result-card.reject { border-color: var(--danger); background: linear-gradient(180deg, var(--danger-soft), var(--surface) 70%); }
+.result-kicker { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--muted); }
+.result-title { font-size: 26px; font-weight: 800; margin: 4px 0 8px; display: flex; align-items: center; gap: 10px; }
+.result-card.recommend .result-title { color: var(--ok); }
+.result-card.review .result-title { color: var(--warn); }
+.result-card.reject .result-title { color: var(--danger); }
+.result-body { font-size: 15px; }
+.result-disclaimer { font-size: 12px; color: var(--muted); margin-top: 10px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 16px; }
+.metric { padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
+.metric-val { font-size: 22px; font-weight: 800; line-height: 1.2; }
+.metric-val small { font-size: 13px; color: var(--muted); font-weight: 600; }
+.metric-lbl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.bars { display: flex; flex-direction: column; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px 3em; gap: 12px; align-items: center; font-size: 13.5px; }
+.bar-track { height: 10px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 999px; background: var(--accent); }
+.bar-fill.lo { background: var(--danger); }
+.bar-fill.mid { background: var(--warn); }
+.bar-fill.hi { background: var(--ok); }
+.bar-val { text-align: right; font-weight: 700; }
+.bar-row.overall .bar-label { font-weight: 700; }
+
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+.list-plain { margin: 0; padding-left: 1.2em; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+.list-check, .list-x { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.list-check li::before { content: "✓ "; color: var(--ok); font-weight: 800; }
+.list-x li::before { content: "！ "; color: var(--danger); font-weight: 800; }
+.empty { color: var(--muted); font-size: 13.5px; }
+
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.tl-item { display: grid; grid-template-columns: 14px 1fr; gap: 12px; align-items: start; font-size: 13.5px; }
+.tl-item::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); margin-top: 6px; }
+.tl-item .when { color: var(--muted); font-size: 12px; }
+
+/* ---------- 右サマリー ---------- */
+.summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; }
+.summary-card h4 { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; }
+.sum-name { font-size: 18px; font-weight: 800; line-height: 1.3; }
+.sum-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.sum-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.sum-row:last-child { border-bottom: none; }
+.sum-label { color: var(--muted); }
+.sum-val { font-weight: 600; text-align: right; }
+.gauge-wrap { display: flex; align-items: center; gap: 14px; }
+.gauge { width: 84px; height: 84px; flex: none; }
+.gauge .track { stroke: var(--surface-3); }
+.gauge .fill { stroke: var(--accent); transition: stroke-dasharray .3s; }
+.gauge .fill.recommend { stroke: var(--ok); }
+.gauge .fill.review { stroke: var(--warn); }
+.gauge .fill.reject { stroke: var(--danger); }
+.gauge text { fill: var(--text); font-weight: 800; font-size: 20px; font-family: var(--font); }
+.gauge text.small { fill: var(--muted); font-size: 9px; font-weight: 600; }
+.sum-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sum-count { text-align: center; padding: 8px 4px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
+.sum-count b { display: block; font-size: 20px; line-height: 1.1; }
+.sum-count span { font-size: 11px; color: var(--muted); }
+.sum-count.block b { color: var(--danger); }
+.sum-count.warn b { color: var(--warn); }
+.sum-count.info b { color: var(--info); }
+
+/* ---------- 設定画面 ---------- */
+.settings-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 22px; align-items: start; }
+.settings-nav { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 2px; }
+.settings-nav a { display: block; padding: 7px 10px; border-radius: 7px; font-size: 13.5px; color: var(--text); text-decoration: none; }
+.settings-nav a:hover { background: var(--surface-3); }
+.settings-body { display: flex; flex-direction: column; gap: 18px; padding-bottom: 80px; }
+@media (max-width: 900px) { .settings-layout { grid-template-columns: 1fr; } .settings-nav { position: static; flex-direction: row; flex-wrap: wrap; } }
+.save-bar {
+  position: sticky; bottom: 0; z-index: 15; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 20px; margin: 0 -28px -60px; background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px); border-top: 1px solid var(--border);
+}
+.save-bar .note { font-size: 12.5px; color: var(--muted); margin-right: auto; }
+.check-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+.check-row:last-child { border-bottom: none; }
+.check-row input { margin-top: 4px; width: 17px; height: 17px; }
+.check-row .lbl { font-size: 14px; font-weight: 600; }
+.check-row .hint { margin-top: 1px; }
+
+.rule-row {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: start;
+  padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.rule-row:last-child { border-bottom: none; }
+.rule-row.off { opacity: .55; }
+.rule-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.rule-meta code { font-size: 11.5px; color: var(--muted); }
+.rule-row textarea { min-height: 56px; font-size: 14px; }
+.sel-sm { width: auto; padding: 4px 8px; font-size: 12.5px; }
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; margin-top: 2px; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--border-strong); transition: background .15s; cursor: pointer; }
+.switch span::after { content: ""; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.switch input:checked + span { background: var(--ok); }
+.switch input:checked + span::after { transform: translateX(18px); }
+
+.item-row { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; }
+.item-row .idx { color: var(--muted); font-weight: 700; font-size: 13px; text-align: center; }
+.row-actions { display: flex; gap: 4px; }
+.row-actions .btn { padding: 5px 9px; font-size: 12.5px; }
+.params-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+.legend .badge { font-size: 11px; }
+
+/* ---------- 使い方 ---------- */
+.help-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.help-step { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.help-step .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 13px; margin-bottom: 8px; }
+.help-step h3 { font-size: 14.5px; margin-bottom: 4px; }
+.help-step p { font-size: 13px; color: var(--muted); }
+.kbd { font-family: var(--mono); font-size: 12px; background: var(--surface-3); border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 6px; }
+
+/* ---------- トースト ---------- */
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 20px);
+  background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 10px;
+  font-size: 14px; font-weight: 600; box-shadow: var(--shadow-lg);
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 100; max-width: min(90vw, 560px);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.error { background: var(--danger); color: #fff; }
+.toast.ok { background: var(--ok); color: #fff; }
+
+/* ---------- 印刷 ---------- */
+@media print {
+  @page { size: A4; margin: 14mm; }
+  html { font-size: 12px; }
+  body { background: #fff; color: #000; }
+  .sidebar, .topbar, .summary, .actions, .toast, .no-print, .view-footer { display: none !important; }
+  .app { display: block; }
+  .view { padding: 0; }
+  .judge-layout { display: block; }
+  .card, .result-card { box-shadow: none; break-inside: avoid; border-color: #bbb; }
+  .result-card { background: #fff !important; }
+  .handoff-item { break-inside: avoid; }
+}
+
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- ===== サイドバー ===== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" id="brandMark">R</div>
+        <div>
+          <div class="brand-title" id="brandTitle">リクルート判定システム</div>
+          <div class="brand-sub" id="brandTheater">—</div>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="メインメニュー">
+        <button type="button" class="nav-item active" data-view="judge"><span class="ico">▣</span>応募者判定</button>
+        <button type="button" class="nav-item" data-view="settings"><span class="ico">⚙</span>設定（劇場ルール）</button>
+        <button type="button" class="nav-item" data-view="help"><span class="ico">?</span>使い方</button>
+      </nav>
+
+      <div id="stepSection">
+        <div class="side-section-title">判定ステップ</div>
+        <ol class="steps" id="stepNav"></ol>
+      </div>
+
+      <div class="sidebar-foot">
+        <button type="button" class="btn sm ghost" id="btnTheme">🌙 ダークモード</button>
+        <div class="version" id="brandVersion"></div>
+      </div>
+    </aside>
+
+    <!-- ===== メイン ===== -->
+    <main class="main">
+      <header class="topbar">
+        <div class="top-title" id="topTitle">応募者判定</div>
+        <div class="chip-applicant" id="applicantChip"><span class="dot"></span><span>未入力</span></div>
+        <div class="top-actions" id="topActions">
+          <button type="button" class="btn sm" id="btnNew">＋ 新規</button>
+          <button type="button" class="btn sm" id="btnLoad">📂 読み込み</button>
+          <button type="button" class="btn sm primary" id="btnSave">💾 保存（HTML）</button>
+          <button type="button" class="btn sm" id="btnPrint">🖨 印刷</button>
+        </div>
+      </header>
+
+      <section class="view" id="view-judge">
+        <div class="judge-layout">
+          <div class="work" id="stepContent"></div>
+          <aside class="summary" id="summaryPanel" aria-label="サマリー"></aside>
+        </div>
+        <div class="view-footer" id="footerText"></div>
+      </section>
+
+      <section class="view hidden" id="view-settings"></section>
+      <section class="view hidden" id="view-help"></section>
+    </main>
+  </div>
+
+  <input type="file" id="fileInput" accept=".html,.htm,.json" hidden>
+  <input type="file" id="profileFileInput" accept=".json" hidden>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+/* ---- util.js ---- */
+/* 共通ユーティリティ（DOM非依存） */
+;(function (global) {
+  'use strict';
+
+  function deepClone(o) {
+    return JSON.parse(JSON.stringify(o));
+  }
+
+  function isObj(v) {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+  }
+
+  // base をベースに inc を再帰マージ。配列は inc 側で丸ごと置き換える。
+  function deepMerge(base, inc) {
+    if (!isObj(base) || !isObj(inc)) return inc === undefined ? base : inc;
+    const out = Object.assign({}, base);
+    Object.keys(inc).forEach(function (k) {
+      out[k] = isObj(base[k]) && isObj(inc[k]) ? deepMerge(base[k], inc[k]) : inc[k];
+    });
+    return out;
+  }
+
+  function tokens(path) {
+    return String(path).match(/[^.\[\]]+/g) || [];
+  }
+
+  function getPath(obj, path) {
+    return tokens(path).reduce(function (o, k) {
+      return o == null ? undefined : o[k];
+    }, obj);
+  }
+
+  function setPath(obj, path, val) {
+    const t = tokens(path);
+    let o = obj;
+    for (let i = 0; i < t.length - 1; i++) {
+      const k = t[i];
+      if (o[k] == null || typeof o[k] !== 'object') {
+        o[k] = /^\d+$/.test(t[i + 1]) ? [] : {};
+      }
+      o = o[k];
+    }
+    o[t[t.length - 1]] = val;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  // "{name}" 形式のプレースホルダーを置換。未定義は「未入力」にする。
+  function fill(text, vars) {
+    return String(text || '').replace(/\{(\w+)\}/g, function (m, k) {
+      const v = vars ? vars[k] : undefined;
+      return v === undefined || v === null || v === '' ? '未入力' : String(v);
+    });
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  function fmtDate(d) {
+    const x = d instanceof Date ? d : new Date(d);
+    return x.getFullYear() + '-' + pad2(x.getMonth() + 1) + '-' + pad2(x.getDate());
+  }
+
+  function fmtDateTime(d) {
+    const x = d instanceof Date ? d : new Date(d);
+    if (isNaN(x.getTime())) return '';
+    return x.getFullYear() + '/' + pad2(x.getMonth() + 1) + '/' + pad2(x.getDate()) +
+      ' ' + pad2(x.getHours()) + ':' + pad2(x.getMinutes());
+  }
+
+  function uid(prefix) {
+    return (prefix || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  global.RecruitUtil = {
+    deepClone: deepClone,
+    deepMerge: deepMerge,
+    isObj: isObj,
+    getPath: getPath,
+    setPath: setPath,
+    esc: esc,
+    fill: fill,
+    fmtDate: fmtDate,
+    fmtDateTime: fmtDateTime,
+    uid: uid
+  };
+})(window);
+
+</script>
+  <script>
+/* ---- config.default.js ---- */
+/*
+ * 劇場プロファイル既定値（TOHOシネマズ新宿）
+ * ----------------------------------------------------------------------
+ * 判定ロジック本体（rules.js）は劇場に依存しない。
+ * 劇場ごとに変わるもの（名称・選択肢・閾値・留意点の文言・評価項目）は
+ * すべてこのプロファイルに集約し、アプリ内の設定画面から編集／JSON書き出し／読み込みできる。
+ *
+ * handoffRules[].id は rules.js 側の条件関数（CONDITIONS）のキーと対応する。
+ * 条件そのものを追加する場合は rules.js の CONDITIONS に関数を追加し、ここに既定の行を追加する。
+ */
+;(function (global) {
+  'use strict';
+
+  const DEFAULT_PROFILE = {
+    schemaVersion: 1,
+
+    meta: {
+      theaterName: 'TOHOシネマズ新宿',
+      appTitle: 'リクルート判定システム',
+      version: '5.0.0-alpha',
+      footer: '© 2025 Haruhisa Sasagawa｜このツールの著作権は制作者に帰属します。無断転用・改変を禁じます。'
+    },
+
+    // 入力項目のON/OFF（劇場ごとに不要な項目を隠せる）
+    features: {
+      graduationDate: true,     // 学生の卒業予定年月
+      vacation: true,           // 長期休暇の対応可否
+      lateNight: true,          // 深夜帯（22時以降）勤務可否・帰宅手段
+      taxi: true,               // タクシー帰宅時の規定金額チェック（lateNight が前提）
+      foreignNational: true,    // 外国籍・在留資格・日本語レベル
+      department: false,        // 希望部署
+      applicationRoute: false   // 応募経路
+    },
+
+    options: {
+      genders: ['男性', '女性', '回答しない'],
+      // group: highschool / university / vocational / freeter / homemaker / doubleworker / other
+      categories: [
+        { value: '高校1年生', group: 'highschool' },
+        { value: '高校2年生', group: 'highschool' },
+        { value: '高校3年生', group: 'highschool' },
+        { value: '大学1年生', group: 'university' },
+        { value: '大学2年生', group: 'university' },
+        { value: '大学3年生', group: 'university' },
+        { value: '大学4年生', group: 'university' },
+        { value: '大学院生', group: 'university' },
+        { value: '専門学校生1年生', group: 'vocational' },
+        { value: '専門学校生2年生', group: 'vocational' },
+        { value: '専門学校生3年生', group: 'vocational' },
+        { value: 'フリーター', group: 'freeter' },
+        { value: '主婦・主夫', group: 'homemaker' },
+        { value: 'ダブルワーカー', group: 'doubleworker' },
+        { value: 'その他', group: 'other' }
+      ],
+      commuteMethods: ['徒歩', '自転車', '公共交通機関', 'バイク（原付）', 'マイカー'],
+      stationHints: ['新宿', '新宿三丁目', '西武新宿', '新宿西口', '東新宿', '新宿御苑前', '代々木'],
+      workPeriods: [
+        { value: 'long', label: '長期（1年以上）' },
+        { value: 'mid', label: '中期（半年以上〜1年未満）' },
+        { value: 'short', label: '短期（半年以下）' }
+      ],
+      vacationItems: [
+        { id: 'summer', label: '夏休み' },
+        { id: 'obon', label: 'お盆' },
+        { id: 'yearend', label: '年末年始' },
+        { id: 'gw', label: 'GW' }
+      ],
+      returnMethods: [
+        { value: 'train', label: '終電で帰宅' },
+        { value: 'taxi', label: 'タクシーで帰宅' },
+        { value: 'walk_bike', label: '徒歩・自転車' },
+        { value: 'other', label: 'その他' }
+      ],
+      residenceStatuses: ['留学', '家族滞在', '永住者', '定住者', '日本人の配偶者等', '特定活動', '技術・人文知識・国際業務', 'その他'],
+      workPermitStates: [
+        { value: 'yes', label: 'あり（資格外活動許可済）' },
+        { value: 'no', label: 'なし' },
+        { value: 'unknown', label: '未確認' },
+        { value: 'na', label: '不要（就労制限なし）' }
+      ],
+      japaneseLevels: ['ネイティブ', 'ビジネス（N1相当）', '日常会話（N2相当）', '基礎（N3相当以下）'],
+      departments: ['コンセッション', 'フロア', 'ボックス（チケット）', '特に希望なし'],
+      applicationRoutes: ['求人サイト', '店頭ポスター', '紹介', '公式サイト', 'その他']
+    },
+
+    // 判定パラメータ（数値のしきい値）
+    params: {
+      maxAge: 60,                       // この年齢以上は「要判断」
+      minShiftMinutes: 180,             // 1日の最低勤務時間（分）
+      lowMaxDays: 2,                    // 週最大勤務日数がこの値以下なら「要確認」
+      commuteWarnMinutes: 60,           // 通勤時間がこれを超えると「要確認」
+      commuteBlockMinutes: 90,          // 通勤時間がこれ以上で「要判断」
+      openStartFrom: 7,                 // オープン要員とみなす開始時刻（時）下限
+      openStartTo: 8,                   // 同 上限
+      closeEndHour: 22,                 // この時刻以降まで働けるならクローズ要員
+      daytimeStartBefore: 15,           // 平日この時刻より前の開始は「日中帯」
+      lateNightStartHour: 22,           // 深夜帯の開始時刻（時）
+      taxiLimitYen: 3000,               // タクシー帰宅の規定金額（円）
+      highschoolLatestEnd: '22:00',     // 高校生の勤務終了上限（当劇場運用）
+      foreignWeeklyHourCap: 28,         // 資格外活動の週上限（時間）
+      foreignVacationWeeklyHourCap: 40, // 長期休暇中の週上限（時間）
+      residenceExpiryWarnMonths: 6      // 在留期限が何か月以内なら「要確認」
+    },
+
+    // 面接者への申し送り（留意点）ルール
+    // severity: block=要判断（採用担当が面接実施可否を判断） / warn=要確認（面接時に確認） / info=共有
+    handoffRules: [
+      // --- 全般 ---
+      { id: 'age_limit', enabled: true, severity: 'block', category: 'general',
+        text: '{age}歳のため年齢基準（{maxAge}歳以上）に該当します。面接実施の可否を採用担当で判断してください。' },
+      { id: 'short_period', enabled: true, severity: 'block', category: 'general',
+        text: '短期（半年以下）の勤務希望です。研修期間・シフト貢献度を踏まえ、面接実施の可否を採用担当で判断してください。' },
+      { id: 'weekly_days_one', enabled: true, severity: 'block', category: 'general',
+        text: '週最大勤務日数が1日のため、シフト貢献度の観点で条件を満たしません。' },
+      { id: 'commute_block', enabled: true, severity: 'block', category: 'general',
+        text: '通勤時間{commuteTime}分は長すぎるため、継続勤務が難しい可能性があります。面接実施の可否を判断してください。' },
+      { id: 'vacation_ng', enabled: true, severity: 'block', category: 'general',
+        text: '長期休暇期間（{vacationLabels}）の勤務ができません。繁忙期対応の観点から面接実施の可否を判断してください。' },
+      { id: 'graduation_midterm', enabled: true, severity: 'warn', category: 'general',
+        text: '来年3月卒業予定で勤務期間が「中期」です。実際に中期で勤務できるか面接時に確認してください。' },
+      { id: 'weekly_days_low', enabled: true, severity: 'warn', category: 'general',
+        text: '週最大勤務日数が{maxDays}日のためシフト貢献度が低めです。増やせる見込みがあるか確認してください。' },
+      { id: 'weekly_days_unknown', enabled: true, severity: 'info', category: 'general',
+        text: '週の勤務日数が未入力です。希望日数を面接時に確認してください。' },
+      { id: 'shift_times_missing', enabled: true, severity: 'info', category: 'general',
+        text: '勤務希望時間が未入力の曜日があります。面接時に具体的な時間帯を確認してください。' },
+      { id: 'short_shift', enabled: true, severity: 'warn', category: 'general',
+        text: '1日{minShiftHours}時間に満たない勤務希望日があります。シフト組みの観点で確認してください。' },
+      { id: 'weekday_daytime', enabled: true, severity: 'warn', category: 'general',
+        text: '平日の朝〜夕方は既存スタッフでシフトが埋まりやすい時間帯です。希望通りに入れない可能性を事前に説明してください。' },
+      { id: 'weekend_missing', enabled: true, severity: 'warn', category: 'general',
+        text: '土日両日にチェックが入っていません。土日勤務の可否と頻度を確認してください。' },
+      { id: 'commute_warn', enabled: true, severity: 'warn', category: 'general',
+        text: '通勤時間{commuteTime}分は長めです。通勤負担と継続性について確認してください。' },
+      { id: 'commute_car', enabled: true, severity: 'info', category: 'general',
+        text: 'マイカー通勤希望です。当劇場の駐車場事情（スタッフ用駐車場なし）を説明してください。' },
+      { id: 'side_job_student', enabled: true, severity: 'info', category: 'general',
+        text: 'かけもちあり（学生）。扶養控除内であれば当劇場でどの程度の収入を希望しているか確認してください。' },
+      { id: 'side_job_nonstudent', enabled: true, severity: 'info', category: 'general',
+        text: 'かけもちあり。扶養控除内の希望収入、および週40時間超の時間外手当を当劇場では支払えない旨を説明してください。' },
+      { id: 'freeter_insurance', enabled: true, severity: 'info', category: 'general',
+        text: 'フリーターの方は社会保険の加入希望について確認してください。' },
+      { id: 'vacation_consult', enabled: true, severity: 'warn', category: 'general',
+        text: '長期休暇期間（{vacationLabels}）が要相談です。具体的にどの程度入れるか確認してください。' },
+
+      // --- 高校生 ---
+      { id: 'highschool_permission', enabled: true, severity: 'warn', category: 'highschool',
+        text: '所属高校のアルバイト許可を得ているか確認してください。' },
+      { id: 'highschool_hours', enabled: true, severity: 'warn', category: 'highschool',
+        text: '高校生は法令上22:00まで。当劇場では{highschoolLatestEnd}までの勤務としている旨を伝えてください。' },
+      { id: 'highschool_time_violation', enabled: true, severity: 'block', category: 'highschool',
+        text: '{highschoolLatestEnd}を超える勤務希望時間が入力されています。高校生は深夜帯勤務不可のため入力内容を確認してください。' },
+
+      // --- 専門学校生 ---
+      { id: 'vocational_permission', enabled: true, severity: 'warn', category: 'vocational',
+        text: '所属専門学校のアルバイト許可を得ているか確認してください。' },
+
+      // --- 外国籍 ---
+      { id: 'foreign_permit_missing', enabled: true, severity: 'block', category: 'foreign',
+        text: '資格外活動許可が確認できていません。在留カード裏面の許可印を必ず確認してください（許可なしでは就労不可）。' },
+      { id: 'foreign_hour_cap', enabled: true, severity: 'warn', category: 'foreign',
+        text: '資格外活動は週{foreignWeeklyHourCap}時間（長期休暇中は{foreignVacationWeeklyHourCap}時間）が上限です。かけもち分も含めて超えないか確認してください。' },
+      { id: 'foreign_hour_cap_exceeded', enabled: true, severity: 'block', category: 'foreign',
+        text: '希望シフトの合計（週{weeklyHours}時間目安）が週{foreignWeeklyHourCap}時間の上限を超えています。シフト調整の可否を判断してください。' },
+      { id: 'foreign_expiry', enabled: true, severity: 'warn', category: 'foreign',
+        text: '在留期限（{residenceExpiry}）が近い、または未入力です。更新予定を確認してください。' },
+      { id: 'foreign_japanese', enabled: true, severity: 'warn', category: 'foreign',
+        text: '日本語レベルが「{japaneseLevel}」です。接客・案内業務が可能か面接での会話を通じて確認してください。' },
+
+      // --- 深夜帯 ---
+      { id: 'late_night_ng', enabled: true, severity: 'info', category: 'lateNight',
+        text: '{lateNightStartHour}時以降の勤務が不可です。クローズ要員としては見込めないため、日中〜夕方帯での配置を前提に検討してください。' },
+      { id: 'late_night_consult', enabled: true, severity: 'warn', category: 'lateNight',
+        text: '{lateNightStartHour}時以降の勤務が要相談です。可能な曜日・頻度を確認してください。' },
+      { id: 'late_night_shift_conflict', enabled: true, severity: 'warn', category: 'lateNight',
+        text: '{lateNightStartHour}時以降の勤務時間が入力されていますが、深夜帯は「不可」となっています。入力内容を確認してください。' },
+      { id: 'late_night_last_train', enabled: true, severity: 'warn', category: 'lateNight',
+        text: '深夜帯勤務の希望がありますが終電時刻が未入力です。クローズ（{closeEndHour}時以降）後に帰宅手段があるか確認してください。' },
+      { id: 'late_night_taxi_over', enabled: true, severity: 'block', category: 'lateNight',
+        text: 'タクシー帰宅の料金目安{taxiFare}円が規定（{taxiLimitYen}円）を超えています。深夜帯の採用可否を採用担当で判断してください。' },
+      { id: 'late_night_taxi_unknown', enabled: true, severity: 'warn', category: 'lateNight',
+        text: 'タクシー帰宅希望ですが料金目安が未入力です。自宅までの料金が規定（{taxiLimitYen}円）内か確認してください。' },
+      { id: 'late_night_taxi_ok', enabled: true, severity: 'info', category: 'lateNight',
+        text: 'タクシー帰宅（料金目安{taxiFare}円）は規定（{taxiLimitYen}円）内です。利用ルールを説明してください。' }
+    ],
+
+    // 面接評価（面接後の採用可否判定の中核）
+    evaluation: {
+      scaleMax: 5,
+      items: [
+        { id: 'greeting', label: '挨拶はできていたか' },
+        { id: 'first_impression', label: '第一印象は良かったか' },
+        { id: 'communication', label: '明るくハキハキとしていたか' },
+        { id: 'eye_contact', label: '話をするときに目を見て話していたか' },
+        { id: 'appearance', label: '服装、身だしなみはきちんとしていたか' },
+        { id: 'explanation', label: '意見を判りやすく説明できていたか' },
+        { id: 'motivation', label: '志望動機に好感が持てたか' },
+        { id: 'self_analysis', label: '長所や短所などの自己分析ができていたか' },
+        { id: 'service_mindset', label: '接客する上で大切にしたいことを答えられたか' },
+        { id: 'overall_judgment', label: '面接者から見ての総合判断' }
+      ],
+      overallItemId: 'overall_judgment',
+      overallWarnBelow: 3,
+      // 満点に対する割合（%）で判定。項目数を変えても閾値を調整不要にするため。
+      thresholds: { recommendPct: 70, reviewPct: 40 },
+      // 「要判断」の留意点が未確認のまま採用推奨になった場合、上長最終判断要に留める
+      holdOnUnresolvedBlock: true
+    },
+
+    texts: {
+      recommend: { title: '採用推奨', body: '{name}は面接評価が優秀（{total}/{max}点）で、採用を強く推奨します。' },
+      review: { title: '上長最終判断要', body: '{name}は面接評価が標準的（{total}/{max}点）です。面接評価を踏まえた上長の最終判断が必要です。' },
+      reject: { title: '不採用推奨', body: '{name}は面接評価が低く（{total}/{max}点）、不採用を推奨します。' },
+      disclaimer: '※本判定は基準統一のための参考値です。最終判断は上長が行います。',
+      handoffIntro: '応募情報から自動抽出した留意点です。面接者へ共有し、面接時に確認してください。「要判断」は採用担当が面接実施の可否を判断する項目です。',
+      strengths: {
+        open: 'オープン要員として期待できます',
+        close: 'クローズ要員として期待できます',
+        weekend: '土日両日の勤務が可能です',
+        longTerm: '長期勤務希望で安定が見込めます',
+        days3: '週{minDays}日以上の勤務が可能です',
+        vacationOk: '長期休暇期間すべてに対応可能です',
+        commuteNear: '通勤{commuteTime}分で通勤負担が小さいです',
+        longShift: '1日{minShiftHours}時間以上の勤務が可能です',
+        lateNightOk: '深夜帯（{lateNightStartHour}時以降）の勤務が可能です'
+      }
+    }
+  };
+
+  global.RECRUIT_DEFAULT_PROFILE = DEFAULT_PROFILE;
+})(window);
+
+</script>
+  <script>
+/* ---- rules.js ---- */
+/*
+ * 判定エンジン（DOM非依存・純関数）
+ * ----------------------------------------------------------------------
+ * - analyzeShifts    : 希望シフトの解析（オープン/クローズ/深夜/週時間など）
+ * - buildHandoff     : 面接者への申し送り（留意点）と強みを生成
+ * - evaluateHiring   : 面接評価スコアから採用可否を判定
+ * - describeApplicant: 応募情報を表示用のラベル／値ペアに整形
+ *
+ * 劇場固有の数値・文言はすべて profile（config.default.js）から受け取る。
+ */
+;(function (global) {
+  'use strict';
+
+  const U = global.RecruitUtil;
+
+  const DAYS = [
+    { key: 'mon', label: '月', weekday: true },
+    { key: 'tue', label: '火', weekday: true },
+    { key: 'wed', label: '水', weekday: true },
+    { key: 'thu', label: '木', weekday: true },
+    { key: 'fri', label: '金', weekday: true },
+    { key: 'sat', label: '土', weekday: false },
+    { key: 'sun', label: '日', weekday: false }
+  ];
+
+  const SEVERITY = {
+    block: { key: 'block', label: '要判断', order: 0, desc: '採用担当が面接実施の可否を判断する項目' },
+    warn:  { key: 'warn',  label: '要確認', order: 1, desc: '面接時に応募者へ確認する項目' },
+    info:  { key: 'info',  label: '共有',   order: 2, desc: '面接者へ共有しておく事項' }
+  };
+
+  const CATEGORY_LABELS = {
+    general: '全般',
+    highschool: '高校生',
+    vocational: '専門学校生',
+    foreign: '外国籍',
+    lateNight: '深夜帯'
+  };
+
+  const TRI_LABELS = { ok: '○ 可能', consult: '△ 要相談', ng: '× 不可' };
+
+  // ---------- 時刻ユーティリティ ----------
+  function toMinutes(hhmm) {
+    if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return null;
+    const p = hhmm.split(':').map(Number);
+    return p[0] * 60 + p[1];
+  }
+
+  // 終了が開始より早い、または翌日フラグがある場合は翌日扱い
+  function duration(start, end, nextDay) {
+    const s = toMinutes(start);
+    const e0 = toMinutes(end);
+    if (s == null || e0 == null) return null;
+    let e = e0;
+    if (nextDay || e < s) e += 1440;
+    return e - s;
+  }
+
+  function fmtDuration(min) {
+    if (min == null) return '';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? h + '時間' + m + '分' : h + '時間';
+  }
+
+  function fmtEnd(end, nextDay) {
+    return nextDay ? '翌' + end : end;
+  }
+
+  function categoryGroup(profile, value) {
+    const c = (profile.options.categories || []).find(function (x) { return x.value === value; });
+    return c ? c.group : '';
+  }
+
+  function isStudentGroup(g) {
+    return g === 'highschool' || g === 'university' || g === 'vocational';
+  }
+
+  function labelOf(list, value) {
+    const hit = (list || []).find(function (o) { return (typeof o === 'string' ? o : o.value) === value; });
+    if (!hit) return value || '';
+    return typeof hit === 'string' ? hit : hit.label;
+  }
+
+  // ---------- シフト解析 ----------
+  function analyzeShifts(applicant, profile) {
+    const p = profile.params || {};
+    const shifts = applicant.shifts || {};
+    const days = applicant.workDays || [];
+    const useAny = !!applicant.anyDay;
+    const entries = [];
+
+    function push(key, label, weekday, s) {
+      if (!s || !s.start || !s.end) return;
+      const min = duration(s.start, s.end, s.nextDay);
+      if (min == null) return;
+      const startMin = toMinutes(s.start);
+      entries.push({
+        key: key, label: label, weekday: weekday,
+        start: s.start, end: s.end, nextDay: !!s.nextDay || (toMinutes(s.end) < startMin),
+        minutes: min, startAbs: startMin, endAbs: startMin + min
+      });
+    }
+
+    if (useAny) {
+      push('any', '曜日問わず', null, shifts.any);
+    } else {
+      DAYS.forEach(function (d) {
+        if (days.indexOf(d.key) >= 0) push(d.key, d.label + '曜', d.weekday, shifts[d.key]);
+      });
+    }
+
+    const res = {
+      entries: entries,
+      hasAnyEntry: entries.length > 0,
+      hasShort: false, hasLong: false,
+      isOpen: false, isClose: false, isLateNight: false,
+      weekdayDaytime: false, weekdayMorningToAfternoon: false,
+      weekendBoth: false,
+      latestEndAbs: null,
+      weeklyMinutes: 0,
+      missingTimes: false
+    };
+
+    const minShift = Number(p.minShiftMinutes) || 180;
+    const openFrom = Number(p.openStartFrom), openTo = Number(p.openStartTo);
+    const closeEnd = (Number(p.closeEndHour) || 22) * 60;
+    const lateStart = (Number(p.lateNightStartHour) || 22) * 60;
+    const daytimeBefore = (Number(p.daytimeStartBefore) || 15) * 60;
+
+    entries.forEach(function (e) {
+      if (e.minutes < minShift) res.hasShort = true; else res.hasLong = true;
+      const sh = Math.floor(e.startAbs / 60);
+      if (!isNaN(openFrom) && !isNaN(openTo) && sh >= openFrom && sh <= openTo) res.isOpen = true;
+      if (e.endAbs >= closeEnd) res.isClose = true;
+      if (e.endAbs > lateStart) res.isLateNight = true;
+      const weekday = useAny ? true : e.weekday;
+      if (weekday && e.startAbs >= 7 * 60 && e.startAbs < daytimeBefore) {
+        res.weekdayDaytime = true;
+        if (e.endAbs >= daytimeBefore) res.weekdayMorningToAfternoon = true;
+      }
+      if (res.latestEndAbs == null || e.endAbs > res.latestEndAbs) res.latestEndAbs = e.endAbs;
+    });
+
+    res.weekendBoth = useAny || (days.indexOf('sat') >= 0 && days.indexOf('sun') >= 0);
+
+    // 週あたりの勤務時間（目安）
+    const daysMax = Number(applicant.daysMax) || 0;
+    const daysMin = Number(applicant.daysMin) || 0;
+    if (useAny) {
+      const e = entries[0];
+      const n = daysMax || daysMin || 0;
+      res.weeklyMinutes = e ? e.minutes * n : 0;
+    } else {
+      let list = entries.slice().sort(function (a, b) { return b.minutes - a.minutes; });
+      if (daysMax && list.length > daysMax) list = list.slice(0, daysMax);
+      res.weeklyMinutes = list.reduce(function (a, e) { return a + e.minutes; }, 0);
+    }
+
+    const selectedCount = useAny ? 1 : days.length;
+    res.missingTimes = selectedCount > 0 && entries.length < selectedCount;
+    return res;
+  }
+
+  // ---------- 留意点ルールの条件 ----------
+  // 各関数は false（該当なし）/ true / 追加変数オブジェクト を返す
+  const CONDITIONS = {
+    age_limit: function (c) { return !!c.p.maxAge && c.age > 0 && c.age >= Number(c.p.maxAge); },
+    short_period: function (c) { return c.a.workPeriod === 'short'; },
+    graduation_midterm: function (c) {
+      if (!c.a.graduationDate || c.a.workPeriod !== 'mid') return false;
+      const ny = new Date().getFullYear() + 1;
+      return c.a.graduationDate === ny + '-03';
+    },
+    weekly_days_one: function (c) { return c.daysMax === 1; },
+    weekly_days_low: function (c) { return c.daysMax >= 2 && c.daysMax <= (Number(c.p.lowMaxDays) || 2); },
+    weekly_days_unknown: function (c) { return !c.daysMax && !c.daysMin; },
+    shift_times_missing: function (c) { return c.shift.missingTimes || (!c.shift.hasAnyEntry && (c.a.workDays || []).length === 0 && !c.a.anyDay); },
+    short_shift: function (c) { return c.shift.hasShort; },
+    weekday_daytime: function (c) { return c.shift.weekdayMorningToAfternoon; },
+    weekend_missing: function (c) { return ((c.a.workDays || []).length > 0 || c.a.anyDay) && !c.shift.weekendBoth; },
+    commute_block: function (c) { return c.commute > 0 && c.commute >= (Number(c.p.commuteBlockMinutes) || 90); },
+    commute_warn: function (c) {
+      return c.commute > (Number(c.p.commuteWarnMinutes) || 60) && c.commute < (Number(c.p.commuteBlockMinutes) || 90);
+    },
+    commute_car: function (c) { return c.a.commuteMethod === 'マイカー'; },
+    side_job_student: function (c) { return c.a.sideJob === 'yes' && c.isStudent; },
+    side_job_nonstudent: function (c) { return c.a.sideJob === 'yes' && !c.isStudent; },
+    freeter_insurance: function (c) { return c.group === 'freeter'; },
+    vacation_ng: function (c) {
+      if (!c.features.vacation) return false;
+      const ng = c.vacationItems.filter(function (v) { return (c.a.vacation || {})[v.id] === 'ng'; });
+      return ng.length ? { vacationLabels: ng.map(function (v) { return v.label; }).join('・') } : false;
+    },
+    vacation_consult: function (c) {
+      if (!c.features.vacation) return false;
+      const cs = c.vacationItems.filter(function (v) { return (c.a.vacation || {})[v.id] === 'consult'; });
+      return cs.length ? { vacationLabels: cs.map(function (v) { return v.label; }).join('・') } : false;
+    },
+
+    highschool_permission: function (c) { return c.isHighschool; },
+    highschool_hours: function (c) { return c.isHighschool; },
+    highschool_time_violation: function (c) {
+      if (!c.isHighschool || c.shift.latestEndAbs == null) return false;
+      const limit = toMinutes(c.p.highschoolLatestEnd || '22:00');
+      return limit != null && c.shift.latestEndAbs > limit;
+    },
+    vocational_permission: function (c) { return c.group === 'vocational'; },
+
+    foreign_permit_missing: function (c) {
+      return c.isForeign && ['no', 'unknown', ''].indexOf(c.a.foreign.workPermit || '') >= 0;
+    },
+    foreign_hour_cap: function (c) { return c.isForeign && c.a.foreign.workPermit !== 'na'; },
+    foreign_hour_cap_exceeded: function (c) {
+      if (!c.isForeign || c.a.foreign.workPermit === 'na') return false;
+      const cap = (Number(c.p.foreignWeeklyHourCap) || 28) * 60;
+      return c.shift.weeklyMinutes > cap ? { weeklyHours: Math.round(c.shift.weeklyMinutes / 6) / 10 } : false;
+    },
+    foreign_expiry: function (c) {
+      if (!c.isForeign || c.a.foreign.workPermit === 'na') return false;
+      const exp = c.a.foreign.residenceExpiry;
+      if (!exp) return { residenceExpiry: '未入力' };
+      const m = /^(\d{4})-(\d{2})/.exec(exp);
+      if (!m) return { residenceExpiry: exp };
+      const months = Number(c.p.residenceExpiryWarnMonths) || 6;
+      const limit = new Date();
+      limit.setMonth(limit.getMonth() + months);
+      const expDate = new Date(Number(m[1]), Number(m[2]), 0); // 月末
+      return expDate <= limit ? { residenceExpiry: exp } : false;
+    },
+    foreign_japanese: function (c) {
+      if (!c.isForeign) return false;
+      const levels = c.profile.options.japaneseLevels || [];
+      const lv = c.a.foreign.japaneseLevel;
+      return lv && levels.length && lv === levels[levels.length - 1] ? { japaneseLevel: lv } : false;
+    },
+
+    late_night_ng: function (c) { return c.features.lateNight && c.a.lateNight.availability === 'ng'; },
+    late_night_consult: function (c) { return c.features.lateNight && c.a.lateNight.availability === 'consult'; },
+    late_night_shift_conflict: function (c) {
+      return c.features.lateNight && c.a.lateNight.availability === 'ng' && c.shift.isLateNight;
+    },
+    late_night_last_train: function (c) {
+      if (!c.features.lateNight) return false;
+      const ln = c.a.lateNight;
+      const wants = ln.availability === 'ok' || ln.availability === 'consult' || c.shift.isLateNight;
+      return wants && ln.returnMethod === 'train' && !ln.lastTrain;
+    },
+    late_night_taxi_over: function (c) {
+      if (!c.features.lateNight || !c.features.taxi) return false;
+      return c.a.lateNight.returnMethod === 'taxi' && c.taxiFare > 0 && c.taxiFare > (Number(c.p.taxiLimitYen) || 0);
+    },
+    late_night_taxi_unknown: function (c) {
+      if (!c.features.lateNight || !c.features.taxi) return false;
+      return c.a.lateNight.returnMethod === 'taxi' && !(c.taxiFare > 0);
+    },
+    late_night_taxi_ok: function (c) {
+      if (!c.features.lateNight || !c.features.taxi) return false;
+      return c.a.lateNight.returnMethod === 'taxi' && c.taxiFare > 0 && c.taxiFare <= (Number(c.p.taxiLimitYen) || 0);
+    }
+  };
+
+  function buildContext(applicant, profile) {
+    const a = applicant;
+    const p = profile.params || {};
+    const group = categoryGroup(profile, a.category);
+    const shift = analyzeShifts(a, profile);
+    const features = profile.features || {};
+    return {
+      a: a, p: p, profile: profile, features: features, shift: shift,
+      group: group,
+      isStudent: isStudentGroup(group),
+      isHighschool: group === 'highschool',
+      isForeign: !!features.foreignNational && (a.foreign || {}).isForeign === 'yes',
+      age: Number(a.age) || 0,
+      commute: Number(a.commuteMinutes) || 0,
+      daysMin: Number(a.daysMin) || 0,
+      daysMax: Number(a.daysMax) || 0,
+      taxiFare: Number((a.lateNight || {}).taxiFare) || 0,
+      vacationItems: profile.options.vacationItems || []
+    };
+  }
+
+  function templateVars(c, extra) {
+    const p = c.p;
+    const base = {
+      name: c.a.name ? c.a.name + 'さん' : '応募者',
+      age: c.a.age,
+      maxAge: p.maxAge,
+      commuteTime: c.a.commuteMinutes,
+      nearestStation: c.a.nearestStation,
+      minDays: c.a.daysMin,
+      maxDays: c.a.daysMax,
+      minShiftHours: Math.round(((Number(p.minShiftMinutes) || 180) / 60) * 10) / 10,
+      highschoolLatestEnd: p.highschoolLatestEnd,
+      foreignWeeklyHourCap: p.foreignWeeklyHourCap,
+      foreignVacationWeeklyHourCap: p.foreignVacationWeeklyHourCap,
+      weeklyHours: Math.round(c.shift.weeklyMinutes / 6) / 10,
+      taxiFare: c.taxiFare ? c.taxiFare.toLocaleString('ja-JP') : '',
+      taxiLimitYen: p.taxiLimitYen != null ? Number(p.taxiLimitYen).toLocaleString('ja-JP') : '',
+      closeEndHour: p.closeEndHour,
+      lateNightStartHour: p.lateNightStartHour,
+      residenceExpiry: (c.a.foreign || {}).residenceExpiry,
+      japaneseLevel: (c.a.foreign || {}).japaneseLevel
+    };
+    return Object.assign(base, extra || {});
+  }
+
+  // ---------- 申し送り（留意点）生成 ----------
+  function buildHandoff(applicant, profile) {
+    const c = buildContext(applicant, profile);
+    const items = [];
+
+    (profile.handoffRules || []).forEach(function (rule) {
+      if (!rule || rule.enabled === false) return;
+      const fn = CONDITIONS[rule.id];
+      if (!fn) return; // 条件未実装のルールはスキップ（HANDOFF.md 参照）
+      let hit;
+      try { hit = fn(c); } catch (e) { hit = false; }
+      if (!hit) return;
+      const extra = typeof hit === 'object' ? hit : {};
+      const sev = SEVERITY[rule.severity] ? rule.severity : 'info';
+      items.push({
+        id: rule.id,
+        severity: sev,
+        category: rule.category || 'general',
+        categoryLabel: CATEGORY_LABELS[rule.category] || rule.category || '全般',
+        text: U.fill(rule.text, templateVars(c, extra))
+      });
+    });
+
+    items.sort(function (x, y) { return SEVERITY[x.severity].order - SEVERITY[y.severity].order; });
+
+    // 強み（面接者への共有用）
+    const st = (profile.texts && profile.texts.strengths) || {};
+    const strengths = [];
+    const v = templateVars(c);
+    const sh = c.shift;
+    if (sh.isOpen && st.open) strengths.push({ key: 'open', text: U.fill(st.open, v) });
+    if (sh.isClose && st.close) strengths.push({ key: 'close', text: U.fill(st.close, v) });
+    if (sh.weekendBoth && st.weekend) strengths.push({ key: 'weekend', text: U.fill(st.weekend, v) });
+    if (c.a.workPeriod === 'long' && st.longTerm) strengths.push({ key: 'longTerm', text: U.fill(st.longTerm, v) });
+    if (c.daysMin >= 3 && st.days3) strengths.push({ key: 'days3', text: U.fill(st.days3, v) });
+    if (sh.hasLong && !sh.hasShort && st.longShift) strengths.push({ key: 'longShift', text: U.fill(st.longShift, v) });
+    if (c.commute > 0 && c.commute <= 30 && st.commuteNear) strengths.push({ key: 'commuteNear', text: U.fill(st.commuteNear, v) });
+    if (c.features.vacation && c.vacationItems.length &&
+        c.vacationItems.every(function (it) { return (c.a.vacation || {})[it.id] === 'ok'; }) && st.vacationOk) {
+      strengths.push({ key: 'vacationOk', text: U.fill(st.vacationOk, v) });
+    }
+    if (c.features.lateNight && c.a.lateNight.availability === 'ok' && st.lateNightOk) {
+      strengths.push({ key: 'lateNightOk', text: U.fill(st.lateNightOk, v) });
+    }
+
+    const counts = { block: 0, warn: 0, info: 0 };
+    items.forEach(function (i) { counts[i.severity]++; });
+
+    return {
+      items: items,
+      strengths: strengths,
+      counts: counts,
+      shift: sh,
+      badges: shiftBadges(c),
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  // 右パネル等で使う短いバッジ
+  function shiftBadges(c) {
+    const b = [];
+    const sh = c.shift;
+    if (sh.isOpen) b.push({ key: 'open', label: 'オープン', tone: 'ok' });
+    if (sh.isClose) b.push({ key: 'close', label: 'クローズ', tone: 'ok' });
+    if (sh.isLateNight) b.push({ key: 'late', label: '深夜帯', tone: 'info' });
+    if (sh.weekendBoth) b.push({ key: 'weekend', label: '土日可', tone: 'ok' });
+    else if ((c.a.workDays || []).length) b.push({ key: 'weekend-ng', label: '土日要確認', tone: 'warn' });
+    if (c.a.workPeriod === 'long') b.push({ key: 'long', label: '長期', tone: 'ok' });
+    if (c.a.workPeriod === 'short') b.push({ key: 'short', label: '短期', tone: 'danger' });
+    if (c.daysMin >= 3) b.push({ key: 'days', label: '週' + c.daysMin + '日〜', tone: 'ok' });
+    if (sh.hasShort) b.push({ key: 'shortshift', label: '短時間日あり', tone: 'warn' });
+    if (c.isForeign) b.push({ key: 'foreign', label: '外国籍', tone: 'info' });
+    if (c.isHighschool) b.push({ key: 'hs', label: '高校生', tone: 'info' });
+    return b;
+  }
+
+  // ---------- 採用可否判定 ----------
+  function evaluateHiring(applicant, scores, profile, handoff, checks) {
+    const ev = profile.evaluation || {};
+    const items = ev.items || [];
+    const scale = Number(ev.scaleMax) || 5;
+    scores = scores || {};
+    checks = checks || {};
+
+    const breakdown = items.map(function (it) {
+      const raw = scores[it.id];
+      const s = raw === undefined || raw === null || raw === '' ? null : Number(raw);
+      return { id: it.id, label: it.label, score: isNaN(s) ? null : s, isOverall: it.id === ev.overallItemId };
+    });
+
+    const unscored = breakdown.filter(function (b) { return b.score == null; });
+    const total = breakdown.reduce(function (a, b) { return a + (b.score || 0); }, 0);
+    const max = items.length * scale;
+    const pct = max ? Math.round((total / max) * 1000) / 10 : 0;
+
+    const th = ev.thresholds || {};
+    const recPct = Number(th.recommendPct) || 70;
+    const revPct = Number(th.reviewPct) || 40;
+
+    let result = pct >= recPct ? 'recommend' : pct >= revPct ? 'review' : 'reject';
+    const warnings = [];
+
+    const overall = breakdown.find(function (b) { return b.isOverall; });
+    const warnBelow = Number(ev.overallWarnBelow) || 3;
+    if (overall && overall.score != null && overall.score < warnBelow) {
+      warnings.push('面接者の総合判断が' + overall.score + '点と低評価です。採用可否は慎重に判断してください。');
+    }
+    if (unscored.length) {
+      warnings.push('未入力の評価項目が' + unscored.length + '件あります（0点として集計）。');
+    }
+
+    const unresolved = ((handoff && handoff.items) || []).filter(function (i) { return !checks[i.id]; });
+    const unresolvedBlock = unresolved.filter(function (i) { return i.severity === 'block'; });
+    if (unresolved.length) {
+      warnings.push('未確認の留意点が' + unresolved.length + '件あります（うち要判断 ' + unresolvedBlock.length + '件）。');
+    }
+
+    let adjusted = false;
+    if (ev.holdOnUnresolvedBlock && result === 'recommend' && unresolvedBlock.length) {
+      result = 'review';
+      adjusted = true;
+      warnings.push('「要判断」の留意点が未確認のため、採用推奨ではなく上長最終判断要として扱います。');
+    }
+
+    const strengths = breakdown.filter(function (b) { return b.score != null && b.score >= 4 && !b.isOverall; }).map(function (b) { return b.label; });
+    const concerns = breakdown.filter(function (b) { return b.score != null && b.score <= 2 && !b.isOverall; }).map(function (b) { return b.label; });
+
+    const t = (profile.texts || {})[result] || { title: result, body: '' };
+    const name = applicant.name ? applicant.name + 'さん' : '応募者';
+
+    return {
+      result: result,
+      title: t.title,
+      body: U.fill(t.body, { name: name, total: total, max: max, pct: pct }),
+      disclaimer: (profile.texts || {}).disclaimer || '',
+      total: total, max: max, pct: pct,
+      thresholds: {
+        recommendPct: recPct, reviewPct: revPct,
+        recommendPts: Math.ceil((max * recPct) / 100),
+        reviewPts: Math.ceil((max * revPct) / 100)
+      },
+      breakdown: breakdown,
+      strengths: strengths,
+      concerns: concerns,
+      warnings: warnings,
+      unresolved: unresolved.map(function (i) { return { id: i.id, severity: i.severity, text: i.text }; }),
+      adjusted: adjusted,
+      evaluatedAt: new Date().toISOString()
+    };
+  }
+
+  // ---------- 表示用整形 ----------
+  function describeShifts(applicant, profile) {
+    const sh = analyzeShifts(applicant, profile);
+    return sh.entries.map(function (e) {
+      return e.label + ' ' + e.start + '〜' + fmtEnd(e.end, e.nextDay) + '（' + fmtDuration(e.minutes) + '）';
+    });
+  }
+
+  function describeApplicant(a, profile) {
+    const o = profile.options || {};
+    const f = profile.features || {};
+    const rows = [];
+    const add = function (label, value) { if (value !== undefined && value !== null && value !== '') rows.push({ label: label, value: value }); };
+
+    add('氏名', a.name);
+    add('性別', a.gender);
+    add('年齢', a.age ? a.age + '歳' : '');
+    add('区分', a.category);
+    if (f.graduationDate) add('卒業予定', a.graduationDate);
+    add('通勤方法', a.commuteMethod);
+    add('通勤時間', a.commuteMinutes ? a.commuteMinutes + '分' : '');
+    add('最寄り駅', a.nearestStation);
+
+    const dayLabels = a.anyDay ? '曜日問わず' : DAYS.filter(function (d) { return (a.workDays || []).indexOf(d.key) >= 0; }).map(function (d) { return d.label; }).join('・');
+    add('勤務可能曜日', dayLabels);
+    const dmin = a.daysMin, dmax = a.daysMax;
+    add('週勤務日数', dmin || dmax ? (dmin || '?') + '〜' + (dmax || '?') + '日' : '');
+    add('希望シフト', describeShifts(a, profile).join(' / '));
+    add('勤務期間', labelOf(o.workPeriods, a.workPeriod));
+    add('かけもち', a.sideJob === 'yes' ? 'あり' + (a.sideJobDetail ? '（' + a.sideJobDetail + '）' : '') : a.sideJob === 'no' ? 'なし' : '');
+
+    if (f.vacation) {
+      const v = (o.vacationItems || []).map(function (it) {
+        const val = (a.vacation || {})[it.id];
+        return val ? it.label + ':' + (TRI_LABELS[val] || val).charAt(0) : null;
+      }).filter(Boolean).join('　');
+      add('長期休暇', v);
+    }
+    if (f.lateNight) {
+      const ln = a.lateNight || {};
+      const parts = [];
+      if (ln.availability) parts.push(TRI_LABELS[ln.availability] || ln.availability);
+      if (ln.returnMethod) parts.push(labelOf(o.returnMethods, ln.returnMethod));
+      if (ln.returnMethod === 'train' && ln.lastTrain) parts.push('終電 ' + ln.lastTrain);
+      if (f.taxi && ln.returnMethod === 'taxi' && ln.taxiFare) parts.push('料金目安 ' + Number(ln.taxiFare).toLocaleString('ja-JP') + '円');
+      add('深夜帯（' + (profile.params.lateNightStartHour || 22) + '時以降）', parts.join(' / '));
+    }
+    if (f.foreignNational) {
+      const fo = a.foreign || {};
+      if (fo.isForeign === 'yes') {
+        const parts = [];
+        if (fo.residenceStatus) parts.push('在留資格: ' + fo.residenceStatus);
+        if (fo.workPermit) parts.push('資格外活動許可: ' + labelOf(o.workPermitStates, fo.workPermit));
+        if (fo.residenceExpiry) parts.push('在留期限: ' + fo.residenceExpiry);
+        if (fo.japaneseLevel) parts.push('日本語: ' + fo.japaneseLevel);
+        add('外国籍', parts.join(' / ') || '該当');
+      } else if (fo.isForeign === 'no') {
+        add('外国籍', '該当なし');
+      }
+    }
+    if (f.department) add('希望部署', a.department);
+    if (f.applicationRoute) add('応募経路', a.applicationRoute);
+    add('担当者所見', a.reviewerNotes);
+    return rows;
+  }
+
+  global.RecruitRules = {
+    DAYS: DAYS,
+    SEVERITY: SEVERITY,
+    CATEGORY_LABELS: CATEGORY_LABELS,
+    TRI_LABELS: TRI_LABELS,
+    CONDITIONS: CONDITIONS,
+    toMinutes: toMinutes,
+    duration: duration,
+    fmtDuration: fmtDuration,
+    fmtEnd: fmtEnd,
+    categoryGroup: categoryGroup,
+    isStudentGroup: isStudentGroup,
+    labelOf: labelOf,
+    analyzeShifts: analyzeShifts,
+    buildHandoff: buildHandoff,
+    evaluateHiring: evaluateHiring,
+    describeApplicant: describeApplicant,
+    describeShifts: describeShifts
+  };
+})(window);
+
+</script>
+  <script>
+/* ---- storage.js ---- */
+/*
+ * 保存・読込
+ * ----------------------------------------------------------------------
+ * - 劇場プロファイル: localStorage に保存。JSON ファイルで書き出し／読み込み。
+ * - 応募者レコード  : 人が読めるHTMLレポートとして保存し、同じファイルに
+ *                    <script type="application/json" id="recruit-record"> で元データを埋め込む。
+ *                    読み込み時はこのJSONを取り出すだけなので、見た目を変えても壊れない。
+ */
+;(function (global) {
+  'use strict';
+
+  const U = global.RecruitUtil;
+  const PROFILE_KEY = 'recruit.profile.v1';
+  const THEME_KEY = 'recruit.theme';
+  const RECORD_KIND = 'recruit-applicant-record';
+
+  function defaults() {
+    return U.deepClone(global.RECRUIT_DEFAULT_PROFILE);
+  }
+
+  // 既定値に不足キーを補う。既定に追加された新ルールも末尾に追加する。
+  function normalizeProfile(p) {
+    const base = defaults();
+    const merged = U.deepMerge(base, p || {});
+    merged.handoffRules = Array.isArray(merged.handoffRules) ? merged.handoffRules : [];
+    const ids = {};
+    merged.handoffRules.forEach(function (r) { if (r && r.id) ids[r.id] = true; });
+    base.handoffRules.forEach(function (r) { if (!ids[r.id]) merged.handoffRules.push(U.deepClone(r)); });
+    if (!Array.isArray(merged.evaluation.items) || !merged.evaluation.items.length) {
+      merged.evaluation.items = U.deepClone(base.evaluation.items);
+    }
+    return merged;
+  }
+
+  function loadProfile() {
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      if (!raw) return defaults();
+      return normalizeProfile(JSON.parse(raw));
+    } catch (e) {
+      return defaults();
+    }
+  }
+
+  function saveProfile(p) {
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) { /* 保存不可環境 */ }
+  }
+
+  function resetProfile() {
+    try { localStorage.removeItem(PROFILE_KEY); } catch (e) { /* noop */ }
+    return defaults();
+  }
+
+  function parseProfileJSON(text) {
+    const obj = JSON.parse(text);
+    if (!obj || typeof obj !== 'object' || !obj.meta || !obj.handoffRules) {
+      throw new Error('劇場プロファイルの形式ではありません。');
+    }
+    return normalizeProfile(obj);
+  }
+
+  function loadTheme() {
+    try { return localStorage.getItem(THEME_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  function saveTheme(t) {
+    try { if (t) localStorage.setItem(THEME_KEY, t); else localStorage.removeItem(THEME_KEY); } catch (e) { /* noop */ }
+  }
+
+  function download(filename, content, mime) {
+    const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function safeName(s) {
+    return String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) || '応募者';
+  }
+
+  // ---------- 応募者レコード ----------
+  function buildRecord(state) {
+    const h = state.handoff;
+    return {
+      kind: RECORD_KIND,
+      schemaVersion: 1,
+      savedAt: new Date().toISOString(),
+      profile: { theaterName: state.profile.meta.theaterName, version: state.profile.meta.version },
+      step: state.step,
+      applicant: U.deepClone(state.applicant),
+      handoff: {
+        items: h ? h.items.map(function (i) { return { id: i.id, severity: i.severity, category: i.category, text: i.text }; }) : [],
+        strengths: h ? h.strengths.map(function (s) { return s.text; }) : [],
+        checks: U.deepClone(state.handoffChecks || {}),
+        note: state.handoffNote || ''
+      },
+      scores: U.deepClone(state.scores || {}),
+      interviewNotes: state.interviewNotes || '',
+      judgment: state.judgment ? U.deepClone(state.judgment) : null
+    };
+  }
+
+  function parseRecordFromHTML(html) {
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const node = doc.querySelector('script#recruit-record[type="application/json"]');
+      if (!node) return null;
+      const rec = JSON.parse(node.textContent);
+      return rec && rec.kind === RECORD_KIND ? rec : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ---------- HTMLレポート生成 ----------
+  function generateReportHTML(record, profile) {
+    const R = global.RecruitRules;
+    const esc = U.esc;
+    const a = record.applicant;
+    const meta = profile.meta;
+    const name = a.name ? a.name + 'さん' : '応募者';
+    const savedAt = U.fmtDateTime(record.savedAt);
+
+    const rows = R.describeApplicant(a, profile).map(function (r) {
+      return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>';
+    }).join('');
+
+    const sevLabel = function (s) { return (R.SEVERITY[s] || R.SEVERITY.info).label; };
+    const handoffItems = (record.handoff.items || []).map(function (i) {
+      const done = !!record.handoff.checks[i.id];
+      return '<li class="h ' + esc(i.severity) + (done ? ' done' : '') + '">' +
+        '<span class="box">' + (done ? '☑' : '☐') + '</span>' +
+        '<span class="sev">' + esc(sevLabel(i.severity)) + '</span>' +
+        '<span class="cat">' + esc(R.CATEGORY_LABELS[i.category] || i.category) + '</span>' +
+        '<span class="txt">' + esc(i.text) + '</span></li>';
+    }).join('');
+    const strengths = (record.handoff.strengths || []).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
+
+    const ev = profile.evaluation;
+    const scoreRows = (ev.items || []).map(function (it) {
+      const s = record.scores[it.id];
+      return '<tr><td>' + esc(it.label) + '</td><td class="num">' + (s == null || s === '' ? '-' : esc(s) + '点') + '</td></tr>';
+    }).join('');
+    const hasScores = Object.keys(record.scores || {}).length > 0;
+
+    const j = record.judgment;
+    const judgmentHtml = j ? (
+      '<div class="result ' + esc(j.result) + '">' +
+      '<div class="result-title">' + esc(j.title) + '</div>' +
+      '<div class="result-body">' + esc(j.body) + '</div>' +
+      '<div class="result-score">合計 ' + esc(j.total) + ' / ' + esc(j.max) + '点（' + esc(j.pct) + '%）　' +
+      '採用推奨 ' + esc(j.thresholds.recommendPts) + '点以上 ／ 上長判断 ' + esc(j.thresholds.reviewPts) + '点以上</div>' +
+      (j.warnings && j.warnings.length ? '<ul class="warn-list">' + j.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') +
+      '<div class="disclaimer">' + esc(j.disclaimer) + '</div>' +
+      '</div>'
+    ) : '<p class="muted">採用可否判定は未実施です。</p>';
+
+    const json = JSON.stringify(record).replace(/<\//g, '<\\/');
+    const SCRIPT_END = '</scr' + 'ipt>';
+
+    return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+      '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
+      '<style>\n' +
+      'body{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;max-width:860px;margin:0 auto;padding:24px;color:#1a2233;background:#fff;line-height:1.6}\n' +
+      '.head{border-bottom:3px solid #1f5fbf;padding-bottom:12px;margin-bottom:20px}\n' +
+      '.head h1{font-size:20px;margin:0 0 4px}\n.head p{margin:0;color:#5b6675;font-size:13px}\n' +
+      'h2{font-size:15px;margin:28px 0 10px;padding-left:10px;border-left:4px solid #1f5fbf}\n' +
+      'table{width:100%;border-collapse:collapse;font-size:14px}\n' +
+      'th,td{border:1px solid #dde3ea;padding:7px 10px;text-align:left;vertical-align:top}\n' +
+      'th{width:9em;background:#f3f5f8;font-weight:600;color:#5b6675}\ntd.num{text-align:right;width:6em}\n' +
+      'ul{padding-left:0;list-style:none;margin:0}\n' +
+      'li.h{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid #dde3ea;border-left-width:4px;border-radius:6px;margin-bottom:6px;font-size:14px}\n' +
+      'li.h.block{border-left-color:#dc2626}li.h.warn{border-left-color:#d97706}li.h.info{border-left-color:#2563eb}\n' +
+      'li.h.done{background:#f3faf6}\n.box{font-size:16px}\n' +
+      '.sev{font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:#eef2f7;white-space:nowrap}\n' +
+      '.cat{font-size:11px;color:#5b6675;white-space:nowrap;padding-top:2px}\n.txt{flex:1}\n' +
+      '.strengths li{padding:4px 0 4px 1.2em;position:relative}.strengths li:before{content:"✓";position:absolute;left:0;color:#0e9f6e;font-weight:700}\n' +
+      '.result{border-radius:10px;padding:18px 20px;border:2px solid}\n' +
+      '.result.recommend{background:#e3f6ee;border-color:#0e9f6e}.result.review{background:#fdf1dc;border-color:#d97706}.result.reject{background:#fde8e8;border-color:#dc2626}\n' +
+      '.result-title{font-size:20px;font-weight:800;margin-bottom:6px}\n.result-score{margin-top:8px;font-weight:600}\n' +
+      '.warn-list{margin-top:10px;padding-left:1.2em;list-style:disc;font-size:13px}\n' +
+      '.disclaimer{margin-top:10px;font-size:12px;color:#5b6675}\n.note{white-space:pre-wrap;background:#f8fafc;border:1px solid #dde3ea;border-radius:6px;padding:10px;font-size:14px}\n' +
+      '.muted{color:#5b6675}\n.foot{margin-top:36px;padding-top:12px;border-top:1px solid #dde3ea;font-size:11px;color:#5b6675}\n' +
+      '@media print{body{padding:0}}\n' +
+      '</style>\n</head>\n<body>\n' +
+      '<div class="head"><h1>' + esc(meta.theaterName) + '　応募者情報</h1>' +
+      '<p>応募者: ' + esc(name) + '　｜　保存日時: ' + esc(savedAt) + '　｜　' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</p></div>\n' +
+      '<h2>応募情報</h2>\n<table>' + rows + '</table>\n' +
+      '<h2>面接者への申し送り（留意点）</h2>\n' +
+      (handoffItems ? '<ul>' + handoffItems + '</ul>' : '<p class="muted">留意点はありません。</p>') +
+      (strengths ? '<h2>強み</h2>\n<ul class="strengths">' + strengths + '</ul>' : '') +
+      (record.handoff.note ? '<h2>担当者からの追記</h2>\n<div class="note">' + esc(record.handoff.note) + '</div>' : '') +
+      '<h2>面接評価</h2>\n' +
+      (hasScores ? '<table>' + scoreRows + '</table>' : '<p class="muted">面接評価は未入力です。</p>') +
+      (record.interviewNotes ? '<h2>面接所見</h2>\n<div class="note">' + esc(record.interviewNotes) + '</div>' : '') +
+      '<h2>採用可否判定</h2>\n' + judgmentHtml + '\n' +
+      '<div class="foot">' + esc(meta.footer) + '<br>このファイルはアプリの「読み込み」から再度開けます。ファイル内の埋め込みデータを編集しないでください。</div>\n' +
+      '<script type="application/json" id="recruit-record">' + json + SCRIPT_END + '\n' +
+      '</body>\n</html>\n';
+  }
+
+  global.RecruitStorage = {
+    PROFILE_KEY: PROFILE_KEY,
+    defaults: defaults,
+    normalizeProfile: normalizeProfile,
+    loadProfile: loadProfile,
+    saveProfile: saveProfile,
+    resetProfile: resetProfile,
+    parseProfileJSON: parseProfileJSON,
+    loadTheme: loadTheme,
+    saveTheme: saveTheme,
+    download: download,
+    safeName: safeName,
+    buildRecord: buildRecord,
+    parseRecordFromHTML: parseRecordFromHTML,
+    generateReportHTML: generateReportHTML
+  };
+})(window);
+
+</script>
+  <script>
+/* ---- settings.js ---- */
+/*
+ * 設定画面（劇場プロファイル編集）
+ * ----------------------------------------------------------------------
+ * data-bind="path.to.value" を持つ入力をプロファイルの下書き（draft）に双方向バインドする。
+ * 構造が変わる操作（評価項目の追加・削除・並べ替え）は draft を変更してから再描画する。
+ * 「設定を保存」で app 側の onSave に draft を渡す。
+ */
+;(function (global) {
+  'use strict';
+
+  const U = global.RecruitUtil;
+  const esc = U.esc;
+
+  let root = null;
+  let draft = null;
+  let handlers = null;
+
+  const CATEGORY_LABELS = { general: '全般', highschool: '高校生', vocational: '専門学校生', foreign: '外国籍', lateNight: '深夜帯' };
+  const GROUP_HINT = 'highschool（高校生）/ university（大学・大学院）/ vocational（専門学校）/ freeter / homemaker / doubleworker / other';
+  const VARS_HINT = '{name} {age} {maxAge} {commuteTime} {nearestStation} {minDays} {maxDays} {minShiftHours} {highschoolLatestEnd} {foreignWeeklyHourCap} {foreignVacationWeeklyHourCap} {weeklyHours} {taxiFare} {taxiLimitYen} {closeEndHour} {lateNightStartHour} {residenceExpiry} {japaneseLevel} {vacationLabels}';
+
+  // ---------- 描画ヘルパー ----------
+  function val(path) {
+    const v = U.getPath(draft, path);
+    return v === undefined || v === null ? '' : v;
+  }
+
+  function sInput(path, label, opts) {
+    opts = opts || {};
+    const type = opts.type || 'text';
+    const attrs = [
+      'type="' + type + '"',
+      'data-bind="' + esc(path) + '"',
+      'value="' + esc(val(path)) + '"',
+      opts.min !== undefined ? 'min="' + opts.min + '"' : '',
+      opts.max !== undefined ? 'max="' + opts.max + '"' : '',
+      opts.step !== undefined ? 'step="' + opts.step + '"' : '',
+      opts.placeholder ? 'placeholder="' + esc(opts.placeholder) + '"' : ''
+    ].filter(Boolean).join(' ');
+    return '<div class="field"><label>' + esc(label) + '</label>' +
+      (opts.suffix ? '<div class="inline"><input ' + attrs + '><span class="suffix">' + esc(opts.suffix) + '</span></div>' : '<input ' + attrs + '>') +
+      (opts.hint ? '<div class="hint">' + esc(opts.hint) + '</div>' : '') + '</div>';
+  }
+
+  function sTextarea(path, label, opts) {
+    opts = opts || {};
+    return '<div class="field"><label>' + esc(label) + '</label>' +
+      '<textarea data-bind="' + esc(path) + '" rows="' + (opts.rows || 3) + '">' + esc(val(path)) + '</textarea>' +
+      (opts.hint ? '<div class="hint">' + esc(opts.hint) + '</div>' : '') + '</div>';
+  }
+
+  function sLines(path, label, opts) {
+    opts = opts || {};
+    const arr = U.getPath(draft, path) || [];
+    let text;
+    if (opts.type === 'categories') text = arr.map(function (c) { return c.value + '|' + (c.group || 'other'); }).join('\n');
+    else if (opts.type === 'pairs') text = arr.map(function (c) { return c.id + '|' + c.label; }).join('\n');
+    else text = arr.join('\n');
+    return '<div class="field"><label>' + esc(label) + '</label>' +
+      '<textarea data-bind="' + esc(path) + '" data-type="' + (opts.type || 'lines') + '" rows="' + (opts.rows || Math.min(Math.max(arr.length + 1, 3), 12)) + '">' + esc(text) + '</textarea>' +
+      '<div class="hint">1行に1項目。' + (opts.hint ? esc(opts.hint) : '') + '</div></div>';
+  }
+
+  function sCheck(path, label, hint) {
+    return '<label class="check-row"><input type="checkbox" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + '>' +
+      '<div><div class="lbl">' + esc(label) + '</div>' + (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div></label>';
+  }
+
+  function sSelect(path, label, options, hint) {
+    const cur = val(path);
+    return '<div class="field"><label>' + esc(label) + '</label><select data-bind="' + esc(path) + '">' +
+      options.map(function (o) { return '<option value="' + esc(o.value) + '"' + (o.value === cur ? ' selected' : '') + '>' + esc(o.label) + '</option>'; }).join('') +
+      '</select>' + (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div>';
+  }
+
+  // ---------- テンプレート ----------
+  function template() {
+    const p = draft;
+    const items = p.evaluation.items || [];
+    const max = items.length * (Number(p.evaluation.scaleMax) || 5);
+    const recPts = Math.ceil(max * (Number(p.evaluation.thresholds.recommendPct) || 0) / 100);
+    const revPts = Math.ceil(max * (Number(p.evaluation.thresholds.reviewPct) || 0) / 100);
+
+    return '' +
+    '<div class="settings-layout">' +
+      '<nav class="settings-nav">' +
+        '<a href="#s-meta">劇場情報</a><a href="#s-features">入力項目のON/OFF</a><a href="#s-options">選択肢</a>' +
+        '<a href="#s-params">判定パラメータ</a><a href="#s-rules">申し送りルール</a><a href="#s-eval">面接評価・閾値</a>' +
+        '<a href="#s-texts">結果文言</a><a href="#s-io">書き出し／読み込み</a>' +
+      '</nav>' +
+      '<div class="settings-body">' +
+
+        '<section class="card" id="s-meta"><div class="card-head"><h2>劇場情報</h2><p>画面上部・保存ファイルに表示されます。</p></div>' +
+          '<div class="field-row">' + sInput('meta.theaterName', '劇場名') + sInput('meta.appTitle', 'アプリ名') + '</div>' +
+          '<div class="field-row">' + sInput('meta.version', 'バージョン表記') + '</div>' +
+          sTextarea('meta.footer', 'フッター（著作権表記など）', { rows: 2 }) +
+        '</section>' +
+
+        '<section class="card" id="s-features"><div class="card-head"><h2>入力項目のON/OFF</h2><p>劇場で不要な項目はOFFにすると入力画面・判定から除外されます。</p></div>' +
+          sCheck('features.graduationDate', '卒業予定年月（学生）', '来年3月卒業×中期希望の確認に使います。') +
+          sCheck('features.vacation', '長期休暇の対応可否', '夏休み・お盆・年末年始・GWなど。項目は「選択肢」で編集。') +
+          sCheck('features.lateNight', '深夜帯（22時以降）勤務可否・帰宅手段', 'クローズ要員の見込み、終電確認に使います。') +
+          sCheck('features.taxi', 'タクシー帰宅時の規定金額チェック', '深夜帯がONのときのみ有効。') +
+          sCheck('features.foreignNational', '外国籍・在留資格・日本語レベル', '資格外活動許可、週28時間上限、在留期限の確認を自動で出します。') +
+          sCheck('features.department', '希望部署', '記録用。判定には使いません。') +
+          sCheck('features.applicationRoute', '応募経路', '記録用。判定には使いません。') +
+        '</section>' +
+
+        '<section class="card" id="s-options"><div class="card-head"><h2>選択肢</h2><p>入力画面のプルダウンに表示される項目です。</p></div>' +
+          '<div class="field-row">' +
+            sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。グループ: ' + GROUP_HINT }) +
+            sLines('options.genders', '性別') +
+          '</div>' +
+          '<div class="field-row">' +
+            sLines('options.commuteMethods', '通勤方法') +
+            sLines('options.stationHints', '最寄り駅の候補', { hint: '入力補完に使います。' }) +
+          '</div>' +
+          '<h3 class="sub">勤務期間のラベル</h3>' +
+          '<div class="field-row cols-3">' +
+            sInput('options.workPeriods[0].label', '長期（値: long）') + sInput('options.workPeriods[1].label', '中期（値: mid）') + sInput('options.workPeriods[2].label', '短期（値: short）') +
+          '</div>' +
+          '<div class="field-row">' +
+            sLines('options.vacationItems', '長期休暇の項目', { type: 'pairs', hint: '「id|表示名」の形式。idは英数字。' }) +
+            sLines('options.japaneseLevels', '日本語レベル', { hint: '最後の行が最も低いレベルとして「要確認」の判定に使われます。' }) +
+          '</div>' +
+          '<div class="field-row">' +
+            sLines('options.residenceStatuses', '在留資格') +
+            sLines('options.departments', '希望部署') +
+          '</div>' +
+          '<div class="field-row">' + sLines('options.applicationRoutes', '応募経路') + '</div>' +
+        '</section>' +
+
+        '<section class="card" id="s-params"><div class="card-head"><h2>判定パラメータ</h2><p>留意点ルールやシフト適合バッジが参照するしきい値です。</p></div>' +
+          '<div class="params-grid">' +
+            sInput('params.maxAge', '年齢基準（この歳以上で要判断）', { type: 'number', min: 0, suffix: '歳' }) +
+            sInput('params.minShiftMinutes', '1日の最低勤務時間', { type: 'number', min: 0, step: 30, suffix: '分' }) +
+            sInput('params.lowMaxDays', '週最大日数がこの値以下で要確認', { type: 'number', min: 1, max: 7, suffix: '日' }) +
+            sInput('params.commuteWarnMinutes', '通勤時間（これを超えると要確認）', { type: 'number', min: 0, suffix: '分' }) +
+            sInput('params.commuteBlockMinutes', '通勤時間（これ以上で要判断）', { type: 'number', min: 0, suffix: '分' }) +
+            sInput('params.openStartFrom', 'オープン要員: 開始時刻の下限', { type: 'number', min: 0, max: 23, suffix: '時' }) +
+            sInput('params.openStartTo', 'オープン要員: 開始時刻の上限', { type: 'number', min: 0, max: 23, suffix: '時' }) +
+            sInput('params.closeEndHour', 'クローズ要員: この時刻以降まで勤務', { type: 'number', min: 0, max: 30, suffix: '時' }) +
+            sInput('params.daytimeStartBefore', '平日日中帯: この時刻より前の開始', { type: 'number', min: 0, max: 23, suffix: '時' }) +
+            sInput('params.lateNightStartHour', '深夜帯の開始時刻', { type: 'number', min: 0, max: 23, suffix: '時' }) +
+            sInput('params.taxiLimitYen', 'タクシー帰宅の規定金額', { type: 'number', min: 0, step: 100, suffix: '円' }) +
+            sInput('params.highschoolLatestEnd', '高校生の勤務終了上限（当劇場運用）', { type: 'time' }) +
+            sInput('params.foreignWeeklyHourCap', '資格外活動の週上限', { type: 'number', min: 0, suffix: '時間' }) +
+            sInput('params.foreignVacationWeeklyHourCap', '同・長期休暇中の週上限', { type: 'number', min: 0, suffix: '時間' }) +
+            sInput('params.residenceExpiryWarnMonths', '在留期限が何か月以内で要確認', { type: 'number', min: 0, suffix: 'か月' }) +
+          '</div>' +
+        '</section>' +
+
+        '<section class="card" id="s-rules"><div class="card-head"><h2>面接者への申し送りルール</h2>' +
+          '<p>応募情報が条件に合致したときに表示される留意点です。ON/OFF・重要度・文言を変更できます（条件そのものはコードで定義）。</p></div>' +
+          '<div class="legend"><span class="badge danger">要判断</span>採用担当が面接実施の可否を判断　<span class="badge warn">要確認</span>面接時に確認　<span class="badge info">共有</span>面接者へ共有</div>' +
+          '<div class="hint" style="margin-bottom:10px">文言で使える変数: <code>' + esc(VARS_HINT) + '</code></div>' +
+          rulesHtml() +
+        '</section>' +
+
+        '<section class="card" id="s-eval"><div class="card-head"><h2>面接評価項目と閾値</h2><p>面接後の採用可否判定の中核です。項目を増減すると満点が変わるため、閾値は割合（%）で管理します。</p></div>' +
+          '<h3 class="sub">評価項目（上から順に表示）</h3>' +
+          items.map(function (it, i) {
+            return '<div class="item-row"><span class="idx">' + (i + 1) + '</span>' +
+              '<input type="text" data-bind="evaluation.items[' + i + '].label" value="' + esc(it.label) + '">' +
+              '<div class="row-actions">' +
+                '<button type="button" class="btn ghost" data-action="item-up" data-index="' + i + '" title="上へ"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+                '<button type="button" class="btn ghost" data-action="item-down" data-index="' + i + '" title="下へ"' + (i === items.length - 1 ? ' disabled' : '') + '>↓</button>' +
+                '<button type="button" class="btn ghost danger" data-action="item-del" data-index="' + i + '" title="削除"' + (items.length <= 1 ? ' disabled' : '') + '>削除</button>' +
+              '</div></div>';
+          }).join('') +
+          '<div class="actions" style="margin-top:8px"><button type="button" class="btn sm" data-action="item-add">＋ 評価項目を追加</button></div>' +
+          '<h3 class="sub">採点・判定</h3>' +
+          '<div class="field-row cols-3">' +
+            sInput('evaluation.scaleMax', '1項目の満点', { type: 'number', min: 2, max: 10, suffix: '点' }) +
+            sSelect('evaluation.overallItemId', '「総合判断」として扱う項目', items.map(function (it) { return { value: it.id, label: it.label }; }), '低評価のとき警告を出す項目です。') +
+            sInput('evaluation.overallWarnBelow', '総合判断の警告しきい値', { type: 'number', min: 1, max: 10, suffix: '点未満で警告' }) +
+          '</div>' +
+          '<div class="field-row">' +
+            sInput('evaluation.thresholds.recommendPct', '採用推奨', { type: 'number', min: 0, max: 100, suffix: '% 以上（現在の満点 ' + max + '点では ' + recPts + '点以上）' }) +
+            sInput('evaluation.thresholds.reviewPct', '上長最終判断要', { type: 'number', min: 0, max: 100, suffix: '% 以上（' + revPts + '点以上。未満は不採用推奨）' }) +
+          '</div>' +
+          sCheck('evaluation.holdOnUnresolvedBlock', '「要判断」の留意点が未確認のまま採用推奨になった場合、上長最終判断要に留める', '採用担当の判断が済んでいない状態で「採用推奨」が出るのを防ぎます。') +
+        '</section>' +
+
+        '<section class="card" id="s-texts"><div class="card-head"><h2>結果文言</h2><p>変数: {name} {total} {max} {pct}</p></div>' +
+          '<div class="field-row">' + sInput('texts.recommend.title', '採用推奨: タイトル') + sInput('texts.recommend.body', '採用推奨: 本文') + '</div>' +
+          '<div class="field-row">' + sInput('texts.review.title', '上長最終判断要: タイトル') + sInput('texts.review.body', '上長最終判断要: 本文') + '</div>' +
+          '<div class="field-row">' + sInput('texts.reject.title', '不採用推奨: タイトル') + sInput('texts.reject.body', '不採用推奨: 本文') + '</div>' +
+          sTextarea('texts.disclaimer', '判定結果の注記', { rows: 2 }) +
+          sTextarea('texts.handoffIntro', '申し送り画面の説明文', { rows: 2 }) +
+          '<h3 class="sub">強みの文言（面接者への共有）</h3>' +
+          '<div class="field-row">' +
+            sInput('texts.strengths.open', 'オープン要員') + sInput('texts.strengths.close', 'クローズ要員') +
+            sInput('texts.strengths.weekend', '土日両日可') + sInput('texts.strengths.longTerm', '長期希望') +
+            sInput('texts.strengths.days3', '週3日以上（{minDays}）') + sInput('texts.strengths.longShift', '1日の勤務時間が十分（{minShiftHours}）') +
+            sInput('texts.strengths.commuteNear', '通勤が近い（{commuteTime}）') + sInput('texts.strengths.vacationOk', '長期休暇すべて可') +
+            sInput('texts.strengths.lateNightOk', '深夜帯可（{lateNightStartHour}）') +
+          '</div>' +
+        '</section>' +
+
+        '<section class="card" id="s-io"><div class="card-head"><h2>プロファイルの書き出し／読み込み</h2><p>他劇場へ展開するときは JSON を書き出して、相手側で読み込みます。</p></div>' +
+          '<div class="actions">' +
+            '<button type="button" class="btn" data-action="export">⬇ JSONを書き出す</button>' +
+            '<button type="button" class="btn" data-action="import">⬆ JSONを読み込む</button>' +
+            '<button type="button" class="btn danger" data-action="reset">初期設定（新宿既定）に戻す</button>' +
+          '</div>' +
+          '<div class="hint" style="margin-top:10px">設定はこのブラウザ（端末）内に保存されます。別の端末で使う場合は JSON を書き出して持ち運んでください。</div>' +
+        '</section>' +
+
+      '</div>' +
+    '</div>' +
+    '<div class="save-bar"><span class="note">変更は「設定を保存」で反映されます。</span>' +
+      '<button type="button" class="btn ghost" data-action="discard">変更を破棄</button>' +
+      '<button type="button" class="btn primary" data-action="save">設定を保存</button></div>';
+  }
+
+  function rulesHtml() {
+    const rules = draft.handoffRules || [];
+    const order = ['general', 'highschool', 'vocational', 'foreign', 'lateNight'];
+    const sevOpts = [['block', '要判断'], ['warn', '要確認'], ['info', '共有']];
+    return order.map(function (cat) {
+      const idx = [];
+      rules.forEach(function (r, i) { if ((r.category || 'general') === cat) idx.push(i); });
+      if (!idx.length) return '';
+      return '<h3 class="sub">' + esc(CATEGORY_LABELS[cat] || cat) + '</h3>' + idx.map(function (i) {
+        const r = rules[i];
+        return '<div class="rule-row' + (r.enabled === false ? ' off' : '') + '">' +
+          '<label class="switch"><input type="checkbox" data-bind="handoffRules[' + i + '].enabled"' + (r.enabled !== false ? ' checked' : '') + '><span></span></label>' +
+          '<div class="rule-main"><div class="rule-meta"><code>' + esc(r.id) + '</code>' +
+            '<select class="sel-sm" data-bind="handoffRules[' + i + '].severity">' +
+              sevOpts.map(function (o) { return '<option value="' + o[0] + '"' + (r.severity === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+            '</select>' +
+            '<button type="button" class="btn link" data-action="rule-default" data-index="' + i + '">既定の文言に戻す</button>' +
+          '</div>' +
+          '<textarea data-bind="handoffRules[' + i + '].text" rows="2">' + esc(r.text) + '</textarea></div>' +
+        '</div>';
+      }).join('');
+    }).join('');
+  }
+
+  // ---------- イベント ----------
+  function coerce(t) {
+    if (t.type === 'checkbox') return t.checked;
+    if (t.type === 'number') return t.value === '' ? '' : Number(t.value);
+    const dt = t.dataset.type;
+    if (dt === 'lines') return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (dt === 'categories') {
+      return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
+        const parts = line.split('|');
+        return { value: parts[0].trim(), group: (parts[1] || 'other').trim() || 'other' };
+      });
+    }
+    if (dt === 'pairs') {
+      return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
+        const parts = line.split('|');
+        const id = parts[0].trim().replace(/[^A-Za-z0-9_]/g, '_');
+        return { id: id, label: (parts[1] || parts[0]).trim() };
+      });
+    }
+    return t.value;
+  }
+
+  function onEdit(e) {
+    const t = e.target.closest('[data-bind]');
+    if (!t) return;
+    U.setPath(draft, t.dataset.bind, coerce(t));
+    const row = t.closest('.rule-row');
+    if (row && t.type === 'checkbox') row.classList.toggle('off', !t.checked);
+  }
+
+  function onClick(e) {
+    const b = e.target.closest('[data-action]');
+    if (!b) return;
+    const act = b.dataset.action;
+    const i = Number(b.dataset.index);
+    const items = draft.evaluation.items;
+    const y = window.scrollY;
+
+    switch (act) {
+      case 'save':
+        handlers.onSave(U.deepClone(draft));
+        break;
+      case 'discard':
+        draft = U.deepClone(handlers.current());
+        paint(y);
+        handlers.onToast && handlers.onToast('変更を破棄しました');
+        break;
+      case 'export':
+        handlers.onExport(U.deepClone(draft));
+        break;
+      case 'import':
+        handlers.onImport();
+        break;
+      case 'reset':
+        if (window.confirm('すべての設定を初期状態（新宿の既定値）に戻します。よろしいですか？')) handlers.onReset();
+        break;
+      case 'item-add':
+        items.push({ id: U.uid('item'), label: '新しい評価項目' });
+        paint(y);
+        break;
+      case 'item-del':
+        if (items.length <= 1) return;
+        if (draft.evaluation.overallItemId === items[i].id) draft.evaluation.overallItemId = items[items.length - 1 === i ? 0 : items.length - 1].id;
+        items.splice(i, 1);
+        paint(y);
+        break;
+      case 'item-up':
+        if (i > 0) { const tmp = items[i - 1]; items[i - 1] = items[i]; items[i] = tmp; paint(y); }
+        break;
+      case 'item-down':
+        if (i < items.length - 1) { const tmp2 = items[i + 1]; items[i + 1] = items[i]; items[i] = tmp2; paint(y); }
+        break;
+      case 'rule-default': {
+        const def = (global.RECRUIT_DEFAULT_PROFILE.handoffRules || []).find(function (r) { return r.id === draft.handoffRules[i].id; });
+        if (def) { draft.handoffRules[i].text = def.text; paint(y); }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  function paint(scrollY) {
+    root.innerHTML = template();
+    root.oninput = onEdit;
+    root.onchange = onEdit;
+    root.onclick = onClick;
+    if (typeof scrollY === 'number') window.scrollTo(0, scrollY);
+  }
+
+  function render(container, profile, h) {
+    root = container;
+    handlers = h;
+    draft = U.deepClone(profile);
+    paint();
+  }
+
+  global.RecruitSettings = { render: render };
+})(window);
+
+</script>
+  <script>
+/* ---- app.js ---- */
+/*
+ * 画面制御
+ * ----------------------------------------------------------------------
+ * Step1 応募情報 → Step2 面接者への申し送り（留意点） → Step3 面接評価 → Step4 採用可否判定
+ * 右側のサマリーパネルは入力のたびに更新する。
+ */
+;(function (global) {
+  'use strict';
+
+  const U = global.RecruitUtil;
+  const R = global.RecruitRules;
+  const S = global.RecruitStorage;
+  const Settings = global.RecruitSettings;
+  const esc = U.esc;
+  const $ = function (sel, root) { return (root || document).querySelector(sel); };
+  const $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+
+  const STEPS = [
+    { n: 1, label: '応募情報', hint: '採用担当が入力' },
+    { n: 2, label: '面接者への申し送り', hint: '留意点を確認・共有' },
+    { n: 3, label: '面接評価', hint: '面接者が採点' },
+    { n: 4, label: '採用可否判定', hint: '判定結果・保存' }
+  ];
+
+  const state = {
+    view: 'judge',
+    step: 1,
+    maxStepReached: 1,
+    profile: null,
+    applicant: null,
+    handoff: null,
+    handoffChecks: {},
+    handoffNote: '',
+    scores: {},
+    interviewNotes: '',
+    judgment: null,
+    savedAt: null,
+    dirty: false
+  };
+
+  // =====================================================================
+  // 初期化
+  // =====================================================================
+  function init() {
+    state.profile = S.loadProfile();
+    state.applicant = emptyApplicant(state.profile);
+    applyTheme(S.loadTheme());
+    renderBrand();
+    bindGlobal();
+    showView('judge');
+  }
+
+  function emptyApplicant(profile) {
+    const shifts = {};
+    R.DAYS.forEach(function (d) { shifts[d.key] = { start: '', end: '', nextDay: false }; });
+    shifts.any = { start: '', end: '', nextDay: false };
+    const vacation = {};
+    ((profile.options || {}).vacationItems || []).forEach(function (v) { vacation[v.id] = ''; });
+    return {
+      name: '', gender: '', age: '', category: '', graduationDate: '',
+      commuteMethod: '', commuteMinutes: '', nearestStation: '',
+      workDays: [], anyDay: false, daysMin: '', daysMax: '',
+      shifts: shifts,
+      workPeriod: '', sideJob: '', sideJobDetail: '',
+      vacation: vacation,
+      lateNight: { availability: '', returnMethod: '', lastTrain: '', taxiFare: '' },
+      foreign: { isForeign: '', residenceStatus: '', workPermit: '', residenceExpiry: '', japaneseLevel: '' },
+      department: '', applicationRoute: '',
+      reviewerNotes: ''
+    };
+  }
+
+  function bindGlobal() {
+    $$('.nav-item').forEach(function (b) { b.addEventListener('click', function () { showView(b.dataset.view); }); });
+    $('#stepNav').addEventListener('click', function (e) {
+      const li = e.target.closest('[data-step]');
+      if (!li || li.classList.contains('disabled')) return;
+      goStep(Number(li.dataset.step));
+    });
+    $('#btnNew').addEventListener('click', newRecord);
+    $('#btnLoad').addEventListener('click', function () { const f = $('#fileInput'); f.value = ''; f.click(); });
+    $('#fileInput').addEventListener('change', onFileChosen);
+    $('#profileFileInput').addEventListener('change', onProfileFileChosen);
+    $('#btnSave').addEventListener('click', saveRecord);
+    $('#btnPrint').addEventListener('click', function () { window.print(); });
+    $('#btnTheme').addEventListener('click', toggleTheme);
+
+    const content = $('#stepContent');
+    content.addEventListener('input', onFieldEvent);
+    content.addEventListener('change', onFieldEvent);
+    content.addEventListener('click', onContentClick);
+
+    window.addEventListener('beforeunload', function (e) {
+      if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
+    });
+  }
+
+  function renderBrand() {
+    const m = state.profile.meta;
+    $('#brandTitle').textContent = m.appTitle || 'リクルート判定システム';
+    $('#brandTheater').textContent = m.theaterName || '';
+    $('#brandMark').textContent = (m.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R';
+    $('#brandVersion').textContent = 'Version ' + (m.version || '') + '　判定ルール: ' + (m.theaterName || '');
+    $('#footerText').textContent = m.footer || '';
+    document.title = (m.appTitle || 'リクルート判定システム') + ' | ' + (m.theaterName || '');
+  }
+
+  // =====================================================================
+  // テーマ
+  // =====================================================================
+  function applyTheme(t) {
+    const html = document.documentElement;
+    if (t === 'dark' || t === 'light') html.setAttribute('data-theme', t); else html.removeAttribute('data-theme');
+    const isDark = t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    $('#btnTheme').textContent = isDark ? '☀ ライトモード' : '🌙 ダークモード';
+  }
+
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const isDark = cur === 'dark' || (!cur && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const next = isDark ? 'light' : 'dark';
+    S.saveTheme(next);
+    applyTheme(next);
+  }
+
+  // =====================================================================
+  // ビュー切替
+  // =====================================================================
+  function showView(view) {
+    state.view = view;
+    $$('.nav-item').forEach(function (b) { b.classList.toggle('active', b.dataset.view === view); });
+    ['judge', 'settings', 'help'].forEach(function (v) { $('#view-' + v).classList.toggle('hidden', v !== view); });
+    $('#stepSection').classList.toggle('hidden', view !== 'judge');
+    $('#topActions').classList.toggle('hidden', view !== 'judge');
+    $('#applicantChip').classList.toggle('hidden', view !== 'judge');
+    $('#topTitle').textContent = view === 'judge' ? '応募者判定' : view === 'settings' ? '設定（劇場プロファイル）' : '使い方';
+
+    if (view === 'judge') {
+      renderStepNav(); renderStep(); renderSummary();
+    } else if (view === 'settings') {
+      Settings.render($('#view-settings'), state.profile, {
+        current: function () { return state.profile; },
+        onSave: function (p) {
+          state.profile = S.normalizeProfile(p);
+          S.saveProfile(state.profile);
+          renderBrand();
+          // 新しい長期休暇項目などに合わせて応募者データのキーを補う
+          state.applicant = U.deepMerge(emptyApplicant(state.profile), state.applicant);
+          toast('設定を保存しました', 'ok');
+          Settings.render($('#view-settings'), state.profile, this);
+        },
+        onExport: function (p) {
+          S.download('劇場プロファイル_' + S.safeName(p.meta.theaterName) + '_' + U.fmtDate(new Date()) + '.json', JSON.stringify(p, null, 2), 'application/json');
+          toast('プロファイルを書き出しました');
+        },
+        onImport: function () { const f = $('#profileFileInput'); f.value = ''; f.click(); },
+        onReset: function () {
+          state.profile = S.resetProfile();
+          S.saveProfile(state.profile);
+          renderBrand();
+          toast('初期設定に戻しました', 'ok');
+          showView('settings');
+        },
+        onToast: toast
+      });
+    } else if (view === 'help') {
+      $('#view-help').innerHTML = helpHtml();
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // =====================================================================
+  // ステップ制御
+  // =====================================================================
+  function goStep(n) {
+    if (n === 2) state.handoff = R.buildHandoff(state.applicant, state.profile);
+    if (n === 4) {
+      if (!state.handoff) state.handoff = R.buildHandoff(state.applicant, state.profile);
+      state.judgment = R.evaluateHiring(state.applicant, state.scores, state.profile, state.handoff, state.handoffChecks);
+    }
+    state.step = n;
+    state.maxStepReached = Math.max(state.maxStepReached, n);
+    renderStepNav(); renderStep(); renderSummary();
+    const top = $('#view-judge').getBoundingClientRect().top + window.scrollY - 70;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+
+  function renderStepNav() {
+    $('#stepNav').innerHTML = STEPS.map(function (s) {
+      const cls = ['step'];
+      if (s.n === state.step) cls.push('current');
+      else if (s.n < state.step) cls.push('done');
+      if (s.n > state.maxStepReached) cls.push('disabled');
+      return '<li class="' + cls.join(' ') + '" data-step="' + s.n + '" role="button" tabindex="0">' +
+        '<span class="step-num">' + (s.n < state.step ? '✓' : s.n) + '</span>' +
+        '<span><span class="step-label">' + esc(s.label) + '</span><br><span class="step-hint">' + esc(s.hint) + '</span></span></li>';
+    }).join('');
+  }
+
+  function renderStep() {
+    const c = $('#stepContent');
+    switch (state.step) {
+      case 1: c.innerHTML = inputStepHtml(); applyVisibility(); updateTimeDisplays(); break;
+      case 2: c.innerHTML = handoffStepHtml(); break;
+      case 3: c.innerHTML = interviewStepHtml(); updateScoreUI(); break;
+      case 4: c.innerHTML = resultStepHtml(); break;
+      default: c.innerHTML = '';
+    }
+  }
+
+  // =====================================================================
+  // Step1: 応募情報
+  // =====================================================================
+  function optHtml(options, value) {
+    return (options || []).map(function (o) {
+      const v = typeof o === 'string' ? o : o.value;
+      const l = typeof o === 'string' ? o : o.label;
+      return '<option value="' + esc(v) + '"' + (v === value ? ' selected' : '') + '>' + esc(l) + '</option>';
+    }).join('');
+  }
+
+  function fSelect(path, label, options, o) {
+    o = o || {};
+    const value = U.getPath(state.applicant, path) || '';
+    return '<div class="field"' + (o.id ? ' id="' + o.id + '"' : '') + '><label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>' +
+      '<select data-field="' + path + '"' + (o.required ? ' data-required' : '') + '><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select>' +
+      (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
+  }
+
+  function fInput(path, label, o) {
+    o = o || {};
+    const value = U.getPath(state.applicant, path);
+    const attrs = [
+      'type="' + (o.type || 'text') + '"',
+      'data-field="' + path + '"',
+      'value="' + esc(value == null ? '' : value) + '"',
+      o.required ? 'data-required' : '',
+      o.placeholder ? 'placeholder="' + esc(o.placeholder) + '"' : '',
+      o.min !== undefined ? 'min="' + o.min + '"' : '',
+      o.max !== undefined ? 'max="' + o.max + '"' : '',
+      o.step !== undefined ? 'step="' + o.step + '"' : '',
+      o.list ? 'list="' + o.list + '"' : '',
+      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : ''
+    ].filter(Boolean).join(' ');
+    const input = '<input ' + attrs + '>';
+    return '<div class="field"' + (o.id ? ' id="' + o.id + '"' : '') + '><label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>' +
+      (o.suffix ? '<div class="inline">' + input + '<span class="suffix">' + esc(o.suffix) + '</span></div>' : input) +
+      (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
+  }
+
+  function fTextarea(path, label, o) {
+    o = o || {};
+    return '<div class="field"><label>' + esc(label) + '</label>' +
+      '<textarea data-field="' + path + '" rows="' + (o.rows || 3) + '" placeholder="' + esc(o.placeholder || '') + '">' + esc(U.getPath(state.applicant, path) || '') + '</textarea></div>';
+  }
+
+  // ラジオ風セグメント。options: [{value,label,tone}]
+  function fSeg(path, label, options, o) {
+    o = o || {};
+    const cur = U.getPath(state.applicant, path) || '';
+    return '<div class="field"' + (o.id ? ' id="' + o.id + '"' : '') + '><label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>' +
+      '<div class="seg" data-seg="' + path + '">' + options.map(function (op) {
+        return '<label class="seg-opt' + (op.tone ? ' tone-' + op.tone : '') + (cur === op.value ? ' on' : '') + '">' +
+          '<input type="radio" name="seg-' + path + '" value="' + esc(op.value) + '" data-field="' + path + '"' + (cur === op.value ? ' checked' : '') + '><span>' + esc(op.label) + '</span></label>';
+      }).join('') + '</div>' +
+      (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
+  }
+
+  const TRI = [{ value: 'ok', label: '○ 可能', tone: 'ok' }, { value: 'consult', label: '△ 要相談', tone: 'warn' }, { value: 'ng', label: '× 不可', tone: 'danger' }];
+
+  function timeRowHtml(key, label) {
+    const s = state.applicant.shifts[key] || { start: '', end: '', nextDay: false };
+    return '<div class="time-row" data-day="' + key + '">' +
+      '<div class="time-label">' + esc(label) + '</div>' +
+      '<input type="time" data-field="shifts.' + key + '.start" value="' + esc(s.start) + '" aria-label="' + esc(label) + ' 開始">' +
+      '<span class="tilde">〜</span>' +
+      '<input type="time" data-field="shifts.' + key + '.end" value="' + esc(s.end) + '" aria-label="' + esc(label) + ' 終了">' +
+      '<label class="chip chip-sm' + (s.nextDay ? ' on' : '') + '"><input type="checkbox" data-field="shifts.' + key + '.nextDay"' + (s.nextDay ? ' checked' : '') + '><span>翌日</span></label>' +
+      '<span class="time-dur" data-dur="' + key + '"></span>' +
+    '</div>';
+  }
+
+  function inputStepHtml() {
+    const a = state.applicant;
+    const p = state.profile;
+    const o = p.options;
+    const f = p.features;
+    const prm = p.params;
+
+    let html = '';
+
+    html += '<div class="card"><div class="card-head"><h2>基本情報</h2><p>応募書類・応募フォームの内容を入力してください。<span class="req">*</span> は必須です。</p></div>' +
+      '<div class="field-row">' +
+        fInput('name', '応募者名', { required: true, placeholder: '例：山田 太郎', autocomplete: 'off' }) +
+        fSelect('gender', '性別', o.genders) +
+      '</div>' +
+      '<div class="field-row cols-3">' +
+        fInput('age', '年齢', { type: 'number', min: 15, max: 99, suffix: '歳', required: true }) +
+        fSelect('category', '区分', o.categories.map(function (c) { return c.value; }), { required: true }) +
+        (f.graduationDate ? fInput('graduationDate', '卒業予定年月', { type: 'month', id: 'grp-graduation' }) : '') +
+      '</div>' +
+    '</div>';
+
+    html += '<div class="card"><div class="card-head"><h2>通勤</h2></div>' +
+      '<div class="field-row cols-3">' +
+        fSelect('commuteMethod', '通勤方法', o.commuteMethods, { required: true }) +
+        fInput('commuteMinutes', '通勤時間', { type: 'number', min: 1, max: 240, suffix: '分', required: true }) +
+        fInput('nearestStation', '最寄り駅／バス停', { id: 'grp-station', list: 'stationHints', placeholder: '例：新宿', hint: '乗換案内で所要時間・終電も確認しておくと面接がスムーズです。' }) +
+      '</div>' +
+      '<datalist id="stationHints">' + (o.stationHints || []).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
+    '</div>';
+
+    html += '<div class="card"><div class="card-head"><h2>勤務条件</h2></div>' +
+      '<div class="field"><label>勤務可能曜日<span class="req">*</span></label>' +
+        '<div class="chip-group" id="dayChips">' +
+          R.DAYS.map(function (d) {
+            const on = a.workDays.indexOf(d.key) >= 0;
+            return '<label class="chip' + (on ? ' on' : '') + '"><input type="checkbox" data-field="workDays" data-array value="' + d.key + '"' + (on ? ' checked' : '') + '><span>' + d.label + '</span></label>';
+          }).join('') +
+          '<label class="chip chip-any' + (a.anyDay ? ' on' : '') + '"><input type="checkbox" data-field="anyDay"' + (a.anyDay ? ' checked' : '') + '><span>曜日問わず</span></label>' +
+        '</div></div>' +
+      '<div class="field-row">' +
+        fInput('daysMin', '週の最低勤務日数', { type: 'number', min: 1, max: 7, suffix: '日' }) +
+        fInput('daysMax', '週の最大勤務日数', { type: 'number', min: 1, max: 7, suffix: '日' }) +
+      '</div>' +
+      '<div class="field"><label>勤務希望時間<span class="req">*</span></label>' +
+        '<div class="time-rows" id="timeRows">' +
+          timeRowHtml('any', '曜日問わず') +
+          R.DAYS.map(function (d) { return timeRowHtml(d.key, d.label + '曜'); }).join('') +
+          '<div class="time-empty" id="timeEmpty">勤務可能曜日を選ぶと、曜日ごとの時間入力欄が表示されます。</div>' +
+        '</div>' +
+        '<div class="hint">終了時間が開始時間より早い場合は自動的に「翌日」扱いになります。</div>' +
+        '<div class="alert danger hidden" id="hsWarn"><span class="ico">⚠</span><span>高校生は ' + esc(prm.highschoolLatestEnd || '22:00') + ' を超える勤務はできません。入力内容を確認してください。</span></div>' +
+      '</div>' +
+      '<div class="field-row">' +
+        fSelect('workPeriod', '勤務期間', o.workPeriods, { required: true }) +
+        fSeg('sideJob', 'かけもち', [{ value: 'no', label: 'なし' }, { value: 'yes', label: 'あり', tone: 'warn' }]) +
+      '</div>' +
+      '<div id="grp-sidejob-detail">' + fInput('sideJobDetail', 'かけもち先・週の勤務時間など', { placeholder: '例：コンビニ 週2日 10時間程度' }) + '</div>' +
+      (f.vacation && (o.vacationItems || []).length ? (
+        '<h3 class="sub">長期休暇の対応</h3><div class="field-row cols-' + Math.min(o.vacationItems.length, 4) + '">' +
+          o.vacationItems.map(function (v) { return fSeg('vacation.' + v.id, v.label, TRI); }).join('') +
+        '</div>') : '') +
+    '</div>';
+
+    if (f.lateNight) {
+      html += '<div class="card"><div class="card-head"><h2>深夜帯（' + esc(prm.lateNightStartHour || 22) + '時以降）</h2><p>クローズ要員の見込みと、帰宅手段を確認します。</p></div>' +
+        '<div class="field-row">' +
+          fSeg('lateNight.availability', esc(prm.lateNightStartHour || 22) + '時以降の勤務', TRI) +
+          fSelect('lateNight.returnMethod', '深夜帯の帰宅手段', o.returnMethods) +
+        '</div>' +
+        '<div class="field-row">' +
+          fInput('lateNight.lastTrain', '終電時刻（最寄り駅発）', { type: 'time', id: 'grp-lasttrain', hint: 'クローズ後に間に合うか確認します。' }) +
+          (f.taxi ? fInput('lateNight.taxiFare', 'タクシー料金の目安（自宅まで）', { type: 'number', min: 0, step: 100, suffix: '円', id: 'grp-taxi', hint: '規定金額: ' + Number(prm.taxiLimitYen || 0).toLocaleString('ja-JP') + '円' }) : '') +
+        '</div>' +
+      '</div>';
+    }
+
+    if (f.foreignNational) {
+      html += '<div class="card"><div class="card-head"><h2>外国籍・在留資格</h2><p>該当する場合、資格外活動許可と週' + esc(prm.foreignWeeklyHourCap || 28) + '時間上限の確認事項を自動で申し送ります。</p></div>' +
+        fSeg('foreign.isForeign', '外国籍', [{ value: 'no', label: '該当なし' }, { value: 'yes', label: '該当する', tone: 'warn' }]) +
+        '<div id="grp-foreign-detail">' +
+          '<div class="field-row">' +
+            fSelect('foreign.residenceStatus', '在留資格', o.residenceStatuses) +
+            fSelect('foreign.workPermit', '資格外活動許可', o.workPermitStates) +
+          '</div>' +
+          '<div class="field-row">' +
+            fInput('foreign.residenceExpiry', '在留期限', { type: 'month' }) +
+            fSelect('foreign.japaneseLevel', '日本語レベル', o.japaneseLevels) +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    const extras = [];
+    if (f.department) extras.push(fSelect('department', '希望部署', o.departments));
+    if (f.applicationRoute) extras.push(fSelect('applicationRoute', '応募経路', o.applicationRoutes));
+    html += '<div class="card"><div class="card-head"><h2>その他</h2></div>' +
+      (extras.length ? '<div class="field-row">' + extras.join('') + '</div>' : '') +
+      fTextarea('reviewerNotes', '担当者所見（応募時点）', { placeholder: '応募書類や連絡時の印象、気になった点など' }) +
+    '</div>';
+
+    html += '<div class="actions end"><button type="button" class="btn primary" data-action="generate-handoff">留意点を生成して申し送りへ →</button></div>';
+    return html;
+  }
+
+  function show(sel, on) {
+    const el = typeof sel === 'string' ? $(sel) : sel;
+    if (el) el.classList.toggle('hidden', !on);
+  }
+
+  function applyVisibility() {
+    const a = state.applicant;
+    const f = state.profile.features;
+    const group = R.categoryGroup(state.profile, a.category);
+    show('#grp-graduation', !!f.graduationDate && R.isStudentGroup(group));
+    show('#grp-station', a.commuteMethod === '公共交通機関');
+    show('#grp-sidejob-detail', a.sideJob === 'yes');
+    $$('.time-row[data-day]').forEach(function (row) {
+      const k = row.dataset.day;
+      show(row, k === 'any' ? a.anyDay : (!a.anyDay && a.workDays.indexOf(k) >= 0));
+    });
+    show('#timeEmpty', !a.anyDay && a.workDays.length === 0);
+    show('#grp-lasttrain', a.lateNight.returnMethod === 'train');
+    show('#grp-taxi', !!f.taxi && a.lateNight.returnMethod === 'taxi');
+    show('#grp-foreign-detail', a.foreign.isForeign === 'yes');
+
+    const sh = R.analyzeShifts(a, state.profile);
+    const limit = R.toMinutes(state.profile.params.highschoolLatestEnd || '22:00');
+    show('#hsWarn', group === 'highschool' && sh.latestEndAbs != null && limit != null && sh.latestEndAbs > limit);
+  }
+
+  function updateTimeDisplays() {
+    const late = (Number(state.profile.params.lateNightStartHour) || 22) * 60;
+    $$('.time-row[data-day]').forEach(function (row) {
+      const k = row.dataset.day;
+      const s = state.applicant.shifts[k];
+      const out = row.querySelector('[data-dur]');
+      if (!s || !out) return;
+      const sm = R.toMinutes(s.start), em = R.toMinutes(s.end);
+      // 終了<開始なら自動で翌日に
+      if (sm != null && em != null && em < sm && !s.nextDay) {
+        s.nextDay = true;
+        const cb = row.querySelector('input[type="checkbox"]');
+        if (cb) { cb.checked = true; cb.closest('.chip').classList.add('on'); }
+      }
+      const min = R.duration(s.start, s.end, s.nextDay);
+      if (min == null) { out.textContent = ''; out.classList.remove('late'); return; }
+      const endAbs = sm + min;
+      let txt = R.fmtDuration(min);
+      if (s.nextDay) txt += '（翌' + s.end + 'まで）';
+      if (endAbs > late) txt += ' ・深夜帯あり';
+      out.textContent = txt;
+      out.classList.toggle('late', endAbs > late);
+    });
+  }
+
+  function onFieldEvent(e) {
+    const t = e.target;
+    if (!t || !t.dataset) return;
+
+    if (t.dataset.field) {
+      const path = t.dataset.field;
+      if (t.type === 'checkbox' && t.hasAttribute('data-array')) {
+        const arr = (U.getPath(state.applicant, path) || []).slice();
+        const i = arr.indexOf(t.value);
+        if (t.checked && i < 0) arr.push(t.value);
+        if (!t.checked && i >= 0) arr.splice(i, 1);
+        U.setPath(state.applicant, path, arr);
+      } else if (t.type === 'checkbox') {
+        U.setPath(state.applicant, path, t.checked);
+      } else if (t.type === 'radio') {
+        if (!t.checked) return;
+        U.setPath(state.applicant, path, t.value);
+        const seg = t.closest('.seg');
+        if (seg) $$('.seg-opt', seg).forEach(function (l) { l.classList.toggle('on', l.contains(t)); });
+      } else {
+        U.setPath(state.applicant, path, t.value);
+      }
+      const chip = t.closest('.chip');
+      if (chip && t.type === 'checkbox') chip.classList.toggle('on', t.checked);
+      if (t.hasAttribute('data-required')) t.classList.remove('invalid');
+      state.dirty = true;
+      applyVisibility();
+      updateTimeDisplays();
+      renderSummary();
+      return;
+    }
+
+    if (t.dataset.check) {
+      state.handoffChecks[t.dataset.check] = t.checked;
+      const item = t.closest('.handoff-item');
+      if (item) item.classList.toggle('done', t.checked);
+      state.dirty = true;
+      renderHandoffProgress();
+      renderSummary();
+      return;
+    }
+
+    if (t.dataset.note === 'handoff') { state.handoffNote = t.value; state.dirty = true; return; }
+    if (t.dataset.note === 'interview') { state.interviewNotes = t.value; state.dirty = true; return; }
+  }
+
+  function onContentClick(e) {
+    const b = e.target.closest('[data-action]');
+    if (!b) return;
+    switch (b.dataset.action) {
+      case 'generate-handoff':
+        if (validateInput()) goStep(2);
+        break;
+      case 'to-step':
+        goStep(Number(b.dataset.step));
+        break;
+      case 'copy-handoff':
+        copyHandoffText();
+        break;
+      case 'judge':
+        if (validateScores()) goStep(4);
+        break;
+      case 'score': {
+        const id = b.dataset.item;
+        const v = Number(b.dataset.value);
+        state.scores[id] = state.scores[id] === v ? undefined : v;
+        if (state.scores[id] === undefined) delete state.scores[id];
+        state.dirty = true;
+        updateScoreUI();
+        renderSummary();
+        break;
+      }
+      case 'save':
+        saveRecord();
+        break;
+      case 'print':
+        window.print();
+        break;
+      default:
+        break;
+    }
+  }
+
+  function validateInput() {
+    const missing = [];
+    $$('#stepContent [data-required]').forEach(function (el) {
+      const visible = !el.closest('.hidden');
+      if (visible && !String(el.value || '').trim()) { el.classList.add('invalid'); missing.push(el); }
+      else el.classList.remove('invalid');
+    });
+    const a = state.applicant;
+    if (!a.anyDay && a.workDays.length === 0) {
+      toast('勤務可能曜日を1つ以上選んでください', 'error');
+      $('#dayChips').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
+    const sh = R.analyzeShifts(a, state.profile);
+    if (!sh.hasAnyEntry) {
+      toast('勤務希望時間を1つ以上入力してください', 'error');
+      $('#timeRows').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
+    if (missing.length) {
+      toast('必須項目（' + missing.length + '件）が未入力です', 'error');
+      missing[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      missing[0].focus();
+      return false;
+    }
+    return true;
+  }
+
+  // =====================================================================
+  // Step2: 面接者への申し送り
+  // =====================================================================
+  function handoffStepHtml() {
+    const h = state.handoff;
+    const a = state.applicant;
+    const p = state.profile;
+    const sev = R.SEVERITY;
+    const groups = ['block', 'warn', 'info'].map(function (k) {
+      return { key: k, meta: sev[k], items: h.items.filter(function (i) { return i.severity === k; }) };
+    });
+    const shiftRows = R.describeShifts(a, p);
+
+    let html = '<div class="card"><div class="card-head"><h2>面接者への申し送り</h2>' +
+      '<div class="spacer"></div><span class="badge accent lg">' + esc(a.name) + ' さん</span>' +
+      '<p>' + esc(p.texts.handoffIntro || '') + '</p></div>' +
+      '<div class="grid-2">' +
+        '<div><h3 class="sub">応募者</h3><table class="table kv">' +
+          [['区分', a.category + (a.age ? '（' + a.age + '歳）' : '')],
+           ['通勤', [a.commuteMethod, a.commuteMinutes ? a.commuteMinutes + '分' : '', a.nearestStation].filter(Boolean).join(' / ')],
+           ['勤務期間', R.labelOf(p.options.workPeriods, a.workPeriod)],
+           ['週勤務日数', (a.daysMin || a.daysMax) ? (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日' : '未入力']
+          ].map(function (r) { return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1] || '未入力') + '</td></tr>'; }).join('') +
+        '</table></div>' +
+        '<div><h3 class="sub">希望シフト</h3>' +
+          (shiftRows.length ? '<ul class="list-plain">' + shiftRows.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>' : '<p class="empty">未入力</p>') +
+          '<div class="badges" style="margin-top:10px">' + h.badges.map(function (b) { return '<span class="badge ' + b.tone + '">' + esc(b.label) + '</span>'; }).join('') + '</div>' +
+        '</div>' +
+      '</div>' +
+      (h.strengths.length ? '<h3 class="sub">強み（面接者へ共有）</h3><ul class="strength-list">' + h.strengths.map(function (s) { return '<li>' + esc(s.text) + '</li>'; }).join('') + '</ul>' : '') +
+    '</div>';
+
+    html += '<div class="card"><div class="card-head"><h2>留意点 <span class="muted" style="font-weight:500">' + h.items.length + '件</span></h2>' +
+      '<div class="spacer"></div><div class="progress" id="handoffProgress" style="min-width:220px"></div>' +
+      '<p>確認が済んだ項目にチェックを入れてください。チェック状況は保存ファイルと採用可否判定に反映されます。</p></div>';
+
+    if (!h.items.length) {
+      html += '<div class="alert ok"><span class="ico">✓</span><span>自動抽出された留意点はありません。面接者には応募者の強みと希望シフトを共有してください。</span></div>';
+    }
+    groups.forEach(function (g) {
+      if (!g.items.length) return;
+      const tone = g.key === 'block' ? 'danger' : g.key === 'warn' ? 'warn' : 'info';
+      html += '<div class="handoff-group"><div class="handoff-group-head"><span class="badge ' + tone + '">' + esc(g.meta.label) + '</span><h3>' + g.items.length + '件</h3><span class="desc">' + esc(g.meta.desc) + '</span></div>' +
+        '<div class="handoff-list">' + g.items.map(function (i) {
+          const done = !!state.handoffChecks[i.id];
+          return '<label class="handoff-item sev-' + i.severity + (done ? ' done' : '') + '">' +
+            '<input type="checkbox" data-check="' + esc(i.id) + '"' + (done ? ' checked' : '') + '>' +
+            '<div><div class="handoff-meta"><span class="tag">' + esc(i.categoryLabel) + '</span></div><div class="handoff-text">' + esc(i.text) + '</div></div>' +
+          '</label>';
+        }).join('') + '</div></div>';
+    });
+    html += '</div>';
+
+    html += '<div class="card"><div class="card-head"><h2>担当者からの追記</h2><p>自動抽出に含まれない申し送り事項があれば記入してください（面接者向け）。</p></div>' +
+      '<textarea data-note="handoff" rows="3" placeholder="例：電話での受け答えがとても丁寧でした。土曜は月2回程度なら可能とのこと。">' + esc(state.handoffNote) + '</textarea></div>';
+
+    html += '<div class="actions between">' +
+      '<button type="button" class="btn" data-action="to-step" data-step="1">← 応募情報に戻る</button>' +
+      '<div class="actions"><button type="button" class="btn" data-action="copy-handoff">📋 申し送り文をコピー</button>' +
+      '<button type="button" class="btn primary" data-action="to-step" data-step="3">面接評価へ進む →</button></div></div>';
+    return html;
+  }
+
+  function renderHandoffProgress() {
+    const el = $('#handoffProgress');
+    if (!el || !state.handoff) return;
+    const total = state.handoff.items.length;
+    const done = state.handoff.items.filter(function (i) { return state.handoffChecks[i.id]; }).length;
+    const pct = total ? Math.round(done / total * 100) : 100;
+    el.innerHTML = '<span>確認済み ' + done + ' / ' + total + '</span><div class="progress-bar"><span style="width:' + pct + '%"></span></div>';
+  }
+
+  function buildHandoffText() {
+    const h = state.handoff;
+    const a = state.applicant;
+    const p = state.profile;
+    const lines = [];
+    lines.push('【面接者への申し送り】' + p.meta.theaterName);
+    lines.push('応募者：' + a.name + ' さん（' + [a.category, a.age ? a.age + '歳' : ''].filter(Boolean).join('・') + '）');
+    R.describeApplicant(a, p).forEach(function (r) {
+      if (['氏名', '年齢', '区分', '担当者所見'].indexOf(r.label) >= 0) return;
+      lines.push(r.label + '：' + r.value);
+    });
+    ['block', 'warn', 'info'].forEach(function (k) {
+      const items = h.items.filter(function (i) { return i.severity === k; });
+      if (!items.length) return;
+      lines.push('');
+      lines.push('■' + R.SEVERITY[k].label + '（' + R.SEVERITY[k].desc + '）');
+      items.forEach(function (i) { lines.push((state.handoffChecks[i.id] ? '☑ ' : '☐ ') + i.text); });
+    });
+    if (h.strengths.length) {
+      lines.push('');
+      lines.push('■強み');
+      h.strengths.forEach(function (s) { lines.push('・' + s.text); });
+    }
+    if (a.reviewerNotes) { lines.push(''); lines.push('■担当者所見'); lines.push(a.reviewerNotes); }
+    if (state.handoffNote) { lines.push(''); lines.push('■担当者からの追記'); lines.push(state.handoffNote); }
+    return lines.join('\n');
+  }
+
+  function copyHandoffText() {
+    const text = buildHandoffText();
+    const done = function () { toast('申し送り文をコピーしました', 'ok'); };
+    const fallback = function () {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { toast('コピーできませんでした', 'error'); }
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  }
+
+  // =====================================================================
+  // Step3: 面接評価
+  // =====================================================================
+  function interviewStepHtml() {
+    const ev = state.profile.evaluation;
+    const scale = Number(ev.scaleMax) || 5;
+    const h = state.handoff;
+    const unresolved = h ? h.items.filter(function (i) { return !state.handoffChecks[i.id]; }) : [];
+    const unresolvedBlock = unresolved.filter(function (i) { return i.severity === 'block'; });
+
+    let html = '';
+    if (unresolved.length) {
+      html += '<div class="alert ' + (unresolvedBlock.length ? 'danger' : 'warn') + '"><span class="ico">⚠</span><span>未確認の留意点が ' + unresolved.length + ' 件あります' +
+        (unresolvedBlock.length ? '（うち要判断 ' + unresolvedBlock.length + ' 件）' : '') + '。' +
+        '<button type="button" class="btn link" data-action="to-step" data-step="2">申し送りを確認する</button></span></div>';
+    }
+
+    html += '<div class="card"><div class="card-head"><h2>面接評価</h2><div class="spacer"></div><span class="badge accent lg">' + esc(state.applicant.name) + ' さん</span>' +
+      '<p>各項目を 1〜' + scale + ' 点で評価してください。同じ点を再度押すと取り消せます。</p></div>' +
+      '<div class="scale-legend"><span>1 悪い</span><span>' + Math.ceil(scale / 2) + ' 普通</span><span>' + scale + ' 良い</span></div>' +
+      '<div class="eval-list">' + (ev.items || []).map(function (it, idx) {
+        const isOverall = it.id === ev.overallItemId;
+        const cur = state.scores[it.id];
+        return '<div class="eval-item' + (isOverall ? ' overall' : '') + '" data-eval="' + esc(it.id) + '">' +
+          '<div><div class="eval-label"><span class="n">' + (idx + 1) + '.</span>' + esc(it.label) + '</div>' +
+          (isOverall ? '<div class="eval-sub">1 = 不採用 … ' + scale + ' = 採用。' + (Number(ev.overallWarnBelow) || 3) + '点未満で警告が出ます。</div>' : '') + '</div>' +
+          '<div class="score-seg">' + Array.from({ length: scale }, function (_, i) { return i + 1; }).map(function (v) {
+            return '<button type="button" class="seg-btn s' + v + (cur === v ? ' active' : '') + '" data-action="score" data-item="' + esc(it.id) + '" data-value="' + v + '" aria-label="' + v + '点">' + v + '</button>';
+          }).join('') + '</div></div>';
+      }).join('') + '</div>' +
+      '<div class="score-total">合計 <strong id="scoreTotal">0</strong><span class="max">/ ' + ((ev.items || []).length * scale) + '点</span><span class="pct" id="scorePct"></span></div>' +
+      '<div class="alert warn hidden" id="overallWarn" style="margin-top:10px"><span class="ico">⚠</span><span>面接者の総合判断が低評価です。採用可否は慎重に判断してください。</span></div>' +
+    '</div>';
+
+    html += '<div class="card"><div class="card-head"><h2>面接所見</h2></div>' +
+      '<textarea data-note="interview" rows="4" placeholder="特記事項、面接での受け答えの印象、確認できた事項など">' + esc(state.interviewNotes) + '</textarea></div>';
+
+    html += '<div class="actions between">' +
+      '<button type="button" class="btn" data-action="to-step" data-step="2">← 申し送りに戻る</button>' +
+      '<button type="button" class="btn primary" data-action="judge">採用可否判定を実行 →</button></div>';
+    return html;
+  }
+
+  function updateScoreUI() {
+    const ev = state.profile.evaluation;
+    const scale = Number(ev.scaleMax) || 5;
+    let total = 0;
+    (ev.items || []).forEach(function (it) {
+      const v = state.scores[it.id];
+      if (v != null) total += Number(v);
+      const row = $('.eval-item[data-eval="' + it.id + '"]');
+      if (row) {
+        $$('.seg-btn', row).forEach(function (b) { b.classList.toggle('active', Number(b.dataset.value) === v); });
+        row.classList.remove('missing');
+      }
+    });
+    const max = (ev.items || []).length * scale;
+    const t = $('#scoreTotal'); if (t) t.textContent = total;
+    const pctEl = $('#scorePct'); if (pctEl) pctEl.textContent = max ? Math.round(total / max * 100) + '%' : '';
+    const ov = state.scores[ev.overallItemId];
+    show('#overallWarn', ov != null && ov < (Number(ev.overallWarnBelow) || 3));
+  }
+
+  function validateScores() {
+    const ev = state.profile.evaluation;
+    const missing = (ev.items || []).filter(function (it) { return state.scores[it.id] == null; });
+    if (!missing.length) return true;
+    missing.forEach(function (it) { const row = $('.eval-item[data-eval="' + it.id + '"]'); if (row) row.classList.add('missing'); });
+    toast('未入力の評価項目が ' + missing.length + ' 件あります', 'error');
+    const first = $('.eval-item.missing'); if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return false;
+  }
+
+  // =====================================================================
+  // Step4: 採用可否判定
+  // =====================================================================
+  function resultStepHtml() {
+    const j = state.judgment;
+    const a = state.applicant;
+    const p = state.profile;
+    const scale = Number(p.evaluation.scaleMax) || 5;
+    const icon = j.result === 'recommend' ? '🎉' : j.result === 'review' ? '⚖' : '✖';
+
+    let html = '<div class="result-card ' + j.result + '">' +
+      '<div class="result-kicker">採用可否判定 ・ ' + esc(a.name) + ' さん</div>' +
+      '<div class="result-title"><span>' + icon + '</span><span>' + esc(j.title) + '</span></div>' +
+      '<div class="result-body">' + esc(j.body) + '</div>' +
+      '<div class="metrics">' +
+        '<div class="metric"><div class="metric-val num">' + j.total + ' <small>/ ' + j.max + '点</small></div><div class="metric-lbl">面接評価 合計</div></div>' +
+        '<div class="metric"><div class="metric-val num">' + j.pct + '<small>%</small></div><div class="metric-lbl">得点率</div></div>' +
+        '<div class="metric"><div class="metric-val num">' + j.thresholds.recommendPts + '<small>点以上</small></div><div class="metric-lbl">' + esc(p.texts.recommend.title) + '（' + j.thresholds.recommendPct + '%）</div></div>' +
+        '<div class="metric"><div class="metric-val num">' + j.thresholds.reviewPts + '<small>点以上</small></div><div class="metric-lbl">' + esc(p.texts.review.title) + '（' + j.thresholds.reviewPct + '%）</div></div>' +
+      '</div>' +
+      '<div class="result-disclaimer">' + esc(j.disclaimer) + '</div>' +
+    '</div>';
+
+    if (j.warnings.length) {
+      html += '<div class="card"><div class="card-head"><h3>確認事項</h3></div><ul class="list-x">' + j.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' +
+        (j.unresolved.length ? '<h3 class="sub">未確認の留意点</h3><div class="handoff-list">' + j.unresolved.map(function (i) {
+          return '<div class="handoff-item sev-' + i.severity + '" style="grid-template-columns:1fr;cursor:default"><div><div class="handoff-meta"><span class="badge ' + (i.severity === 'block' ? 'danger' : i.severity === 'warn' ? 'warn' : 'info') + '">' + esc(R.SEVERITY[i.severity].label) + '</span></div><div class="handoff-text">' + esc(i.text) + '</div></div></div>';
+        }).join('') + '</div><div class="actions" style="margin-top:10px"><button type="button" class="btn sm" data-action="to-step" data-step="2">申し送りを確認する</button></div>' : '') +
+      '</div>';
+    }
+
+    html += '<div class="card"><div class="card-head"><h3>評価内訳</h3></div><div class="bars">' + j.breakdown.map(function (b) {
+      const s = b.score == null ? 0 : b.score;
+      const pct = Math.round(s / scale * 100);
+      const tone = s <= 2 ? 'lo' : s === 3 ? 'mid' : 'hi';
+      return '<div class="bar-row' + (b.isOverall ? ' overall' : '') + '"><div class="bar-label">' + esc(b.label) + '</div><div class="bar-track"><div class="bar-fill ' + tone + '" style="width:' + pct + '%"></div></div><div class="bar-val num">' + (b.score == null ? '-' : b.score) + '</div></div>';
+    }).join('') + '</div></div>';
+
+    html += '<div class="grid-2">' +
+      '<div class="card"><div class="card-head"><h3>面接での強み</h3></div>' + (j.strengths.length ? '<ul class="list-check">' + j.strengths.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>' : '<p class="empty">4点以上の項目はありません。</p>') + '</div>' +
+      '<div class="card"><div class="card-head"><h3>面接での懸念</h3></div>' + (j.concerns.length ? '<ul class="list-x">' + j.concerns.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>' : '<p class="empty">2点以下の項目はありません。</p>') + '</div>' +
+    '</div>';
+
+    if (state.interviewNotes) {
+      html += '<div class="card"><div class="card-head"><h3>面接所見</h3></div><p style="white-space:pre-wrap">' + esc(state.interviewNotes) + '</p></div>';
+    }
+
+    html += '<div class="card"><div class="card-head"><h3>応募情報サマリー</h3></div><table class="table kv">' +
+      R.describeApplicant(a, p).map(function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; }).join('') + '</table></div>';
+
+    const h = state.handoff;
+    html += '<div class="card"><div class="card-head"><h3>判定履歴</h3></div><ul class="timeline">' +
+      '<li class="tl-item"><div><div>Step 2　留意点 ' + (h ? h.items.length : 0) + ' 件（要判断 ' + (h ? h.counts.block : 0) + '・要確認 ' + (h ? h.counts.warn : 0) + '・共有 ' + (h ? h.counts.info : 0) + '）／確認済み ' + (h ? h.items.filter(function (i) { return state.handoffChecks[i.id]; }).length : 0) + ' 件</div><div class="when">' + esc(U.fmtDateTime(h ? h.generatedAt : '')) + '</div></div></li>' +
+      '<li class="tl-item"><div><div>Step 3　面接評価 合計 ' + j.total + ' / ' + j.max + ' 点</div></div></li>' +
+      '<li class="tl-item"><div><div>Step 4　' + esc(j.title) + (j.adjusted ? '（要判断未確認のため調整）' : '') + '</div><div class="when">' + esc(U.fmtDateTime(j.evaluatedAt)) + '</div></div></li>' +
+      (state.savedAt ? '<li class="tl-item"><div><div>保存済み</div><div class="when">' + esc(U.fmtDateTime(state.savedAt)) + '</div></div></li>' : '') +
+    '</ul></div>';
+
+    html += '<div class="actions between no-print">' +
+      '<button type="button" class="btn" data-action="to-step" data-step="3">← 面接評価に戻る</button>' +
+      '<div class="actions"><button type="button" class="btn" data-action="print">🖨 印刷</button>' +
+      '<button type="button" class="btn primary" data-action="save">💾 保存（HTML）</button></div></div>';
+    return html;
+  }
+
+  // =====================================================================
+  // 右サマリー
+  // =====================================================================
+  function renderSummary() {
+    const a = state.applicant;
+    const p = state.profile;
+    const ev = p.evaluation;
+    const scale = Number(ev.scaleMax) || 5;
+    const max = (ev.items || []).length * scale;
+    let total = 0, scored = 0;
+    (ev.items || []).forEach(function (it) { const v = state.scores[it.id]; if (v != null) { total += Number(v); scored++; } });
+    const pct = max ? Math.round(total / max * 100) : 0;
+
+    const live = R.buildHandoff(a, p); // 入力途中でもバッジ・件数をライブ表示
+    const badges = live.badges;
+    const counts = live.counts;
+    const checked = state.handoff ? state.handoff.items.filter(function (i) { return state.handoffChecks[i.id]; }).length : 0;
+    const j = state.judgment;
+
+    const chip = $('#applicantChip');
+    chip.className = 'chip-applicant' + (state.dirty ? ' dirty' : state.savedAt ? ' saved' : '');
+    chip.innerHTML = '<span class="dot"></span><span>' + (a.name ? '<strong>' + esc(a.name) + '</strong> さん' : '未入力') + (state.dirty ? '・未保存' : state.savedAt ? '・保存済み' : '') + '</span>';
+
+    const r = 36, c = 2 * Math.PI * r;
+    const dash = (pct / 100) * c;
+    const gaugeCls = j ? j.result : '';
+
+    $('#summaryPanel').innerHTML =
+      '<div class="summary-card"><h4>応募者</h4>' +
+        '<div class="sum-name">' + (a.name ? esc(a.name) + ' <span class="muted" style="font-size:13px;font-weight:600">さん</span>' : '<span class="muted">未入力</span>') + '</div>' +
+        '<div class="sum-sub">' + esc([a.category, a.age ? a.age + '歳' : '', a.gender].filter(Boolean).join('・') || '区分・年齢未入力') + '</div>' +
+        '<div class="sum-row"><span class="sum-label">通勤</span><span class="sum-val">' + esc([a.commuteMethod, a.commuteMinutes ? a.commuteMinutes + '分' : ''].filter(Boolean).join(' ') || '—') + '</span></div>' +
+        '<div class="sum-row"><span class="sum-label">勤務期間</span><span class="sum-val">' + esc(R.labelOf(p.options.workPeriods, a.workPeriod) || '—') + '</span></div>' +
+        '<div class="sum-row"><span class="sum-label">週日数</span><span class="sum-val">' + esc((a.daysMin || a.daysMax) ? (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日' : '—') + '</span></div>' +
+      '</div>' +
+      '<div class="summary-card"><h4>シフト適合</h4>' +
+        (badges.length ? '<div class="badges">' + badges.map(function (b) { return '<span class="badge ' + b.tone + '">' + esc(b.label) + '</span>'; }).join('') + '</div>' : '<p class="empty">勤務曜日・時間を入力すると表示されます。</p>') +
+      '</div>' +
+      '<div class="summary-card"><h4>留意点</h4>' +
+        '<div class="sum-counts">' +
+          '<div class="sum-count block"><b>' + counts.block + '</b><span>要判断</span></div>' +
+          '<div class="sum-count warn"><b>' + counts.warn + '</b><span>要確認</span></div>' +
+          '<div class="sum-count info"><b>' + counts.info + '</b><span>共有</span></div>' +
+        '</div>' +
+        (state.handoff ? '<div class="progress" style="margin-top:10px"><span>確認済み ' + checked + '/' + state.handoff.items.length + '</span><div class="progress-bar"><span style="width:' + (state.handoff.items.length ? Math.round(checked / state.handoff.items.length * 100) : 100) + '%"></span></div></div>' : '') +
+      '</div>' +
+      '<div class="summary-card"><h4>面接評価</h4><div class="gauge-wrap">' +
+        '<svg class="gauge" viewBox="0 0 84 84"><circle class="track" cx="42" cy="42" r="' + r + '" fill="none" stroke-width="8"/>' +
+        '<circle class="fill ' + gaugeCls + '" cx="42" cy="42" r="' + r + '" fill="none" stroke-width="8" stroke-linecap="round" transform="rotate(-90 42 42)" stroke-dasharray="' + dash.toFixed(1) + ' ' + c.toFixed(1) + '"/>' +
+        '<text x="42" y="40" text-anchor="middle">' + total + '</text><text class="small" x="42" y="54" text-anchor="middle">/ ' + max + '点</text></svg>' +
+        '<div><div class="sum-row" style="border:none;padding:2px 0"><span class="sum-label">入力</span><span class="sum-val">' + scored + ' / ' + (ev.items || []).length + ' 項目</span></div>' +
+        '<div class="sum-row" style="border:none;padding:2px 0"><span class="sum-label">得点率</span><span class="sum-val">' + pct + '%</span></div></div>' +
+      '</div></div>' +
+      '<div class="summary-card"><h4>判定</h4>' +
+        (j ? '<span class="badge lg ' + (j.result === 'recommend' ? 'ok' : j.result === 'review' ? 'warn' : 'danger') + '">' + esc(j.title) + '</span>' : '<p class="empty">面接評価を入力後に判定します。</p>') +
+        (state.savedAt ? '<div class="sum-sub" style="margin-top:8px">最終保存 ' + esc(U.fmtDateTime(state.savedAt)) + '</div>' : '') +
+      '</div>';
+  }
+
+  // =====================================================================
+  // 保存・読込・新規
+  // =====================================================================
+  function saveRecord() {
+    const a = state.applicant;
+    if (!a.name) { toast('応募者名を入力してから保存してください', 'error'); return; }
+    if (!state.handoff) state.handoff = R.buildHandoff(a, state.profile);
+    const rec = S.buildRecord(state);
+    const html = S.generateReportHTML(rec, state.profile);
+    S.download('応募者_' + S.safeName(a.name) + '_' + U.fmtDate(new Date()) + '.html', html, 'text/html;charset=utf-8');
+    state.savedAt = rec.savedAt;
+    state.dirty = false;
+    renderSummary();
+    if (state.step === 4) renderStep();
+    toast(a.name + ' さんの情報を保存しました', 'ok');
+  }
+
+  function onFileChosen(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (ev) {
+      const text = String(ev.target.result || '');
+      if (/\.json$/i.test(file.name)) { importProfileText(text); return; }
+      const rec = S.parseRecordFromHTML(text);
+      if (!rec) { toast('このアプリで保存したファイルではないか、データが見つかりません', 'error'); return; }
+      if (state.dirty && !window.confirm('入力中の内容を破棄して読み込みますか？')) return;
+      applyRecord(rec);
+      toast((rec.applicant.name || '応募者') + ' さんのデータを読み込みました', 'ok');
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function applyRecord(rec) {
+    state.applicant = U.deepMerge(emptyApplicant(state.profile), rec.applicant || {});
+    state.handoffChecks = (rec.handoff && rec.handoff.checks) || {};
+    state.handoffNote = (rec.handoff && rec.handoff.note) || '';
+    state.scores = rec.scores || {};
+    state.interviewNotes = rec.interviewNotes || '';
+    state.judgment = null;
+    state.savedAt = rec.savedAt || null;
+    state.dirty = false;
+    const target = rec.judgment ? 4 : Object.keys(state.scores).length ? 3 : 2;
+    state.maxStepReached = target;
+    if (rec.profile && rec.profile.theaterName && rec.profile.theaterName !== state.profile.meta.theaterName) {
+      toast('このファイルは「' + rec.profile.theaterName + '」の設定で保存されています。現在の設定で再判定します。');
+    }
+    showView('judge');
+    goStep(target);
+  }
+
+  function onProfileFileChosen(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (ev) { importProfileText(String(ev.target.result || '')); };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function importProfileText(text) {
+    let p;
+    try { p = S.parseProfileJSON(text); } catch (err) { toast('読み込めません: ' + err.message, 'error'); return; }
+    if (!window.confirm('「' + p.meta.theaterName + '」のプロファイルを読み込み、現在の設定を置き換えます。よろしいですか？')) return;
+    state.profile = p;
+    S.saveProfile(p);
+    renderBrand();
+    state.applicant = U.deepMerge(emptyApplicant(p), state.applicant);
+    toast('プロファイルを読み込みました', 'ok');
+    showView('settings');
+  }
+
+  function newRecord() {
+    if (state.dirty && !window.confirm('入力中の内容を破棄して新規作成しますか？')) return;
+    state.applicant = emptyApplicant(state.profile);
+    state.handoff = null; state.handoffChecks = {}; state.handoffNote = '';
+    state.scores = {}; state.interviewNotes = ''; state.judgment = null;
+    state.savedAt = null; state.dirty = false;
+    state.step = 1; state.maxStepReached = 1;
+    showView('judge');
+    toast('新規の応募者を開始しました');
+  }
+
+  // =====================================================================
+  // 使い方
+  // =====================================================================
+  function helpHtml() {
+    const m = state.profile.meta;
+    return '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>アルバイト採用の判断基準を統一するためのツールです。面接前は「留意点の申し送り」、面接後は「採用可否の判定」を行います。</p></div>' +
+      '<div class="help-steps">' +
+        '<div class="help-step"><span class="n">1</span><h3>応募情報を入力</h3><p>採用担当が応募書類・連絡内容をもとに入力します。必須は氏名・年齢・区分・通勤・曜日・時間・勤務期間です。</p></div>' +
+        '<div class="help-step"><span class="n">2</span><h3>面接者へ申し送り</h3><p>条件に応じた留意点（要判断・要確認・共有）と強みが自動で出ます。「申し送り文をコピー」でチャット等に貼り付けて共有できます。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>面接評価</h3><p>面接者が各項目を採点します。総合判断が低いときは警告が出ます。</p></div>' +
+        '<div class="help-step"><span class="n">4</span><h3>採用可否判定</h3><p>得点率で「採用推奨／上長最終判断要／不採用推奨」を判定します。「要判断」の留意点が未確認なら採用推奨に留めません。</p></div>' +
+      '</div></div>' +
+      '<div class="card"><div class="card-head"><h3>保存と読み込み</h3></div>' +
+        '<ul class="list-plain"><li><b>保存（HTML）</b>：応募者ごとに1ファイル。ブラウザで開けば判定レポートとして読め、アプリの「読み込み」でそのまま再開できます。</li>' +
+        '<li>途中段階でも保存できます。読み込むと保存時点のステップに戻ります。</li>' +
+        '<li>応募者データはこの端末のブラウザには残りません（保存したファイルのみが記録です）。</li></ul></div>' +
+      '<div class="card"><div class="card-head"><h3>設定（劇場プロファイル）</h3></div>' +
+        '<ul class="list-plain"><li>留意点の文言・ON/OFF・重要度、しきい値、評価項目、結果文言を画面から変更できます。</li>' +
+        '<li>設定は端末のブラウザに保存されます。他の劇場・端末へ展開するときは JSON を書き出して読み込んでください。</li>' +
+        '<li>区分の「グループ」が学生・高校生などの判定に使われます。</li></ul></div>' +
+      '<div class="view-footer">' + esc(m.footer) + '</div>';
+  }
+
+  // =====================================================================
+  // トースト
+  // =====================================================================
+  let toastTimer = null;
+  function toast(msg, kind) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (kind ? ' ' + kind : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2800);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+  global.RecruitApp = { state: state, goStep: goStep, showView: showView };
+})(window);
+
+</script>
+</body>
+</html>

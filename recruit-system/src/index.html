@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>リクルート判定システム</title>
+  <meta name="description" content="アルバイト採用の基準統一を支援する判定アプリ。応募情報から面接者への留意点を自動生成し、面接評価から採用可否を判定します。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- ===== サイドバー ===== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" id="brandMark">R</div>
+        <div>
+          <div class="brand-title" id="brandTitle">リクルート判定システム</div>
+          <div class="brand-sub" id="brandTheater">—</div>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="メインメニュー">
+        <button type="button" class="nav-item active" data-view="judge"><span class="ico">▣</span>応募者判定</button>
+        <button type="button" class="nav-item" data-view="settings"><span class="ico">⚙</span>設定（劇場ルール）</button>
+        <button type="button" class="nav-item" data-view="help"><span class="ico">?</span>使い方</button>
+      </nav>
+
+      <div id="stepSection">
+        <div class="side-section-title">判定ステップ</div>
+        <ol class="steps" id="stepNav"></ol>
+      </div>
+
+      <div class="sidebar-foot">
+        <button type="button" class="btn sm ghost" id="btnTheme">🌙 ダークモード</button>
+        <div class="version" id="brandVersion"></div>
+      </div>
+    </aside>
+
+    <!-- ===== メイン ===== -->
+    <main class="main">
+      <header class="topbar">
+        <div class="top-title" id="topTitle">応募者判定</div>
+        <div class="chip-applicant" id="applicantChip"><span class="dot"></span><span>未入力</span></div>
+        <div class="top-actions" id="topActions">
+          <button type="button" class="btn sm" id="btnNew">＋ 新規</button>
+          <button type="button" class="btn sm" id="btnLoad">📂 読み込み</button>
+          <button type="button" class="btn sm primary" id="btnSave">💾 保存（HTML）</button>
+          <button type="button" class="btn sm" id="btnPrint">🖨 印刷</button>
+        </div>
+      </header>
+
+      <section class="view" id="view-judge">
+        <div class="judge-layout">
+          <div class="work" id="stepContent"></div>
+          <aside class="summary" id="summaryPanel" aria-label="サマリー"></aside>
+        </div>
+        <div class="view-footer" id="footerText"></div>
+      </section>
+
+      <section class="view hidden" id="view-settings"></section>
+      <section class="view hidden" id="view-help"></section>
+    </main>
+  </div>
+
+  <input type="file" id="fileInput" accept=".html,.htm,.json" hidden>
+  <input type="file" id="profileFileInput" accept=".json" hidden>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="util.js"></script>
+  <script src="config.default.js"></script>
+  <script src="rules.js"></script>
+  <script src="storage.js"></script>
+  <script src="settings.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
