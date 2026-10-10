@@ -684,6 +684,16 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await navStep(3);
   await pick('highschool.careerDecided', 'yes');
   await wait(100);
+  // 進路=就職（不採用推奨の対象）なら、継続意思が未入力でも案内文は「上長最終判断要」ではなく「不採用推奨」
+  await page.selectOption('#shiftConfirm [data-field="highschool.careerPath"]', 'employment');
+  await wait(150);
+  const stJob = await page.textContent('#shiftConfirmStatus');
+  expect(stJob.includes('卒業後の継続意思') && stJob.includes('不採用推奨') && !stJob.includes('上長最終判断要'), 'E13 就職＋継続未入力の案内文は不採用推奨: ' + stJob);
+  expect((await page.textContent('#hsExceptionStatus')).includes('不採用推奨'), 'E13 就職は例外条件バッジに不採用推奨');
+  await page.selectOption('#shiftConfirm [data-field="highschool.careerPath"]', 'other');
+  await wait(150);
+  const stOther = await page.textContent('#shiftConfirmStatus');
+  expect(stOther.includes('上長最終判断要') && !stOther.includes('不採用推奨'), 'E13 その他＋継続未入力の案内文は上長最終判断要: ' + stOther);
   await page.selectOption('#shiftConfirm [data-field="highschool.careerPath"]', 'university');
   await page.fill('#shiftConfirm [data-field="highschool.destination"]', '〇〇大学 経済学部（指定校推薦で合格）');
   await pick('continueAfterGraduation', 'yes');

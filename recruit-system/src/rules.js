@@ -68,6 +68,8 @@
   const TRI_LABELS = { ok: '○ 可能', consult: '△ 要相談', ng: '× 不可' };
   const UNIT_LABEL = { total: '日', perWeek: '日/週', perEvent: '日/回' };
   const RESULT_RANK = { reject: 0, review: 1, recommend: 2 };
+  // 調整で結果が下がったときの本文（texts.adjusted が無い旧設定用の既定）
+  const DEFAULT_ADJUSTED_BODY = '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。';
   const BANDS = ['high', 'mid', 'low'];
   const CONTINUE_LABELS = { yes: '継続する', undecided: '未定', no: '継続しない' };
 
@@ -271,7 +273,8 @@
   function highschoolStatus(a, profile) {
     a = a || {};
     const group = categoryGroup(profile, a.category);
-    const out = { applicable: false, isExceptionCategory: false, status: 'none', unmet: [], missing: [], reasonsText: '', pathDisallowed: false, pathLabel: '' };
+    // pathDisallowed: 進路が例外の対象外。pathReject: そのうち rejectCareerPaths で不採用推奨にする進路（既定は就職のみ）
+    const out = { applicable: false, isExceptionCategory: false, status: 'none', unmet: [], missing: [], reasonsText: '', pathDisallowed: false, pathReject: false, pathLabel: '' };
     if (group !== 'highschool') return out;
     out.applicable = true;
     const hp = (profile && profile.highschoolPolicy) || { mode: 'allow' };
@@ -290,6 +293,7 @@
         if (!hs.careerPath) out.missing.push('進路の種別');
         else if ((hp.allowedCareerPaths || {})[hs.careerPath] !== true) {
           out.pathDisallowed = true;
+          out.pathReject = (hp.rejectCareerPaths || {})[hs.careerPath] === true;
           out.pathLabel = labelOf(((profile.options || {}).careerPaths), hs.careerPath);
           out.unmet.push('進路が『' + out.pathLabel + '』（例外の対象外）');
         }
@@ -1078,15 +1082,15 @@
     if (ev.holdOnHighschoolException !== false &&
         (hs.status === 'excluded' || hs.status === 'exception_unmet' || hs.status === 'exception_incomplete')) {
       // 未入力（確認待ち）と未充足（条件を満たさない）・原則対象外を区別して理由を示す
-      // 進路が例外の対象外（就職など）は、設定（既定）により不採用推奨まで下げる
-      const hpJ = profile.highschoolPolicy || {};
-      const pathReject = hs.status === 'exception_unmet' && hs.pathDisallowed && hpJ.disallowedPathResult !== 'review';
+      // 進路が例外の対象外で、rejectCareerPaths に含まれる進路（既定は就職のみ）は不採用推奨まで下げる。
+      // その他（浪人・未定など）・進路未決定・未入力は上長最終判断要に留める
+      const pathReject = hs.status === 'exception_unmet' && hs.pathReject;
       const hsReason = hs.status === 'excluded'
         ? '高校生の採用方針（' + (applicant.category || '高校生') + 'は原則対象外）に該当するため、採用推奨ではなく上長最終判断要として扱います。'
         : hs.status === 'exception_incomplete'
           ? '高校3年生の例外条件（' + hs.missing.join('・') + '）が未入力のため、採用推奨ではなく上長最終判断要として扱います。面接で確認し、Step3 の「高校3年生の例外条件」に入力してください。'
           : pathReject
-            ? '高校3年生ですが進路『' + hs.pathLabel + '』は例外の対象外のため（進学以外は短期採用となりやすいため）、不採用推奨とします。'
+            ? (applicant.category || '高校生') + 'で進路が『' + hs.pathLabel + '』（例外の対象外）のため、不採用推奨とします。'
             : '高校3年生の例外条件を満たしていない（' + hs.reasonsText + '）ため、採用推奨ではなく上長最終判断要として扱います。';
       down(pathReject ? 'reject' : 'review', 'highschool_hold', hsReason);
     }
@@ -1112,13 +1116,23 @@
 
     const t = texts[result] || { title: result, body: '' };
     const name = applicant.name ? applicant.name + 'さん' : '応募者';
-    const bodyTpl = mode === 'interviewOnly' ? t.body : (((texts.matrix || {})[result]) || t.body);
+    // 調整で結果が下がったときは、点数を結論の理由のように書く本文やマスの注記を出さず、調整後とわかる本文にする
+    const lowered = adjustments.length > 0 && result !== baseResult;
+    const resultBodyTpl = mode === 'interviewOnly' ? t.body : (((texts.matrix || {})[result]) || t.body);
+    const bodyTpl = lowered ? (texts.adjusted || DEFAULT_ADJUSTED_BODY) : resultBodyTpl;
+    const contribBand = mode === 'incomplete' ? '未確定' : (bandLabel(contrib.band) || '—');
     const vars = {
       name: name, total: total, max: max, pct: pct,
       interviewPct: pct, interviewBand: bandLabel(iBand),
       contribTotal: contrib.total, contribMax: contrib.max, contribPct: contrib.pct,
-      contribBand: mode === 'incomplete' ? '未確定' : (bandLabel(contrib.band) || '—')
+      contribBand: contribBand,
+      resultTitle: t.title, baseTitle: (texts[baseResult] || { title: baseResult }).title,
+      scoreSummary: mode === 'interviewOnly'
+        ? '面接評価' + total + '/' + max + '点（' + pct + '%）'
+        : '面接評価' + pct + '%（' + bandLabel(iBand) + '）・シフト貢献度' + contrib.pct + '%（' + contribBand + '）'
     };
+    const cellNote = note;
+    if (lowered) note = '';
 
     const table = {};
     BANDS.forEach(function (ib) { BANDS.forEach(function (cb) { const k = ib + '_' + cb; table[k] = cells[k] != null ? cells[k] : null; }); });
@@ -1148,7 +1162,8 @@
       matrix: {
         cellKey: cellKey,
         cellResult: cellResult,
-        note: note,
+        note: note,           // 表示用（調整で結果が下がったときは空）
+        cellNote: cellNote,   // マスの注記（調整の有無に関係なく）
         table: table,
         bands: { interview: { high: recPct, mid: revPct }, contribution: { high: cHigh, mid: cMid } }
       },

@@ -176,7 +176,10 @@
     const hp = merged.highschoolPolicy = U.isObj(merged.highschoolPolicy) ? merged.highschoolPolicy : U.deepClone(base.highschoolPolicy);
     if (HS_MODES.indexOf(hp.mode) < 0) hp.mode = base.highschoolPolicy.mode;
     if (!Array.isArray(hp.exceptionCategories)) hp.exceptionCategories = U.deepClone(base.highschoolPolicy.exceptionCategories);
-    if (hp.disallowedPathResult !== 'reject' && hp.disallowedPathResult !== 'review') hp.disallowedPathResult = base.highschoolPolicy.disallowedPathResult;
+    if (!U.isObj(hp.rejectCareerPaths)) hp.rejectCareerPaths = U.deepClone(base.highschoolPolicy.rejectCareerPaths);
+    // 旧設定 disallowedPathResult（対象外の進路を一律 reject/review）からの移行: 'review' なら不採用推奨にする進路なし
+    if (hp.disallowedPathResult === 'review') Object.keys(hp.rejectCareerPaths).forEach(function (k) { hp.rejectCareerPaths[k] = false; });
+    delete hp.disallowedPathResult;
   }
 
   // 法令ルールは常に ON・重要度固定

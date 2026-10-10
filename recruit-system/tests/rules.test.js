@@ -536,37 +536,88 @@ test('27 高校生ホールド（高2・面接高×貢献高・全確認済み�
   assert.ok(reason(jU).indexOf('未入力のため') < 0);
 });
 
-test('27b 高3・進路が就職（例外の対象外）→ 不採用推奨。設定で上長最終判断要に変更可', function () {
+test('27b 高3・進路が就職 → 不採用推奨。その他（浪人・未定など）・未決定は上長最終判断要。進路ごとに設定可', function () {
   const p = P();
   const base = { age: '18', category: '高校3年生', continueAfterGraduation: 'yes',
     sh: { fri: ['17:00', '22:00'], sat: ['08:00', '22:00'], sun: ['08:00', '22:00'] } };
-  const aJob = A(merge(allAnswered(merge(base, { highschool: { careerDecided: 'yes', careerPath: 'employment' } })), {}));
+  const hsA = function (h, extra) { return A(merge(allAnswered(merge(base, merge({ highschool: h }, extra || {}))), {})); };
+  const aJob = hsA({ careerDecided: 'yes', careerPath: 'employment' });
   const j = judge(aJob, scoresAll(5), p);
   assert.strictEqual(j.highschool.status, 'exception_unmet');
   assert.strictEqual(j.baseResult, 'recommend');
   assert.strictEqual(j.result, 'reject', j.adjustments.map(function (x) { return x.code; }).join(','));
   const adj = j.adjustments.find(function (x) { return x.code === 'highschool_hold'; });
   assert.ok(adj && adj.to === 'reject' && adj.reason.indexOf('『就職』') >= 0 && adj.reason.indexOf('不採用推奨') >= 0, adj && adj.reason);
-  // その他（浪人・未定など）も対象外 → 不採用推奨
-  const aOther = A(merge(allAnswered(merge(base, { highschool: { careerDecided: 'yes', careerPath: 'other' } })), {}));
-  assert.strictEqual(judge(aOther, scoresAll(5), p).result, 'reject');
-  // 進路未決定は従来どおり上長最終判断要（設定に関係なく）
-  const aUndecided = A(merge(allAnswered(merge(base, { highschool: { careerDecided: 'no' } })), {}));
-  assert.strictEqual(judge(aUndecided, scoresAll(5), p).result, 'review');
-  // 設定で review に変更
-  const p2 = P(); p2.highschoolPolicy.disallowedPathResult = 'review';
+  assert.ok(adj.reason.indexOf('短期採用') < 0 && adj.reason.indexOf('進学以外') < 0, adj.reason);
+  // その他（浪人・未定など）は対象外だが不採用推奨にはしない（回答は就職のみ）→ 上長最終判断要
+  const jOther = judge(hsA({ careerDecided: 'yes', careerPath: 'other' }), scoresAll(5), p);
+  assert.strictEqual(jOther.result, 'review');
+  const adjO = jOther.adjustments.find(function (x) { return x.code === 'highschool_hold'; });
+  assert.ok(adjO && adjO.to === 'review' && adjO.reason.indexOf('上長最終判断要') >= 0, adjO && adjO.reason);
+  // 進路未決定は上長最終判断要（その他と同じ）
+  assert.strictEqual(judge(hsA({ careerDecided: 'no' }), scoresAll(5), p).result, 'review');
+  // 就職で継続意思が未入力でも不採用推奨（highschoolStatus の pathReject）
+  const aJobMissing = hsA({ careerDecided: 'yes', careerPath: 'employment' }, { continueAfterGraduation: '' });
+  const hsM = R.highschoolStatus(aJobMissing, p);
+  assert.ok(hsM.status === 'exception_unmet' && hsM.pathReject === true && hsM.missing.indexOf('卒業後の継続意思') >= 0);
+  assert.strictEqual(R.highschoolStatus(hsA({ careerDecided: 'yes', careerPath: 'other' }), p).pathReject, false);
+  // 設定: 就職を不採用推奨から外すと上長最終判断要、その他を加えると不採用推奨
+  const p2 = P(); p2.highschoolPolicy.rejectCareerPaths.employment = false;
   assert.strictEqual(judge(aJob, scoresAll(5), p2).result, 'review');
-  // 就職を例外の対象に含めれば充足
+  const p2b = P(); p2b.highschoolPolicy.rejectCareerPaths.other = true;
+  assert.strictEqual(judge(hsA({ careerDecided: 'yes', careerPath: 'other' }), scoresAll(5), p2b).result, 'reject');
+  // 就職を例外の対象に含めれば充足（rejectCareerPaths は対象外のときだけ効く）
   const p3 = P(); p3.highschoolPolicy.allowedCareerPaths.employment = true;
   assert.strictEqual(judge(aJob, scoresAll(5), p3).result, 'recommend');
   // holdOnHighschoolException=false なら下げない
   const p4 = P(); p4.evaluation.holdOnHighschoolException = false;
   assert.strictEqual(judge(aJob, scoresAll(5), p4).result, 'recommend');
-  // normalizeProfile: 不正値は既定（reject）に戻る
-  const raw = P(); raw.highschoolPolicy.disallowedPathResult = 'xxx';
-  assert.strictEqual(S.normalizeProfile(raw).highschoolPolicy.disallowedPathResult, 'reject');
-  const rawMissing = P(); delete rawMissing.highschoolPolicy.disallowedPathResult;
-  assert.strictEqual(S.normalizeProfile(rawMissing).highschoolPolicy.disallowedPathResult, 'reject');
+  // 進学を対象外にした場合も理由文が自己矛盾しない
+  const p5 = P(); p5.highschoolPolicy.allowedCareerPaths.vocational = false; p5.highschoolPolicy.rejectCareerPaths.vocational = true;
+  const j5 = judge(hsA({ careerDecided: 'yes', careerPath: 'vocational' }), scoresAll(5), p5);
+  assert.strictEqual(j5.result, 'reject');
+  assert.ok(j5.adjustments[0].reason.indexOf('進学以外') < 0, j5.adjustments[0].reason);
+  // normalizeProfile: 欠落・不正値は既定（就職のみ）、旧設定 disallowedPathResult='review' は不採用推奨なしに移行
+  const rawMissing = P(); delete rawMissing.highschoolPolicy.rejectCareerPaths;
+  assert.deepStrictEqual(plain(S.normalizeProfile(rawMissing).highschoolPolicy.rejectCareerPaths), { university: false, vocational: false, employment: true, other: false });
+  const rawBad = P(); rawBad.highschoolPolicy.rejectCareerPaths = 'xxx';
+  assert.strictEqual(S.normalizeProfile(rawBad).highschoolPolicy.rejectCareerPaths.employment, true);
+  const legacy = P(); delete legacy.highschoolPolicy.rejectCareerPaths; legacy.highschoolPolicy.disallowedPathResult = 'review';
+  const nl = S.normalizeProfile(legacy);
+  assert.strictEqual(nl.highschoolPolicy.rejectCareerPaths.employment, false);
+  assert.ok(!('disallowedPathResult' in nl.highschoolPolicy));
+  assert.deepStrictEqual(plain(S.normalizeProfile(nl)), plain(nl));
+  const legacyR = P(); delete legacyR.highschoolPolicy.rejectCareerPaths; legacyR.highschoolPolicy.disallowedPathResult = 'reject';
+  assert.strictEqual(S.normalizeProfile(legacyR).highschoolPolicy.rejectCareerPaths.employment, true);
+});
+
+test('27c 調整で不採用推奨に下がったとき、本文は調整後とわかる文にし、マスの注記は出さない', function () {
+  const p = P();
+  const base = { name: '山田', age: '18', category: '高校3年生', continueAfterGraduation: 'yes',
+    highschool: { careerDecided: 'yes', careerPath: 'employment' },
+    sh: { fri: ['17:00', '22:00'], sat: ['08:00', '22:00'], sun: ['08:00', '22:00'] } };
+  const a = A(merge(allAnswered(base), {}));
+  // 全5点: 高×高（採用推奨）→ 不採用推奨。高評価が不採用の理由に読める本文にしない
+  const jH = judge(a, scoresAll(5), p);
+  assert.strictEqual(jH.matrix.cellKey, 'high_high');
+  assert.strictEqual(jH.result, 'reject');
+  assert.ok(jH.body.indexOf('不採用を推奨します') < 0, jH.body);
+  assert.ok(jH.body.indexOf('点数上は採用推奨') >= 0 && jH.body.indexOf('下記の理由により不採用推奨とします') >= 0, jH.body);
+  // 全3点: 中×高（注記「前向きに検討」）→ 不採用推奨。注記は出さない（cellNote には残す）
+  const jM = judge(a, scoresAll(3), p);
+  assert.strictEqual(jM.matrix.cellKey, 'mid_high');
+  assert.strictEqual(jM.result, 'reject');
+  assert.strictEqual(jM.matrix.note, '');
+  assert.ok(jM.matrix.cellNote.indexOf('前向きに検討') >= 0);
+  // 貢献度 OFF（面接のみ）でも「面接評価が低く」とは書かない
+  const pOff = P(); pOff.features.contribution = false;
+  const jO = judge(a, scoresAll(5, pOff), pOff);
+  assert.strictEqual(jO.mode, 'interviewOnly');
+  assert.strictEqual(jO.result, 'reject');
+  assert.ok(jO.body.indexOf('面接評価が低く') < 0 && jO.body.indexOf('面接評価50/50点') >= 0, jO.body);
+  // 調整なし（例B 高×低）は従来どおりマスの本文と注記
+  const jB = judge(exampleB(), scoresAll(5));
+  assert.ok(jB.matrix.note.length > 0 && jB.matrix.note === jB.matrix.cellNote);
 });
 
 test('28 法令ホールド（17歳の深夜シフト・minor_late_night 未確認・holdOnUnresolvedBlock=false）', function () {

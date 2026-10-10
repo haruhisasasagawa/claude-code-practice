@@ -452,14 +452,20 @@
     });
   }
 
+  // 進路が不採用推奨の対象（rejectCareerPaths）で、判定が不採用推奨まで下がるか（rules.evaluateHiring の highschool_hold と同じ条件）
+  function hsRejectsByPath(hs, p) {
+    return hs.status === 'exception_unmet' && !!hs.pathReject && ((p || {}).evaluation || {}).holdOnHighschoolException !== false;
+  }
+
   // 高校3年生の例外条件
   function hsExceptionHtml() {
     const p = state.profile;
     const hp = p.highschoolPolicy || {};
     if (hp.mode === 'allow') return '';
     const allowed = hp.allowedCareerPaths || {};
+    const rejects = hp.rejectCareerPaths || {};
     const paths = ((p.options || {}).careerPaths || []).map(function (c) {
-      return { value: c.value, label: c.label + (allowed[c.value] !== true ? '（例外対象外）' : '') };
+      return { value: c.value, label: c.label + (allowed[c.value] !== true ? (rejects[c.value] === true ? '（例外対象外・不採用推奨）' : '（例外対象外）') : '') };
     });
     return '<div class="subpanel hidden" id="grp-hs-exception">' +
       '<div class="subpanel-head"><h3>高校3年生の例外条件</h3><span class="badge warn" id="hsExceptionStatus">未入力あり</span></div>' +
@@ -712,7 +718,7 @@
     show('#grp-hs-dest', hsA.careerDecided === 'yes');
     const pill = $('#hsExceptionStatus');
     if (pill) {
-      const m = { exception_met: ['ok', '例外対象（条件充足）'], exception_unmet: ['danger', '例外条件 未充足（要判断）'], exception_incomplete: ['warn', '未入力あり'] }[hs.status] || ['', ''];
+      const m = { exception_met: ['ok', '例外対象（条件充足）'], exception_unmet: ['danger', hsRejectsByPath(hs, p) ? '例外の対象外（不採用推奨）' : '例外条件 未充足（要判断）'], exception_incomplete: ['warn', '未入力あり'] }[hs.status] || ['', ''];
       pill.className = 'badge ' + m[0];
       pill.textContent = m[1];
     }
@@ -824,8 +830,11 @@
         lines.push('未確認：' + esc(c.missing.join('・')) + '。' + (strict ? '判定の前に入力してください。' : '面接で確認できた項目を入力してください。'));
       }
       if (hsMissing.length) {
-        // 高校生の例外は判定を止めない（決定事項 B）。未入力のままだと上長最終判断要になる旨を示す
-        lines.push('高3例外: ' + esc(hsMissing.join('・')) + 'が未入力です（未入力のまま判定すると上長最終判断要になります）。');
+        // 高校生の例外は判定を止めない（決定事項 B）。未入力のままだと上長最終判断要になる旨を示す。
+        // ただし進路が不採用推奨の対象（就職など）なら、入力に関係なく不採用推奨になる
+        lines.push('高3例外: ' + esc(hsMissing.join('・')) + 'が未入力です' + (hsRejectsByPath(hs, p)
+          ? '（進路『' + esc(hs.pathLabel) + '』は例外の対象外のため、入力に関係なく判定は不採用推奨になります）。'
+          : '（未入力のまま判定すると上長最終判断要になります）。'));
       }
       if (lines.length) {
         status.className = 'alert warn';

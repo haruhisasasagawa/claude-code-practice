@@ -45,7 +45,9 @@
       requireCareerDecided: true,          // 例外条件: 進路決定済み
       allowedCareerPaths: { university: true, vocational: true, employment: false, other: false },
       requireContinue: true,               // 例外条件: 卒業後も当劇場で継続する意思
-      disallowedPathResult: 'reject',      // 進路が例外の対象外（就職など）のときの判定: 'reject'=不採用推奨 / 'review'=上長最終判断要
+      // 例外の対象外の進路のうち、不採用推奨まで下げる進路（副支配人回答: 就職はほぼ短期採用のため不採用）。
+      // ここに無い対象外の進路（その他＝浪人・未定など）と進路未決定・未入力は上長最終判断要
+      rejectCareerPaths: { university: false, vocational: false, employment: true, other: false },
       nightRestricted: true,               // 18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う（当劇場運用）
       notice: '新宿では高校生は原則採用対象外です。例外は高校3年生で進路（進学）が決定済み、かつ進学後も当劇場でアルバイトを継続する方のみです。就職予定の方は短期採用となるため対象外です。'
     },
@@ -391,6 +393,8 @@
         review: '{name}は面接評価{interviewPct}%（{interviewBand}）・シフト貢献度{contribPct}%（{contribBand}）です。上長の最終判断が必要です。',
         reject: '{name}は面接評価{interviewPct}%（{interviewBand}）・シフト貢献度{contribPct}%（{contribBand}）で、不採用を推奨します。'
       },
+      // 調整（高校生の方針・未確認の留意点など）で結果が下がったときの本文。マスの注記はこのとき表示しない
+      adjusted: '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。',
       busyIntro: '新宿は土日祝、特に3連休以上の連休・長期休暇の貢献を重視します。分からない期間は空欄のまま（面接で確認）で構いません。',
       allNightIntro: '終映後〜翌朝までの通し勤務（{allNightShiftStart}〜翌{allNightShiftEnd}目安）です。{lateNightStartHour}時以降の勤務（クローズ）とは別に確認します。',
       contributionIntro: '応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「シフト条件の最終確認」で入力すると確定します。',

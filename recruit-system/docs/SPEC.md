@@ -130,10 +130,12 @@ highschoolPolicy: {
   exceptionCategories: ['高校3年生'],   // 例外を検討できる区分（options.categories の value と完全一致）
   requireCareerDecided: true,          // 例外条件: 進路決定済み
   allowedCareerPaths: { university: true, vocational: true, employment: false, other: false },
-  disallowedPathResult: 'reject',   // 進路が例外の対象外（就職など）のときの判定（reject / review）。未決定・未入力は常に review
   requireContinue: true,               // 例外条件: 卒業後も当劇場で継続する意思
+  // 例外の対象外の進路のうち、不採用推奨まで下げる進路（副支配人回答: 就職のみ）。ここで false の対象外の進路（その他＝浪人・未定など）と
+  // 進路未決定・未入力は上長最終判断要。旧キー disallowedPathResult は normalize で移行して削除（8-1）
+  rejectCareerPaths: { university: false, vocational: false, employment: true, other: false },
   nightRestricted: true,               // 18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う（当劇場運用）
-  notice: '新宿では高校生は原則採用対象外です。例外は高校3年生で進路（進学）が決定済み、かつ進学後も当劇場でアルバイトを継続する方のみです。'
+  notice: '新宿では高校生は原則採用対象外です。例外は高校3年生で進路（進学）が決定済み、かつ進学後も当劇場でアルバイトを継続する方のみです。就職予定の方は短期採用となるため対象外です。'
 }
 ```
 
@@ -266,6 +268,8 @@ matrix: {   // 2軸判定（mode=matrix / incomplete）の本文
   review:    '{name}は面接評価{interviewPct}%（{interviewBand}）・シフト貢献度{contribPct}%（{contribBand}）です。上長の最終判断が必要です。',
   reject:    '{name}は面接評価{interviewPct}%（{interviewBand}）・シフト貢献度{contribPct}%（{contribBand}）で、不採用を推奨します。'
 },
+// 調整で結果が下がったとき（result !== baseResult）の本文。全 mode 共通。5-4 参照
+adjusted: '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。',
 busyIntro: '新宿は土日祝、特に3連休以上の連休・長期休暇の貢献を重視します。分からない期間は空欄のまま（面接で確認）で構いません。',
 allNightIntro: '終映後〜翌朝までの通し勤務（{allNightShiftStart}〜翌{allNightShiftEnd}目安）です。{lateNightStartHour}時以降の勤務（クローズ）とは別に確認します。',
 contributionIntro: '応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「シフト条件の最終確認」で入力すると確定します。',
@@ -472,7 +476,8 @@ exceptionCategories に category が無い → status 'excluded'
     careerDecided ''  → missing「進路決定の有無」
     careerDecided 'no'→ unmet「進路が未決定」
     'yes': careerPath '' → missing「進路の種別」
-           allowedCareerPaths[careerPath] !== true → unmet「進路が『{careerPathLabel}』（例外の対象外）」
+           allowedCareerPaths[careerPath] !== true → unmet「進路が『{careerPathLabel}』（例外の対象外）」、
+               pathDisallowed=true、pathLabel={careerPathLabel}、pathReject = rejectCareerPaths[careerPath] === true
   if (hp.requireContinue !== false):
     continueAfterGraduation ''          → missing「卒業後の継続意思」
     'undecided' → unmet「卒業後の継続が未定」 / 'no' → unmet「卒業後は継続しない」
@@ -769,10 +774,10 @@ busy = 3·(0.5·1/2)/17 = 0.0441 → 1.3、weekend 0、holiday 0、allNight 0、
 | 面接 ＼ 貢献度 | 高（≥60%） | 中（35〜60%） | 低（<35%） |
 | --- | --- | --- | --- |
 | **高（≥70%）** | 採用推奨 | 採用推奨 | **上長最終判断要** |
-| **中（40〜70%）** | 上長最終判断要（前向き注記） | 上長最終判断要 | 上長最終判断要 |
+| **中（40〜70%）** | 上長最終判断要（前向き注記） | 上長最終判断要 | **不採用推奨** |
 | **低（<40%）** | 不採用推奨 | 不採用推奨 | 不採用推奨 |
 
-従来（面接のみ）との差は「高×低」の 1 マスだけ（決定事項 E の例）。
+従来（面接のみ）との差は「高×低」（採用推奨→上長最終判断要。決定事項 E の例）と「中×低」（上長最終判断要→不採用推奨。副支配人回答「無理をして採用することもない」）の 2 マス。
 
 ### 5-3. 判定アルゴリズム
 
@@ -793,13 +798,19 @@ baseResult = result
  (1) contribution_incomplete : mode==='incomplete' → down(result,'review')
  (2) overall_cutoff (P1)     : overallRejectAtOrBelow > 0 && 総合判断の点 <= その値 → down(result,'reject')
  (3) highschool_hold         : evaluation.holdOnHighschoolException && hs.status ∈ {excluded, exception_unmet, exception_incomplete}
-                               → down(result,'review')（チェックの有無に関係なく外れない）
+                               → hs.status==='exception_unmet' && hs.pathReject（進路が rejectCareerPaths の対象。既定は就職のみ）なら down(result,'reject')、
+                                 それ以外（原則対象外・未入力・その他の未充足。進路未決定・その他（浪人・未定など）を含む）は down(result,'review')
+                               （チェックの有無に関係なく外れない）
  (4) legal_hold              : 未確認（checks に無い）の category 'legal' の block がある → down(result,'review')（設定に関係なく常に）
  (5) unresolved_block        : 既存 holdOnUnresolvedBlock && 未確認の block がある → down(result,'review')
 ```
 - 各調整は `adjustments.push({ code, from, to, reason })`、`reason` は warnings にも追加:
   - `contribution_incomplete`: 「シフト貢献度の入力が不足しているため（{missingLabels}）、面接評価のみで判定し、採用推奨には留めません。」（このメッセージは result が変わらなくても mode=incomplete なら warnings に入れる）
-  - `highschool_hold`: 「高校生の採用方針（原則対象外／例外条件の未充足）に該当するため、採用推奨ではなく上長最終判断要として扱います。」
+  - `highschool_hold`（status ごとに分ける）:
+    - excluded: 「高校生の採用方針（{category}は原則対象外）に該当するため、採用推奨ではなく上長最終判断要として扱います。」
+    - exception_incomplete: 「高校3年生の例外条件（{missing}）が未入力のため、採用推奨ではなく上長最終判断要として扱います。面接で確認し、Step3 の「高校3年生の例外条件」に入力してください。」
+    - exception_unmet かつ pathReject: 「{category}で進路が『{pathLabel}』（例外の対象外）のため、不採用推奨とします。」（根拠の文言は固定で付けない。進路の設定と食い違うため）
+    - exception_unmet（上記以外）: 「高校3年生の例外条件を満たしていない（{reasonsText}）ため、採用推奨ではなく上長最終判断要として扱います。」
   - `legal_hold`: 「法令に関わる要判断の留意点が未確認のため、採用推奨ではなく上長最終判断要として扱います。」
   - `unresolved_block`: 既存文言のまま
 - 既存の warnings（総合判断低評価・未採点・未確認留意点）は維持。追加 warning: mode=matrix で `contrib.band==='low'` のとき「シフト貢献度が{contribPct}%と低めです（主な不足: {得点率の低い上位2項目のラベル}）。」
@@ -814,7 +825,7 @@ baseResult = result
   mode: 'matrix' | 'incomplete' | 'interviewOnly',
   interview: { total, max, pct, band, bandLabel },
   contribution: <computeContribution の結果>,
-  matrix: { cellKey: 'high_low' | null, cellResult: 'review' | null, note: '' ,
+  matrix: { cellKey: 'high_low' | null, cellResult: 'review' | null, note: '', cellNote: '',
             table: { high_high: 'recommend', ... },     // 判定時点の cells のスナップショット（監査・レポート用）
             bands: { interview: { high: 70, mid: 40 }, contribution: { high: 60, mid: 35 } } },
   baseResult: 'recommend',
@@ -823,9 +834,9 @@ baseResult = result
 }
 ```
 - `title = texts[result].title`
-- `body`: mode が `matrix`/`incomplete` → `texts.matrix[result]`、`interviewOnly` → 従来の `texts[result].body`
-- 本文変数: `{name}{total}{max}{pct}` ＋ `{interviewPct}{interviewBand}{contribTotal}{contribMax}{contribPct}{contribBand}`。mode=incomplete のとき `{contribBand}` は「未確定」
-- `matrix.note = cellNotes[cellKey]`（mode=matrix のときのみ）。本文の下に別段落で表示
+- `body`: 調整で結果が下がったとき（`adjustments.length && result !== baseResult`）→ `texts.adjusted`（どの mode でも。点数を結論の理由のように書かない）。それ以外は mode が `matrix`/`incomplete` → `texts.matrix[result]`、`interviewOnly` → 従来の `texts[result].body`
+- 本文変数: `{name}{total}{max}{pct}` ＋ `{interviewPct}{interviewBand}{contribTotal}{contribMax}{contribPct}{contribBand}` ＋ `{scoreSummary}`（interviewOnly:「面接評価{total}/{max}点（{pct}%）」、それ以外:「面接評価{interviewPct}%（{interviewBand}）・シフト貢献度{contribPct}%（{contribBand}）」）`{baseTitle}`（baseResult のタイトル）`{resultTitle}`。mode=incomplete のとき `{contribBand}` は「未確定」
+- `matrix.cellNote = cellNotes[cellKey]`（mode=matrix のときのみ）。`matrix.note` は表示用で、調整で結果が下がったときは空（マスの注記「前向きに検討」などが結論と食い違うため）、それ以外は cellNote と同じ。本文の下に別段落で表示
 
 ---
 
@@ -949,6 +960,7 @@ baseResult = result
 | | `highschoolPolicy.exceptionCategories` | sLines（区分の値と完全一致） |
 | | `highschoolPolicy.requireCareerDecided` / `highschoolPolicy.requireContinue` / `highschoolPolicy.nightRestricted` | sCheck（nightRestricted のヒント「18歳以上の高3も卒業まで深夜帯・オールナイト不可として扱う」） |
 | | `highschoolPolicy.allowedCareerPaths.<value>`（careerPaths の数だけ） | sCheck「{label}は例外の対象」 |
+| | `highschoolPolicy.rejectCareerPaths.<value>`（careerPaths の数だけ。見出し「例外の対象外の進路のうち、不採用推奨にする進路」） | sCheck「{label}は不採用推奨」。ヒント「例外の対象外の進路のときだけ使います。既定は就職のみ…チェックの無い対象外の進路と、進路が未決定・未入力の場合は上長最終判断要です。」 |
 | | `highschoolPolicy.notice` | sTextarea |
 | `#s-eval` | `evaluation.thresholds.*` は**ここから削除し `#s-matrix` へ移動**（同じパスを 2 か所に出さない）。`evaluation.holdOnUnresolvedBlock` は残す。追加 `evaluation.holdOnHighschoolException`（sCheck）、P1 `evaluation.overallRejectAtOrBelow`（number、0=無効） | |
 | `#s-contrib`（新） | `contribution.items[i].enabled`（switch）/ `.label`（text）/ `.max`（number 0〜100、`data-repaint`）。下に `#contribSum`「合計 {n} 点（得点率で判定するので 100 でなくても可）」 | 固定行（i=0..7） |
@@ -960,6 +972,7 @@ baseResult = result
 | | `matrix.cellNotes.<i>_<c>`（9 個） | `<details>` 内に sInput |
 | `#s-texts` | 変数ヒントを `{name} {total} {max} {pct} {interviewPct} {interviewBand} {contribTotal} {contribMax} {contribPct} {contribBand}` に更新 | |
 | | `texts.matrix.recommend` / `.review` / `.reject`（「2軸判定の本文」）、`texts.bandLabels.high` / `.mid` / `.low` | sInput |
+| | `texts.adjusted`（「調整で結果が下がったときの本文」。ヒントに変数 `{name} {scoreSummary} {baseTitle} {resultTitle}`） | sInput |
 | | `texts.busyIntro`、`texts.allNightIntro`、`texts.contributionIntro` | sTextarea |
 | | `texts.strengths.allNightOk` / `.holidayOk` / `.busyStrong`、`texts.strengths.vacationOk`（ラベル「繁忙期すべて可」） | sInput |
 | `#s-rules` | `VARS_HINT` に 3-2 の変数を追加。カテゴリ順・LOCKED 表示は 7-1 | |
@@ -1001,6 +1014,7 @@ merged.schemaVersion = 2
 - `contribution.items`: 配列でない・空なら既定。既定に無い id は削除（計算関数が無いため）。足りない既定 id は末尾に追加。各要素の欠けたキー（enabled/label/max）を既定から補い、`max` は Number（NaN なら既定）
 - `matrix.cells`: 9 キーそれぞれ、値が recommend/review/reject 以外なら既定。`matrix.cellNotes` の各値を文字列化
 - `highschoolPolicy.mode` が allow/exceptionOnly/deny 以外なら既定。`exceptionCategories` が配列でなければ既定
+- `highschoolPolicy.rejectCareerPaths` がオブジェクトでなければ既定（就職のみ）。旧キー `disallowedPathResult`（bd1d3eb で一時的に入った「対象外の進路を一律 reject/review」）は、値が `'review'` なら `rejectCareerPaths` の全進路を false にしてから削除（`'reject'`・その他は既定のまま削除）
 
 **`enforceLocked(merged)`**: `LOCKED_RULES` の id の行は `enabled = true`、`severity` を固定値に。
 
@@ -1085,6 +1099,8 @@ const NOW = new Date(2026, 9, 10); // 2026-10-10 固定
 | 25 | マトリクス | 面接高×貢献低（例B＋全5点、checks 全済） | `result='review'`、`matrix.cellKey='high_low'`、`note` あり、adjustments 空 |
 | 26 | 入力不足 | 面接高・繁忙期1期間未回答 ／ 面接低・同 | mode incomplete・review・adjustments[0].code `contribution_incomplete` ／ reject のまま |
 | 27 | 高校生ホールド | 面接高×貢献高・高2・全 checks 済み | review（`highschool_hold`）。`holdOnHighschoolException=false` なら recommend |
+| 27b | 高3の進路別 | 18歳・高3・継続する・面接全5点・全 checks 済み。進路=就職／その他／未決定／就職で継続未入力。設定 `rejectCareerPaths` 変更・`allowedCareerPaths.employment=true`・`holdOnHighschoolException=false`・旧 `disallowedPathResult` の normalize | 就職 → reject（`highschool_hold`、理由に『就職』と「不採用推奨」）。その他・未決定 → review。継続未入力でも pathReject=true。employment=false → review、other=true → reject、例外対象に含める・ホールド OFF → recommend。normalize: 欠落・不正は既定、旧 'review' は全 false に移行 |
+| 27c | 調整で下がったときの本文 | 高3・就職・面接全5点／全3点／貢献度 OFF | 本文は `texts.adjusted`（「点数上は採用推奨ですが…不採用推奨とします」。「不採用を推奨します」「面接評価が低く」は出さない）。mid_high の `matrix.note` は空・`cellNote` に残す。調整なし（例B）は note＝cellNote |
 | 28 | 法令ホールド | 面接高×貢献高・17歳 深夜シフト・`minor_late_night` 未チェック・`holdOnUnresolvedBlock=false` | review（`legal_hold`） |
 | 29 | 下げるだけ | `matrix.cells.low_low='recommend'` に変更＋高2 | recommend → review（上げる調整は起きない）。`baseResult='recommend'` |
 | 30 | 不正セル | `cells.high_high='xxx'` | normalize 後は既定に戻る。normalize を通さず evaluate すると legacy＋warning |
@@ -1138,7 +1154,7 @@ const NOW = new Date(2026, 9, 10); // 2026-10-10 固定
 | 3 | **未確認は 0 点でマトリクスに当てない**（mode=incomplete → 面接のみ・推奨に留めない） | 入力漏れが減点として働き不採用に落ちるのを防ぐ（案2 の欠点を回避） |
 | 4 | **○△ の繁忙期は日数も必須**（空欄に既定割合を与えない） | 「日数を入れた方が空欄より不利」という逆転を防ぐ。Step3 で確定させる前提なので運用負担は限定的 |
 | 5 | **高校生ホールド**（原則対象外・例外未充足は確認済みでも採用推奨にしない） | 決定事項 B「基本 NG」と判定表示の整合。外すには `holdOnHighschoolException` を OFF |
-| 6 | **高3例外は「進学」のみ許可。就職・その他は不採用推奨**（`allowedCareerPaths`、`disallowedPathResult` で変更可） | 副支配人の回答で確定: 就職はほぼ短期採用となるため不採用。進路未決定・未入力は上長最終判断要のまま |
+| 6 | **高3例外は「進学」のみ許可。就職は不採用推奨、その他（浪人・未定など）は上長最終判断要**（`allowedCareerPaths`、`rejectCareerPaths` で進路ごとに変更可） | 副支配人の回答「就職の場合はほぼ短期採用となるため不採用で結構です」で確定したのは就職のみ。その他は回答の対象外のため従来どおり上長最終判断要（進路未決定・未入力と同じ） |
 | 7 | **18歳以上の高3も深夜・オールナイト不可**（`nightRestricted=true`） | HANDOFF の「18歳以上の高3の扱い」に対し安全側。法令上は可能なので設定で外せる |
 | 8 | **法令値はコード定数・法令ルールは OFF 不可**（文言は編集可） | 設定ミスで労基法違反の見落としが起きないように。運用値（`lateNightStartHour` 等）とは分離 |
 | 9 | **繁忙期 7 期間・critical は 3連休/GW/夏休み/お盆/年末年始**、SW・春休みは × でも要確認止まり | 「3連休以上」を重点にしつつ、SW・春休みだけで要判断が出て保留が多発するのを防ぐ |
@@ -1158,7 +1174,7 @@ const NOW = new Date(2026, 9, 10); // 2026-10-10 固定
 
 1. ~~マトリクス「面接中×貢献低」を不採用推奨に下げるか~~ → **回答済み: 不採用推奨にした**。「面接中×貢献高」は上長判断のまま
 2. 配点・帯・繁忙期の重み／満点日数（`refDays`）は仮置き。過去の採用者 5〜10 人分を入力し、「良かった人」が高く出るか試し打ちして調整したい
-3. ~~高3例外で「就職」を含めるか~~ → **回答済み: 含めない（就職は不採用推奨）**。推薦（秋）と一般入試（2〜3月）で「決定済み」の時期が違う点、合格見込みの扱いは運用で判断
+3. ~~高3例外で「就職」を含めるか~~ → **回答済み: 含めない（就職は不採用推奨）**。その他（浪人・未定など）は回答の対象外のため上長最終判断要のまま。推薦（秋）と一般入試（2〜3月）で「決定済み」の時期が違う点、合格見込みの扱いは運用で判断
 4. 18 歳到達・卒業後（4 月以降）の区分更新は運用（記録上の区分変更）で対応する想定でよいか
 5. オールナイトの実際の時間帯（22:00〜翌6:00 は仮）、休憩・始発帰宅のルール、タクシー規定との関係
 6. 土日頻度の選択肢（毎週両日／毎週片方／隔週／月1）と割合が現場の感覚に合うか

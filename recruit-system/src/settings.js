@@ -340,10 +340,12 @@
       '<div class="check-grid">' +
         cps.map(function (c) { return sCheck('highschoolPolicy.allowedCareerPaths.' + c.value, (c.label || c.value) + 'は例外の対象'); }).join('') +
       '</div>' +
-      sSelect('highschoolPolicy.disallowedPathResult', '進路が例外の対象外（就職など）のときの判定', [
-        { value: 'reject', label: '不採用推奨' },
-        { value: 'review', label: '上長最終判断要' }
-      ], '就職予定は短期採用になりやすいため、既定では不採用推奨にします。進路が未決定・未入力の場合はこの設定に関係なく上長最終判断要です。') +
+      '<div class="field"><label>例外の対象外の進路のうち、不採用推奨にする進路</label>' +
+        '<div class="check-grid">' +
+          cps.map(function (c) { return sCheck('highschoolPolicy.rejectCareerPaths.' + c.value, (c.label || c.value) + 'は不採用推奨'); }).join('') +
+        '</div>' +
+        '<div class="hint">例外の対象外の進路のときだけ使います。既定は就職のみ（ほぼ短期採用となるため）。チェックの無い対象外の進路と、進路が未決定・未入力の場合は上長最終判断要です。</div>' +
+      '</div>' +
       sCheck('highschoolPolicy.requireContinue', '卒業後（進学後）も当劇場で継続する意思があること', '「継続する」と答えた場合のみ例外の対象にします。') +
       '<h3 class="sub">深夜帯・オールナイト</h3>' +
       sCheck('highschoolPolicy.nightRestricted', '18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う', '18歳以上の高3も卒業まで深夜帯・オールナイト不可として扱います（18歳未満は法令により常に不可）。') +
@@ -519,6 +521,7 @@
       sInput('texts.matrix.recommend', '採用推奨（2軸）') +
       sInput('texts.matrix.review', '上長最終判断要（2軸）') +
       sInput('texts.matrix.reject', '不採用推奨（2軸）') +
+      sInput('texts.adjusted', '調整で結果が下がったときの本文', { hint: '変数: {name} {scoreSummary} {baseTitle} {resultTitle}。このときマスの注記は表示しません。' }) +
       '<div class="field-row cols-3">' +
         sInput('texts.bandLabels.high', '帯の表示: 高') + sInput('texts.bandLabels.mid', '帯の表示: 中') + sInput('texts.bandLabels.low', '帯の表示: 低') +
       '</div>' +

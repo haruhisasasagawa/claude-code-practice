@@ -906,7 +906,9 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
       requireCareerDecided: true,          // 例外条件: 進路決定済み
       allowedCareerPaths: { university: true, vocational: true, employment: false, other: false },
       requireContinue: true,               // 例外条件: 卒業後も当劇場で継続する意思
-      disallowedPathResult: 'reject',      // 進路が例外の対象外（就職など）のときの判定: 'reject'=不採用推奨 / 'review'=上長最終判断要
+      // 例外の対象外の進路のうち、不採用推奨まで下げる進路（副支配人回答: 就職はほぼ短期採用のため不採用）。
+      // ここに無い対象外の進路（その他＝浪人・未定など）と進路未決定・未入力は上長最終判断要
+      rejectCareerPaths: { university: false, vocational: false, employment: true, other: false },
       nightRestricted: true,               // 18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う（当劇場運用）
       notice: '新宿では高校生は原則採用対象外です。例外は高校3年生で進路（進学）が決定済み、かつ進学後も当劇場でアルバイトを継続する方のみです。就職予定の方は短期採用となるため対象外です。'
     },
@@ -1252,6 +1254,8 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
         review: '{name}は面接評価{interviewPct}%（{interviewBand}）・シフト貢献度{contribPct}%（{contribBand}）です。上長の最終判断が必要です。',
         reject: '{name}は面接評価{interviewPct}%（{interviewBand}）・シフト貢献度{contribPct}%（{contribBand}）で、不採用を推奨します。'
       },
+      // 調整（高校生の方針・未確認の留意点など）で結果が下がったときの本文。マスの注記はこのとき表示しない
+      adjusted: '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。',
       busyIntro: '新宿は土日祝、特に3連休以上の連休・長期休暇の貢献を重視します。分からない期間は空欄のまま（面接で確認）で構いません。',
       allNightIntro: '終映後〜翌朝までの通し勤務（{allNightShiftStart}〜翌{allNightShiftEnd}目安）です。{lateNightStartHour}時以降の勤務（クローズ）とは別に確認します。',
       contributionIntro: '応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「シフト条件の最終確認」で入力すると確定します。',
@@ -1348,6 +1352,8 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
   const TRI_LABELS = { ok: '○ 可能', consult: '△ 要相談', ng: '× 不可' };
   const UNIT_LABEL = { total: '日', perWeek: '日/週', perEvent: '日/回' };
   const RESULT_RANK = { reject: 0, review: 1, recommend: 2 };
+  // 調整で結果が下がったときの本文（texts.adjusted が無い旧設定用の既定）
+  const DEFAULT_ADJUSTED_BODY = '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。';
   const BANDS = ['high', 'mid', 'low'];
   const CONTINUE_LABELS = { yes: '継続する', undecided: '未定', no: '継続しない' };
 
@@ -1551,7 +1557,8 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
   function highschoolStatus(a, profile) {
     a = a || {};
     const group = categoryGroup(profile, a.category);
-    const out = { applicable: false, isExceptionCategory: false, status: 'none', unmet: [], missing: [], reasonsText: '', pathDisallowed: false, pathLabel: '' };
+    // pathDisallowed: 進路が例外の対象外。pathReject: そのうち rejectCareerPaths で不採用推奨にする進路（既定は就職のみ）
+    const out = { applicable: false, isExceptionCategory: false, status: 'none', unmet: [], missing: [], reasonsText: '', pathDisallowed: false, pathReject: false, pathLabel: '' };
     if (group !== 'highschool') return out;
     out.applicable = true;
     const hp = (profile && profile.highschoolPolicy) || { mode: 'allow' };
@@ -1570,6 +1577,7 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
         if (!hs.careerPath) out.missing.push('進路の種別');
         else if ((hp.allowedCareerPaths || {})[hs.careerPath] !== true) {
           out.pathDisallowed = true;
+          out.pathReject = (hp.rejectCareerPaths || {})[hs.careerPath] === true;
           out.pathLabel = labelOf(((profile.options || {}).careerPaths), hs.careerPath);
           out.unmet.push('進路が『' + out.pathLabel + '』（例外の対象外）');
         }
@@ -2358,15 +2366,15 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
     if (ev.holdOnHighschoolException !== false &&
         (hs.status === 'excluded' || hs.status === 'exception_unmet' || hs.status === 'exception_incomplete')) {
       // 未入力（確認待ち）と未充足（条件を満たさない）・原則対象外を区別して理由を示す
-      // 進路が例外の対象外（就職など）は、設定（既定）により不採用推奨まで下げる
-      const hpJ = profile.highschoolPolicy || {};
-      const pathReject = hs.status === 'exception_unmet' && hs.pathDisallowed && hpJ.disallowedPathResult !== 'review';
+      // 進路が例外の対象外で、rejectCareerPaths に含まれる進路（既定は就職のみ）は不採用推奨まで下げる。
+      // その他（浪人・未定など）・進路未決定・未入力は上長最終判断要に留める
+      const pathReject = hs.status === 'exception_unmet' && hs.pathReject;
       const hsReason = hs.status === 'excluded'
         ? '高校生の採用方針（' + (applicant.category || '高校生') + 'は原則対象外）に該当するため、採用推奨ではなく上長最終判断要として扱います。'
         : hs.status === 'exception_incomplete'
           ? '高校3年生の例外条件（' + hs.missing.join('・') + '）が未入力のため、採用推奨ではなく上長最終判断要として扱います。面接で確認し、Step3 の「高校3年生の例外条件」に入力してください。'
           : pathReject
-            ? '高校3年生ですが進路『' + hs.pathLabel + '』は例外の対象外のため（進学以外は短期採用となりやすいため）、不採用推奨とします。'
+            ? (applicant.category || '高校生') + 'で進路が『' + hs.pathLabel + '』（例外の対象外）のため、不採用推奨とします。'
             : '高校3年生の例外条件を満たしていない（' + hs.reasonsText + '）ため、採用推奨ではなく上長最終判断要として扱います。';
       down(pathReject ? 'reject' : 'review', 'highschool_hold', hsReason);
     }
@@ -2392,13 +2400,23 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
 
     const t = texts[result] || { title: result, body: '' };
     const name = applicant.name ? applicant.name + 'さん' : '応募者';
-    const bodyTpl = mode === 'interviewOnly' ? t.body : (((texts.matrix || {})[result]) || t.body);
+    // 調整で結果が下がったときは、点数を結論の理由のように書く本文やマスの注記を出さず、調整後とわかる本文にする
+    const lowered = adjustments.length > 0 && result !== baseResult;
+    const resultBodyTpl = mode === 'interviewOnly' ? t.body : (((texts.matrix || {})[result]) || t.body);
+    const bodyTpl = lowered ? (texts.adjusted || DEFAULT_ADJUSTED_BODY) : resultBodyTpl;
+    const contribBand = mode === 'incomplete' ? '未確定' : (bandLabel(contrib.band) || '—');
     const vars = {
       name: name, total: total, max: max, pct: pct,
       interviewPct: pct, interviewBand: bandLabel(iBand),
       contribTotal: contrib.total, contribMax: contrib.max, contribPct: contrib.pct,
-      contribBand: mode === 'incomplete' ? '未確定' : (bandLabel(contrib.band) || '—')
+      contribBand: contribBand,
+      resultTitle: t.title, baseTitle: (texts[baseResult] || { title: baseResult }).title,
+      scoreSummary: mode === 'interviewOnly'
+        ? '面接評価' + total + '/' + max + '点（' + pct + '%）'
+        : '面接評価' + pct + '%（' + bandLabel(iBand) + '）・シフト貢献度' + contrib.pct + '%（' + contribBand + '）'
     };
+    const cellNote = note;
+    if (lowered) note = '';
 
     const table = {};
     BANDS.forEach(function (ib) { BANDS.forEach(function (cb) { const k = ib + '_' + cb; table[k] = cells[k] != null ? cells[k] : null; }); });
@@ -2428,7 +2446,8 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
       matrix: {
         cellKey: cellKey,
         cellResult: cellResult,
-        note: note,
+        note: note,           // 表示用（調整で結果が下がったときは空）
+        cellNote: cellNote,   // マスの注記（調整の有無に関係なく）
         table: table,
         bands: { interview: { high: recPct, mid: revPct }, contribution: { high: cHigh, mid: cMid } }
       },
@@ -2772,7 +2791,10 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
     const hp = merged.highschoolPolicy = U.isObj(merged.highschoolPolicy) ? merged.highschoolPolicy : U.deepClone(base.highschoolPolicy);
     if (HS_MODES.indexOf(hp.mode) < 0) hp.mode = base.highschoolPolicy.mode;
     if (!Array.isArray(hp.exceptionCategories)) hp.exceptionCategories = U.deepClone(base.highschoolPolicy.exceptionCategories);
-    if (hp.disallowedPathResult !== 'reject' && hp.disallowedPathResult !== 'review') hp.disallowedPathResult = base.highschoolPolicy.disallowedPathResult;
+    if (!U.isObj(hp.rejectCareerPaths)) hp.rejectCareerPaths = U.deepClone(base.highschoolPolicy.rejectCareerPaths);
+    // 旧設定 disallowedPathResult（対象外の進路を一律 reject/review）からの移行: 'review' なら不採用推奨にする進路なし
+    if (hp.disallowedPathResult === 'review') Object.keys(hp.rejectCareerPaths).forEach(function (k) { hp.rejectCareerPaths[k] = false; });
+    delete hp.disallowedPathResult;
   }
 
   // 法令ルールは常に ON・重要度固定
@@ -3582,10 +3604,12 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
       '<div class="check-grid">' +
         cps.map(function (c) { return sCheck('highschoolPolicy.allowedCareerPaths.' + c.value, (c.label || c.value) + 'は例外の対象'); }).join('') +
       '</div>' +
-      sSelect('highschoolPolicy.disallowedPathResult', '進路が例外の対象外（就職など）のときの判定', [
-        { value: 'reject', label: '不採用推奨' },
-        { value: 'review', label: '上長最終判断要' }
-      ], '就職予定は短期採用になりやすいため、既定では不採用推奨にします。進路が未決定・未入力の場合はこの設定に関係なく上長最終判断要です。') +
+      '<div class="field"><label>例外の対象外の進路のうち、不採用推奨にする進路</label>' +
+        '<div class="check-grid">' +
+          cps.map(function (c) { return sCheck('highschoolPolicy.rejectCareerPaths.' + c.value, (c.label || c.value) + 'は不採用推奨'); }).join('') +
+        '</div>' +
+        '<div class="hint">例外の対象外の進路のときだけ使います。既定は就職のみ（ほぼ短期採用となるため）。チェックの無い対象外の進路と、進路が未決定・未入力の場合は上長最終判断要です。</div>' +
+      '</div>' +
       sCheck('highschoolPolicy.requireContinue', '卒業後（進学後）も当劇場で継続する意思があること', '「継続する」と答えた場合のみ例外の対象にします。') +
       '<h3 class="sub">深夜帯・オールナイト</h3>' +
       sCheck('highschoolPolicy.nightRestricted', '18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う', '18歳以上の高3も卒業まで深夜帯・オールナイト不可として扱います（18歳未満は法令により常に不可）。') +
@@ -3761,6 +3785,7 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
       sInput('texts.matrix.recommend', '採用推奨（2軸）') +
       sInput('texts.matrix.review', '上長最終判断要（2軸）') +
       sInput('texts.matrix.reject', '不採用推奨（2軸）') +
+      sInput('texts.adjusted', '調整で結果が下がったときの本文', { hint: '変数: {name} {scoreSummary} {baseTitle} {resultTitle}。このときマスの注記は表示しません。' }) +
       '<div class="field-row cols-3">' +
         sInput('texts.bandLabels.high', '帯の表示: 高') + sInput('texts.bandLabels.mid', '帯の表示: 中') + sInput('texts.bandLabels.low', '帯の表示: 低') +
       '</div>' +
@@ -4414,14 +4439,20 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
     });
   }
 
+  // 進路が不採用推奨の対象（rejectCareerPaths）で、判定が不採用推奨まで下がるか（rules.evaluateHiring の highschool_hold と同じ条件）
+  function hsRejectsByPath(hs, p) {
+    return hs.status === 'exception_unmet' && !!hs.pathReject && ((p || {}).evaluation || {}).holdOnHighschoolException !== false;
+  }
+
   // 高校3年生の例外条件
   function hsExceptionHtml() {
     const p = state.profile;
     const hp = p.highschoolPolicy || {};
     if (hp.mode === 'allow') return '';
     const allowed = hp.allowedCareerPaths || {};
+    const rejects = hp.rejectCareerPaths || {};
     const paths = ((p.options || {}).careerPaths || []).map(function (c) {
-      return { value: c.value, label: c.label + (allowed[c.value] !== true ? '（例外対象外）' : '') };
+      return { value: c.value, label: c.label + (allowed[c.value] !== true ? (rejects[c.value] === true ? '（例外対象外・不採用推奨）' : '（例外対象外）') : '') };
     });
     return '<div class="subpanel hidden" id="grp-hs-exception">' +
       '<div class="subpanel-head"><h3>高校3年生の例外条件</h3><span class="badge warn" id="hsExceptionStatus">未入力あり</span></div>' +
@@ -4674,7 +4705,7 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
     show('#grp-hs-dest', hsA.careerDecided === 'yes');
     const pill = $('#hsExceptionStatus');
     if (pill) {
-      const m = { exception_met: ['ok', '例外対象（条件充足）'], exception_unmet: ['danger', '例外条件 未充足（要判断）'], exception_incomplete: ['warn', '未入力あり'] }[hs.status] || ['', ''];
+      const m = { exception_met: ['ok', '例外対象（条件充足）'], exception_unmet: ['danger', hsRejectsByPath(hs, p) ? '例外の対象外（不採用推奨）' : '例外条件 未充足（要判断）'], exception_incomplete: ['warn', '未入力あり'] }[hs.status] || ['', ''];
       pill.className = 'badge ' + m[0];
       pill.textContent = m[1];
     }
@@ -4786,8 +4817,11 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
         lines.push('未確認：' + esc(c.missing.join('・')) + '。' + (strict ? '判定の前に入力してください。' : '面接で確認できた項目を入力してください。'));
       }
       if (hsMissing.length) {
-        // 高校生の例外は判定を止めない（決定事項 B）。未入力のままだと上長最終判断要になる旨を示す
-        lines.push('高3例外: ' + esc(hsMissing.join('・')) + 'が未入力です（未入力のまま判定すると上長最終判断要になります）。');
+        // 高校生の例外は判定を止めない（決定事項 B）。未入力のままだと上長最終判断要になる旨を示す。
+        // ただし進路が不採用推奨の対象（就職など）なら、入力に関係なく不採用推奨になる
+        lines.push('高3例外: ' + esc(hsMissing.join('・')) + 'が未入力です' + (hsRejectsByPath(hs, p)
+          ? '（進路『' + esc(hs.pathLabel) + '』は例外の対象外のため、入力に関係なく判定は不採用推奨になります）。'
+          : '（未入力のまま判定すると上長最終判断要になります）。'));
       }
       if (lines.length) {
         status.className = 'alert warn';
