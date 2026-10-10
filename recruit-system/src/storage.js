@@ -182,6 +182,41 @@
     delete hp.disallowedPathResult;
   }
 
+  // ---------- 入力の段階（docs/SPEC-stages.md 2-2） ----------
+  const STAGES = ['pre', 'interview'];
+  // 入力の段階: 既定のキーだけ残し、不正値・欠落は既定に戻す（未知のキーは削除）。旧プロファイル（inputStages なし）は既定の段階
+  function fillStages(merged, base) {
+    const def = base.inputStages;
+    const src = U.isObj(merged.inputStages) ? merged.inputStages : {};
+    const out = {};
+    Object.keys(def).forEach(function (k) { out[k] = STAGES.indexOf(src[k]) >= 0 ? src[k] : def[k]; });
+    // 該当の有無が分からないまま詳細だけ面接前に聞くことはないため、外国籍が面接時なら詳細も面接時
+    if (out.foreignFlag === 'interview') out.foreignDetail = 'interview';
+    merged.inputStages = out;
+    const so = U.isObj(merged.stageOptions) ? merged.stageOptions : {};
+    merged.stageOptions = {};
+    Object.keys(base.stageOptions).forEach(function (k) { merged.stageOptions[k] = typeof so[k] === 'boolean' ? so[k] : base.stageOptions[k]; });
+  }
+  // v2 内での既定文言の変更。旧既定と完全一致するものだけ新既定へ（編集済みの文言は維持）
+  const V2_TEXT_UPGRADES = {
+    rules: {
+      shift_unanswered: ['面接で確認が必要なシフト条件があります（{missingLabels}）。面接で確認し、Step3「シフト条件の最終確認」に入力してください。'],
+      // 繁忙期は既定で面接時に確認するため、面接後にも意味が通る文言へ（「面接実施の可否」→「採用可否」）
+      vacation_ng: ['繁忙期（{vacationLabels}）の勤務ができません。新宿は連休・長期休暇の貢献を重視するため、面接実施の可否を判断してください。']
+    },
+    texts: { contributionIntro: ['応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「シフト条件の最終確認」で入力すると確定します。'] }
+  };
+  function upgradeTexts(merged, base) {
+    (merged.handoffRules || []).forEach(function (r) {
+      const olds = V2_TEXT_UPGRADES.rules[r && r.id];
+      const b = olds && base.handoffRules.find(function (x) { return x.id === r.id; });
+      if (b && olds.indexOf(r.text) >= 0) r.text = b.text;
+    });
+    Object.keys(V2_TEXT_UPGRADES.texts).forEach(function (k) {
+      if (merged.texts && V2_TEXT_UPGRADES.texts[k].indexOf(merged.texts[k]) >= 0) merged.texts[k] = base.texts[k];
+    });
+  }
+
   // 法令ルールは常に ON・重要度固定
   function enforceLocked(merged) {
     const locked = (global.RecruitRules && global.RecruitRules.LOCKED_RULES) || {};
@@ -211,6 +246,8 @@
       if (report) report.migratedFrom = fromVersion;
     }
     fillArrays(merged, base);
+    fillStages(merged, base);
+    upgradeTexts(merged, base);
     enforceLocked(merged);
     merged.schemaVersion = 2;
     return merged;
@@ -356,9 +393,17 @@
       savedAt: new Date().toISOString(),
       profile: { theaterName: state.profile.meta.theaterName, version: state.profile.meta.version, schemaVersion: 2 },
       step: state.step,
+      // 保存時点の入力の段階（レポートの「応募時の情報／面接で確認した情報」の振り分け用。読込では使わない）
+      inputStages: U.deepClone(state.profile.inputStages || null),
       applicant: U.deepClone(state.applicant),
       handoff: {
-        items: h ? h.items.map(function (i) { return { id: i.id, severity: i.severity, category: i.category, text: i.text }; }) : [],
+        // deferred / section / aggregate は該当するときだけ付ける（SPEC-stages 6-1）
+        items: h ? h.items.map(function (i) {
+          const out = { id: i.id, severity: i.severity, category: i.category, text: i.text };
+          if (i.deferred) { out.deferred = true; out.section = i.section; }
+          if (i.aggregate) out.aggregate = true;
+          return out;
+        }) : [],
         strengths: h ? h.strengths.map(function (s) { return s.text; }) : [],
         checks: U.deepClone(state.handoffChecks || {}),
         note: state.handoffNote || ''
@@ -451,9 +496,25 @@
     const bandName = function (b) { return ((texts.bandLabels || {})[b]) || { high: '高', mid: '中', low: '低' }[b] || '—'; };
     const fmtN = function (v) { return v == null || v === '' ? '-' : String(v); };
 
-    const rows = R.describeApplicant(a, profile).map(function (r) {
-      return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>';
-    }).join('');
+    // 応募情報を段階で振り分ける（保存時点の段階を優先。どちらも無い旧データは全部「応募時の情報」）
+    const stages = record.inputStages || profile.inputStages;
+    const sp = { inputStages: stages || {} };
+    const rowHtml = function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; };
+    const descRows = R.describeApplicant(a, profile);
+    const preRows = descRows.filter(function (r) { return r.section !== 'notes' && R.stageOf(sp, r.section) === 'pre'; }).map(rowHtml).join('');
+    const ivRows = descRows.filter(function (r) { return r.section !== 'notes' && R.stageOf(sp, r.section) === 'interview'; }).map(rowHtml).join('');
+    // 保存時点で未入力の「面接で確認する項目」（判定前に必要なもの・確認漏れが残るもの）
+    let unconfirmed = '';
+    try {
+      const cf = R.interviewConfirm(a, Object.assign({}, profile, sp));
+      const groups = [];
+      cf.items.filter(function (it) { return it.level === 'required' || it.level === 'check'; }).forEach(function (it) {
+        let g = groups.find(function (x) { return x.label === it.sectionLabel; });
+        if (!g) { g = { label: it.sectionLabel, items: [] }; groups.push(g); }
+        g.items.push(it.label);
+      });
+      unconfirmed = groups.map(function (g) { return g.label + '：' + g.items.join('、'); }).join('／');
+    } catch (e) { unconfirmed = ''; }
 
     // 高校生の採用方針（保存時点のスナップショットを優先）
     let hs = record.highschool;
@@ -477,7 +538,7 @@
         '<span class="box">' + (done ? '☑' : '☐') + '</span>' +
         '<span class="sev">' + esc(sevLabel(i.severity)) + '</span>' +
         '<span class="cat">' + esc(R.CATEGORY_LABELS[i.category] || i.category) + '</span>' +
-        '<span class="txt">' + esc(i.text) + '</span></li>';
+        '<span class="txt">' + esc(i.text) + (i.deferred || i.aggregate ? '<span class="tag warn">面接で確認</span>' : '') + '</span></li>';
     }).join('');
     const strengths = (record.handoff.strengths || []).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
 
@@ -600,6 +661,8 @@
         '</div>';
     }
 
+    // 面接前（Step1・Step2）に保存したときは、面接時の項目の値は「面接前に分かっている情報」（申し送りコピー文と同じ扱い）
+    const beforeIv = !j && Number(record.step) < 3;
     const json = JSON.stringify(record).replace(/<\//g, '<\\/');
     const SCRIPT_END = '</scr' + 'ipt>';
 
@@ -609,11 +672,17 @@
       '<style>\n' + reportCss() + '</style>\n</head>\n<body>\n' +
       '<div class="head"><h1>' + esc(meta.theaterName) + '　応募者情報</h1>' +
       '<p>応募者: ' + esc(name) + '　｜　保存日時: ' + esc(savedAt) + '　｜　' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</p></div>\n' +
-      '<h2>応募情報</h2>\n<table>' + rows + '</table>\n' + hsHtml +
+      '<h2>応募時の情報</h2>\n' + (preRows ? '<table>' + preRows + '</table>\n' : '<p class="muted">応募時の情報はありません。</p>\n') + hsHtml +
+      (a.reviewerNotes ? '<h2>面接者への申し送りコメント</h2>\n<div class="note">' + esc(a.reviewerNotes) + '</div>' : '') +
       '<h2>面接者への申し送り（留意点）</h2>\n' +
       (handoffItems ? '<ul>' + handoffItems + '</ul>' : '<p class="muted">留意点はありません。</p>') +
       (strengths ? '<h2>強み</h2>\n<ul class="strengths">' + strengths + '</ul>' : '') +
-      (record.handoff.note ? '<h2>担当者からの追記</h2>\n<div class="note">' + esc(record.handoff.note) + '</div>' : '') +
+      (record.handoff.note ? '<h2>追記（申し送りコメントの補足）</h2>\n<div class="note">' + esc(record.handoff.note) + '</div>' : '') +
+      (beforeIv ? '<h2>面接前に分かっている情報（未確認）</h2>\n' : '<h2>面接で確認した情報</h2>\n') +
+      (ivRows ? '<table>' + ivRows + '</table>\n'
+        : beforeIv ? '<p class="muted">面接前に分かっている項目の入力はありません（面接で確認します）。</p>\n'
+          : '<p class="muted">面接で確認した項目の入力はありません。</p>\n') +
+      (unconfirmed ? '<div class="callout">保存時点で未入力: ' + esc(unconfirmed) + '</div>\n' : '') +
       '<h2>シフト貢献度</h2>\n' + contribHtml + '\n' +
       '<h2>面接評価</h2>\n' +
       (hasScores ? '<table>' + scoreRows + interviewTotal + '</table>' : '<p class="muted">面接評価は未入力です。</p>') +

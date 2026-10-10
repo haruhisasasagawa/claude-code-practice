@@ -19,7 +19,7 @@
   const STEPS = [
     { n: 1, label: '応募情報', hint: '採用担当が入力' },
     { n: 2, label: '面接者への申し送り', hint: '留意点を確認・共有' },
-    { n: 3, label: '面接評価', hint: '面接者が採点・シフト確認' },
+    { n: 3, label: '面接評価', hint: '面接者が採点・面接で確認' },
     { n: 4, label: '採用可否判定', hint: '判定結果・保存' }
   ];
 
@@ -39,6 +39,10 @@
     judgment: null,
     legacyRecord: null,    // 旧形式（v1）のファイルを読み込んだときの保存時判定
     lastHandoffText: '',   // 最後にコピーした申し送り文（確認用）
+    preFillOpen: null,     // Step1「面接前に分かっている項目」の開閉（null=自動：面接時の項目に入力があれば開く）
+    continueAt: '',        // Step1 で「卒業後も当劇場で継続」を描いた場所（区分の変更で場所が変わるときだけ描き直す）
+    cfSnap: null,          // Step3「面接で確認する項目」を開いた時点の状態（外国籍の該当欄を出すか・応募時に入力があったか）。goStep で作り直す
+    handoffBase: null,     // Step2 までに作った留意点の文言 { id: text }（Step3 で入力して新しく出た留意点を見分ける。Step3 以降の作り直しでは更新しない）
     savedAt: null,
     dirty: false
   };
@@ -123,13 +127,14 @@
   // ---------- 小さなヘルパー ----------
   function feat() { return (state.profile && state.profile.features) || {}; }
   function contribOn() { return feat().contribution !== false; }
-  // 面接前（Step1・2）は貢献度の点数を出さない設定か（採点者のバイアス対策。Step3 以降は表示）
-  // Step3「シフト条件の最終確認」を出すか：2軸判定・オールナイト、または「シフト条件の未確認」留意点が ON のとき
+  // Step3「面接で確認する項目」でシフト条件（繁忙期・オールナイト・週の勤務日数）を確定させるか：
+  // 2軸判定・オールナイト、または「シフト条件の未確認」留意点が ON のとき
   // （旧プロファイルから移行した他劇場＝2軸 OFF・留意点 OFF では従来どおり出さない）
   function shiftConfirmOn() {
     const rule = ((state.profile && state.profile.handoffRules) || []).find(function (r) { return r.id === 'shift_unanswered'; });
     return contribOn() || !!feat().allNight || !!(rule && rule.enabled !== false && (feat().vacation || feat().holidayWork || feat().weekendFreq));
   }
+  // 面接前（Step1・2）は貢献度の点数を出さない設定か（採点者のバイアス対策。Step3 以降は表示）
   function hidePointsBeforeInterview() {
     return ((state.profile && state.profile.contribution) || {}).showBeforeInterview === false && state.step <= 2;
   }
@@ -145,6 +150,42 @@
     return hit ? hit.text : '';
   }
   function setText(sel, text) { const el = $(sel); if (el) el.textContent = text; }
+
+  // ---------- 入力の段階（docs/SPEC-stages.md。面接前に入力／面接時に確認） ----------
+  function stageOf(id) { return R.stageOf(state.profile, id); }
+  function isInterview(id) { return stageOf(id) === 'interview'; }
+  function sectionOn(id) { return R.sectionActive(state.profile, id); }
+  // 段階が「面接時」で、劇場の設定で使われているセクション（INPUT_SECTIONS の順。固定のセクションは含まない）
+  function interviewSectionIds() {
+    return R.INPUT_SECTIONS.filter(function (s) { return !s.fixed && isInterview(s.id) && sectionOn(s.id); }).map(function (s) { return s.id; });
+  }
+  // Step2 の留意点一覧に出す項目（面接時の項目の未入力が原因のもの・シフト条件の未確認の集約は「面接で確認すること」で表す）
+  function shownItems(h) { return ((h && h.items) || []).filter(function (i) { return !i.deferred && !i.aggregate; }); }
+  function laterItems(h) { return ((h && h.items) || []).filter(function (i) { return i.deferred || i.aggregate; }); }
+  // 留意点のカテゴリ → 入力セクション（面接時のセクションに属する留意点を Step3 でチェックできるようにする）
+  const CATEGORY_SECTION = { busy: 'busy', allNight: 'allNight', lateNight: 'lateNight', foreign: 'foreignDetail' };
+  // Step3「面接で入力した内容から出た留意点」：deferred / aggregate 以外で、
+  // Step2 までに無かった（または文言が変わった）項目と、段階が面接時のセクションのカテゴリの項目。
+  // Step2 に戻らずに Step3 で確認済みにできるようにする（Step2 の一覧と同じ handoffChecks を使う）
+  function interviewNewItems(h) {
+    const base = state.handoffBase;
+    return ((h && h.items) || []).filter(function (i) {
+      if (i.deferred || i.aggregate) return false;
+      if (base && (!Object.prototype.hasOwnProperty.call(base, i.id) || base[i.id] !== i.text)) return true;
+      const sec = CATEGORY_SECTION[i.category];
+      return !!sec && isInterview(sec) && sectionOn(sec);
+    });
+  }
+  // 「卒業後も当劇場で継続」の置き場所（'<section>:<stage>'）
+  function continueKey() {
+    const cs = R.continueSection(state.applicant, state.profile);
+    return cs + ':' + stageOf(cs);
+  }
+  // Step1 で「卒業後も当劇場で継続」を折りたたみ（#preFill）側に置くか
+  function continueInPreFill() {
+    const cs = R.continueSection(state.applicant, state.profile);
+    return isInterview(cs) && sectionOn(cs);
+  }
 
   function bindGlobal() {
     $$('.nav-item').forEach(function (b) { b.addEventListener('click', function () { showView(b.dataset.view); }); });
@@ -261,6 +302,7 @@
     }
     state.step = n;
     state.maxStepReached = Math.max(state.maxStepReached, n);
+    state.cfSnap = null;   // Step3 を開くたびに「応募時の状態」を取り直す（入力中の再描画では変えない）
     renderStepNav(); renderStep(); renderSummary();
     const top = $('#view-judge').getBoundingClientRect().top + window.scrollY - 70;
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
@@ -294,6 +336,11 @@
       if (!Object.prototype.hasOwnProperty.call(now, id)) delete state.handoffChecks[id];
     });
     state.handoffStale = false;
+    // Step2 までの留意点を基準として覚える（Step3 で入力して新しく出た項目を Step3 でチェックできるようにするため）
+    if (state.step < 3 || !state.handoffBase) {
+      state.handoffBase = {};
+      state.handoff.items.forEach(function (i) { state.handoffBase[i.id] = i.text; });
+    }
     if (changed > 0) toast('内容が変わった留意点のチェックを外しました（' + changed + '件）');
   }
 
@@ -312,13 +359,19 @@
   function renderStep() {
     const c = $('#stepContent');
     switch (state.step) {
-      case 1: c.innerHTML = inputStepHtml(); applyVisibility(); updateTimeDisplays(); updateContribMeters(); break;
+      case 1: {
+        c.innerHTML = inputStepHtml(); applyVisibility(); updateTimeDisplays(); updateContribMeters();
+        // toggle はバブリングしないため #preFill に直接付ける（「すべて ○ にする」などの再描画で閉じないよう開閉を覚える）
+        const pf = $('#preFill');
+        if (pf) pf.addEventListener('toggle', function () { state.preFillOpen = pf.open; });
+        break;
+      }
       case 2:
         if (!state.handoff || state.handoffStale) rebuildHandoff();
         c.innerHTML = handoffStepHtml(); renderHandoffProgress(); break;
       case 3:
         if (!state.handoff || state.handoffStale) rebuildHandoff();
-        c.innerHTML = interviewStepHtml(); updateScoreUI(); applyVisibility(); updateContribMeters(); break;
+        c.innerHTML = interviewStepHtml(); updateScoreUI(); applyVisibility(); updateContribMeters(); refreshDeferredItems(); break;
       case 4:
         if (!state.handoff || state.handoffStale) rebuildHandoff();
         if (!state.judgment) {
@@ -536,6 +589,155 @@
     });
   }
 
+  // ---------- 入力部品（Step1 本体・Step1 の折りたたみ・Step3 で共用。副作用なし） ----------
+  // 1 画面に同じ data-field・同じ id を 2 回描かない（描画場所は inputStepHtml / preFillHtml / interviewConfirmHtml の規則で一意）
+  function commuteFieldsHtml(req) {
+    const o = state.profile.options || {};
+    return '<div class="field-row cols-3">' +
+        fSelect('commuteMethod', '通勤方法', o.commuteMethods, { required: req }) +
+        fInput('commuteMinutes', '通勤時間', { type: 'number', min: 1, max: 240, suffix: '分', required: req }) +
+        fInput('nearestStation', '最寄り駅／バス停', { id: 'grp-station', list: 'stationHints', placeholder: '例：新宿', hint: '乗換案内で所要時間・終電も確認しておくと面接がスムーズです。' }) +
+      '</div>' +
+      '<datalist id="stationHints">' + (o.stationHints || []).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>';
+  }
+
+  function continueFieldHtml() {
+    return fSeg('continueAfterGraduation', '卒業後も当劇場で継続', CONTINUE_OPTS, { id: 'grp-continue', hint: '進学・就職後もアルバイトを続ける意思（任意）。高校3年生の例外判定と勤務期間の見込みに使います。' });
+  }
+
+  function foreignFlagHtml() {
+    return fSeg('foreign.isForeign', '外国籍', [{ value: 'no', label: '該当しない' }, { value: 'yes', label: '該当する', tone: 'warn' }], { id: 'grp-foreign-flag' });
+  }
+
+  function foreignDetailHtml() {
+    const o = state.profile.options || {};
+    return '<div id="grp-foreign-detail">' +
+        '<div class="field-row">' +
+          fSelect('foreign.residenceStatus', '在留資格', o.residenceStatuses) +
+          fSelect('foreign.workPermit', '資格外活動許可', o.workPermitStates) +
+        '</div>' +
+        '<div class="field-row">' +
+          fInput('foreign.residenceExpiry', '在留期限', { type: 'month' }) +
+          fSelect('foreign.japaneseLevel', '日本語レベル', o.japaneseLevels) +
+        '</div>' +
+      '</div>';
+  }
+
+  function sideJobFieldsHtml() {
+    const prm = state.profile.params || {};
+    return fSeg('sideJob', 'かけもち', [{ value: 'no', label: 'なし' }, { value: 'yes', label: 'あり', tone: 'warn' }]) +
+      '<div id="grp-sidejob-detail"><div class="field-row">' +
+        fInput('sideJobDetail', 'かけもち先・勤務内容など', { placeholder: '例：コンビニ 週2日' }) +
+        fInput('sideJobHoursPerWeek', 'かけもち先の週あたり時間', { type: 'number', min: 0, max: 60, step: 1, suffix: '時間/週', hint: '外国籍の方は週' + esc(prm.foreignWeeklyHourCap || 28) + '時間の判定に合算します' }) +
+      '</div></div>';
+  }
+
+  // 深夜帯の入力欄（req=true で可否を判定前の必須扱い。法令・運用で対象外のときは必須にしない）
+  function lateNightFieldsHtml(req) {
+    const p = state.profile;
+    const f = p.features || {};
+    const o = p.options || {};
+    const prm = p.params || {};
+    const night = R.nightStatus(state.applicant, p);
+    return alertHtml('lateNightLegal', 'danger', '⚠', 'lateNightLegalText') +
+      '<div class="field-row">' +
+        fSeg('lateNight.availability', lateHour() + '時以降の勤務', TRI, { required: !!req && !night.restricted }) +
+        fSelect('lateNight.returnMethod', '深夜帯の帰宅手段', o.returnMethods) +
+      '</div>' +
+      '<div class="field-row">' +
+        fInput('lateNight.lastTrain', '終電時刻（劇場最寄り駅 → 自宅方面の最終）', { type: 'time', id: 'grp-lasttrain', hint: R.num(prm.dayBoundaryHour, 5) + ':00 より前の時刻は翌日として扱います。' }) +
+        (f.taxi ? fInput('lateNight.taxiFare', 'タクシー料金の目安（自宅まで）', { type: 'number', min: 0, step: 100, suffix: '円', id: 'grp-taxi', hint: '規定金額: ' + Number(prm.taxiLimitYen || 0).toLocaleString('ja-JP') + '円' }) : '') +
+      '</div>' +
+      alertHtml('lastTrainWarn', 'warn', '⚠', 'lastTrainWarnText');
+  }
+
+  function lateNightIntroText() {
+    return 'クローズ要員の見込みと、帰宅手段を確認します。' + (feat().allNight ? 'オールナイト（翌朝までの通し）は「オールナイト上映」で別に確認します。' : '');
+  }
+
+  function extrasFieldsHtml() {
+    const f = feat();
+    const o = state.profile.options || {};
+    const extras = [];
+    if (f.department) extras.push(fSelect('department', '希望部署', o.departments));
+    if (f.applicationRoute) extras.push(fSelect('applicationRoute', '応募経路', o.applicationRoutes));
+    return extras.length ? '<div class="field-row">' + extras.join('') + '</div>' : '';
+  }
+
+  // Step1 の折りたたみ「面接前に分かっている項目があれば入力（任意）」。段階が面接時のセクションを同じ部品で（必須なし・メーターなし）
+  function preFillHtml() {
+    const p = state.profile;
+    const a = state.applicant;
+    const texts = p.texts || {};
+    const ids = interviewSectionIds();
+    if (!ids.length) return '';
+    const cs = R.continueSection(a, p);
+    // title が空なら見出しを省く（1 項目だけのセクションは欄のラベルが見出しを兼ねる）
+    const sec = function (id, domId, title, body) {
+      return '<div class="prefill-sec' + (title ? '' : ' single') + '" data-section="' + esc(id) + '" id="' + esc(domId) + '">' +
+        (title ? '<h3 class="sub">' + esc(title) + '</h3>' : '') + body + '</div>';
+    };
+    const blocks = [];
+    ids.forEach(function (id) {
+      const label = R.sectionLabel(p, id);
+      switch (id) {
+        case 'hsException':
+          blocks.push(sec(id, 'pf-hsException', label, (cs === 'hsException' ? continueFieldHtml() : '') + hsExceptionHtml()));
+          break;
+        case 'continuation':
+          if (cs === 'continuation') blocks.push(sec(id, 'pf-continuation', '', continueFieldHtml()));
+          break;
+        case 'foreignFlag':
+          // 該当の有無が面接時なら詳細も面接時（1 ブロックにまとめる）
+          blocks.push(sec('foreign', 'pf-foreign', '', foreignFlagHtml() + foreignDetailHtml()));
+          break;
+        case 'foreignDetail':
+          if (!isInterview('foreignFlag')) blocks.push(sec(id, 'pf-foreignDetail', label, foreignDetailHtml()));
+          break;
+        case 'commute':
+          blocks.push(sec(id, 'pf-commute', label, commuteFieldsHtml(false)));
+          break;
+        case 'sideJob':
+          blocks.push(sec(id, 'pf-sideJob', '', sideJobFieldsHtml()));
+          break;
+        case 'busy':
+          blocks.push(sec(id, 'busyCard', label, '<p class="hint">' + esc(texts.busyIntro || '') + '</p>' + busyFieldsHtml(false)));
+          break;
+        case 'lateNight':
+          blocks.push(sec(id, 'lateNightCard', label, '<p class="hint">' + esc(lateNightIntroText()) + '</p>' + lateNightFieldsHtml(false)));
+          break;
+        case 'allNight':
+          blocks.push(sec(id, 'allNightCard', label, '<p class="hint">' + esc(allNightIntroText()) + '</p>' + allNightFieldsHtml(false)));
+          break;
+        case 'extras':
+          blocks.push(sec(id, 'pf-extras', label, extrasFieldsHtml()));
+          break;
+        default:
+          break;
+      }
+    });
+    const hasInput = ids.some(function (id) { return R.sectionHasInput(a, p, id); });
+    const so = p.stageOptions || {};
+    const open = so.preFillAlwaysOpen === true || (state.preFillOpen != null ? state.preFillOpen : hasInput);
+    const names = preFillNames();
+    return '<details class="card prefill" id="preFill"' + (open ? ' open' : '') + '>' +
+      '<summary><span class="prefill-title">' + esc(texts.preFillTitle || '面接前に分かっている項目があれば入力（任意）') + '</span>' +
+        '<span class="badge info hidden" id="preFillCount"></span>' +
+        '<span class="hint prefill-list">' + esc(names.join('／')) + '</span></summary>' +
+      '<div class="prefill-body"><p class="hint">' + esc(texts.preFillHint || '') + '</p>' + blocks.join('') + '</div>' +
+    '</details>';
+  }
+
+  // #preFill の summary に出すセクション名（この応募者に関係するものだけ。applyVisibility で入力に合わせて更新）
+  function preFillNames() {
+    const p = state.profile;
+    const a = state.applicant;
+    return interviewSectionIds().filter(function (id) {
+      if (id === 'foreignDetail' && isInterview('foreignFlag')) return false;   // 「外国籍」のブロックにまとめる
+      return id === 'foreignFlag' || R.sectionRelevant(a, p, id);
+    }).map(function (id) { return id === 'foreignFlag' ? '外国籍' : R.sectionLabel(p, id); });
+  }
+
   function inputStepHtml() {
     const a = state.applicant;
     const p = state.profile;
@@ -543,10 +745,23 @@
     const f = p.features;
     const prm = p.params;
     const texts = p.texts || {};
+    const so = p.stageOptions || {};
+    const hasLater = interviewSectionIds().length > 0;
+    state.continueAt = continueKey();
+    const continueHere = !continueInPreFill();
 
     let html = '';
 
-    html += '<div class="card"><div class="card-head"><h2>基本情報</h2><p>応募書類・応募フォームの内容を入力してください。<span class="req">*</span> は必須です。分からない項目は空欄のまま進めれば、面接での確認事項として申し送られます。</p></div>' +
+    // 基本情報（固定）＋ 面接前の高校生の例外条件・外国籍（該当の有無）
+    let foreignHtml = '';
+    if (f.foreignNational && !isInterview('foreignFlag')) {
+      foreignHtml = foreignFlagHtml() +
+        (isInterview('foreignDetail')
+          ? alertHtml('foreignStageHint', 'info', 'ℹ', '', '在留資格・資格外活動許可・在留期限・日本語レベルは面接で確認します。在留カードの持参を依頼してください（分かっていれば下の折りたたみに入力できます）。')
+          : foreignDetailHtml());
+    }
+    html += '<div class="card" id="basicCard"><div class="card-head"><h2>基本情報</h2><p>面接に進めるかを判断するための項目です（目安 2〜3 分）。<span class="req">*</span> は必須です。' +
+        (hasLater ? esc(laterSummaryText()) + 'は面接で確認します（分かっていれば下の折りたたみから入力できます）。' : '分からない項目は空欄のまま進めれば、面接での確認事項として申し送られます。') + '</p></div>' +
       '<div class="field-row">' +
         fInput('name', '応募者名', { required: true, placeholder: '例：山田 太郎', autocomplete: 'off' }) +
         fSelect('gender', '性別', o.genders) +
@@ -559,21 +774,18 @@
       alertHtml('hsPolicyAlert', 'danger', '⛔', 'hsPolicyAlertText') +
       alertHtml('minorNotice', 'info', 'ℹ', '', '18歳未満：22:00〜翌5:00の勤務・オールナイトはできません（労働基準法第61条）。') +
       alertHtml('ageCategoryWarn', 'warn', '⚠', 'ageCategoryWarnText') +
-      // 高3の例外判定（決定事項 B）に必須のため、卒業予定年月の ON/OFF に関係なく描画する（表示条件は applyVisibility）
-      fSeg('continueAfterGraduation', '卒業後も当劇場で継続', CONTINUE_OPTS, { id: 'grp-continue', hint: '進学・就職後もアルバイトを続ける意思（任意）。高校3年生の例外判定と勤務期間の見込みに使います。' }) +
-      hsExceptionHtml() +
+      // 高3の例外判定（決定事項 B）に必須のため、卒業予定年月の ON/OFF に関係なく描画する（表示条件は applyVisibility）。
+      // 段階が面接時のセクションに属するときは折りたたみ側に置く（state.continueAt）
+      (continueHere ? continueFieldHtml() : '') +
+      (!isInterview('hsException') ? hsExceptionHtml() : '') +
+      foreignHtml +
     '</div>';
 
-    html += '<div class="card"><div class="card-head"><h2>通勤</h2></div>' +
-      '<div class="field-row cols-3">' +
-        fSelect('commuteMethod', '通勤方法', o.commuteMethods, { required: true }) +
-        fInput('commuteMinutes', '通勤時間', { type: 'number', min: 1, max: 240, suffix: '分', required: true }) +
-        fInput('nearestStation', '最寄り駅／バス停', { id: 'grp-station', list: 'stationHints', placeholder: '例：新宿', hint: '乗換案内で所要時間・終電も確認しておくと面接がスムーズです。' }) +
-      '</div>' +
-      '<datalist id="stationHints">' + (o.stationHints || []).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
-    '</div>';
+    if (!isInterview('commute')) {
+      html += '<div class="card" id="commuteCard"><div class="card-head"><h2>通勤</h2></div>' + commuteFieldsHtml(true) + '</div>';
+    }
 
-    html += '<div class="card"><div class="card-head"><h2>勤務条件</h2></div>' +
+    html += '<div class="card" id="workCard"><div class="card-head"><h2>勤務条件</h2></div>' +
       '<div class="field"><label>勤務可能曜日<span class="req">*</span></label>' +
         '<div class="chip-group" id="dayChips">' +
           R.DAYS.map(function (d) {
@@ -584,7 +796,7 @@
         '</div></div>' +
       '<div class="field-row">' +
         fInput('daysMin', '週の最低勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日' }) +
-        fInput('daysMax', '週の最大勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日' }) +
+        fInput('daysMax', '週の最大勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日', required: so.requireDaysMax === true }) +
       '</div>' +
       alertHtml('daysError', 'danger', '⚠', '', '週の最低勤務日数が最大勤務日数を上回っています。') +
       alertHtml('daysWarn', 'warn', '⚠', 'daysWarnText') +
@@ -599,70 +811,52 @@
       '</div>' +
       '<div class="field-row">' +
         fSelect('workPeriod', '勤務期間', o.workPeriods, { required: true }) +
-        fSeg('sideJob', 'かけもち', [{ value: 'no', label: 'なし' }, { value: 'yes', label: 'あり', tone: 'warn' }]) +
       '</div>' +
-      '<div id="grp-sidejob-detail"><div class="field-row">' +
-        fInput('sideJobDetail', 'かけもち先・勤務内容など', { placeholder: '例：コンビニ 週2日' }) +
-        fInput('sideJobHoursPerWeek', 'かけもち先の週あたり時間', { type: 'number', min: 0, max: 60, step: 1, suffix: '時間/週', hint: '外国籍の方は週' + esc(prm.foreignWeeklyHourCap || 28) + '時間の判定に合算します' }) +
-      '</div></div>' +
+      (!isInterview('sideJob') ? sideJobFieldsHtml() : '') +
     '</div>';
 
-    if (f.vacation || f.holidayWork || f.weekendFreq) {
+    if (sectionOn('busy') && !isInterview('busy')) {
       html += '<div class="card" id="busyCard"><div class="card-head"><h2>繁忙期・土日祝</h2><div class="spacer"></div>' + meterHtml('busy,weekend,holiday') +
         '<p>' + esc(texts.busyIntro || '') + '</p></div>' +
         busyFieldsHtml(false) +
       '</div>';
     }
 
-    if (f.lateNight) {
-      html += '<div class="card" id="lateNightCard"><div class="card-head"><h2>深夜帯（' + esc(lateHour()) + '時以降）</h2><div class="spacer"></div>' + meterHtml('close') +
-        '<p>クローズ要員の見込みと、帰宅手段を確認します。' + (f.allNight ? 'オールナイト（翌朝までの通し）は下の「オールナイト上映」で別に確認します。' : '') + '</p></div>' +
-        alertHtml('lateNightLegal', 'danger', '⚠', 'lateNightLegalText') +
-        '<div class="field-row">' +
-          fSeg('lateNight.availability', lateHour() + '時以降の勤務', TRI) +
-          fSelect('lateNight.returnMethod', '深夜帯の帰宅手段', o.returnMethods) +
-        '</div>' +
-        '<div class="field-row">' +
-          fInput('lateNight.lastTrain', '終電時刻（劇場最寄り駅 → 自宅方面の最終）', { type: 'time', id: 'grp-lasttrain', hint: R.num(prm.dayBoundaryHour, 5) + ':00 より前の時刻は翌日として扱います。' }) +
-          (f.taxi ? fInput('lateNight.taxiFare', 'タクシー料金の目安（自宅まで）', { type: 'number', min: 0, step: 100, suffix: '円', id: 'grp-taxi', hint: '規定金額: ' + Number(prm.taxiLimitYen || 0).toLocaleString('ja-JP') + '円' }) : '') +
-        '</div>' +
-        alertHtml('lastTrainWarn', 'warn', '⚠', 'lastTrainWarnText') +
+    if (sectionOn('lateNight') && !isInterview('lateNight')) {
+      html += '<div class="card" id="lateNightCard"><div class="card-head"><h2>' + esc(R.sectionLabel(p, 'lateNight')) + '</h2><div class="spacer"></div>' + meterHtml('close') +
+        '<p>' + esc(lateNightIntroText()) + '</p></div>' +
+        lateNightFieldsHtml(false) +
       '</div>';
     }
 
-    if (f.allNight) {
+    if (sectionOn('allNight') && !isInterview('allNight')) {
       html += '<div class="card" id="allNightCard"><div class="card-head"><h2>オールナイト上映</h2><div class="spacer"></div>' + meterHtml('allNight') +
         '<p>' + esc(allNightIntroText()) + '</p></div>' +
         allNightFieldsHtml(false) +
       '</div>';
     }
 
-    if (f.foreignNational) {
-      html += '<div class="card"><div class="card-head"><h2>外国籍・在留資格</h2><p>該当する場合、資格外活動許可と週' + esc(prm.foreignWeeklyHourCap || 28) + '時間上限の確認事項を自動で申し送ります。</p></div>' +
-        fSeg('foreign.isForeign', '外国籍', [{ value: 'no', label: '該当なし' }, { value: 'yes', label: '該当する', tone: 'warn' }]) +
-        '<div id="grp-foreign-detail">' +
-          '<div class="field-row">' +
-            fSelect('foreign.residenceStatus', '在留資格', o.residenceStatuses) +
-            fSelect('foreign.workPermit', '資格外活動許可', o.workPermitStates) +
-          '</div>' +
-          '<div class="field-row">' +
-            fInput('foreign.residenceExpiry', '在留期限', { type: 'month' }) +
-            fSelect('foreign.japaneseLevel', '日本語レベル', o.japaneseLevels) +
-          '</div>' +
-        '</div>' +
-      '</div>';
+    if (sectionOn('extras') && !isInterview('extras')) {
+      html += '<div class="card" id="extrasCard"><div class="card-head"><h2>' + esc(R.sectionLabel(p, 'extras')) + '</h2></div>' + extrasFieldsHtml() + '</div>';
     }
 
-    const extras = [];
-    if (f.department) extras.push(fSelect('department', '希望部署', o.departments));
-    if (f.applicationRoute) extras.push(fSelect('applicationRoute', '応募経路', o.applicationRoutes));
-    html += '<div class="card"><div class="card-head"><h2>その他</h2></div>' +
-      (extras.length ? '<div class="field-row">' + extras.join('') + '</div>' : '') +
-      fTextarea('reviewerNotes', '担当者所見（応募時点）', { placeholder: '応募書類や連絡時の印象、気になった点など' }) +
+    html += preFillHtml();
+
+    html += '<div class="card notes-card" id="notesCard"><div class="card-head"><h2>面接者への申し送りコメント</h2><p>' + esc(texts.reviewerNotesIntro || '') + '</p></div>' +
+      fTextarea('reviewerNotes', 'コメント（任意）', { rows: 4, placeholder: '例：電話の受け答えが丁寧。土曜は月2回なら可と話していた。家族の介護で急な休みがあり得るとのこと。通勤経路を面接で確認してほしい。' }) +
     '</div>';
 
     html += '<div class="actions end"><button type="button" class="btn primary" data-action="generate-handoff">留意点を生成して申し送りへ →</button></div>';
     return html;
+  }
+
+  // Step1 見出しの説明に使う「面接で確認する項目」の要約（例: 繁忙期・土日祝・深夜帯（22時以降）・オールナイト上映・かけもちなど）
+  function laterSummaryText() {
+    const p = state.profile;
+    const names = interviewSectionIds().filter(function (id) { return ['busy', 'lateNight', 'allNight', 'sideJob'].indexOf(id) >= 0; })
+      .map(function (id) { return R.sectionLabel(p, id); });
+    if (!names.length) names.push.apply(names, interviewSectionIds().slice(0, 3).map(function (id) { return R.sectionLabel(p, id); }));
+    return names.join('・') + 'など';
   }
 
   function show(sel, on) {
@@ -693,6 +887,24 @@
     show('#grp-lasttrain', ln.returnMethod === 'train');
     show('#grp-taxi', !!f.taxi && ln.returnMethod === 'taxi');
     show('#grp-foreign-detail', (a.foreign || {}).isForeign === 'yes');
+    show('#foreignStageHint', (a.foreign || {}).isForeign === 'yes' && R.stageOf(p, 'foreignDetail') === 'interview');
+    // 折りたたみ（Step1）・面接で確認する項目（Step3）のセクションごとのブロック：この応募者に関係するものだけ
+    $$('.prefill-sec[data-section], .confirm-sec[data-section]').forEach(function (el) {
+      const id = el.getAttribute('data-section');
+      // 外国籍：該当の有無の欄があるか、該当する（詳細を聞く）ときだけ
+      const vis = id === 'foreign' ? (!!el.querySelector('[data-field="foreign.isForeign"]') || (a.foreign || {}).isForeign === 'yes')
+        : id === 'days' || R.sectionRelevant(a, p, id);
+      show(el, vis);
+    });
+    const pfList = $('#preFill .prefill-list');
+    if (pfList) pfList.textContent = preFillNames().join('／');
+    const pfCount = $('#preFillCount');
+    if (pfCount) {
+      const filled = interviewSectionIds().filter(function (id) { return R.sectionHasInput(a, p, id); })
+        .map(function (id) { return R.sectionLabel(p, id); });
+      pfCount.textContent = filled.length ? '入力あり：' + filled.join('・') : '';
+      show(pfCount, filled.length > 0);
+    }
 
     const sh = R.analyzeShifts(a, p);
     const hs = R.highschoolStatus(a, p);
@@ -829,6 +1041,27 @@
       if (shiftOn && c.missing.length) {
         lines.push('未確認：' + esc(c.missing.join('・')) + '。' + (strict ? '判定の前に入力してください。' : '面接で確認できた項目を入力してください。'));
       }
+      // 面接時の項目のうち、空欄のままだと留意点（確認事項）が残るもの（判定は止めない）
+      const cf = R.interviewConfirm(state.applicant, p);
+      const bySec = [];
+      cf.sections.forEach(function (s) {
+        if (!s.toAsk || s.id === 'hsException') return;
+        const chk = s.missing.filter(function (m) { return m.level === 'check'; });
+        if (chk.length) bySec.push(s.label + '：' + chk.map(function (m) { return m.label; }).join('、'));
+      });
+      if (bySec.length) {
+        lines.push('未入力（判定は止めません）：' + esc(bySec.join('／')) + '。未入力のまま判定すると確認事項として残ります。');
+      }
+      // 上の 2 行に出ない、面接で確認する項目の空欄（記録用の項目・シフト条件を確定しない劇場の繁忙期など）。
+      // 「すべて確認済み」はこれらが無くなったときだけにする（Step2「面接で確認すること」と食い違わないように）
+      const notYet = [];
+      cf.sections.forEach(function (s) {
+        if (!s.toAsk || s.id === 'hsException') return;
+        const rest = s.missing.filter(function (m) { return m.level === 'optional' || (m.level === 'required' && !shiftOn); });
+        if (!rest.length) return;
+        notYet.push(s.hasInput ? s.label + '（' + rest.map(function (m) { return m.label; }).join('、') + '）' : s.label);
+      });
+      const noteLine = notYet.length ? 'まだ入力のない項目（判定は止めません）：' + esc(notYet.join('／')) + '。面接で確認して入力してください。' : '';
       if (hsMissing.length) {
         // 高校生の例外は判定を止めない（決定事項 B）。未入力のままだと上長最終判断要になる旨を示す。
         // ただし進路が不採用推奨の対象（就職など）なら、入力に関係なく不採用推奨になる
@@ -837,11 +1070,16 @@
           : '（未入力のまま判定すると上長最終判断要になります）。'));
       }
       if (lines.length) {
+        if (noteLine) lines.push(noteLine);
         status.className = 'alert warn';
         status.innerHTML = '<span class="ico">⚠</span><span>' + lines.join('<br>') + '</span>';
+      } else if (noteLine) {
+        status.className = 'alert info';
+        status.innerHTML = '<span class="ico">ℹ</span><span>' + noteLine + '</span>';
       } else {
         status.className = 'alert ok';
-        status.innerHTML = '<span class="ico">✓</span><span>' + (shiftOn ? 'シフト条件はすべて確認済みです。' : '例外条件はすべて入力済みです。') + '</span>';
+        const hsOnly = status.getAttribute('data-mode') === 'hs';
+        status.innerHTML = '<span class="ico">✓</span><span>' + (hsOnly ? '例外条件はすべて入力済みです。' : '面接で確認する項目はすべて確認済みです。') + '</span>';
       }
     }
   }
@@ -887,21 +1125,34 @@
       state.dirty = true;
       state.handoffStale = true;
       invalidateJudgment();
+      // 区分の変更で「卒業後も当劇場で継続」の置き場所（基本情報／折りたたみ）が変わるときだけ Step1 を描き直す
+      if (state.step === 1 && path === 'category' && continueKey() !== state.continueAt) {
+        const y = window.scrollY;
+        renderStep();
+        window.scrollTo(0, y);
+        const el = $('[data-field="category"]');
+        if (el) el.focus();
+        renderSummary();
+        return;
+      }
       applyVisibility();
       updateTimeDisplays();
       updateContribMeters();
-      if (state.step === 3) refreshUnresolvedAlert();
+      if (state.step === 3) { refreshUnresolvedAlert(); refreshDeferredItems(); }
       renderSummary();
       return;
     }
 
     if (t.dataset.check) {
+      // Step3 で入力した直後のチェックが古い文言に付き、判定時の作り直しで外れるのを防ぐ
+      if (state.step === 3 && state.handoffStale) rebuildHandoff();
       state.handoffChecks[t.dataset.check] = t.checked;
       const item = t.closest('.handoff-item');
       if (item) item.classList.toggle('done', t.checked);
       state.dirty = true;
       invalidateJudgment();
       renderHandoffProgress();
+      if (state.step === 3) refreshUnresolvedAlert();
       renderSummary();
       return;
     }
@@ -1000,7 +1251,7 @@
 
   function isIntText(v) { return /^\d+$/.test(String(v).trim()); }
 
-  // 週の勤務日数（Step1 と Step3「シフト条件の最終確認」で共用）：1〜7の整数・最低≦最大
+  // 週の勤務日数（Step1 と Step3「面接で確認する項目」で共用）：1〜7の整数・最低≦最大
   function validateDays() {
     const a = state.applicant;
     const isInt = isIntText;
@@ -1083,10 +1334,10 @@
       }).join('') + '</tbody></table>';
   }
 
-  // 「面接で確認すること」: 未確認の項目＋得点率の低い項目
-  function confirmList(c, withPoints) {
-    const out = (c.missing || []).slice();
-    (c.parts || []).forEach(function (pt) {
+  // 「回答から確認したいこと」: 得点率の低い項目の問いかけ（未回答・法令/運用で対象外の項目は除く）
+  function lowRatioHints(c, withPoints) {
+    const out = [];
+    ((c && c.parts) || []).forEach(function (pt) {
       if (!pt.applicable || pt.ratio >= 0.5) return;
       const fl = pt.flags || [];
       if (fl.indexOf('unanswered') >= 0 || fl.indexOf('restricted') >= 0) return;
@@ -1109,27 +1360,135 @@
     const sj = lr.savedJudgment;
     if (sj) msg += '保存時の判定: ' + (sj.title || resultTitle(sj.result)) + '（' + sj.total + '/' + sj.max + '点・面接評価のみ）';
     return '<div class="alert warn legacy-banner"><span class="ico">ℹ</span><span>' + esc(msg) +
-      (state.step !== 3 ? ' <button type="button" class="btn link" data-action="to-step" data-step="3">シフト条件を入力する</button>' : '') + '</span></div>';
+      (state.step !== 3 ? ' <button type="button" class="btn link" data-action="to-step" data-step="3">面接で確認する項目を入力する</button>' : '') + '</span></div>';
   }
 
   // =====================================================================
   // Step2: 面接者への申し送り
   // =====================================================================
+  // 面接前（Step2・コピー文）に貢献度の点数を見せるか
+  //   面接時に聞くセクション（繁忙期・深夜帯・オールナイトなど）に判定に使う未回答が残る間は出さない：
+  //   未回答は 0 点で数えるため、面接前の見込みがほぼ全員「低」に偏る（SPEC-stages D5・D17）
+  function showPointsBeforeInterview(c) {
+    return pointsAllowedBeforeInterview(c) && !pendingInterviewContrib().length;
+  }
+  function pointsAllowedBeforeInterview(c) {
+    return contribOn() && !!c && !!c.enabled && ((state.profile.contribution || {}).showBeforeInterview !== false);
+  }
+  // 面接時に聞くセクションのうち、貢献度の計算に使う未回答（level 'required'）があるもの
+  function pendingInterviewContrib() {
+    return R.interviewConfirm(state.applicant, state.profile).sections.filter(function (s) {
+      return s.toAsk && s.missing.some(function (m) { return m.level === 'required'; });
+    });
+  }
+
   function contribPreviewHtml(c) {
     const p = state.profile;
-    if (!contribOn() || !c) return '';
-    const co = p.contribution || {};
-    const showPts = co.showBeforeInterview !== false && c.enabled;
-    const confirm = confirmList(c, showPts);
+    // 面接前に点数を出さない設定（showBeforeInterview=false）ではカードごと出さない
+    if (!pointsAllowedBeforeInterview(c)) return '';
+    const pending = pendingInterviewContrib();
+    if (pending.length) {
+      return '<div class="card" id="contribPreview"><div class="card-head"><h2>シフト貢献度（面接前の見込み）</h2><div class="spacer"></div>' +
+          '<span class="badge lg info">面接後に確定</span>' +
+          '<p>' + esc(pending.map(function (s) { return s.label; }).join('・')) + 'を面接で確認してから点数を出します（未回答を 0 点で数えると低く見えるため、面接前は点数を出しません）。</p></div>' +
+      '</div>';
+    }
+    const answered = ((c.busyRows) || []).some(function (r) { return !!r.avail; });
     return '<div class="card" id="contribPreview"><div class="card-head"><h2>シフト貢献度（面接前の見込み）</h2><div class="spacer"></div>' +
-        (showPts ? '<span class="badge lg ' + (BAND_TONE[c.band] || '') + '">' + fmtNum(c.total) + ' / ' + fmtNum(c.max) + '点（' + esc(c.bandLabel) + '・暫定）</span>' : '') +
+        '<span class="badge lg ' + (BAND_TONE[c.band] || '') + '">' + fmtNum(c.total) + ' / ' + fmtNum(c.max) + '点（' + esc(c.bandLabel) + '・暫定）</span>' +
         '<p>' + esc((p.texts || {}).contributionIntro || '') + '</p></div>' +
-      (showPts ? contribBarsHtml(c) : '') +
-      (feat().vacation ? '<h3 class="sub">繁忙期</h3>' + busyTableHtml(c) : '') +
-      '<h3 class="sub">面接で確認すること</h3>' +
-      (confirm.length ? '<ul class="list-plain confirm-list">' + confirm.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'
-        : '<p class="empty">特にありません（シフト条件はすべて入力済みです）。</p>') +
+      contribBarsHtml(c) +
+      (feat().vacation && answered ? '<h3 class="sub">繁忙期</h3>' + busyTableHtml(c) : '') +
     '</div>';
+  }
+
+  // 「面接で確認すること」の 1 セクション分（Step2 のカード・コピー文で共用）
+  function todoSectionInfo(s) {
+    const missing = s.missing.map(function (m) { return m.label; });
+    return {
+      status: !s.hasInput ? 'empty' : missing.length ? 'partial' : 'done',
+      missing: missing
+    };
+  }
+
+  // そのセクションの未入力が原因の要判断（deferred・block）があるか（右サマリーの「うち要判断」と対応させる）
+  function deferredBlockIn(h, sid) {
+    return ((h && h.items) || []).some(function (i) { return i.deferred && i.severity === 'block' && i.section === sid; });
+  }
+
+  // Step2「面接で確認すること」（interviewConfirm から。貢献度の ON/OFF に関係なく出す）
+  function interviewTodoHtml(h) {
+    const a = state.applicant;
+    const p = state.profile;
+    const cf = h.confirm || R.interviewConfirm(a, p);
+    const desc = R.describeApplicant(a, p);
+    const lis = cf.sections.filter(function (s) { return s.toAsk; }).map(function (s) {
+      const info = todoSectionInfo(s);
+      let head = '<b>' + esc(s.label) + '</b>';
+      if (info.status === 'empty') head += '　<span class="hint">' + esc(s.ask) + '</span> <span class="badge warn">未入力</span>';
+      else if (info.status === 'partial') head += ' <span class="badge warn">未入力: ' + esc(info.missing.join('、')) + '</span>';
+      else head += ' <span class="badge ok">入力済み（面接で再確認）</span>';
+      if (s.blocking) head += ' <span class="badge danger">判定前に入力が必要</span>';
+      if (deferredBlockIn(h, s.id)) head += ' <span class="badge danger">要判断</span>';
+      const vals = s.hasInput ? desc.filter(function (r) { return r.section === s.id; }).map(function (r) { return r.label + '：' + r.value; }).join(' / ') : '';
+      return '<li data-section="' + esc(s.id) + '">' + head + (vals ? '<div class="hint">' + esc(vals) + '</div>' : '') + '</li>';
+    });
+    const pre = cf.sections.filter(function (s) { return !s.toAsk && s.missing.length; });
+    if (pre.length) {
+      const labels = [];
+      pre.forEach(function (s) { s.missing.forEach(function (m) { labels.push(m.label); }); });
+      lis.push('<li data-section="pre"><b>応募時に未入力</b> ' + esc(labels.join('、')) +
+        (pre.some(function (s) { return s.blocking; }) ? ' <span class="badge danger">判定前に入力が必要</span>' : '') + '</li>');
+    }
+    const c = h.contribution || R.computeContribution(a, p);
+    const hints = contribOn() && c && c.enabled ? lowRatioHints(c, showPointsBeforeInterview(c)) : [];
+    let body = '';
+    if (lis.length) body += '<ul class="todo-list">' + lis.join('') + '</ul>';
+    if (hints.length) body += '<h3 class="sub">回答から確認したいこと</h3><ul class="list-plain confirm-list">' + hints.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+    if (!body) body = '<p class="empty">面接で確認が必要な未入力の項目はありません。</p>';
+    return '<div class="card" id="interviewTodo"><div class="card-head"><h2>面接で確認すること</h2>' +
+        '<p>面接で次の項目を確認し、Step3「面接で確認する項目」に入力してください。</p></div>' + body + '</div>';
+  }
+
+  // コピー文の「■面接で確認すること」の行
+  function interviewTodoLines(h) {
+    const a = state.applicant;
+    const p = state.profile;
+    const cf = h.confirm || R.interviewConfirm(a, p);
+    const out = [];
+    cf.sections.filter(function (s) { return s.toAsk; }).forEach(function (s) {
+      const info = todoSectionInfo(s);
+      const st = info.status === 'empty' ? '未入力（' + s.ask + '）'
+        : info.status === 'partial' ? '未入力（' + info.missing.join('、') + '）' : '入力済み（面接で再確認）';
+      out.push('・' + s.label + '：' + st + (s.blocking ? '［判定前に入力が必要］' : '') + (deferredBlockIn(h, s.id) ? '［要判断］' : ''));
+    });
+    const pre = cf.sections.filter(function (s) { return !s.toAsk && s.missing.length; });
+    if (pre.length) {
+      const labels = [];
+      pre.forEach(function (s) { s.missing.forEach(function (m) { labels.push(m.label); }); });
+      out.push('・応募時に未入力：' + labels.join('、') + (pre.some(function (s) { return s.blocking; }) ? '［判定前に入力が必要］' : ''));
+    }
+    const c = h.contribution || R.computeContribution(a, p);
+    if (contribOn() && c && c.enabled) lowRatioHints(c, false).forEach(function (x) { out.push('・（回答から）' + x); });
+    return out;
+  }
+
+  // 留意点のチェック項目（Step2 の一覧・Step3 の #deferredItems で共用）
+  function handoffItemHtml(i, done) {
+    const catTone = i.category === 'legal' ? ' tag-danger' : i.category === 'highschool' ? ' tag-warn' : '';
+    return '<label class="handoff-item sev-' + i.severity + (done ? ' done' : '') + '" data-item-id="' + esc(i.id) + '">' +
+      '<input type="checkbox" data-check="' + esc(i.id) + '"' + (done ? ' checked' : '') + '>' +
+      '<div><div class="handoff-meta"><span class="tag' + catTone + '">' + esc(i.categoryLabel) + '</span>' +
+        (i.deferred || i.aggregate ? '<span class="tag tag-warn">面接で確認</span>' : '') + '</div><div class="handoff-text">' + esc(i.text) + '</div></div>' +
+    '</label>';
+  }
+
+  function handoffCommentHtml() {
+    const notes = state.applicant.reviewerNotes || '';
+    const edit = '<button type="button" class="btn link no-print" data-action="to-step" data-step="1">編集</button>';
+    if (!String(notes).trim()) return '<p class="muted handoff-comment empty-comment" id="handoffComment">申し送りコメントはありません（Step1 で入力できます）。' + edit + '</p>';
+    return '<div class="alert info handoff-comment" id="handoffComment"><span class="ico">✎</span>' +
+      '<div class="handoff-comment-body"><b>申し送りコメント</b><div style="white-space:pre-wrap">' + esc(notes) + '</div></div>' + edit + '</div>';
   }
 
   function handoffStepHtml() {
@@ -1137,24 +1496,38 @@
     const a = state.applicant;
     const p = state.profile;
     const sev = R.SEVERITY;
+    const shown = shownItems(h);
+    const later = h.items.length - shown.length;
     const groups = ['block', 'warn', 'info'].map(function (k) {
-      return { key: k, meta: sev[k], items: h.items.filter(function (i) { return i.severity === k; }) };
+      return { key: k, meta: sev[k], items: shown.filter(function (i) { return i.severity === k; }) };
     });
     const shiftRows = R.describeShifts(a, p);
-    const hsRow = R.describeApplicant(a, p).find(function (r) { return r.label === '高校生の例外'; });
+    const desc = R.describeApplicant(a, p);
+    const hsRow = desc.find(function (r) { return r.label === '高校生の例外'; });
     const hs = h.hs || R.highschoolStatus(a, p);
+    const fo = a.foreign || {};
+    let foreignRow = null;
+    if (feat().foreignNational && fo.isForeign === 'yes') {
+      const fr = desc.find(function (r) { return r.label === '外国籍'; });
+      // 詳細が面接時でも、Step1 の折りたたみで先に入力していればその値を出す（空のときだけ「詳細は面接で確認」）
+      const later = stageOf('foreignDetail') === 'interview';
+      const known = !later || R.sectionHasInput(a, p, 'foreignDetail');
+      foreignRow = ['外国籍', known ? (fr ? fr.value : '該当') + (later ? '（面接で再確認）' : '') : '該当（詳細は面接で確認）', 'danger'];
+    }
 
     let html = legacyBannerHtml();
-    html += '<div class="card"><div class="card-head"><h2>面接者への申し送り</h2>' +
+    html += '<div class="card" id="handoffCard"><div class="card-head"><h2>面接者への申し送り</h2>' +
       '<div class="spacer"></div><span class="badge accent lg">' + esc(a.name) + ' さん</span>' +
       '<p>' + esc(p.texts.handoffIntro || '') + '</p></div>' +
+      handoffCommentHtml() +
       '<div class="grid-2">' +
         '<div><h3 class="sub">応募者</h3><table class="table kv">' +
           [['区分', a.category + (a.age ? '（' + a.age + '歳）' : '')],
            hsRow ? ['高校生', hsRow.value + (hs.status === 'excluded' ? '（' + a.category + '）' : ''), hs.status === 'exception_met' ? 'ok' : 'danger'] : null,
            ['通勤', [a.commuteMethod, a.commuteMinutes ? a.commuteMinutes + '分' : '', a.nearestStation].filter(Boolean).join(' / ')],
            ['勤務期間', R.labelOf(p.options.workPeriods, a.workPeriod)],
-           ['週勤務日数', (a.daysMin || a.daysMax) ? (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日' : '未入力']
+           ['週勤務日数', (a.daysMin || a.daysMax) ? (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日' : '未入力'],
+           foreignRow
           ].filter(Boolean).map(function (r) {
             return '<tr' + (r[2] ? ' class="row-' + r[2] + '"' : '') + '><th>' + esc(r[0]) + '</th><td>' + esc(r[1] || '未入力') + '</td></tr>';
           }).join('') +
@@ -1167,32 +1540,37 @@
       (h.strengths.length ? '<h3 class="sub">強み（面接者へ共有）</h3><ul class="strength-list">' + h.strengths.map(function (s) { return '<li>' + esc(s.text) + '</li>'; }).join('') + '</ul>' : '') +
     '</div>';
 
-    html += contribPreviewHtml(h.contribution || R.computeContribution(a, p));
+    html += interviewTodoHtml(h);
 
-    html += '<div class="card"><div class="card-head"><h2>留意点 <span class="muted" style="font-weight:500">' + h.items.length + '件</span></h2>' +
+    html += '<div class="card" id="handoffItems"><div class="card-head"><h2>留意点 <span class="muted" style="font-weight:500">' + shown.length + '件</span></h2>' +
       '<div class="spacer"></div><div class="progress" id="handoffProgress" style="min-width:220px"></div>' +
-      '<p>確認が済んだ項目にチェックを入れてください。チェック状況は保存ファイルと採用可否判定に反映されます。</p></div>';
+      '<p>確認が済んだ項目にチェックを入れてください。チェック状況は保存ファイルと採用可否判定に反映されます。</p></div>' +
+      (later > 0 ? '<p class="hint later-note">面接で確認する項目の未入力に関する留意点（' + later + ' 件）は「面接で確認すること」にまとめています。Step3 で入力するか、未入力のまま確認してチェックしてください。</p>' : '');
 
-    if (!h.items.length) {
+    if (!shown.length) {
       html += '<div class="alert ok"><span class="ico">✓</span><span>自動抽出された留意点はありません。面接者には応募者の強みと希望シフトを共有してください。</span></div>';
     }
     groups.forEach(function (g) {
       if (!g.items.length) return;
       const tone = g.key === 'block' ? 'danger' : g.key === 'warn' ? 'warn' : 'info';
       html += '<div class="handoff-group"><div class="handoff-group-head"><span class="badge ' + tone + '">' + esc(g.meta.label) + '</span><h3>' + g.items.length + '件</h3><span class="desc">' + esc(g.meta.desc) + '</span></div>' +
-        '<div class="handoff-list">' + g.items.map(function (i) {
-          const done = !!state.handoffChecks[i.id];
-          const catTone = i.category === 'legal' ? ' tag-danger' : i.category === 'highschool' ? ' tag-warn' : '';
-          return '<label class="handoff-item sev-' + i.severity + (done ? ' done' : '') + '" data-item-id="' + esc(i.id) + '">' +
-            '<input type="checkbox" data-check="' + esc(i.id) + '"' + (done ? ' checked' : '') + '>' +
-            '<div><div class="handoff-meta"><span class="tag' + catTone + '">' + esc(i.categoryLabel) + '</span></div><div class="handoff-text">' + esc(i.text) + '</div></div>' +
-          '</label>';
-        }).join('') + '</div></div>';
+        '<div class="handoff-list">' + g.items.map(function (i) { return handoffItemHtml(i, !!state.handoffChecks[i.id]); }).join('') + '</div></div>';
     });
     html += '</div>';
 
-    html += '<div class="card"><div class="card-head"><h2>担当者からの追記</h2><p>自動抽出に含まれない申し送り事項があれば記入してください（面接者向け）。</p></div>' +
-      '<textarea data-note="handoff" rows="3" placeholder="例：電話での受け答えがとても丁寧でした。土曜は月2回程度なら可能とのこと。">' + esc(state.handoffNote) + '</textarea></div>';
+    html += contribPreviewHtml(h.contribution || R.computeContribution(a, p));
+
+    // 面接者向けの自由記述は Step1 の「申し送りコメント」が基本。ここは補足用（保存データ handoff.note の互換のため残す）。
+    // 空のときは閉じた折りたたみにして目立たせない
+    const noteTitle = '追記（申し送りコメントの補足・任意）';
+    const noteBody = '<p class="hint">面接者への申し送りは、基本は Step1 の「面接者への申し送りコメント」に書いてください。申し送りを作った後に補足したいことがあればここに記入します。</p>' +
+      '<textarea data-note="handoff" rows="3" placeholder="例：土曜は月2回程度なら可能とのこと（電話で追加確認）。">' + esc(state.handoffNote) + '</textarea>';
+    if (String(state.handoffNote || '').trim()) {
+      html += '<div class="card" id="handoffNoteCard"><div class="card-head"><h2>' + esc(noteTitle) + '</h2></div>' + noteBody + '</div>';
+    } else {
+      html += '<details class="card prefill" id="handoffNoteCard"><summary><span class="prefill-title">' + esc(noteTitle) + '</span></summary>' +
+        '<div class="prefill-body">' + noteBody + '</div></details>';
+    }
 
     html += '<div class="actions between">' +
       '<button type="button" class="btn" data-action="to-step" data-step="1">← 応募情報に戻る</button>' +
@@ -1201,11 +1579,13 @@
     return html;
   }
 
+  // Step2 の進捗（Step2 に出る項目＝shownItems で数える）
   function renderHandoffProgress() {
     const el = $('#handoffProgress');
     if (!el || !state.handoff) return;
-    const total = state.handoff.items.length;
-    const done = state.handoff.items.filter(function (i) { return state.handoffChecks[i.id]; }).length;
+    const items = shownItems(state.handoff);
+    const total = items.length;
+    const done = items.filter(function (i) { return state.handoffChecks[i.id]; }).length;
     const pct = total ? Math.round(done / total * 100) : 100;
     el.innerHTML = '<span>確認済み ' + done + ' / ' + total + '</span><div class="progress-bar"><span style="width:' + pct + '%"></span></div>';
   }
@@ -1220,46 +1600,42 @@
     const a = state.applicant;
     const p = state.profile;
     const lines = [];
+    const section = function (title, rows) {
+      if (!rows.length) return;
+      lines.push('');
+      lines.push(title);
+      rows.forEach(function (x) { lines.push(x); });
+    };
     lines.push('【面接者への申し送り】' + p.meta.theaterName);
     lines.push('応募者：' + a.name + ' さん（' + [a.category, a.age ? a.age + '歳' : ''].filter(Boolean).join('・') + '）');
-    R.describeApplicant(a, p).forEach(function (r) {
-      if (['氏名', '年齢', '区分', '担当者所見'].indexOf(r.label) >= 0) return;
-      lines.push(r.label + '：' + r.value);
-    });
-    if (contribOn()) {
-      const c = h.contribution || R.computeContribution(a, p);
-      const showPts = (p.contribution || {}).showBeforeInterview !== false && c.enabled;
-      if (showPts) {
-        lines.push('');
-        lines.push('■シフト貢献度（面接前の見込み）' + fmtNum(c.total) + '/' + fmtNum(c.max) + '点（' + c.bandLabel + '・暫定）');
-        lines.push(c.parts.filter(function (pt) { return pt.applicable; }).map(function (pt) {
-          return partShort(pt) + ' ' + fmtNum(pt.score) + '/' + fmtNum(pt.max);
-        }).join('・'));
-      }
-      const conf = confirmList(c, false);
-      if (conf.length) {
-        lines.push('');
-        lines.push('■面接で確認すること');
-        conf.forEach(function (x) { lines.push('・' + x); });
-      }
-    }
+    // 申し送りコメントは冒頭に（面接者が最初に読む）
+    if (String(a.reviewerNotes || '').trim()) section('■申し送りコメント', [a.reviewerNotes]);
+    const desc = R.describeApplicant(a, p);
+    section('■応募時の情報', desc.filter(function (r) {
+      return stageOf(r.section) === 'pre' && r.section !== 'notes' && ['氏名', '年齢', '区分'].indexOf(r.label) < 0;
+    }).map(function (r) { return r.label + '：' + r.value; }));
+    section('■面接前に分かっている情報', desc.filter(function (r) {
+      return stageOf(r.section) === 'interview' && R.sectionHasInput(a, p, r.section);
+    }).map(function (r) { return r.label + '：' + r.value; }));
+    section('■面接で確認すること', interviewTodoLines(h));
+    const shown = shownItems(h);
     ['block', 'warn', 'info'].forEach(function (k) {
-      const items = h.items.filter(function (i) { return i.severity === k; });
-      if (!items.length) return;
-      lines.push('');
-      lines.push('■' + R.SEVERITY[k].label + '（' + R.SEVERITY[k].desc + '）');
-      items.forEach(function (i) {
+      const items = shown.filter(function (i) { return i.severity === k; });
+      section('■' + R.SEVERITY[k].label + '（' + R.SEVERITY[k].desc + '）', items.map(function (i) {
         const prefix = i.category === 'legal' ? '[法令]' : i.category === 'highschool' ? '[高校生]' : '';
-        lines.push((state.handoffChecks[i.id] ? '☑ ' : '☐ ') + prefix + i.text);
-      });
+        return (state.handoffChecks[i.id] ? '☑ ' : '☐ ') + prefix + i.text;
+      }));
     });
-    if (h.strengths.length) {
-      lines.push('');
-      lines.push('■強み');
-      h.strengths.forEach(function (s) { lines.push('・' + s.text); });
+    section('■強み', h.strengths.map(function (s) { return '・' + s.text; }));
+    const c = h.contribution || R.computeContribution(a, p);
+    if (showPointsBeforeInterview(c)) {
+      section('■シフト貢献度（面接前の見込み）' + fmtNum(c.total) + '/' + fmtNum(c.max) + '点（' + c.bandLabel + '・暫定）', [
+        c.parts.filter(function (pt) { return pt.applicable; }).map(function (pt) {
+          return partShort(pt) + ' ' + fmtNum(pt.score) + '/' + fmtNum(pt.max);
+        }).join('・')
+      ]);
     }
-    if (a.reviewerNotes) { lines.push(''); lines.push('■担当者所見'); lines.push(a.reviewerNotes); }
-    if (state.handoffNote) { lines.push(''); lines.push('■担当者からの追記'); lines.push(state.handoffNote); }
+    if (state.handoffNote) section('■追記（申し送りコメントの補足）', [state.handoffNote]);
     return lines.join('\n');
   }
 
@@ -1281,51 +1657,180 @@
   // =====================================================================
   // Step3: 面接評価
   // =====================================================================
-  // シフト条件の最終確認（面接で確認した内容で確定させる）
-  function shiftConfirmHtml() {
+  // 面接で確認する項目（面接で確認した内容を入力し、シフト条件を確定させる）。
+  // 段階が面接時のセクションは全項目を表示する（Step1 で先に入力した値もそのまま出る）。どのブロックを描くかは描画時に決める
+  function interviewConfirmHtml() {
     const p = state.profile;
+    const a = state.applicant;
     const f = feat();
-    const hs = R.highschoolStatus(state.applicant, p);
+    const hs = R.highschoolStatus(a, p);
     const shiftOn = shiftConfirmOn();
-    if (!shiftOn && !hs.isExceptionCategory) return '';
-    const night = R.nightStatus(state.applicant, p);
-    let body = '<div id="shiftConfirmStatus" class="alert"></div>';
-    // 高3の例外条件（合格通知など面接で確認した結果をここで記録できるように。Step1 と同じ data-field）
+    const night = R.nightStatus(a, p);
+    const strict = contribOn() && (p.contribution || {}).requireComplete !== false;
+    const cs = R.continueSection(a, p);
+    const isF0 = (a.foreign || {}).isForeign || '';
+    // 開いた時点の状態（入力中の再描画で見出しや欄が入れ替わらないように）
+    if (!state.cfSnap) {
+      state.cfSnap = { foreignFlag: isF0 === '', input: {} };
+      ['busy', 'lateNight', 'allNight'].forEach(function (id) { state.cfSnap.input[id] = R.sectionHasInput(a, p, id); });
+    }
+    const snap = state.cfSnap;
+    const fixedNote = function (id) { return snap.input[id] ? '（応募時に入力済み・変更があれば修正）' : '（応募時は未入力）'; };
+    const blocks = [];
+    // title が空なら見出しを省く（1 項目だけのセクションは欄のラベルが見出しを兼ねる）
+    const block = function (id, title, body) {
+      if (!body) return;
+      blocks.push('<div class="confirm-sec' + (title ? '' : ' single') + '" data-section="' + esc(id) + '" id="cf-' + esc(id) + '">' +
+        (title ? '<h3 class="sub">' + esc(title) + '</h3>' : '') + body + '</div>');
+    };
+    let foreignDone = false;
+    R.INPUT_SECTIONS.forEach(function (sec) {
+      const id = sec.id;
+      if (sec.fixed || id === 'hsException' || !sectionOn(id)) return;
+      const later = isInterview(id);
+      const label = R.sectionLabel(p, id);
+      switch (id) {
+        case 'continuation':
+          if (later && cs === 'continuation') block(id, '', continueFieldHtml());
+          break;
+        case 'foreignFlag':
+        case 'foreignDetail': {
+          if (foreignDone) break;
+          foreignDone = true;
+          const isF = isF0;
+          // Step1 で空欄なら、面接で該当の有無も入れられるようにする（開いた時点で空欄なら、選んだ後も欄を残す）
+          const flagHere = isInterview('foreignFlag') || isF === '' || snap.foreignFlag;
+          if (flagHere) {
+            // 1 項目のセクションは見出しを省き、欄のラベル（外国籍）に任せる
+            block('foreign', '', foreignFlagHtml() + foreignDetailHtml());
+          } else if (isInterview('foreignDetail') && isF === 'yes') {
+            // 該当の有無は応募時に入力済み（該当しない なら何も描かない）
+            block('foreign', R.sectionLabel(p, 'foreignDetail'), foreignDetailHtml());
+          }
+          break;
+        }
+        case 'commute':
+          if (later) block(id, label, commuteFieldsHtml(false));
+          break;
+        case 'sideJob':
+          if (later) block(id, '', sideJobFieldsHtml());
+          break;
+        case 'busy':
+          if (later) block(id, label, busyFieldsHtml(strict));
+          else if (shiftOn) block(id, label + fixedNote(id), busyFieldsHtml(strict));
+          break;
+        case 'lateNight':
+          if (later) block(id, label, lateNightFieldsHtml(strict));
+          else if (shiftOn) {
+            block(id, label + fixedNote(id), fSeg('lateNight.availability', lateHour() + '時以降の勤務', TRI, {
+              required: strict && !night.restricted,
+              hint: night.restricted ? night.reason + 'のため、' + lateHour() + '時以降の勤務は貢献度に数えません。' : ''
+            }));
+          }
+          break;
+        case 'allNight':
+          if (later) block(id, label, allNightFieldsHtml(strict));
+          else if (shiftOn) block(id, label + fixedNote(id), allNightFieldsHtml(strict));
+          break;
+        case 'extras':
+          if (later) block(id, label, extrasFieldsHtml());
+          break;
+        default:
+          break;
+      }
+    });
+    // 週の勤務日数：シフト条件を確定する劇場では常に。そうでない劇場でも、判定に使う週の最大勤務日数が空なら
+    // （Step2 の「応募時に未入力」から Step3 へ案内するため）
+    const cf0 = R.interviewConfirm(a, p);
+    const daysHere = shiftOn || cf0.sections.some(function (s) { return s.missing.some(function (m) { return m.key === 'daysMax'; }); });
+    if (!shiftOn && !hs.isExceptionCategory && !blocks.length && !daysHere) return '';
+
+    // 高3の例外条件（合格通知など面接で確認した結果をここで記録できるように。段階に関係なく。Step1 と同じ data-field）
+    const hsOnly = !shiftOn && !blocks.length && !daysHere;
+    let body = '<div id="shiftConfirmStatus" class="alert"' + (hsOnly ? ' data-mode="hs"' : '') + '></div>';
     if (hs.isExceptionCategory) {
-      body += '<h3 class="sub">高校3年生の例外条件</h3><div id="shiftConfirmHs">' +
-        fSeg('continueAfterGraduation', '卒業後も当劇場で継続', CONTINUE_OPTS, { id: 'grp-continue', hint: '進学・就職後もアルバイトを続ける意思。高校3年生の例外判定と勤務期間の見込みに使います。' }) +
-        hsExceptionHtml() + '</div>';
+      body += '<h3 class="sub">高校3年生の例外条件</h3><div id="shiftConfirmHs">' + continueFieldHtml() + hsExceptionHtml() + '</div>';
     }
-    if (!shiftOn) {
-      return '<div class="card" id="shiftConfirm"><div class="card-head"><h2>高校3年生の例外条件の確認（面接で確認）</h2>' +
-        '<p>進路（合格通知など）と卒業後の継続意思を面接で確認し、入力してください。ここで変えた内容は応募情報にも反映されます。</p></div>' + body + '</div>';
+    body += blocks.join('');
+    if (daysHere) {
+      body += '<div class="confirm-sec" data-section="days" id="cf-days"><h3 class="sub">週の勤務日数（確認）</h3><div class="field-row">' +
+          fInput('daysMin', '週の最低勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日' }) +
+          fInput('daysMax', '週の最大勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日', required: strict }) +
+        '</div>' +
+        alertHtml('daysError', 'danger', '⚠', '', '週の最低勤務日数が最大勤務日数を上回っています。') +
+        alertHtml('daysWarn', 'warn', '⚠', 'daysWarnText') +
+      '</div>';
     }
-    if (f.vacation || f.holidayWork || f.weekendFreq) body += '<h3 class="sub">繁忙期・土日祝</h3>' + busyFieldsHtml(true);
-    if (f.allNight) body += '<h3 class="sub">オールナイト上映</h3>' + allNightFieldsHtml(true);
-    body += '<h3 class="sub">深夜帯・週の勤務日数</h3><div class="field-row cols-3">' +
-      (f.lateNight ? fSeg('lateNight.availability', lateHour() + '時以降の勤務', TRI, { required: !night.restricted, hint: night.restricted ? night.reason + 'のため、' + lateHour() + '時以降の勤務は貢献度に数えません。' : '' }) : '') +
-      fInput('daysMin', '週の最低勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日' }) +
-      fInput('daysMax', '週の最大勤務日数', { type: 'number', min: 1, max: 7, step: 1, suffix: '日', required: true }) +
-    '</div>' +
-    alertHtml('daysError', 'danger', '⚠', '', '週の最低勤務日数が最大勤務日数を上回っています。') +
-    alertHtml('daysWarn', 'warn', '⚠', 'daysWarnText');
-    return '<div class="card" id="shiftConfirm"><div class="card-head"><h2>シフト条件の最終確認（面接で確認）</h2><div class="spacer"></div>' +
+    body += '<div id="interviewNewItems" class="deferred-items hidden"></div>';
+    body += '<div id="deferredItems" class="deferred-items hidden"></div>';
+    return '<div class="card" id="shiftConfirm"><div class="card-head"><h2>面接で確認する項目</h2><div class="spacer"></div>' +
         (contribOn() ? '<span class="badge info">シフト貢献度</span><span class="contrib-meter" data-meter="total"></span>' : '') +
-        '<p>面接で確認した内容で、繁忙期・土日祝・オールナイトなどのシフト条件を確定してください。Step1 と同じ項目で、ここで変えた内容は応募情報にも反映されます。</p></div>' +
+        '<p>' + esc((p.texts || {}).interviewConfirmIntro || '') + '</p></div>' +
       body + '</div>';
   }
 
+  // 「未入力のまま判定する場合の留意点」：面接時の項目の未入力が原因の留意点（deferred）とシフト条件の未確認（aggregate）。
+  // Step2 の一覧に出さないため、確認済みにする場所としてここでチェックできる（入力すると消える）
+  function deferredItemsHtml(h) {
+    const p = state.profile;
+    // 判定前にシフト条件の入力が必須（strict）なら、シフト条件の未確認（aggregate）はチェックしても判定できないので出さない
+    // （上部の件数と #shiftConfirmStatus の 1 行目で示す。validateContribution と同じ条件）
+    const strict = contribOn() && (p.contribution || {}).requireComplete !== false && !!R.computeContribution(state.applicant, p).enabled;
+    const items = laterItems(h).filter(function (i) { return !(strict && i.aggregate); });
+    if (!items.length) return '';
+    const prevText = {};
+    if (state.handoff) state.handoff.items.forEach(function (i) { prevText[i.id] = i.text; });
+    return '<h3 class="sub">未入力のまま判定する場合の留意点</h3>' +
+      '<p class="hint">面接で確認できなかった項目です。確認した上でチェックしてください（入力すると消えます）。</p>' +
+      '<div class="handoff-list">' + items.map(function (i) {
+        return handoffItemHtml(i, !!state.handoffChecks[i.id] && prevText[i.id] === i.text);
+      }).join('') + '</div>';
+  }
+
+  // 「面接で入力した内容から出た留意点」（interviewNewItems）。Step3 で入力して出た「要判断」などを、Step2 に戻らずにここでチェックできる
+  function interviewNewItemsHtml(h) {
+    const items = interviewNewItems(h);
+    if (!items.length) return '';
+    const prevText = {};
+    if (state.handoff) state.handoff.items.forEach(function (i) { prevText[i.id] = i.text; });
+    return '<h3 class="sub">面接で入力した内容から出た留意点</h3>' +
+      '<p class="hint">面接時の項目（繁忙期・深夜帯・オールナイト・かけもち・外国籍の詳細など）の回答に関する留意点です。面接で確認した上でチェックしてください（チェックは Step2 の一覧と共通です）。</p>' +
+      '<div class="handoff-list">' + items.map(function (i) {
+        return handoffItemHtml(i, !!state.handoffChecks[i.id] && prevText[i.id] === i.text);
+      }).join('') + '</div>';
+  }
+
+  function refreshDeferredItems() {
+    const h = R.buildHandoff(state.applicant, state.profile);
+    const nbox = $('#interviewNewItems');
+    if (nbox) {
+      const nhtml = interviewNewItemsHtml(h);
+      nbox.innerHTML = nhtml;
+      show(nbox, !!nhtml);
+    }
+    const box = $('#deferredItems');
+    if (!box) return;
+    const html = deferredItemsHtml(h);
+    box.innerHTML = html;
+    show(box, !!html);
+  }
+
   // Step3 上部「未確認の留意点 N 件」。h の各項目について、チェック済みでも文言が変わった項目は未確認として数える
-  // （rebuildHandoff と同じ扱い。state は書き換えない）
+  // （rebuildHandoff と同じ扱い。state は書き換えない）。件数は判定時と同じ全件（面接時の項目の未入力・シフト条件の未確認を含む）
   function unresolvedAlertHtml(h) {
     const prevText = {};
     if (state.handoff) state.handoff.items.forEach(function (i) { prevText[i.id] = i.text; });
     const unresolved = h ? h.items.filter(function (i) { return !(state.handoffChecks[i.id] && prevText[i.id] === i.text); }) : [];
     if (!unresolved.length) return '';
     const unresolvedBlock = unresolved.filter(function (i) { return i.severity === 'block'; });
+    // 下の『面接で確認する項目』で解消できるもの（deferred / aggregate と、面接で入力した内容から出た留意点）
+    const hereIds = {};
+    interviewNewItems(h).forEach(function (i) { hereIds[i.id] = true; });
+    const later = unresolved.filter(function (i) { return i.deferred || i.aggregate || hereIds[i.id]; }).length;
     return '<div class="alert ' + (unresolvedBlock.length ? 'danger' : 'warn') + '"><span class="ico">⚠</span><span>未確認の留意点が <b class="num" id="unresolvedCount">' + unresolved.length + '</b> 件あります' +
       (unresolvedBlock.length ? '（うち要判断 ' + unresolvedBlock.length + ' 件）' : '') + '。' +
-      '<button type="button" class="btn link" data-action="to-step" data-step="2">申し送りを確認する</button></span></div>';
+      (later ? '（うち ' + later + ' 件は下の『面接で確認する項目』で入力・確認すると解消します）' : '') +
+      (unresolved.length - later > 0 ? '<button type="button" class="btn link no-print" data-action="to-step" data-step="2">申し送りを確認する</button>' : '') + '</span></div>';
   }
 
   // Step3 でシフト条件などを変えたとき、上部の件数だけ作り直す（全体の再描画は入力中のフォーカスを失うため）
@@ -1359,7 +1864,7 @@
       '<div class="alert warn hidden" id="overallWarn" style="margin-top:10px"><span class="ico">⚠</span><span>面接者の総合判断が低評価です。採用可否は慎重に判断してください。</span></div>' +
     '</div>';
 
-    html += shiftConfirmHtml();
+    html += interviewConfirmHtml();
 
     html += '<div class="card"><div class="card-head"><h2>面接所見</h2></div>' +
       '<textarea data-note="interview" rows="4" placeholder="特記事項、面接での受け答えの印象、確認できた事項など">' + esc(state.interviewNotes) + '</textarea></div>';
@@ -1493,10 +1998,19 @@
     '</div>';
 
     if (j.warnings.length) {
-      html += '<div class="card"><div class="card-head"><h3>確認事項</h3></div><ul class="list-x">' + j.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' +
+      // 面接時の項目の未入力が原因の留意点・シフト条件の未確認には「面接で確認」の印（Step3 で入力・確認すると解消）
+      const laterIds = {};
+      laterItems(state.handoff).forEach(function (i) { laterIds[i.id] = true; });
+      // 面接で入力した内容から出た留意点も Step3 でチェックできるので「面接で確認する項目へ」を出す
+      const hereIds = {};
+      interviewNewItems(state.handoff).forEach(function (i) { hereIds[i.id] = true; });
+      const anyLater = j.unresolved.some(function (i) { return laterIds[i.id] || hereIds[i.id]; });
+      html += '<div class="card" id="judgeWarnings"><div class="card-head"><h3>確認事項</h3></div><ul class="list-x">' + j.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' +
         (j.unresolved.length ? '<h3 class="sub">未確認の留意点</h3><div class="handoff-list">' + j.unresolved.map(function (i) {
-          return '<div class="handoff-item sev-' + i.severity + '" style="grid-template-columns:1fr;cursor:default"><div><div class="handoff-meta"><span class="badge ' + (i.severity === 'block' ? 'danger' : i.severity === 'warn' ? 'warn' : 'info') + '">' + esc(R.SEVERITY[i.severity].label) + '</span></div><div class="handoff-text">' + esc(i.text) + '</div></div></div>';
-        }).join('') + '</div><div class="actions" style="margin-top:10px"><button type="button" class="btn sm" data-action="to-step" data-step="2">申し送りを確認する</button></div>' : '') +
+          return '<div class="handoff-item sev-' + i.severity + '" data-item-id="' + esc(i.id) + '" style="grid-template-columns:1fr;cursor:default"><div><div class="handoff-meta"><span class="badge ' + (i.severity === 'block' ? 'danger' : i.severity === 'warn' ? 'warn' : 'info') + '">' + esc(R.SEVERITY[i.severity].label) + '</span>' +
+            (laterIds[i.id] ? '<span class="tag tag-warn">面接で確認</span>' : '') + '</div><div class="handoff-text">' + esc(i.text) + '</div></div></div>';
+        }).join('') + '</div><div class="actions" style="margin-top:10px"><button type="button" class="btn sm" data-action="to-step" data-step="2">申し送りを確認する</button>' +
+          (anyLater ? '<button type="button" class="btn sm" data-action="to-step" data-step="3">面接で確認する項目へ</button>' : '') + '</div>' : '') +
       '</div>';
     }
 
@@ -1532,8 +2046,17 @@
       html += '<div class="card"><div class="card-head"><h3>面接所見</h3></div><p style="white-space:pre-wrap">' + esc(state.interviewNotes) + '</p></div>';
     }
 
-    html += '<div class="card"><div class="card-head"><h3>応募情報サマリー</h3></div><table class="table kv">' +
-      R.describeApplicant(a, p).map(function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; }).join('') + '</table></div>';
+    // 応募情報サマリー：応募時の情報（面接前に入力・申し送りコメントは末尾）／面接で確認した情報 の 2 表
+    const rowsHtml = function (rows) { return rows.map(function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; }).join(''); };
+    const descRows = R.describeApplicant(a, p);
+    const preRows = descRows.filter(function (r) { return stageOf(r.section) === 'pre' && r.section !== 'notes'; })
+      .concat(descRows.filter(function (r) { return r.section === 'notes'; }));
+    const laterRows = descRows.filter(function (r) { return stageOf(r.section) === 'interview'; });
+    html += '<div class="card" id="applicantSummary"><div class="card-head"><h3>応募情報サマリー</h3></div>' +
+      '<h3 class="sub">応募時の情報</h3><table class="table kv">' + rowsHtml(preRows) + '</table>' +
+      '<h3 class="sub">面接で確認した情報</h3>' +
+      (laterRows.length ? '<table class="table kv">' + rowsHtml(laterRows) + '</table>' : '<p class="empty">面接で確認した項目の入力はありません。</p>') +
+    '</div>';
 
     const h = state.handoff;
     const adj = adjustSummary(j);
@@ -1567,10 +2090,25 @@
       return '<div class="summary-card"><h4>シフト適合</h4>' +
         (badgesHtml || '<p class="empty">勤務曜日・時間を入力すると表示されます。</p>') + '</div>';
     }
-    const missingHtml = co.missing.length ? '<div class="sum-missing"><span class="badge warn">未確認 ' + co.missing.length + '</span><span>' + esc(co.missing.join('・')) + '</span></div>' : '';
+    // 面接前（Step1・2）は、面接時に聞くセクションの未回答を「面接で確認」として分けて出す（Step1 で聞く項目に見えないように）
+    const before = state.step <= 2;
+    const pending = before ? pendingInterviewContrib() : [];
+    const laterLabels = {};
+    pending.forEach(function (s) { s.missing.forEach(function (m) { if (m.level === 'required') laterLabels[m.label] = true; }); });
+    const laterMissing = co.missing.filter(function (x) { return laterLabels[x]; });
+    const nowMissing = co.missing.filter(function (x) { return !laterLabels[x]; });
+    const missingHtml =
+      (nowMissing.length ? '<div class="sum-missing"><span class="badge warn">未確認 ' + nowMissing.length + '</span><span>' + esc(nowMissing.join('・')) + '</span></div>' : '') +
+      (laterMissing.length ? '<div class="sum-missing" id="sumContribLater"><span class="badge info">面接で確認 ' + laterMissing.length + '</span><span>' + esc(pending.map(function (s) { return s.label; }).join('・')) + '</span></div>' : '');
     if (hidePointsBeforeInterview()) {
       return '<div class="summary-card" id="sumContrib"><h4>シフト貢献度</h4>' +
         '<p class="empty" id="sumContribHidden">点数は面接評価（Step3）から表示します。</p>' +
+        missingHtml + badgesHtml + '</div>';
+    }
+    if (pending.length) {
+      // 未回答を 0 点で数えた点数・帯は出さない（面接前の見込みが低い方へ偏るため。SPEC-stages D17）
+      return '<div class="summary-card" id="sumContrib"><h4>シフト貢献度</h4>' +
+        '<p class="empty" id="sumContribPending">面接後に確定（面接で確認する項目の回答後に点数を出します）</p>' +
         missingHtml + badgesHtml + '</div>';
     }
     const bands = (p.contribution || {}).bands || {};
@@ -1600,9 +2138,21 @@
     const iBand = scored ? R.bandOf(pct, R.num(th.recommendPct, 70), R.num(th.reviewPct, 40)) : null;
 
     const live = R.buildHandoff(a, p); // 入力途中でもバッジ・件数・貢献度をライブ表示
-    const counts = live.counts;
+    // 面接前（Step1・2）は Step2 の一覧に出る項目（shownItems）で数え、面接で確認する項目の未入力によるもの
+    // （deferred・aggregate）は内訳として別に出す（要判断が隠れないように件数と要判断の数を示す）。Step3 以降は判定時と同じ全件
+    const before = state.step <= 2;
+    const countOf = function (items) {
+      const o = { block: 0, warn: 0, info: 0 };
+      items.forEach(function (i) { if (o[i.severity] != null) o[i.severity]++; });
+      return o;
+    };
+    const counts = before ? countOf(shownItems(live)) : live.counts;
+    const laterLive = before ? laterItems(live) : [];
+    const laterBlock = laterLive.filter(function (i) { return i.severity === 'block'; }).length;
     const attrBadges = live.badges.filter(function (b) { return b.key === 'hs' || b.key === 'minor'; });
-    const checked = state.handoff ? state.handoff.items.filter(function (i) { return state.handoffChecks[i.id]; }).length : 0;
+    // 「確認済み x/y」は Step2 に出る項目（shownItems）で数える
+    const sumItems = state.handoff ? shownItems(state.handoff) : [];
+    const checked = sumItems.filter(function (i) { return state.handoffChecks[i.id]; }).length;
     const j = state.judgment;
 
     const chip = $('#applicantChip');
@@ -1630,7 +2180,9 @@
           '<div class="sum-count warn"><b>' + counts.warn + '</b><span>要確認</span></div>' +
           '<div class="sum-count info"><b>' + counts.info + '</b><span>共有</span></div>' +
         '</div>' +
-        (state.handoff ? '<div class="progress" style="margin-top:10px"><span>確認済み ' + checked + '/' + state.handoff.items.length + '</span><div class="progress-bar"><span style="width:' + (state.handoff.items.length ? Math.round(checked / state.handoff.items.length * 100) : 100) + '%"></span></div></div>' : '') +
+        (laterLive.length ? '<p class="hint sum-later" id="sumLater">ほかに面接で確認する項目の未入力による留意点 ' + laterLive.length + ' 件' +
+          (laterBlock ? '（うち<b class="sev-block-text">要判断 ' + laterBlock + ' 件</b>）' : '') + '</p>' : '') +
+        (state.handoff ? '<div class="progress" style="margin-top:10px"><span>確認済み ' + checked + '/' + sumItems.length + '</span><div class="progress-bar"><span style="width:' + (sumItems.length ? Math.round(checked / sumItems.length * 100) : 100) + '%"></span></div></div>' : '') +
       '</div>' +
       '<div class="summary-card"><h4>面接評価</h4><div class="gauge-wrap">' +
         '<svg class="gauge" viewBox="0 0 84 84"><circle class="track" cx="42" cy="42" r="' + r + '" fill="none" stroke-width="8"/>' +
@@ -1712,9 +2264,12 @@
     state.judgmentStale = false;
     state.savedAt = rec.savedAt || null;
     state.dirty = false;
+    state.preFillOpen = null;   // 段階は現在の設定で表示（面接時の項目に値があれば Step1 の折りたたみは自動で開く）
     // 前の応募者の留意点が残らないよう、必ず作り直す
     state.handoff = R.buildHandoff(state.applicant, p);
     state.handoffStale = false;
+    state.handoffBase = {};
+    state.handoff.items.forEach(function (i) { state.handoffBase[i.id] = i.text; });
     const target = sj ? 4 : Object.keys(state.scores).length ? 3 : 2;
     state.step = target;
     state.maxStepReached = target;
@@ -1757,10 +2312,11 @@
   function newRecord() {
     if (state.dirty && !window.confirm('入力中の内容を破棄して新規作成しますか？')) return;
     state.applicant = emptyApplicant(state.profile);
-    state.handoff = null; state.handoffStale = false; state.handoffChecks = {}; state.handoffNote = '';
+    state.handoff = null; state.handoffStale = false; state.handoffChecks = {}; state.handoffNote = ''; state.handoffBase = null;
     state.scores = {}; state.interviewNotes = ''; state.judgment = null; state.judgmentStale = false;
     state.legacyRecord = null;
     state.savedAt = null; state.dirty = false;
+    state.preFillOpen = null;
     state.step = 1; state.maxStepReached = 1;
     showView('judge');
     toast('新規の応募者を開始しました');
@@ -1773,9 +2329,9 @@
     const m = state.profile.meta;
     return '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>アルバイト採用の判断基準を統一するためのツールです。面接前は「留意点の申し送り」、面接後は「採用可否の判定」を行います。</p></div>' +
       '<div class="help-steps">' +
-        '<div class="help-step"><span class="n">1</span><h3>応募情報を入力</h3><p>採用担当が応募書類・連絡内容をもとに入力します。必須は氏名・年齢・区分・通勤・曜日・時間・勤務期間です。繁忙期・祝日・オールナイトなど分からない項目は空欄のままで構いません（面接で確認する項目として申し送られます）。</p></div>' +
-        '<div class="help-step"><span class="n">2</span><h3>面接者へ申し送り</h3><p>条件に応じた留意点（要判断・要確認・共有）と強み、シフト貢献度の見込みが自動で出ます。「申し送り文をコピー」でチャット等に貼り付けて共有できます。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>面接評価・シフト確認</h3><p>面接者が各項目を採点し、「シフト条件の最終確認」で繁忙期・土日祝・オールナイトなどを確定します。未確認が残っていると判定に進めません。</p></div>' +
+        '<div class="help-step"><span class="n">1</span><h3>応募情報を入力</h3><p>採用担当が応募書類・連絡内容をもとに入力します。必須は氏名・年齢・区分・通勤・曜日・時間・週の最大勤務日数・勤務期間です（週の最大勤務日数は設定で任意にもできます）。繁忙期・深夜帯・オールナイト・かけもちなどは面接で確認します（分かっていれば折りたたみから先に入力できます）。面接者への申し送りコメントは申し送りの冒頭に表示されます。</p></div>' +
+        '<div class="help-step"><span class="n">2</span><h3>面接者へ申し送り</h3><p>申し送りコメント、面接で確認すること、留意点（要判断・要確認・共有）と強みが自動で出ます。「申し送り文をコピー」でチャット等に貼り付けて共有できます。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>面接評価・面接で確認</h3><p>面接者が各項目を採点し、「面接で確認する項目」に面接で聞いた内容を入力します。判定に必要なシフト条件（*）が未確認だと判定に進めません。</p></div>' +
         '<div class="help-step"><span class="n">4</span><h3>採用可否判定</h3><p>面接評価とシフト貢献度の2軸（マトリクス）で「採用推奨／上長最終判断要／不採用推奨」を判定します。「要判断」の留意点が未確認・高校生の採用方針に該当する場合は採用推奨に留めません。</p></div>' +
       '</div></div>' +
       '<div class="card"><div class="card-head"><h3>保存と読み込み</h3></div>' +
@@ -1786,7 +2342,8 @@
       '<div class="card"><div class="card-head"><h3>設定（劇場プロファイル）</h3></div>' +
         '<ul class="list-plain"><li>留意点の文言・ON/OFF・重要度、しきい値、評価項目、結果文言を画面から変更できます。</li>' +
         '<li>設定は端末のブラウザに保存されます。他の劇場・端末へ展開するときは JSON を書き出して読み込んでください。</li>' +
-        '<li>区分の「グループ」が学生・高校生などの判定に使われます。</li></ul></div>' +
+        '<li>区分の「グループ」が学生・高校生などの判定に使われます。</li>' +
+        '<li>応募情報（Step1）で入力する項目と、面接で確認して Step3 で入力する項目（面接前／面接時）は、設定画面の「入力の段階」で切り替えられます。</li></ul></div>' +
       '<div class="view-footer">' + esc(m.footer) + '</div>';
   }
 

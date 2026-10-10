@@ -8,6 +8,7 @@
  * - buildHandoff        : 面接者への申し送り（留意点）と強みを生成
  * - evaluateHiring      : 面接評価 × シフト貢献度 の2軸マトリクスで採用可否を判定
  * - describeApplicant   : 応募情報を表示用のラベル／値ペアに整形
+ * - stageOf ほか        : 入力の段階（面接前に入力／面接時に確認。INPUT_SECTIONS）と interviewConfirm（面接で確認する項目）
  *
  * 劇場固有の数値・文言はすべて profile（config.default.js）から受け取る。
  * 法令で決まる値（深夜業 22:00〜翌5:00、年少者 18歳未満など）だけは LAW 定数として持つ（設定不可）。
@@ -28,7 +29,7 @@
   ];
 
   const SEVERITY = {
-    block: { key: 'block', label: '要判断', order: 0, desc: '採用担当が面接実施の可否を判断する項目' },
+    block: { key: 'block', label: '要判断', order: 0, desc: '採用担当が面接実施・採用の可否を判断する項目' },
     warn:  { key: 'warn',  label: '要確認', order: 1, desc: '面接時に応募者へ確認する項目' },
     info:  { key: 'info',  label: '共有',   order: 2, desc: '面接者へ共有しておく事項' }
   };
@@ -72,6 +73,61 @@
   const DEFAULT_ADJUSTED_BODY = '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。';
   const BANDS = ['high', 'mid', 'low'];
   const CONTINUE_LABELS = { yes: '継続する', undecided: '未定', no: '継続しない' };
+
+  // ---------- 入力の段階（面接前に入力／面接時に確認）。docs/SPEC-stages.md 1 章 ----------
+  // 段階は「どの画面で入力するか」「申し送りでどう見せるか」だけに使い、判定の条件は変えない。
+  // 既定の段階は劇場固有値なので config（profile.inputStages）に置き、ここはセクションの構造だけを持つ。
+  const INPUT_STAGES = ['pre', 'interview'];
+  const INPUT_STAGE_LABELS = { pre: '面接前に入力（Step1）', interview: '面接時に確認（Step3）' };
+  // 入力セクション（配列の順＝Step2・Step3・設定画面・レポートの並び）。fixed は常に pre
+  const INPUT_SECTIONS = [
+    { id: 'basic',         label: '基本情報', fixed: true, ask: '氏名・性別・年齢・区分・卒業予定年月',
+      fields: ['name', 'gender', 'age', 'category', 'graduationDate'] },
+    { id: 'hsException',   label: '高校3年生の例外条件', ask: '進路（決定済みか・種別・進学先）と、卒業後も当劇場で継続するか',
+      fields: ['highschool.careerDecided', 'highschool.careerPath', 'highschool.destination', 'continueAfterGraduation'] },
+    { id: 'continuation',  label: '卒業後の継続', ask: '卒業後も当劇場でアルバイトを継続するか',
+      fields: ['continueAfterGraduation'] },
+    { id: 'foreignFlag',   label: '外国籍', ask: '外国籍に該当するか',
+      fields: ['foreign.isForeign'] },
+    { id: 'foreignDetail', label: '外国籍の詳細', ask: '在留資格・資格外活動許可（在留カード裏面）・在留期限・日本語レベル',
+      fields: ['foreign.residenceStatus', 'foreign.workPermit', 'foreign.residenceExpiry', 'foreign.japaneseLevel'] },
+    { id: 'commute',       label: '通勤', ask: '通勤方法・通勤時間・最寄り駅',
+      fields: ['commuteMethod', 'commuteMinutes', 'nearestStation'] },
+    { id: 'work',          label: '勤務条件', fixed: true, ask: '勤務可能曜日・勤務希望時間・週の勤務日数・勤務期間',
+      fields: ['workDays', 'anyDay', 'shifts', 'daysMin', 'daysMax', 'workPeriod'] },
+    { id: 'sideJob',       label: 'かけもち', ask: 'かけもちの有無・かけもち先・週あたり時間',
+      fields: ['sideJob', 'sideJobDetail', 'sideJobHoursPerWeek'] },
+    { id: 'busy',          label: '繁忙期・土日祝', ask: '繁忙期ごとの可否と出られる日数・土日の出勤頻度・祝日の勤務',
+      fields: ['vacation', 'vacationDays', 'weekendFreq', 'holidayWork'] },
+    { id: 'lateNight',     label: '深夜帯（{h}時以降）', ask: '{h}時以降の勤務の可否・帰宅手段（終電時刻・タクシー料金）',
+      fields: ['lateNight.availability', 'lateNight.returnMethod', 'lateNight.lastTrain', 'lateNight.taxiFare'] },
+    { id: 'allNight',      label: 'オールナイト上映', ask: 'オールナイトの可否・頻度・条件',
+      fields: ['allNight.availability', 'allNight.frequency', 'allNight.note'] },
+    { id: 'extras',        label: '希望部署・応募経路', ask: '希望部署・応募経路',
+      fields: ['department', 'applicationRoute'] },
+    { id: 'notes',         label: '面接者への申し送りコメント', fixed: true, ask: '',
+      fields: ['reviewerNotes'] }
+  ];
+  const SECTION_MAP = {};
+  INPUT_SECTIONS.forEach(function (s) { SECTION_MAP[s.id] = s; });
+  // 未入力が原因で出る留意点のうち、セクションが「面接時」なら Step2 の一覧から外すもの（条件は変えない）
+  const DEFERRABLE_RULES = {
+    late_night_return_unknown: { section: 'lateNight' },
+    late_night_last_train:     { section: 'lateNight' },
+    late_night_taxi_unknown:   { section: 'lateNight' },
+    // 'no' / 'unknown' は回答なので対象外（空欄のときだけ）
+    foreign_permit_missing:    { section: 'foreignDetail', byBlank: function (c) { return !(c.a.foreign.workPermit || ''); } },
+    foreign_expiry:            { section: 'foreignDetail', byBlank: function (c) { return !c.a.foreign.residenceExpiry; } }
+  };
+  // Step2 では「面接で確認すること」カードがこの内容を表すため、一覧に出さないルール
+  const AGGREGATE_RULES = { shift_unanswered: true };
+  // deferred / aggregate の印を付けないカテゴリ（高校生の方針・法令は段階に関係なく面接前に届ける）
+  const NEVER_DEFER_CATEGORIES = { legal: true, highschool: true };
+  // shiftConditionMissing の key → セクション
+  const MISSING_KEY_SECTION = {
+    busy: 'busy', busyDays: 'busy', weekendFreq: 'busy', holiday: 'busy',
+    lateNight: 'lateNight', allNight: 'allNight', allNightFreq: 'allNight', daysMax: 'work'
+  };
 
   // ---------- 共通ヘルパー ----------
   // 0 を「未設定」と区別して読む（Number(x) || 既定 だと 0 が既定値に戻るため）
@@ -402,6 +458,187 @@
     if (f.lateNight && !night.restricted && !(a.lateNight || {}).availability) out.push({ key: 'lateNight', label: '22時以降の勤務' });
     if (!a.daysMax) out.push({ key: 'daysMax', label: '週の最大勤務日数' });
     return out;
+  }
+
+  // ---------- 入力の段階（DOM 非依存）。docs/SPEC-stages.md 1-3・1-4 ----------
+  // セクションの段階。fixed・未知の id は 'pre'。inputStages が無い・不正（未 normalize の profile）も 'pre'（従来どおり）
+  function stageOf(profile, id) {
+    const sec = SECTION_MAP[id];
+    if (!sec || sec.fixed) return 'pre';
+    // 該当の有無が分からないまま詳細だけ面接前に聞くことはないため、外国籍が面接時なら詳細も面接時
+    if (id === 'foreignDetail' && stageOf(profile, 'foreignFlag') === 'interview') return 'interview';
+    const st = profile && U.isObj(profile.inputStages) ? profile.inputStages[id] : undefined;
+    return INPUT_STAGES.indexOf(st) >= 0 ? st : 'pre';
+  }
+
+  function fillHour(text, profile) {
+    const h = num((((profile || {}).params) || {}).lateNightStartHour, 22);
+    return String(text || '').replace(/\{h\}/g, h);
+  }
+  function sectionLabel(profile, id) { const s = SECTION_MAP[id]; return s ? fillHour(s.label, profile) : String(id || ''); }
+  function sectionAsk(profile, id) { const s = SECTION_MAP[id]; return s ? fillHour(s.ask, profile) : ''; }
+
+  // セクションが劇場の設定で使われているか（入力項目の ON/OFF・高校生の方針）
+  function sectionActive(profile, id) {
+    const f = (profile && profile.features) || {};
+    switch (id) {
+      case 'hsException': { const hp = profile && profile.highschoolPolicy; return !!hp && hp.mode !== 'allow'; }
+      case 'continuation': return f.graduationDate !== false;
+      case 'foreignFlag':
+      case 'foreignDetail': return !!f.foreignNational;
+      case 'busy': return !!(f.vacation || f.holidayWork || f.weekendFreq);
+      case 'lateNight': return !!f.lateNight;
+      case 'allNight': return !!f.allNight;
+      case 'extras': return !!(f.department || f.applicationRoute);
+      default: return !!SECTION_MAP[id];
+    }
+  }
+
+  // 卒業後の継続（continueAfterGraduation）が属するセクション。高3（例外対象区分）は例外条件、それ以外は卒業後の継続
+  function continueSection(a, profile) {
+    return highschoolStatus(a || {}, profile).isExceptionCategory ? 'hsException' : 'continuation';
+  }
+
+  // 有効かつ、この応募者に関係するセクションか
+  function sectionRelevant(a, profile, id) {
+    if (!sectionActive(profile, id)) return false;
+    a = a || {};
+    if (id === 'hsException') return highschoolStatus(a, profile).isExceptionCategory;
+    if (id === 'continuation') return isStudentGroup(categoryGroup(profile, a.category)) && !highschoolStatus(a, profile).isExceptionCategory;
+    if (id === 'foreignDetail') return (a.foreign || {}).isForeign === 'yes';
+    return true;
+  }
+
+  function filled(v) {
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== '' && v != null && v !== false;
+  }
+
+  // セクションのフィールドのどれかに値があるか
+  function sectionHasInput(a, profile, id) {
+    const sec = SECTION_MAP[id];
+    if (!sec) return false;
+    a = a || {};
+    const ids = busyItems(profile).map(function (v) { return v.id; });
+    return sec.fields.some(function (path) {
+      if (path === 'vacation' || path === 'vacationDays') {
+        const m = a[path] || {};
+        return ids.some(function (k) { return filled(m[k]); });
+      }
+      if (path === 'shifts') {
+        const sh = a.shifts || {};
+        return Object.keys(sh).some(function (k) { return !!(sh[k] && (sh[k].start || sh[k].end)); });
+      }
+      if (path === 'anyDay') return a.anyDay === true;
+      if (path === 'continueAfterGraduation') return continueSection(a, profile) === id && filled(a.continueAfterGraduation);
+      return filled(U.getPath(a, path));
+    });
+  }
+
+  // 「面接で確認する項目」の元データ（Step2 の「面接で確認すること」・Step3・レポートで共用）
+  //   level: 'required'＝判定前に必要（shiftConditionMissing）/ 'check'＝空欄だと留意点・確認漏れが残る（対応する留意点ルールが ON のときだけ）/ 'optional'＝記録用
+  //   opts: { shift, night, hs, contribution, ctx, now }。ctx（buildContext の結果）が無ければ buildContext から作る
+  function interviewConfirm(applicant, profile, opts) {
+    opts = opts || {};
+    const c = opts.ctx;
+    if (!c) return buildContext(applicant || {}, profile, opts).confirm;
+    const a = c.a;
+    const f = c.features;
+    const night = opts.night || c.night;
+    const hs = opts.hs || c.hs;
+    const contribution = opts.contribution || c.contribution;
+    const strict = !!contribution.enabled && ((profile.contribution || {}).requireComplete !== false);
+    const fo = a.foreign || {};
+
+    // 判定に必要な未入力（shiftConditionMissing）をセクションへ振り分ける
+    const required = {};
+    (contribution.missingKeys || []).forEach(function (k, i) {
+      const sid = MISSING_KEY_SECTION[k];
+      if (!sid) return;
+      (required[sid] = required[sid] || []).push({ key: k, label: contribution.missing[i], level: 'required' });
+    });
+    const cond = function (id) { try { return !!CONDITIONS[id](c); } catch (e) { return false; } };
+    // 'check'（空欄だと留意点が残る）は、対応する留意点ルールを劇場が ON にしているときだけ。OFF なら記録用（optional）
+    const ruleOn = function (id) {
+      return (profile.handoffRules || []).some(function (r) { return r && r.id === id && r.enabled !== false; });
+    };
+    const lvl = function (id) { return ruleOn(id) ? 'check' : 'optional'; };
+
+    function candidates(id) {
+      const out = (required[id] || []).slice();
+      const push = function (key, label, level) { out.push({ key: key, label: label, level: level }); };
+      switch (id) {
+        case 'commute':
+          if (!filled(a.commuteMethod)) push('commuteMethod', '通勤方法', 'optional');
+          if (!filled(a.commuteMinutes)) push('commuteMinutes', '通勤時間', 'optional');
+          break;
+        case 'hsException':
+          if (hs.isExceptionCategory) hs.missing.forEach(function (m) { push('highschool', m, 'check'); });
+          break;
+        case 'continuation':
+          if (!filled(a.continueAfterGraduation)) push('continueAfterGraduation', '卒業後も当劇場で継続するか', 'optional');
+          break;
+        case 'foreignFlag':
+          if (!filled(fo.isForeign)) push('foreign.isForeign', '外国籍の該当', 'check');
+          break;
+        case 'foreignDetail':
+          if (!filled(fo.residenceStatus)) push('foreign.residenceStatus', '在留資格', 'optional');
+          if (!filled(fo.workPermit)) push('foreign.workPermit', '資格外活動許可（在留カード裏面）', lvl('foreign_permit_missing'));
+          if (!filled(fo.residenceExpiry) && fo.workPermit !== 'na') push('foreign.residenceExpiry', '在留期限', lvl('foreign_expiry'));
+          if (!filled(fo.japaneseLevel)) push('foreign.japaneseLevel', '日本語レベル', 'optional');
+          break;
+        case 'sideJob':
+          if (!filled(a.sideJob)) push('sideJob', 'かけもちの有無', 'optional');
+          // 週28時間の判定に使うため（外国籍のかけもちあり）
+          if (a.sideJob === 'yes' && fo.isForeign === 'yes' && !filled(a.sideJobHoursPerWeek)) push('sideJobHoursPerWeek', 'かけもち先の週あたり時間', 'optional');
+          break;
+        case 'lateNight':
+          if (cond('late_night_return_unknown')) push('lateNight.returnMethod', '帰宅手段', lvl('late_night_return_unknown'));
+          if (cond('late_night_last_train')) push('lateNight.lastTrain', '終電時刻', lvl('late_night_last_train'));
+          if (cond('late_night_taxi_unknown')) push('lateNight.taxiFare', 'タクシー料金の目安', lvl('late_night_taxi_unknown'));
+          break;
+        case 'extras':
+          if (f.department && !filled(a.department)) push('department', '希望部署', 'optional');
+          if (f.applicationRoute && !filled(a.applicationRoute)) push('applicationRoute', '応募経路', 'optional');
+          break;
+      }
+      return out;
+    }
+
+    const sections = [];
+    INPUT_SECTIONS.forEach(function (sec) {
+      const id = sec.id;
+      if (!sectionActive(profile, id)) return;
+      const stage = stageOf(profile, id);
+      const relevant = sectionRelevant(a, profile, id);
+      const toAsk = stage === 'interview' && relevant && !(night.restricted && (id === 'lateNight' || id === 'allNight'));
+      let missing = relevant ? candidates(id) : [];
+      // 面接時に聞くセクション以外は、判定に必要な未入力（required）だけを残す
+      if (!toAsk) missing = missing.filter(function (m) { return m.level === 'required'; });
+      sections.push({
+        id: id, label: sectionLabel(profile, id), ask: sectionAsk(profile, id),
+        stage: stage, fixed: !!sec.fixed, relevant: relevant, toAsk: toAsk,
+        hasInput: sectionHasInput(a, profile, id),
+        missing: missing,
+        blocking: strict && missing.some(function (m) { return m.level === 'required'; })
+      });
+    });
+
+    const items = [];
+    sections.forEach(function (s) {
+      s.missing.forEach(function (m) { items.push({ section: s.id, sectionLabel: s.label, key: m.key, label: m.label, level: m.level }); });
+    });
+    const summary = sections.map(function (s) {
+      const req = s.missing.filter(function (m) { return m.level === 'required'; });
+      return req.length ? s.label + '：' + req.map(function (m) { return m.label; }).join('、') : '';
+    }).filter(Boolean).join('／');
+    return {
+      strict: strict,
+      sections: sections,
+      items: items,
+      summary: summary,
+      sectionLabels: sections.filter(function (s) { return s.missing.length > 0; }).map(function (s) { return s.label; })
+    };
   }
 
   function monthsUntil(ym, now) {
@@ -808,6 +1045,8 @@
     c.days = weeklyDaysCheck(a);
     c.ageCat = ageCategoryCheck(a, profile);
     c.contribution = computeContribution(a, profile, { shift: shift, night: c.night, now: c.now });
+    // 面接で確認する項目（ctx を渡すので buildContext を再帰しない）
+    c.confirm = interviewConfirm(a, profile, { shift: shift, night: c.night, hs: c.hs, contribution: c.contribution, ctx: c });
     return c;
   }
 
@@ -859,6 +1098,9 @@
       weekendFreqLabel: labelOf(o.weekendFrequencies, c.a.weekendFreq),
       sideJobHours: c.sideJobHours,
       missingLabels: c.contribution.missing.join('・'),
+      // 面接で確認する項目（セクションごとの判定前に必要な未入力／未入力のあるセクション名）
+      confirmSummary: c.confirm ? c.confirm.summary : '',
+      confirmSections: c.confirm ? c.confirm.sectionLabels.join('・') : '',
       contribPct: c.contribution.pct,
       busyPct: busyPart != null ? round1(busyPart * 100) : ''
     };
@@ -884,14 +1126,23 @@
       if (!hit) return;
       const extra = typeof hit === 'object' ? hit : {};
       const sev = SEVERITY[rule.severity] ? rule.severity : 'info';
-      items.push({
+      const item = {
         id: rule.id,
         severity: sev,
         category: rule.category || 'general',
         categoryLabel: CATEGORY_LABELS[rule.category] || rule.category || '全般',
         text: U.fill(rule.text, templateVars(c, extra)),
         _i: items.length
-      });
+      };
+      items.push(item);
+      // 段階の印（項目の追加・削除・並び・文言は変えない。該当しない item にはキー自体を付けない）
+      //   aggregate: Step2 では「面接で確認すること」カードが代わりに表す
+      //   deferred : 面接時のセクションの未入力が原因。Step2 の一覧から外し Step3 以降で確認する
+      if (!NEVER_DEFER_CATEGORIES[item.category]) {
+        if (AGGREGATE_RULES[rule.id]) item.aggregate = true;
+        const df = DEFERRABLE_RULES[rule.id];
+        if (df && stageOf(profile, df.section) === 'interview' && (!df.byBlank || df.byBlank(c))) { item.deferred = true; item.section = df.section; }
+      }
     });
 
     // 重要度 → カテゴリ順（同一カテゴリ内は handoffRules の並び）の安定ソート
@@ -932,6 +1183,7 @@
       shift: sh,
       badges: shiftBadges(c),
       contribution: c.contribution,
+      confirm: c.confirm,
       hs: c.hs,
       night: c.night,
       generatedAt: new Date().toISOString()
@@ -1199,32 +1451,34 @@
     const f = profile.features || {};
     const p = profile.params || {};
     const rows = [];
-    const add = function (label, value) { if (value !== undefined && value !== null && value !== '') rows.push({ label: label, value: value }); };
+    // section: 行が属する入力セクション（SPEC-stages 1-5。応募時の情報／面接で確認した情報の振り分けに使う）
+    const add = function (label, value, section) { if (value !== undefined && value !== null && value !== '') rows.push({ label: label, value: value, section: section }); };
     const group = categoryGroup(profile, a.category);
     const hs = highschoolStatus(a, profile);
     const night = nightStatus(a, profile);
 
-    add('氏名', a.name);
-    add('性別', a.gender);
-    add('年齢', a.age ? a.age + '歳' : '');
-    add('区分', a.category);
-    add('高校生の例外', hsStatusText(hs, a, profile));
-    if (f.graduationDate) add('卒業予定', a.graduationDate);
-    if (isStudentGroup(group)) add('卒業後の継続', CONTINUE_LABELS[a.continueAfterGraduation] || '');
-    add('通勤方法', a.commuteMethod);
-    add('通勤時間', a.commuteMinutes ? a.commuteMinutes + '分' : '');
-    add('最寄り駅', a.nearestStation);
+    add('氏名', a.name, 'basic');
+    add('性別', a.gender, 'basic');
+    add('年齢', a.age ? a.age + '歳' : '', 'basic');
+    add('区分', a.category, 'basic');
+    // 高校生の方針（原則対象外など）は段階に関係なく面接前に伝えるため basic
+    add('高校生の例外', hsStatusText(hs, a, profile), 'basic');
+    if (f.graduationDate) add('卒業予定', a.graduationDate, 'basic');
+    if (isStudentGroup(group)) add('卒業後の継続', CONTINUE_LABELS[a.continueAfterGraduation] || '', continueSection(a, profile));
+    add('通勤方法', a.commuteMethod, 'commute');
+    add('通勤時間', a.commuteMinutes ? a.commuteMinutes + '分' : '', 'commute');
+    add('最寄り駅', a.nearestStation, 'commute');
 
     const dayLabels = a.anyDay ? '曜日問わず' : DAYS.filter(function (d) { return (a.workDays || []).indexOf(d.key) >= 0; }).map(function (d) { return d.label; }).join('・');
-    add('勤務可能曜日', dayLabels);
+    add('勤務可能曜日', dayLabels, 'work');
     const dmin = a.daysMin, dmax = a.daysMax;
-    add('週勤務日数', dmin || dmax ? (dmin || '?') + '〜' + (dmax || '?') + '日' : '');
-    add('希望シフト', describeShifts(a, profile).join(' / '));
-    add('勤務期間', labelOf(o.workPeriods, a.workPeriod));
+    add('週勤務日数', dmin || dmax ? (dmin || '?') + '〜' + (dmax || '?') + '日' : '', 'work');
+    add('希望シフト', describeShifts(a, profile).join(' / '), 'work');
+    add('勤務期間', labelOf(o.workPeriods, a.workPeriod), 'work');
     const sjh = num(a.sideJobHoursPerWeek, null);
     add('かけもち', a.sideJob === 'yes'
       ? 'あり' + (a.sideJobDetail ? '（' + a.sideJobDetail + '）' : '') + (sjh != null ? '（週' + sjh + '時間）' : '')
-      : a.sideJob === 'no' ? 'なし' : '');
+      : a.sideJob === 'no' ? 'なし' : '', 'sideJob');
 
     if (f.vacation) {
       const vdays = a.vacationDays || {};
@@ -1238,20 +1492,20 @@
         }
         return s;
       }).join('　');
-      add('繁忙期', v);
+      add('繁忙期', v, 'busy');
     }
-    if (f.holidayWork) add('祝日', TRI_LABELS[a.holidayWork] || '');
-    if (f.weekendFreq && a.weekendFreq) add('土日の頻度', labelOf(o.weekendFrequencies, a.weekendFreq));
+    if (f.holidayWork) add('祝日', TRI_LABELS[a.holidayWork] || '', 'busy');
+    if (f.weekendFreq && a.weekendFreq) add('土日の頻度', labelOf(o.weekendFrequencies, a.weekendFreq), 'busy');
     if (f.allNight) {
       const an = a.allNight || {};
       if (night.restricted) {
-        add('オールナイト', '対象外（' + night.reason + '）');
+        add('オールナイト', '対象外（' + night.reason + '）', 'allNight');
       } else {
         const parts = [];
         if (an.availability) parts.push(TRI_LABELS[an.availability] || an.availability);
         if (isTri(an.availability) && an.frequency) parts.push(labelOf(o.allNightFrequencies, an.frequency));
         if (isTri(an.availability) && an.note) parts.push(an.note);
-        add('オールナイト', parts.join(' / '));
+        add('オールナイト', parts.join(' / '), 'allNight');
       }
     }
     if (f.lateNight) {
@@ -1263,7 +1517,7 @@
       if (f.taxi && ln.returnMethod === 'taxi' && ln.taxiFare) parts.push('料金目安 ' + Number(ln.taxiFare).toLocaleString('ja-JP') + '円');
       let txt = parts.join(' / ');
       if (txt && lastTrainCheck(a, profile).conflict) txt += '（終電に間に合わない可能性）';
-      add('深夜帯（' + (p.lateNightStartHour || 22) + '時以降）', txt);
+      add('深夜帯（' + (p.lateNightStartHour || 22) + '時以降）', txt, 'lateNight');
     }
     if (f.foreignNational) {
       const fo = a.foreign || {};
@@ -1273,14 +1527,15 @@
         if (fo.workPermit) parts.push('資格外活動許可: ' + labelOf(o.workPermitStates, fo.workPermit));
         if (fo.residenceExpiry) parts.push('在留期限: ' + fo.residenceExpiry);
         if (fo.japaneseLevel) parts.push('日本語: ' + fo.japaneseLevel);
-        add('外国籍', parts.join(' / ') || '該当');
+        // 詳細が 1 つでもあれば外国籍の詳細、「該当」だけなら外国籍（該当の有無）
+        add('外国籍', parts.join(' / ') || '該当', parts.length ? 'foreignDetail' : 'foreignFlag');
       } else if (fo.isForeign === 'no') {
-        add('外国籍', '該当なし');
+        add('外国籍', '該当なし', 'foreignFlag');
       }
     }
-    if (f.department) add('希望部署', a.department);
-    if (f.applicationRoute) add('応募経路', a.applicationRoute);
-    add('担当者所見', a.reviewerNotes);
+    if (f.department) add('希望部署', a.department, 'extras');
+    if (f.applicationRoute) add('応募経路', a.applicationRoute, 'extras');
+    add('申し送りコメント', a.reviewerNotes, 'notes');
     return rows;
   }
 
@@ -1322,6 +1577,20 @@
     shiftBadges: shiftBadges,
     evaluateHiring: evaluateHiring,
     describeApplicant: describeApplicant,
-    describeShifts: describeShifts
+    describeShifts: describeShifts,
+    // 入力の段階（SPEC-stages）
+    INPUT_STAGES: INPUT_STAGES,
+    INPUT_STAGE_LABELS: INPUT_STAGE_LABELS,
+    INPUT_SECTIONS: INPUT_SECTIONS,
+    DEFERRABLE_RULES: DEFERRABLE_RULES,
+    AGGREGATE_RULES: AGGREGATE_RULES,
+    stageOf: stageOf,
+    sectionLabel: sectionLabel,
+    sectionAsk: sectionAsk,
+    sectionActive: sectionActive,
+    sectionRelevant: sectionRelevant,
+    continueSection: continueSection,
+    sectionHasInput: sectionHasInput,
+    interviewConfirm: interviewConfirm
   };
 })(window);

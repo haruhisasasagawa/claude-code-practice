@@ -906,5 +906,463 @@ test('41 buildHandoff / evaluateHiring は applicant を書き換えない', fun
   assert.strictEqual(JSON.stringify(a), before);
 });
 
+// ======================================================================
+// 入力の段階（面接前に入力／面接時に確認）— docs/SPEC-stages.md 7-1
+const DEFAULT_STAGES = {
+  commute: 'pre', hsException: 'pre', continuation: 'interview', foreignFlag: 'pre', foreignDetail: 'interview',
+  sideJob: 'interview', busy: 'interview', lateNight: 'interview', allNight: 'interview', extras: 'interview'
+};
+function allPre(p) { p = p || P(); Object.keys(p.inputStages).forEach(function (k) { p.inputStages[k] = 'pre'; }); return p; }
+function sec(cf, id) { return cf.sections.find(function (s) { return s.id === id; }); }
+function hasKey(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+// 例A の基本・勤務条件（Step1 の項目）だけ。週の最大勤務日数は空
+function step1Only(over) {
+  return A(merge({
+    name: '佐藤 花子', gender: '女性', age: '21', category: '大学3年生', graduationDate: '2027-03',
+    commuteMethod: '公共交通機関', commuteMinutes: '40', nearestStation: '高田馬場', workPeriod: 'mid',
+    sh: { mon: ['17:00', '23:30'], wed: ['10:00', '12:00'], fri: ['18:00', '01:00'], sat: ['08:00', '17:00'] },
+    daysMin: '2', foreign: { isForeign: 'no' }
+  }, over || {}));
+}
+
+test('43 段階の既定とカタログ', function () {
+  assert.deepStrictEqual(plain(P().inputStages), DEFAULT_STAGES);
+  const nonFixed = plain(R.INPUT_SECTIONS.filter(function (s) { return !s.fixed; }).map(function (s) { return s.id; }));
+  assert.deepStrictEqual(nonFixed.slice().sort(), Object.keys(DEFAULT_STAGES).sort());
+  assert.deepStrictEqual(plain(R.INPUT_SECTIONS.filter(function (s) { return s.fixed; }).map(function (s) { return s.id; })), ['basic', 'work', 'notes']);
+  assert.strictEqual(R.stageOf(P(), 'busy'), 'interview');
+  assert.strictEqual(R.stageOf(P(), 'commute'), 'pre');
+  assert.strictEqual(R.stageOf(P(), 'work'), 'pre');
+  assert.strictEqual(R.stageOf(P(), 'notes'), 'pre');
+  assert.strictEqual(R.stageOf(P(), 'unknown_section'), 'pre');
+  assert.strictEqual(R.stageOf({}, 'busy'), 'pre');                                  // 未 normalize は従来どおり
+  assert.strictEqual(R.stageOf({ inputStages: { busy: 'x' } }, 'busy'), 'pre');      // 不正値
+  assert.strictEqual(R.stageOf({ inputStages: { foreignFlag: 'interview', foreignDetail: 'pre' } }, 'foreignDetail'), 'interview');
+  assert.strictEqual(R.stageOf({ inputStages: { work: 'interview' } }, 'work'), 'pre'); // fixed は常に pre
+  assert.strictEqual(R.sectionLabel(P(), 'lateNight'), '深夜帯（22時以降）');
+  assert.ok(R.sectionAsk(P(), 'lateNight').indexOf('22時以降') === 0);
+  const p23 = P(); p23.params.lateNightStartHour = 23;
+  assert.strictEqual(R.sectionLabel(p23, 'lateNight'), '深夜帯（23時以降）');
+  assert.deepStrictEqual(plain(P().stageOptions), { requireDaysMax: true, preFillAlwaysOpen: false });   // 週何日は面接に進めるかの判断材料（既定で必須）
+  assert.deepStrictEqual(plain(R.INPUT_STAGES), ['pre', 'interview']);
+  // 有効条件（入力項目の ON/OFF・高校生の方針）
+  const p = P();
+  assert.ok(!R.sectionActive(p, 'extras'));
+  p.features.department = true;
+  assert.ok(R.sectionActive(p, 'extras'));
+  p.highschoolPolicy.mode = 'allow';
+  assert.ok(!R.sectionActive(p, 'hsException'));
+  assert.ok(!R.sectionActive({}, 'hsException'));                                    // 方針の欠落は allow 扱い
+  p.features.vacation = false; p.features.holidayWork = false; p.features.weekendFreq = false;
+  assert.ok(!R.sectionActive(p, 'busy'));
+  // 既定文言（新）
+  const su = P().handoffRules.find(function (r) { return r.id === 'shift_unanswered'; });
+  assert.ok(su.text.indexOf('{confirmSummary}') >= 0 && su.text.indexOf('面接で確認する項目') >= 0, su.text);
+  ['preFillTitle', 'preFillHint', 'interviewConfirmIntro', 'reviewerNotesIntro'].forEach(function (k) { assert.ok(P().texts[k], k); });
+});
+
+test('44 normalize（入力の段階・運用設定）', function () {
+  assert.deepStrictEqual(plain(S.normalizeProfile({}).inputStages), DEFAULT_STAGES);
+  const n1 = plain(S.normalizeProfile({ inputStages: { busy: 'x', lateNight: 'pre', commute: null, bogus: 'pre' } }));
+  assert.strictEqual(n1.inputStages.busy, 'interview');
+  assert.strictEqual(n1.inputStages.lateNight, 'pre');
+  assert.strictEqual(n1.inputStages.commute, 'pre');
+  assert.ok(!hasKey(n1.inputStages, 'bogus'));
+  assert.deepStrictEqual(Object.keys(n1.inputStages), Object.keys(DEFAULT_STAGES));    // 既定キー順で作り直す
+  const n2 = plain(S.normalizeProfile({ inputStages: { foreignFlag: 'interview', foreignDetail: 'pre' } }));
+  assert.strictEqual(n2.inputStages.foreignFlag, 'interview');
+  assert.strictEqual(n2.inputStages.foreignDetail, 'interview');
+  const n3 = plain(S.normalizeProfile({ stageOptions: { requireDaysMax: 'yes', preFillAlwaysOpen: true, junk: 1 } }));
+  assert.deepStrictEqual(n3.stageOptions, { requireDaysMax: true, preFillAlwaysOpen: true });      // 不正値は既定（true）
+  const n4 = plain(S.normalizeProfile({ inputStages: 'abc', stageOptions: null }));
+  assert.deepStrictEqual(n4.inputStages, DEFAULT_STAGES);
+  assert.deepStrictEqual(n4.stageOptions, { requireDaysMax: true, preFillAlwaysOpen: false });
+  // 冪等
+  const raw = { inputStages: { busy: 'pre', foreignFlag: 'interview', foreignDetail: 'pre', x: 1 }, stageOptions: { requireDaysMax: true } };
+  const once = plain(S.normalizeProfile(raw));
+  assert.deepStrictEqual(plain(S.normalizeProfile(once)), once);
+  // v1 の旧プロファイル（新宿・他劇場）は既定の段階
+  ['v1-profile-shinjuku.json', 'v1-profile-other.json'].forEach(function (f) {
+    const n = plain(S.normalizeProfile(JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8'))));
+    assert.deepStrictEqual(n.inputStages, DEFAULT_STAGES, f);
+    assert.deepStrictEqual(n.stageOptions, { requireDaysMax: true, preFillAlwaysOpen: false }, f);
+  });
+  // v2 で inputStages の無い旧プロファイル（本変更前の保存）も既定の段階
+  const v2old = plain(P()); delete v2old.inputStages; delete v2old.stageOptions;
+  assert.deepStrictEqual(plain(S.normalizeProfile(v2old).inputStages), DEFAULT_STAGES);
+  // 既定プロファイルは normalize で不変
+  assert.deepStrictEqual(plain(S.normalizeProfile(P())), plain(P()));
+  // 設定で選んだ値は保持
+  const p = P(); p.inputStages.sideJob = 'pre'; p.stageOptions.requireDaysMax = false;
+  const np = plain(S.normalizeProfile(p));
+  assert.strictEqual(np.inputStages.sideJob, 'pre');
+  assert.strictEqual(np.stageOptions.requireDaysMax, false);                                     // OFF にした設定は保持
+});
+
+test('45 既定文言の差し替え（「シフト条件の最終確認」→「面接で確認する項目」）', function () {
+  const OLD_RULE = '面接で確認が必要なシフト条件があります（{missingLabels}）。面接で確認し、Step3「シフト条件の最終確認」に入力してください。';
+  const OLD_INTRO = '応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「シフト条件の最終確認」で入力すると確定します。';
+  const ruleText = function (p) { return p.handoffRules.find(function (r) { return r.id === 'shift_unanswered'; }).text; };
+  const p = P();
+  p.handoffRules.find(function (r) { return r.id === 'shift_unanswered'; }).text = OLD_RULE;
+  p.texts.contributionIntro = OLD_INTRO;
+  const n = plain(S.normalizeProfile(p));
+  assert.strictEqual(ruleText(n), ruleText(P()));
+  assert.strictEqual(n.texts.contributionIntro, P().texts.contributionIntro);
+  assert.deepStrictEqual(plain(S.normalizeProfile(n)), n);
+  // 編集済みの文言は維持
+  const e = P();
+  e.handoffRules.find(function (r) { return r.id === 'shift_unanswered'; }).text = '独自: {missingLabels}';
+  e.texts.contributionIntro = '独自の説明';
+  const ne = plain(S.normalizeProfile(e));
+  assert.strictEqual(ruleText(ne), '独自: {missingLabels}');
+  assert.strictEqual(ne.texts.contributionIntro, '独自の説明');
+  // vacation_ng: 繁忙期は既定で面接時に確認するため、面接後にも意味が通る文言（「面接実施の可否」→「採用可否」）
+  const OLD_VNG = '繁忙期（{vacationLabels}）の勤務ができません。新宿は連休・長期休暇の貢献を重視するため、面接実施の可否を判断してください。';
+  const vngText = function (p) { return p.handoffRules.find(function (r) { return r.id === 'vacation_ng'; }).text; };
+  assert.ok(vngText(P()).indexOf('面接実施') < 0 && vngText(P()).indexOf('採用可否を判断') >= 0, vngText(P()));
+  assert.ok(R.SEVERITY.block.desc.indexOf('採用の可否') >= 0, R.SEVERITY.block.desc);
+  const v = P(); v.handoffRules.find(function (r) { return r.id === 'vacation_ng'; }).text = OLD_VNG;
+  const nv = plain(S.normalizeProfile(v));
+  assert.strictEqual(vngText(nv), vngText(P()));                                              // 旧既定と完全一致 → 新既定
+  assert.deepStrictEqual(plain(S.normalizeProfile(nv)), nv);                                  // 冪等
+  const ve = P(); ve.handoffRules.find(function (r) { return r.id === 'vacation_ng'; }).text = OLD_VNG + '（独自）';
+  assert.strictEqual(vngText(plain(S.normalizeProfile(ve))), OLD_VNG + '（独自）');           // 編集済みは維持
+  // v1 の旧既定文言も新既定へ
+  const v1 = plain(P()); v1.schemaVersion = 1;
+  v1.handoffRules.find(function (r) { return r.id === 'vacation_ng'; }).text = S.V1_DEFAULT_TEXTS.vacation_ng;
+  assert.strictEqual(vngText(plain(S.normalizeProfile(v1))), vngText(P()));
+});
+
+test('46 deferred / aggregate の印（Step2 の一覧から外す項目）', function () {
+  const late = A(allAnswered({ age: '20', category: '大学2年生', sh: { mon: ['18:00', '23:30'] }, lateNight: { availability: 'ok', returnMethod: '' } }));
+  const h = HO(late);
+  const it = item(h, 'late_night_return_unknown');
+  assert.ok(it, ids(h).join(','));
+  assert.strictEqual(it.deferred, true);
+  assert.strictEqual(it.section, 'lateNight');
+  // 段階が pre ならキー自体を付けない
+  const pPre = P(); pPre.inputStages.lateNight = 'pre';
+  const itPre = item(HO(late, pPre), 'late_night_return_unknown');
+  assert.ok(itPre && !hasKey(itPre, 'deferred') && !hasKey(itPre, 'section'));
+  // 未 normalize（inputStages なし）の profile も従来どおり印なし
+  const pRaw = P(); delete pRaw.inputStages;
+  assert.ok(!hasKey(item(HO(late, pRaw), 'late_night_return_unknown'), 'deferred'));
+  // shift_unanswered は aggregate（段階に関係なく）
+  const blank = A({ age: '20', category: '大学2年生', sh: { sat: ['10:00', '18:00'] } });
+  assert.strictEqual(item(HO(blank), 'shift_unanswered').aggregate, true);
+  assert.strictEqual(item(HO(blank, allPre()), 'shift_unanswered').aggregate, true);
+  // 外国籍: 空欄だけ deferred。「不明」は回答なので通常の要判断
+  const mkForeign = function () { return A(allAnswered({ age: '20', category: '大学2年生', sh: { sat: ['10:00', '18:00'] }, foreign: { isForeign: 'yes', workPermit: '' } })); };
+  const fBlank = mkForeign();
+  assert.strictEqual(item(HO(fBlank), 'foreign_permit_missing').deferred, true);
+  assert.strictEqual(item(HO(fBlank), 'foreign_permit_missing').section, 'foreignDetail');
+  assert.strictEqual(item(HO(fBlank), 'foreign_expiry').deferred, true);
+  const fUnknown = merge(mkForeign(), { foreign: { workPermit: 'unknown', residenceExpiry: '2026-12' } });
+  const hU = HO(fUnknown);
+  assert.ok(!hasKey(item(hU, 'foreign_permit_missing'), 'deferred'));
+  assert.ok(!hasKey(item(hU, 'foreign_expiry'), 'deferred'));                       // 期限が近い（値で発火）は通常の項目
+  // 外国籍の該当が面接時なら、詳細も面接時として扱う
+  const pF = P(); pF.inputStages.foreignFlag = 'interview'; pF.inputStages.foreignDetail = 'pre';
+  assert.strictEqual(item(HO(fBlank, pF), 'foreign_permit_missing').deferred, true);
+  // legal / highschool カテゴリには付けない（カテゴリを変えた場合も）
+  const minor = A({ age: '17', category: '高校2年生', sh: { mon: ['17:00', '23:00'] }, lateNight: { availability: 'ok' }, allNight: { availability: 'ok' } });
+  HO(minor).items.forEach(function (i) {
+    if (i.category === 'legal' || i.category === 'highschool') assert.ok(!hasKey(i, 'deferred') && !hasKey(i, 'aggregate'), i.id);
+  });
+  const pL = P(); pL.handoffRules.find(function (r) { return r.id === 'shift_unanswered'; }).category = 'legal';
+  assert.ok(!hasKey(item(HO(blank, pL), 'shift_unanswered'), 'aggregate'));
+  // items の id 集合・並び・counts・文言は段階を変えても同じ
+  [late, blank, fBlank, exampleA(), minor].forEach(function (a, k) {
+    const h1 = HO(a), h2 = HO(a, allPre());
+    assert.deepStrictEqual(ids(h1), ids(h2), 'case ' + k);
+    assert.deepStrictEqual(plain(h1.counts), plain(h2.counts), 'case ' + k);
+    assert.deepStrictEqual(plain(h1.items.map(function (i) { return i.text; })), plain(h2.items.map(function (i) { return i.text; })), 'case ' + k);
+  });
+  // buildHandoff の戻り値に confirm
+  assert.ok(h.confirm && Array.isArray(h.confirm.sections));
+});
+
+test('47 判定は段階に依存しない', function () {
+  const cases = [
+    exampleA(),
+    exampleB(),
+    A(allAnswered({ age: '16', category: '高校2年生', sh: { sat: ['10:00', '18:00'], sun: ['10:00', '18:00'] } })),
+    A({ age: '17', category: 'フリーター', sh: { mon: ['18:00', '23:00'] }, lateNight: { availability: 'ok' }, daysMax: '3', workPeriod: 'long' })
+  ];
+  cases.forEach(function (a, k) {
+    [scoresAll(5), scoresAll(3), scoresAll(2)].forEach(function (s) {
+      const j1 = judge(a, s, P()), j2 = judge(a, s, allPre());
+      ['result', 'mode', 'baseResult'].forEach(function (f) { assert.strictEqual(j2[f], j1[f], 'case ' + k + ' ' + f); });
+      assert.strictEqual(j2.contribution.total, j1.contribution.total);
+      assert.deepStrictEqual(plain(j2.adjustments.map(function (x) { return x.code; })), plain(j1.adjustments.map(function (x) { return x.code; })));
+      // チェックなしでも同じ（deferred / aggregate も未確認として数える）
+      const n1 = judge(a, s, P(), function () { return {}; }), n2 = judge(a, s, allPre(), function () { return {}; });
+      assert.strictEqual(n2.result, n1.result);
+      assert.strictEqual(n2.unresolved.length, n1.unresolved.length);
+    });
+    assert.deepStrictEqual(plain(CC(a, allPre())), plain(CC(a)), 'case ' + k);
+  });
+  assert.strictEqual(CC(exampleA()).total, 65.4);
+  assert.strictEqual(CC(exampleB()).total, 17.6);
+});
+
+test('48 deferred の未確認は判定に出る（要判断は上長最終判断要に留める）', function () {
+  const a = merge(exampleA(), { foreign: { isForeign: 'yes', workPermit: '', residenceExpiry: '2030-03' } });
+  const h = HO(a);
+  assert.strictEqual(item(h, 'foreign_permit_missing').deferred, true);
+  const exceptPermit = function (hh) { const c = allChecks(hh); delete c.foreign_permit_missing; return c; };
+  const j = judge(a, scoresAll(5), P(), exceptPermit);
+  assert.ok(j.unresolved.some(function (u) { return u.id === 'foreign_permit_missing'; }));
+  assert.ok(j.adjustments.some(function (x) { return x.code === 'unresolved_block'; }), JSON.stringify(plain(j.adjustments)));
+  assert.strictEqual(j.result, 'review');
+  // 面接で「あり」を入力すれば項目が消え、採用推奨
+  const a2 = merge(exampleA(), { foreign: { isForeign: 'yes', workPermit: 'yes', residenceExpiry: '2030-03' } });
+  assert.ok(!has(HO(a2), 'foreign_permit_missing'));
+  const j2 = judge(a2, scoresAll(5), P(), exceptPermit);
+  assert.strictEqual(j2.result, 'recommend', JSON.stringify(plain(j2.adjustments)));
+  assert.ok(!j2.adjustments.some(function (x) { return x.code === 'unresolved_block'; }));
+});
+
+test('49 interviewConfirm（面接で確認する項目）', function () {
+  const a = step1Only();
+  const cf = R.interviewConfirm(a, P(), OPTS);
+  assert.strictEqual(cf.strict, true);
+  assert.deepStrictEqual(plain(cf.sections.filter(function (s) { return s.toAsk; }).map(function (s) { return s.id; })), ['continuation', 'sideJob', 'busy', 'lateNight', 'allNight']);
+  // 並びは INPUT_SECTIONS の順・有効なものだけ（extras は既定 OFF）
+  const order = plain(R.INPUT_SECTIONS.map(function (s) { return s.id; }));
+  const got = plain(cf.sections.map(function (s) { return s.id; }));
+  assert.ok(got.indexOf('extras') < 0);
+  for (let k = 1; k < got.length; k++) assert.ok(order.indexOf(got[k - 1]) < order.indexOf(got[k]));
+  const work = sec(cf, 'work');
+  assert.deepStrictEqual(plain(work.missing.map(function (m) { return { key: m.key, level: m.level }; })), [{ key: 'daysMax', level: 'required' }]);
+  assert.strictEqual(work.blocking, true);
+  assert.strictEqual(work.stage, 'pre');
+  assert.strictEqual(work.fixed, true);
+  const sj = sec(cf, 'sideJob');
+  assert.ok(sj.missing.length > 0 && sj.missing.every(function (m) { return m.level === 'optional'; }));
+  assert.strictEqual(sj.blocking, false);
+  assert.strictEqual(sj.hasInput, false);
+  assert.ok(sec(cf, 'busy').blocking);
+  assert.ok(cf.summary.indexOf('勤務条件：週の最大勤務日数') === 0, cf.summary);
+  assert.ok(cf.summary.indexOf('／繁忙期・土日祝：繁忙期の可否（') > 0, cf.summary);
+  assert.ok(cf.summary.indexOf('土日の出勤頻度') > 0 && cf.summary.indexOf('祝日の勤務') > 0, cf.summary);
+  assert.ok(cf.summary.indexOf('／深夜帯（22時以降）：22時以降の勤務') > 0, cf.summary);
+  assert.ok(cf.summary.indexOf('／オールナイト上映：オールナイトの可否') > 0, cf.summary);
+  assert.ok(cf.summary.indexOf('かけもち') < 0, cf.summary);                          // optional は summary に入らない
+  assert.strictEqual(cf.items.length, cf.sections.reduce(function (n, s) { return n + s.missing.length; }, 0));
+  assert.ok(cf.items.every(function (i) { return i.section && i.sectionLabel && i.key && i.label && i.level; }));
+  assert.deepStrictEqual(plain(cf.sectionLabels), ['卒業後の継続', '勤務条件', 'かけもち', '繁忙期・土日祝', '深夜帯（22時以降）', 'オールナイト上映']);
+  // buildHandoff / buildContext からも同じ内容
+  assert.strictEqual(HO(a).confirm.summary, cf.summary);
+  // 深夜帯 ○・帰宅手段 空 → check
+  const ln = sec(R.interviewConfirm(step1Only({ lateNight: { availability: 'ok' } }), P(), OPTS), 'lateNight');
+  assert.deepStrictEqual(plain(ln.missing.map(function (m) { return m.key + ':' + m.level; })), ['lateNight.returnMethod:check']);
+  assert.strictEqual(ln.hasInput, true);
+  const lnT = sec(R.interviewConfirm(step1Only({ lateNight: { availability: 'ok', returnMethod: 'train' } }), P(), OPTS), 'lateNight');
+  assert.deepStrictEqual(plain(lnT.missing.map(function (m) { return m.key; })), ['lateNight.lastTrain']);
+  // 外国籍 yes → 外国籍の詳細が toAsk、missing 4 件（check 2・optional 2）
+  const fd = sec(R.interviewConfirm(step1Only({ foreign: { isForeign: 'yes' } }), P(), OPTS), 'foreignDetail');
+  assert.strictEqual(fd.toAsk, true);
+  assert.strictEqual(fd.missing.length, 4);
+  assert.strictEqual(fd.missing.filter(function (m) { return m.level === 'check'; }).length, 2);
+  assert.strictEqual(fd.missing.filter(function (m) { return m.level === 'optional'; }).length, 2);
+  // 対応する留意点ルールを OFF にした劇場では check ではなく optional（未入力でも留意点は残らないため）
+  const pRuleOff = P();
+  pRuleOff.handoffRules.forEach(function (r) { if (['late_night_return_unknown', 'foreign_permit_missing', 'foreign_expiry'].indexOf(r.id) >= 0) r.enabled = false; });
+  const lnOff = sec(R.interviewConfirm(step1Only({ lateNight: { availability: 'ok' } }), pRuleOff, OPTS), 'lateNight');
+  assert.deepStrictEqual(plain(lnOff.missing.map(function (m) { return m.key + ':' + m.level; })), ['lateNight.returnMethod:optional']);
+  const fdOff = sec(R.interviewConfirm(step1Only({ foreign: { isForeign: 'yes' } }), pRuleOff, OPTS), 'foreignDetail');
+  assert.strictEqual(fdOff.missing.filter(function (m) { return m.level === 'check'; }).length, 0);
+  assert.strictEqual(fdOff.missing.length, 4);
+  assert.strictEqual(sec(cf, 'foreignDetail').relevant, false);
+  assert.strictEqual(sec(cf, 'foreignDetail').missing.length, 0);
+  // 外国籍の該当が空欄なら check（段階 pre のため toAsk ではなく missing は required のみ＝空）
+  const ff = sec(R.interviewConfirm(step1Only({ foreign: { isForeign: '' } }), P(), OPTS), 'foreignFlag');
+  assert.strictEqual(ff.toAsk, false);
+  assert.strictEqual(ff.missing.length, 0);
+  const pFF = P(); pFF.inputStages.foreignFlag = 'interview';
+  const ff2 = sec(R.interviewConfirm(step1Only({ foreign: { isForeign: '' } }), pFF, OPTS), 'foreignFlag');
+  assert.deepStrictEqual(plain(ff2.missing.map(function (m) { return m.key + ':' + m.level; })), ['foreign.isForeign:check']);
+  // 17歳: 深夜帯・オールナイトは聞かない
+  const cm = R.interviewConfirm(A({ age: '17', category: 'フリーター', sh: { mon: ['10:00', '16:00'] } }), P(), OPTS);
+  assert.strictEqual(sec(cm, 'lateNight').toAsk, false);
+  assert.strictEqual(sec(cm, 'allNight').toAsk, false);
+  assert.strictEqual(sec(cm, 'lateNight').missing.length, 0);
+  assert.ok(!sec(cm, 'continuation').relevant);                                       // 学生以外
+  // 全部入力すると何も残らない
+  const full = step1Only(allAnswered({ daysMax: '4', workPeriod: 'mid', sideJob: 'no', continueAfterGraduation: 'yes' }));
+  const cfFull = R.interviewConfirm(full, P(), OPTS);
+  assert.deepStrictEqual(plain(cfFull.items), []);
+  assert.strictEqual(cfFull.summary, '');
+  assert.deepStrictEqual(plain(cfFull.sectionLabels), []);
+  assert.ok(cfFull.sections.filter(function (s) { return s.toAsk; }).every(function (s) { return s.hasInput && !s.blocking; }));
+  // busy を pre にすると missing は required だけ・toAsk ではない
+  const pB = P(); pB.inputStages.busy = 'pre';
+  const bs = sec(R.interviewConfirm(a, pB, OPTS), 'busy');
+  assert.strictEqual(bs.stage, 'pre');
+  assert.strictEqual(bs.toAsk, false);
+  assert.ok(bs.missing.length > 0 && bs.missing.every(function (m) { return m.level === 'required'; }));
+  // 2軸 OFF（他劇場）なら blocking にしない
+  const pOff = P(); pOff.features.contribution = false;
+  const cfOff = R.interviewConfirm(a, pOff, OPTS);
+  assert.strictEqual(cfOff.strict, false);
+  assert.ok(cfOff.sections.every(function (s) { return !s.blocking; }));
+  // 高3（例外対象区分）: 例外条件の未入力は check（段階 interview のとき）
+  const hs3 = A({ age: '18', category: '高校3年生', sh: { sat: ['10:00', '18:00'] } });
+  const pH = P(); pH.inputStages.hsException = 'interview';
+  const hx = sec(R.interviewConfirm(hs3, pH, OPTS), 'hsException');
+  assert.strictEqual(hx.toAsk, true);
+  assert.deepStrictEqual(plain(hx.missing.map(function (m) { return m.label; })), ['進路決定の有無', '卒業後の継続意思']);
+  assert.ok(hx.missing.every(function (m) { return m.level === 'check'; }));
+  assert.strictEqual(sec(R.interviewConfirm(hs3, P(), OPTS), 'hsException').missing.length, 0);   // 既定は pre
+  // continueSection / sectionRelevant / sectionHasInput
+  assert.strictEqual(R.continueSection(hs3, P()), 'hsException');
+  assert.strictEqual(R.continueSection(a, P()), 'continuation');
+  assert.strictEqual(R.continueSection(A({ category: 'フリーター' }), P()), 'continuation');
+  assert.ok(R.sectionRelevant(hs3, P(), 'hsException'));
+  assert.ok(!R.sectionRelevant(hs3, P(), 'continuation'));
+  assert.ok(!R.sectionHasInput(a, P(), 'busy'));
+  assert.ok(R.sectionHasInput(step1Only({ vacation: { gw: 'ok' } }), P(), 'busy'));
+  assert.ok(R.sectionHasInput(step1Only({ vacationDays: { spring: '2' } }), P(), 'busy'));
+  assert.ok(R.sectionHasInput(step1Only({ weekendFreq: 'every_one' }), P(), 'busy'));
+  assert.ok(R.sectionHasInput(a, P(), 'work'));
+  assert.ok(!R.sectionHasInput(A(), P(), 'work'));
+  assert.ok(R.sectionHasInput(A({ anyDay: true }), P(), 'work'));
+  const cont = step1Only({ continueAfterGraduation: 'yes' });
+  assert.ok(R.sectionHasInput(cont, P(), 'continuation'));
+  assert.ok(!R.sectionHasInput(cont, P(), 'hsException'));
+  const hsCont = merge(hs3, { continueAfterGraduation: 'yes' });
+  assert.ok(R.sectionHasInput(hsCont, P(), 'hsException'));
+  assert.ok(!R.sectionHasInput(hsCont, P(), 'continuation'));
+  // 入れ子の欠けた旧データでも例外を出さない
+  assert.ok(R.interviewConfirm({ age: '20', category: '大学2年生' }, P(), OPTS).sections.length > 0);
+});
+
+test('50 shift_unanswered の文言（{confirmSummary}）', function () {
+  const a = A(allAnswered({ age: '20', category: '大学2年生', sh: { sat: ['10:00', '18:00'] }, vacation: { spring: '' }, vacationDays: { spring: '' } }));
+  const t = item(HO(a), 'shift_unanswered').text;
+  assert.ok(t.indexOf('（繁忙期・土日祝：繁忙期の可否（春休み期間））') >= 0, t);
+  assert.ok(t.indexOf('Step3「面接で確認する項目」') >= 0, t);
+  // 追加した期間名も含む
+  const p = P();
+  p.options.vacationItems.push({ id: 'busy_x', label: '話題作の公開週', weight: 1 });
+  const np = S.normalizeProfile(p);
+  const tx = item(HO(A(allAnswered({ age: '20', category: '大学2年生', sh: { sat: ['10:00', '18:00'] } }), np), np), 'shift_unanswered').text;
+  assert.ok(tx.indexOf('繁忙期の可否（話題作の公開週）') >= 0, tx);
+  // {missingLabels} を使う編集済み文言も従来どおり置換される
+  const pe = P();
+  pe.handoffRules.find(function (r) { return r.id === 'shift_unanswered'; }).text = '未確認: {missingLabels} / {confirmSections}';
+  // {confirmSections} は未入力（optional を含む）のあるセクション名
+  assert.strictEqual(item(HO(a, pe), 'shift_unanswered').text, '未確認: 繁忙期の可否（春休み期間） / 卒業後の継続・かけもち・繁忙期・土日祝');
+});
+
+test('51 describeApplicant の section', function () {
+  const p = P();
+  const secOf = function (rows, label) { const r = rows.find(function (x) { return x.label === label; }); return r ? r.section : undefined; };
+  const rA = R.describeApplicant(merge(exampleA(), { reviewerNotes: '電話応対が丁寧。', continueAfterGraduation: 'yes', foreign: { isForeign: 'yes' }, sideJob: 'no', commuteMethod: '徒歩' }), p);
+  assert.strictEqual(secOf(rA, '繁忙期'), 'busy');
+  assert.strictEqual(secOf(rA, '祝日'), 'busy');
+  assert.strictEqual(secOf(rA, '土日の頻度'), 'busy');
+  assert.strictEqual(secOf(rA, '深夜帯（22時以降）'), 'lateNight');
+  assert.strictEqual(secOf(rA, 'オールナイト'), 'allNight');
+  assert.strictEqual(secOf(rA, '勤務期間'), 'work');
+  assert.strictEqual(secOf(rA, '希望シフト'), 'work');
+  assert.strictEqual(secOf(rA, '通勤方法'), 'commute');
+  assert.strictEqual(secOf(rA, 'かけもち'), 'sideJob');
+  assert.strictEqual(secOf(rA, '氏名'), 'basic');
+  assert.strictEqual(secOf(rA, '卒業後の継続'), 'continuation');
+  assert.strictEqual(secOf(rA, '申し送りコメント'), 'notes');
+  assert.strictEqual(rA.find(function (r) { return r.label === '申し送りコメント'; }).value, '電話応対が丁寧。');
+  assert.ok(!rA.some(function (r) { return r.label === '担当者所見'; }));
+  assert.strictEqual(secOf(rA, '外国籍'), 'foreignFlag');
+  const rF = R.describeApplicant(merge(exampleA(), { foreign: { isForeign: 'yes', residenceStatus: '留学' } }), p);
+  assert.strictEqual(secOf(rF, '外国籍'), 'foreignDetail');
+  assert.strictEqual(secOf(R.describeApplicant(merge(exampleA(), { foreign: { isForeign: 'no' } }), p), '外国籍'), 'foreignFlag');
+  const rH = R.describeApplicant(A({ age: '18', category: '高校3年生', highschool: { careerDecided: 'yes', careerPath: 'university' }, continueAfterGraduation: 'yes' }), p);
+  assert.strictEqual(secOf(rH, '高校生の例外'), 'basic');
+  assert.strictEqual(secOf(rH, '卒業後の継続'), 'hsException');
+  // すべての行に有効なセクション
+  const valid = plain(R.INPUT_SECTIONS.map(function (s) { return s.id; }));
+  rA.concat(rF, rH).forEach(function (r) { assert.ok(valid.indexOf(r.section) >= 0, r.label + ':' + r.section); });
+});
+
+test('52 保存レポート（応募時の情報／面接者への申し送りコメント／面接で確認した情報）', function () {
+  const p = P();
+  const mkState = function (a, prof) {
+    prof = prof || p;
+    const h = R.buildHandoff(a, prof, OPTS);
+    return { step: 2, applicant: a, profile: prof, handoff: h, handoffChecks: {}, handoffNote: '', scores: {}, interviewNotes: '', judgment: null, history: [] };
+  };
+  const a = merge(exampleA(), { reviewerNotes: '電話応対が丁寧。' });
+  const rec = S.buildRecord(mkState(a));
+  assert.deepStrictEqual(plain(rec.inputStages), DEFAULT_STAGES);
+  assert.strictEqual(rec.schemaVersion, 2);
+  const html = S.generateReportHTML(rec, p);
+  const iPre = html.indexOf('<h2>応募時の情報</h2>');
+  const iNotes = html.indexOf('<h2>面接者への申し送りコメント</h2>');
+  const iHand = html.indexOf('<h2>面接者への申し送り（留意点）</h2>');
+  // 面接前（step 2・判定なし）の保存では、面接時の項目は「面接前に分かっている情報（未確認）」（コピー文の『■面接前に分かっている情報』と同じ扱い）
+  const iIv = html.indexOf('<h2>面接前に分かっている情報（未確認）</h2>');
+  assert.ok(iPre > 0 && iNotes > iPre && iHand > iNotes && iIv > iHand, [iPre, iNotes, iHand, iIv].join(','));
+  assert.ok(html.indexOf('<h2>面接で確認した情報</h2>') < 0);
+  // 面接後（step 3 以降、または判定あり）の保存では「面接で確認した情報」
+  const rec3 = plain(rec); rec3.step = 3;
+  assert.ok(S.generateReportHTML(rec3, p).indexOf('<h2>面接で確認した情報</h2>') > 0);
+  const recJ = plain(rec); recJ.judgment = plain(R.evaluateHiring(a, scoresAll(4), p, R.buildHandoff(a, p, OPTS), {}, OPTS));
+  assert.ok(S.generateReportHTML(recJ, p).indexOf('<h2>面接で確認した情報</h2>') > 0);
+  assert.ok(html.indexOf('<h2>応募情報</h2>') < 0);
+  const rowAt = function (h, label) { return h.indexOf('<tr><th>' + label + '</th>'); };
+  assert.ok(rowAt(html, '繁忙期') > iIv, 'busy row in interview table');
+  assert.ok(rowAt(html, '勤務期間') > iPre && rowAt(html, '勤務期間') < iNotes, 'work row in pre table');
+  assert.ok(rowAt(html, '申し送りコメント') < 0);
+  assert.ok(html.indexOf('電話応対が丁寧。') > iNotes);
+  assert.ok(html.indexOf('保存時点で未入力') < 0);                                    // 例A は判定に必要な項目がそろっている
+  // 保存時点の段階（スナップショット）を優先
+  const recPre = plain(rec); recPre.inputStages = plain(allPre().inputStages);
+  const htmlPre = S.generateReportHTML(recPre, p);
+  assert.ok(rowAt(htmlPre, '繁忙期') < htmlPre.indexOf('<h2>面接者への申し送り（留意点）</h2>'));
+  assert.ok(htmlPre.indexOf('面接前に分かっている項目の入力はありません（面接で確認します）。') > 0);
+  // 未入力が残る応募者: 保存時点で未入力・deferred / aggregate の記録とタグ
+  const b = A({ name: '未入力', age: '20', category: '大学2年生', sh: { mon: ['18:00', '23:30'] }, lateNight: { availability: 'ok' } });
+  const recB = S.buildRecord(mkState(b));
+  const lru = recB.handoff.items.find(function (i) { return i.id === 'late_night_return_unknown'; });
+  assert.strictEqual(lru.deferred, true);
+  assert.strictEqual(lru.section, 'lateNight');
+  assert.strictEqual(recB.handoff.items.find(function (i) { return i.id === 'shift_unanswered'; }).aggregate, true);
+  assert.ok(recB.handoff.items.filter(function (i) { return i.id !== 'late_night_return_unknown' && i.id !== 'shift_unanswered'; }).every(function (i) { return !hasKey(i, 'deferred') && !hasKey(i, 'aggregate'); }));
+  const htmlB = S.generateReportHTML(recB, p);
+  assert.ok(htmlB.indexOf('保存時点で未入力: ') > 0);
+  assert.ok(htmlB.indexOf('勤務条件：週の最大勤務日数') > 0, 'required in callout');
+  const callout = (htmlB.match(/保存時点で未入力: ([^<]*)</) || [])[1] || '';
+  assert.ok(callout.indexOf('深夜帯（22時以降）：帰宅手段') >= 0, 'check in callout: ' + callout);
+  assert.ok(callout.indexOf('かけもち') < 0, 'optional is not in callout: ' + callout);
+  assert.ok(htmlB.indexOf('<span class="tag warn">面接で確認</span>') > 0);
+  assert.ok(htmlB.indexOf('<h2>面接者への申し送りコメント</h2>') < 0);                 // コメントが無ければ章ごと省略
+  // 埋め込み JSON から読み戻せる形（applicant のフィールド名は変えない）
+  assert.deepStrictEqual(Object.keys(plain(recB.applicant)).sort(), Object.keys(plain(b)).sort());
+  // inputStages の無い旧レコード × 旧プロファイルでも例外を出さない（全部「応募時の情報」）
+  const old = plain(rec); delete old.inputStages;
+  old.handoff.items.forEach(function (i) { delete i.deferred; delete i.aggregate; delete i.section; });
+  const p0 = P(); delete p0.inputStages;
+  const htmlOld = S.generateReportHTML(old, p0);
+  assert.ok(htmlOld.indexOf('<h2>応募時の情報</h2>') > 0);
+  assert.ok(rowAt(htmlOld, '繁忙期') < htmlOld.indexOf('<h2>面接者への申し送り（留意点）</h2>'));
+  // 旧レコード × 現在の設定なら現在の段階で振り分ける
+  const htmlOld2 = S.generateReportHTML(old, p);
+  assert.ok(htmlOld2.indexOf('<h2>面接前に分かっている情報（未確認）</h2>') > 0 && rowAt(htmlOld2, '繁忙期') > htmlOld2.indexOf('<h2>面接前に分かっている情報（未確認）</h2>'));
+  // 旧 fixture の保存 HTML（v1）を新しいレポートで描いても例外を出さない
+  const v1 = fs.readFileSync(path.join(FIX, 'v1-record.html'), 'utf8');
+  const m = v1.match(/<script type="application\/json" id="recruit-record">([\s\S]*?)<\/script>/);
+  if (m) {
+    const r1 = JSON.parse(m[1]);
+    r1.handoff = r1.handoff || { items: [], strengths: [], checks: {} };
+    r1.handoff.checks = r1.handoff.checks || {};
+    r1.scores = r1.scores || {};
+    r1.applicant = merge(A(), r1.applicant || {});
+    assert.ok(S.generateReportHTML(r1, p).indexOf('<h2>応募時の情報</h2>') > 0);
+  }
+});
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

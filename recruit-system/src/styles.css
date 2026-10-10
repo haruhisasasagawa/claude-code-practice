@@ -494,6 +494,8 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
   backdrop-filter: blur(8px); border-top: 1px solid var(--border);
 }
 .save-bar .note { font-size: 12.5px; color: var(--muted); margin-right: auto; }
+/* 狭い画面では .view の左右余白が 16px になるので、はみ出さないよう合わせる */
+@media (max-width: 840px) { .save-bar { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; } }
 .check-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--border); }
 .check-row:last-child { border-bottom: none; }
 .check-row input { margin-top: 4px; width: 17px; height: 17px; }
@@ -657,6 +659,69 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
 .sum-missing { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--muted); line-height: 1.45; margin-bottom: 8px; }
 .sum-missing .badge { flex: none; }
 
+/* ---------- 入力の段階（面接前に入力／面接時に確認） ---------- */
+/* Step1 の折りたたみ「面接前に分かっている項目があれば入力（任意）」 */
+.prefill { padding: 0; border-style: dashed; border-color: var(--border-strong); background: var(--surface-2); box-shadow: none; }
+.prefill > summary {
+  display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap;
+  padding: 14px 22px; cursor: pointer; list-style: none; user-select: none;
+}
+.prefill > summary::-webkit-details-marker { display: none; }
+.prefill > summary::before {
+  content: '▶'; font-size: 11px; color: var(--muted); transition: transform .15s; flex: none;
+}
+.prefill[open] > summary::before { transform: rotate(90deg); }
+.prefill > summary:hover .prefill-title { color: var(--accent); }
+.prefill > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius); }
+.prefill-title { font-size: 15px; font-weight: 700; }
+.prefill-list { width: 100%; padding-left: 21px; }
+.prefill > summary .badge { white-space: normal; max-width: 100%; line-height: 1.4; }
+.prefill[open] > summary { border-bottom: 1px dashed var(--border-strong); }
+.prefill-body { padding: 14px 22px 18px; background: var(--surface); border-radius: 0 0 var(--radius) var(--radius); }
+.prefill-body > .hint:first-child { margin-bottom: 4px; }
+.prefill-sec, .confirm-sec { margin-top: 14px; padding: 2px 0 2px 14px; border-left: 3px solid var(--border-strong); }
+/* セクション見出しは本文色・やや大きく（欄のラベル・繁忙期の中の小見出しより上の階層に見えるように） */
+.card .prefill-sec > h3.sub, .card .confirm-sec > h3.sub {
+  font-size: 14.5px; color: var(--text); letter-spacing: 0; margin: 0 0 10px; padding-bottom: 0; border-bottom: 0;
+}
+.prefill-sec .busy-head h4, .confirm-sec .busy-head h4 { font-size: 12.5px; font-weight: 600; letter-spacing: 0; }
+.prefill-sec.single > .field:first-child > label, .confirm-sec.single > .field:first-child > label { font-weight: 700; }
+.prefill-sec > .hint { margin-bottom: 10px; }
+.prefill-sec .subpanel { margin-top: 0; }
+
+/* 面接者への申し送りコメント（Step1 の最後・Step2 の先頭） */
+.notes-card { border-left: 4px solid var(--info); }
+.notes-card textarea { min-height: 96px; }
+.handoff-comment { margin-bottom: 14px; }
+.handoff-comment .handoff-comment-body { flex: 1; min-width: 0; }
+.handoff-comment .btn.link { flex: none; padding: 0 2px; }
+p.handoff-comment { font-size: 13.5px; }
+
+/* Step2「面接で確認すること」 */
+.todo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.todo-list > li {
+  padding: 9px 12px; border: 1px solid var(--border); border-left: 3px solid var(--warn);
+  border-radius: var(--radius-sm); background: var(--surface-2); font-size: 14px; line-height: 1.55;
+}
+.todo-list > li .badge { margin-left: 4px; vertical-align: 1px; white-space: normal; max-width: 100%; line-height: 1.4; }
+.todo-list > li > .hint { margin-top: 2px; }
+.todo-list > li[data-section="pre"] { border-left-color: var(--danger); }
+.later-note { margin: -6px 0 12px; }
+
+/* Step3「未入力のまま判定する場合の留意点」 */
+.deferred-items { margin-top: 4px; }
+.deferred-items > .hint { margin-bottom: 8px; }
+
+/* 設定「入力の段階」 */
+.s-stage-table { margin-bottom: 10px; }
+.s-stage-row { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 8px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.s-stage-row .lbl { font-size: 14px; font-weight: 600; }
+.s-stage-row.fixed { opacity: .75; }
+.s-stage-row.off .lbl { color: var(--muted); }
+.s-stage-row .s-off { margin: 6px 0 0; padding: 6px 10px; font-size: 12.5px; }
+.s-stage-row select { width: 100%; }
+@media (max-width: 720px) { .s-stage-row { grid-template-columns: 1fr; } }
+
 /* ---------- 使い方 ---------- */
 .help-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .help-step { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
@@ -690,4 +755,7 @@ table.matrix td.current { border-color: var(--text); box-shadow: inset 0 0 0 1px
   .handoff-item { break-inside: avoid; }
   .matrix, .bars, .busy-mini { break-inside: avoid; }
   .legacy-banner .btn { display: none; }
+  .handoff-comment .btn, .sum-later { display: none; }
 }
+.sum-later { margin: 8px 0 0; font-size: 12px; }
+.sev-block-text { color: var(--danger); }

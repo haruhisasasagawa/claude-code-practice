@@ -34,7 +34,7 @@
     '{graduationDate} {monthsLeft} {workPeriodLabel} {periodMinMonths} {ageRange} {highschoolLatestEnd} {hsUnmet} {hsExceptionCategories} {careerPathLabel} {destination} ' +
     '{foreignWeeklyHourCap} {foreignVacationWeeklyHourCap} {weeklyHours} {sideJobHours} {residenceExpiry} {japaneseLevel} ' +
     '{taxiFare} {taxiLimitYen} {closeEndHour} {lateNightStartHour} {latestEnd} {lastTrain} {lastTrainBufferMinutes} {nightReason} {nightWish} ' +
-    '{allNightAvail} {allNightFreq} {allNightShiftStart} {allNightShiftEnd} {weekendFreqLabel} {vacationLabels} {missingLabels} {contribPct} {busyPct}';
+    '{allNightAvail} {allNightFreq} {allNightShiftStart} {allNightShiftEnd} {weekendFreqLabel} {vacationLabels} {missingLabels} {confirmSummary} {confirmSections} {contribPct} {busyPct}';
   const RESULT_VARS_HINT = '{name} {total} {max} {pct} {interviewPct} {interviewBand} {contribTotal} {contribMax} {contribPct} {contribBand}';
   const UNIT_OPTIONS = [
     { value: 'total', label: '期間の合計日数' },
@@ -106,7 +106,7 @@
     opts = opts || {};
     const cur = String(val(path));
     return '<select data-bind="' + esc(path) + '"' + (opts.cls ? ' class="' + esc(opts.cls) + '"' : '') +
-      (opts.repaint ? ' data-repaint' : '') + (opts.aria ? ' aria-label="' + esc(opts.aria) + '"' : '') + '>' +
+      (opts.repaint ? ' data-repaint' : '') + (opts.aria ? ' aria-label="' + esc(opts.aria) + '"' : '') + (opts.disabled ? ' disabled' : '') + '>' +
       options.map(function (o) { return '<option value="' + esc(o.value) + '"' + (String(o.value) === cur ? ' selected' : '') + '>' + esc(o.label) + '</option>'; }).join('') +
       '</select>';
   }
@@ -139,17 +139,17 @@
     return '' +
     '<div class="settings-layout">' +
       '<nav class="settings-nav">' +
-        '<a href="#s-meta">劇場情報</a><a href="#s-features">入力項目のON/OFF</a><a href="#s-options">選択肢</a>' +
+        '<a href="#s-meta">劇場情報</a><a href="#s-features">入力項目のON/OFF</a><a href="#s-stages">面接前／面接時</a><a href="#s-options">選択肢</a>' +
         '<a href="#s-busy">繁忙期・オールナイト</a><a href="#s-params">判定パラメータ</a><a href="#s-hs">高校生の扱い</a>' +
         '<a href="#s-rules">申し送りルール</a><a href="#s-eval">面接評価</a><a href="#s-contrib">シフト貢献度</a>' +
         '<a href="#s-matrix">2軸判定</a><a href="#s-texts">結果文言</a><a href="#s-io">書き出し／読み込み</a>' +
       '</nav>' +
       '<div class="settings-body">' +
         issuesHtml() +
-        metaHtml() + featuresHtml() + optionsHtml() + busyHtml() + paramsHtml() + hsHtml() +
+        metaHtml() + featuresHtml() + stagesHtml() + optionsHtml() + busyHtml() + paramsHtml() + hsHtml() +
         section('s-rules', '面接者への申し送りルール',
           '応募情報が条件に合致したときに表示される留意点です。ON/OFF・重要度・文言を変更できます（条件そのものはコードで定義）。',
-          '<div class="legend"><span class="badge danger">要判断</span>採用担当が面接実施の可否を判断　<span class="badge warn">要確認</span>面接時に確認　<span class="badge info">共有</span>面接者へ共有　<span class="badge danger">法令（OFF不可）</span>労働基準法に関わるため OFF・重要度変更不可（文言は編集可）</div>' +
+          '<div class="legend"><span class="badge danger">要判断</span>採用担当が面接実施・採用の可否を判断　<span class="badge warn">要確認</span>面接時に確認　<span class="badge info">共有</span>面接者へ共有　<span class="badge danger">法令（OFF不可）</span>労働基準法に関わるため OFF・重要度変更不可（文言は編集可）</div>' +
           '<div class="hint" style="margin-bottom:10px">文言で使える変数: <code>' + esc(VARS_HINT) + '</code></div>' +
           rulesHtml()) +
         evalHtml() + contribHtml() + matrixHtml() + textsHtml() + ioHtml() +
@@ -187,6 +187,54 @@
       sCheck('features.contribution', 'シフト貢献度と2軸判定', 'OFFにすると従来どおり面接評価のみで採用可否を判定します。', { repaint: true }) +
       sCheck('features.department', '希望部署', '記録用。判定には使いません。') +
       sCheck('features.applicationRoute', '応募経路', '記録用。判定には使いません。'));
+  }
+
+  // 入力の段階（面接前に入力／面接時に確認）。docs/SPEC-stages.md 2-3
+  const STAGE_OPTIONS = [{ value: 'pre', label: '面接前に入力（Step1）' }, { value: 'interview', label: '面接時に確認（Step3）' }];
+  const STAGE_NOTE = {
+    commute: '（面接時にすると、通勤方法・通勤時間を Step1 で必須にしません）',
+    hsException: '（高校3年生のみ）',
+    continuation: '（高校3年生以外の学生）'
+  };
+  function stagesHtml() {
+    const Rr = R();
+    const sections = Rr.INPUT_SECTIONS || [];
+    if (!sections.length || !Rr.stageOf) return '';
+    if (!U.isObj(draft.inputStages)) draft.inputStages = U.deepClone(global.RECRUIT_DEFAULT_PROFILE.inputStages || {});
+    if (!U.isObj(draft.stageOptions)) draft.stageOptions = U.deepClone(global.RECRUIT_DEFAULT_PROFILE.stageOptions || {});
+    const flagLater = draft.inputStages.foreignFlag === 'interview';
+    // 該当の有無が面接時なら詳細も面接時（normalize・rules.stageOf と同じ制約）
+    if (flagLater) draft.inputStages.foreignDetail = 'interview';
+    const fixedRows = [
+      '基本情報（氏名・性別・年齢・区分・卒業予定年月）',
+      '勤務条件（曜日・時間・週の勤務日数・勤務期間）',
+      '面接者への申し送りコメント'
+    ].map(function (t) {
+      return '<div class="s-stage-row fixed"><div><div class="lbl">' + esc(t) + '</div></div><div><span class="badge">常に面接前</span></div></div>';
+    }).join('');
+    const rows = sections.filter(function (s) { return !s.fixed; }).map(function (s) {
+      const id = s.id;
+      const active = Rr.sectionActive(draft, id);
+      const label = Rr.sectionLabel(draft, id);
+      const lockDetail = id === 'foreignDetail' && flagLater;
+      return '<div class="s-stage-row' + (active ? '' : ' off') + '" data-stage-id="' + esc(id) + '">' +
+        '<div><div class="lbl">' + esc(label) + '</div>' +
+          '<div class="hint">含む項目: ' + esc(Rr.sectionAsk(draft, id)) + esc(STAGE_NOTE[id] || '') + '</div>' +
+          (lockDetail ? '<div class="hint">外国籍（該当の有無）が面接時のため、詳細も面接時になります</div>' : '') +
+          (active ? '' : offNotice(false, id === 'hsException' ? '高校生の扱いが「制限なし」のため使われません' : '入力項目が OFF のため使われません')) +
+        '</div>' +
+        '<div>' + selectTag('inputStages.' + id, STAGE_OPTIONS, { aria: label, repaint: id === 'foreignFlag', disabled: lockDetail }) + '</div>' +
+      '</div>';
+    }).join('');
+    return section('s-stages', '入力の段階（面接前に入力／面接時に確認）',
+      '応募情報（Step1）に出す項目と、面接で確認して Step3「面接で確認する項目」で入力する項目を分けます。「面接時に確認」の項目も、分かっていれば Step1 下部の折りたたみから先に入力できます。判定の計算は段階に関係なく同じです。',
+      '<div class="s-stage-table">' + fixedRows + rows + '</div>' +
+      sCheck('stageOptions.requireDaysMax', '週の最大勤務日数を Step1 の必須にする', '既定は ON（週何日勤務できるかは、時間帯・勤務期間と並んで面接に進めるかの判断材料のため）。OFF のときは空欄でも Step1 から進め、面接で確認します（判定の前には Step3 で必須）。') +
+      sCheck('stageOptions.preFillAlwaysOpen', '「面接前に分かっている項目」を常に開いて表示する', 'OFF のときは閉じて表示し、入力済みの項目があるときだけ自動で開きます。') +
+      '<div class="actions" style="margin-top:10px">' +
+        '<button type="button" class="btn sm" data-action="stages-default">既定に戻す</button>' +
+        '<button type="button" class="btn sm ghost" data-action="stages-all-pre">すべて面接前に入力（従来の並び）</button>' +
+      '</div>');
   }
 
   function optionsHtml() {
@@ -530,6 +578,10 @@
       sTextarea('texts.busyIntro', '繁忙期カードの説明文', { rows: 2 }) +
       sTextarea('texts.allNightIntro', 'オールナイトカードの説明文', { rows: 2, hint: '変数: {allNightShiftStart} {allNightShiftEnd} {lateNightStartHour}' }) +
       sTextarea('texts.contributionIntro', 'シフト貢献度（面接前の見込み）の説明文', { rows: 2 }) +
+      sTextarea('texts.preFillTitle', 'Step1 折りたたみの見出し', { rows: 1 }) +
+      sTextarea('texts.preFillHint', 'Step1 折りたたみの説明文', { rows: 2 }) +
+      sTextarea('texts.interviewConfirmIntro', 'Step3「面接で確認する項目」の説明文', { rows: 2 }) +
+      sTextarea('texts.reviewerNotesIntro', 'Step1 申し送りコメントの説明文', { rows: 2 }) +
       '<h3 class="sub">強みの文言（面接者への共有）</h3>' +
       '<div class="field-row">' +
         sInput('texts.strengths.open', 'オープン要員') + sInput('texts.strengths.close', 'クローズ要員') +
@@ -687,6 +739,17 @@
       case 'busy-down':
         if (swap(busy, i, i + 1)) paint(y);
         break;
+      case 'stages-default':
+        draft.inputStages = U.deepClone(global.RECRUIT_DEFAULT_PROFILE.inputStages);
+        paint(y);
+        break;
+      case 'stages-all-pre': {
+        const out = {};
+        Object.keys(global.RECRUIT_DEFAULT_PROFILE.inputStages || {}).forEach(function (k) { out[k] = 'pre'; });
+        draft.inputStages = out;
+        paint(y);
+        break;
+      }
       case 'rule-default': {
         const def = (global.RECRUIT_DEFAULT_PROFILE.handoffRules || []).find(function (r) { return r.id === draft.handoffRules[i].id; });
         if (def) { draft.handoffRules[i].text = def.text; paint(y); }

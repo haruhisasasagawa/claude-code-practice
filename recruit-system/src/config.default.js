@@ -37,6 +37,28 @@
       contribution: true        // シフト貢献度と2軸判定（OFF=従来どおり面接評価のみで判定）
     },
 
+    // 入力の段階: 'pre'=面接前に入力（Step1 に表示） / 'interview'=面接時に確認（Step3 に表示。Step1 では折りたたみで任意入力）
+    // 基本情報・勤務条件（曜日・時間・週日数・勤務期間）・面接者への申し送りコメントは常に面接前（ここには書かない）
+    // セクションの中身は rules.js の INPUT_SECTIONS（docs/SPEC-stages.md 1 章）
+    inputStages: {
+      commute: 'pre',
+      hsException: 'pre',
+      continuation: 'interview',
+      foreignFlag: 'pre',
+      foreignDetail: 'interview',   // foreignFlag が 'interview' のときは自動で 'interview'
+      sideJob: 'interview',
+      busy: 'interview',
+      lateNight: 'interview',
+      allNight: 'interview',
+      extras: 'interview'
+    },
+    // 入力の段階まわりの運用設定
+    stageOptions: {
+      // true: 週の最大勤務日数を Step1 の必須にする（既定 ON。副支配人の要望「面接に進めるかは週何日・時間帯・勤務期間で判断」に合わせる）
+      requireDaysMax: true,
+      preFillAlwaysOpen: false      // true: Step1 の「面接前に分かっている項目」を常に開いて表示する
+    },
+
     // 高校生の採用方針
     //   mode: 'allow'=制限なし（従来） / 'exceptionOnly'=原則対象外・例外のみ選考（新宿） / 'deny'=高校生は全員対象外
     highschoolPolicy: {
@@ -168,7 +190,7 @@
     },
 
     // 面接者への申し送り（留意点）ルール
-    // severity: block=要判断（採用担当が面接実施可否を判断） / warn=要確認（面接時に確認） / info=共有
+    // severity: block=要判断（採用担当が面接実施・採用の可否を判断。面接前にも面接後にも出る） / warn=要確認（面接時に確認） / info=共有
     handoffRules: [
       // --- 法令（労働基準法。設定画面で OFF・重要度変更不可。文言は編集可） ---
       { id: 'minor_late_night', enabled: true, severity: 'block', category: 'legal',
@@ -234,7 +256,7 @@
 
       // --- 繁忙期・休日（土日祝、特に3連休以上の連休・長期休暇） ---
       { id: 'vacation_ng', enabled: true, severity: 'block', category: 'busy',
-        text: '繁忙期（{vacationLabels}）の勤務ができません。新宿は連休・長期休暇の貢献を重視するため、面接実施の可否を判断してください。' },
+        text: '繁忙期（{vacationLabels}）の勤務ができません。新宿は連休・長期休暇の貢献を重視するため、事情と代わりに出られる時期を確認し、採用可否を判断してください。' },
       { id: 'vacation_consult', enabled: true, severity: 'warn', category: 'busy',
         text: '繁忙期（{vacationLabels}）が要相談です。期間中に何日程度入れるか確認してください。' },
       { id: 'busy_optional_ng', enabled: true, severity: 'warn', category: 'busy',
@@ -248,7 +270,7 @@
       { id: 'holiday_consult', enabled: true, severity: 'warn', category: 'busy',
         text: '祝日の勤務が要相談です。月に何回程度、どの祝日なら入れるか確認してください。' },
       { id: 'shift_unanswered', enabled: true, severity: 'warn', category: 'busy',
-        text: '面接で確認が必要なシフト条件があります（{missingLabels}）。面接で確認し、Step3「シフト条件の最終確認」に入力してください。' },
+        text: '判定の前に面接で確認が必要なシフト条件があります（{confirmSummary}）。面接で確認し、Step3「面接で確認する項目」に入力してください。' },
 
       // --- オールナイト上映 ---
       { id: 'allnight_ok', enabled: true, severity: 'info', category: 'allNight',
@@ -397,7 +419,12 @@
       adjusted: '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。',
       busyIntro: '新宿は土日祝、特に3連休以上の連休・長期休暇の貢献を重視します。分からない期間は空欄のまま（面接で確認）で構いません。',
       allNightIntro: '終映後〜翌朝までの通し勤務（{allNightShiftStart}〜翌{allNightShiftEnd}目安）です。{lateNightStartHour}時以降の勤務（クローズ）とは別に確認します。',
-      contributionIntro: '応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「シフト条件の最終確認」で入力すると確定します。',
+      contributionIntro: '応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「面接で確認する項目」で入力すると確定します。',
+      // 入力の段階（面接前に入力／面接時に確認）まわりの文言
+      preFillTitle: '面接前に分かっている項目があれば入力（任意）',
+      preFillHint: '空欄のままで構いません。ここにある項目は面接で確認し、Step3「面接で確認する項目」で入力します。ここで入力した内容は Step3 にそのまま表示されます。',
+      interviewConfirmIntro: '面接で確認した内容を入力してください。Step1 で入力済みの値も表示しています。ここで変えた内容は応募情報にも反映されます。* は判定の前に入力が必要です。',
+      reviewerNotesIntro: '面接者が最初に読む欄です。応募書類・電話で気になった点、配慮が必要な事情、面接で確認してほしいことを自由に書いてください。申し送り文の冒頭に表示されます。',
       strengths: {
         open: 'オープン要員として期待できます',
         close: 'クローズ要員として期待できます',
