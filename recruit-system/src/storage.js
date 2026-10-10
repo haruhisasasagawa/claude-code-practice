@@ -187,7 +187,9 @@
     mg.managers = (Array.isArray(mg.managers) ? mg.managers : []).filter(function (x) { return U.isObj(x) && x.name; }).map(function (x) {
       const name = String(x.name).trim();
       const short = String(x.short || '').trim() || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
-      return { name: name, short: short, title: String(x.title || '').trim() };
+      const out = { name: name, short: short, title: String(x.title || '').trim() };
+      if (x.grade) out.grade = String(x.grade).trim();
+      return out;
     });
     mg.allowFreeName = mg.allowFreeName !== false;
     if (!U.isObj(hp.rejectCareerPaths)) hp.rejectCareerPaths = U.deepClone(base.highschoolPolicy.rejectCareerPaths);

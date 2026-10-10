@@ -82,8 +82,10 @@
         { id: 'final', label: '最終確認', hint: '採用可否を最終確認した上長' }
       ],
       // name: 氏名 / short: 印字名（ハンコに入る名前。2〜4文字が目安）/ title: 役職
+      // name: 氏名 / short: 印字名（ハンコに入る名前。2〜4文字が目安）/ title: 役職 / grade: 等級（任意・参考）
+      // 劇場の名簿は設定画面「応募者の管理（押印）」で追加するか、ここに既定値として並べる
       managers: [
-        { name: '笹川 晴央', short: '笹川', title: '副支配人' }
+        { name: '笹川 晴央', short: '笹川', title: '副支配人', grade: 'S3' }
       ],
       allowFreeName: true   // 名簿にない氏名を手入力で押せる
     },

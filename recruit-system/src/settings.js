@@ -89,7 +89,7 @@
     const arr = U.getPath(draft, path) || [];
     let text;
     if (opts.type === 'categories') text = arr.map(function (c) { return c.value + '|' + (c.group || 'other'); }).join('\n');
-    else if (opts.type === 'managers') text = arr.map(function (c) { return [c.name, c.short || '', c.title || ''].join('|'); }).join('\n');
+    else if (opts.type === 'managers') text = arr.map(function (c) { return [c.name, c.short || '', c.title || ''].concat(c.grade ? [c.grade] : []).join('|'); }).join('\n');
     else text = arr.join('\n');
     return '<div class="field"><label>' + esc(label) + '</label>' +
       '<textarea data-bind="' + esc(path) + '" data-type="' + (opts.type || 'lines') + '" rows="' + (opts.rows || Math.min(Math.max(arr.length + 1, 3), 12)) + '">' + esc(text) + '</textarea>' +
@@ -606,7 +606,7 @@
         }).join('') + '</div>' +
         '<div><div class="field"><label>ハンコのプレビュー</label><div class="stamp-preview">' + preview + '</div><div class="hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div></div>' +
       '</div>' +
-      sLines('management.managers', '担当者名簿（氏名|印字名|役職）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人 。印字名を省略すると姓（スペースの前）を使います。' }) +
+      sLines('management.managers', '担当者名簿（氏名|印字名|役職|等級）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人|S3 。印字名を省略すると姓（スペースの前）を使います。等級は任意（押印には使いません）。', rows: 17 }) +
       sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。'));
   }
 
@@ -631,7 +631,9 @@
         const parts = line.split('|').map(function (x) { return x.trim(); });
         const name = parts[0] || '';
         const short = parts[1] || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
-        return { name: name, short: short, title: parts[2] || '' };
+        const m = { name: name, short: short, title: parts[2] || '' };
+        if (parts[3]) m.grade = parts[3];
+        return m;
       }).filter(function (m) { return m.name; });
     }
     if (dt === 'categories') {

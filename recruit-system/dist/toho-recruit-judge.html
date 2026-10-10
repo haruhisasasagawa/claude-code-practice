@@ -1108,8 +1108,10 @@ p.handoff-comment { font-size: 13.5px; }
         { id: 'final', label: '最終確認', hint: '採用可否を最終確認した上長' }
       ],
       // name: 氏名 / short: 印字名（ハンコに入る名前。2〜4文字が目安）/ title: 役職
+      // name: 氏名 / short: 印字名（ハンコに入る名前。2〜4文字が目安）/ title: 役職 / grade: 等級（任意・参考）
+      // 劇場の名簿は設定画面「応募者の管理（押印）」で追加するか、ここに既定値として並べる
       managers: [
-        { name: '笹川 晴央', short: '笹川', title: '副支配人' }
+        { name: '笹川 晴央', short: '笹川', title: '副支配人', grade: 'S3' }
       ],
       allowFreeName: true   // 名簿にない氏名を手入力で押せる
     },
@@ -3277,7 +3279,9 @@ p.handoff-comment { font-size: 13.5px; }
     mg.managers = (Array.isArray(mg.managers) ? mg.managers : []).filter(function (x) { return U.isObj(x) && x.name; }).map(function (x) {
       const name = String(x.name).trim();
       const short = String(x.short || '').trim() || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
-      return { name: name, short: short, title: String(x.title || '').trim() };
+      const out = { name: name, short: short, title: String(x.title || '').trim() };
+      if (x.grade) out.grade = String(x.grade).trim();
+      return out;
     });
     mg.allowFreeName = mg.allowFreeName !== false;
     if (!U.isObj(hp.rejectCareerPaths)) hp.rejectCareerPaths = U.deepClone(base.highschoolPolicy.rejectCareerPaths);
@@ -4166,7 +4170,7 @@ p.handoff-comment { font-size: 13.5px; }
     const arr = U.getPath(draft, path) || [];
     let text;
     if (opts.type === 'categories') text = arr.map(function (c) { return c.value + '|' + (c.group || 'other'); }).join('\n');
-    else if (opts.type === 'managers') text = arr.map(function (c) { return [c.name, c.short || '', c.title || ''].join('|'); }).join('\n');
+    else if (opts.type === 'managers') text = arr.map(function (c) { return [c.name, c.short || '', c.title || ''].concat(c.grade ? [c.grade] : []).join('|'); }).join('\n');
     else text = arr.join('\n');
     return '<div class="field"><label>' + esc(label) + '</label>' +
       '<textarea data-bind="' + esc(path) + '" data-type="' + (opts.type || 'lines') + '" rows="' + (opts.rows || Math.min(Math.max(arr.length + 1, 3), 12)) + '">' + esc(text) + '</textarea>' +
@@ -4683,7 +4687,7 @@ p.handoff-comment { font-size: 13.5px; }
         }).join('') + '</div>' +
         '<div><div class="field"><label>ハンコのプレビュー</label><div class="stamp-preview">' + preview + '</div><div class="hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div></div>' +
       '</div>' +
-      sLines('management.managers', '担当者名簿（氏名|印字名|役職）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人 。印字名を省略すると姓（スペースの前）を使います。' }) +
+      sLines('management.managers', '担当者名簿（氏名|印字名|役職|等級）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人|S3 。印字名を省略すると姓（スペースの前）を使います。等級は任意（押印には使いません）。', rows: 17 }) +
       sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。'));
   }
 
@@ -4708,7 +4712,9 @@ p.handoff-comment { font-size: 13.5px; }
         const parts = line.split('|').map(function (x) { return x.trim(); });
         const name = parts[0] || '';
         const short = parts[1] || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
-        return { name: name, short: short, title: parts[2] || '' };
+        const m = { name: name, short: short, title: parts[2] || '' };
+        if (parts[3]) m.grade = parts[3];
+        return m;
       }).filter(function (m) { return m.name; });
     }
     if (dt === 'categories') {

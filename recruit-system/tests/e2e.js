@@ -1248,7 +1248,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect(!!(await page.$('#mgmtCard')) && (await page.$$('#mgmtCard .stamp-box')).length === 3, 'E22 Step2 に押印カード（3枠）');
   const boxSel = (id) => '#mgmtCard .stamp-box[data-field-id="' + id + '"]';
   const hankoCount = (h) => (h.replace(/<script>[\s\S]*?<\/script>/g, '').match(/<svg class="hanko"/g) || []).length;
-  await page.selectOption(boxSel('initial') + ' select', '0');
+  await page.selectOption(boxSel('initial') + ' select', { label: '笹川 晴央（副支配人）' });
   await page.click(boxSel('initial') + ' [data-action="stamp"]');
   await wait(200);
   const m1 = await st(() => window.RecruitApp.state.management.initial);
@@ -1282,7 +1282,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await wait(300);
   const rbox = (id) => '#mgmt .stamp-box[data-field-id="' + id + '"]';
   expect((await rp.$$('#mgmt .stamp-box')).length === 3 && !!(await rp.$(rbox('initial') + ' svg.hanko')) && !(await rp.$eval('#mgmtSave', el => el.classList.contains('show'))), 'E22 レポート: 3枠・初期対応者は押印済み・保存バーは非表示');
-  await rp.selectOption(rbox('interviewer') + ' select', '0');
+  await rp.selectOption(rbox('interviewer') + ' select', { label: '笹川 晴央（副支配人）' });
   await rp.click(rbox('interviewer') + ' [data-act="stamp"]');
   await wait(200);
   expect(!!(await rp.$(rbox('interviewer') + ' svg.hanko')) && (await rp.textContent(rbox('interviewer') + ' .stamp-meta')).includes('笹川 晴央') && (await rp.$eval('#mgmtSave', el => el.classList.contains('show'))), 'E22 レポート上で押印すると SVG と保存バーが出る');

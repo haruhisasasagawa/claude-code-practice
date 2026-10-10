@@ -1385,7 +1385,9 @@ test('53 押印（ハンコSVG・名簿の正規化・レコードとレポー�
   assert.deepStrictEqual(plain(n.management.managers), [{ name: '山田 太郎', short: '山田', title: '' }]);
   assert.strictEqual(n.management.allowFreeName, true);
   const raw2 = P(); delete raw2.management;
-  assert.strictEqual(S.normalizeProfile(raw2).management.managers[0].name, '笹川 晴央');
+  const defMg = S.normalizeProfile(raw2).management.managers;
+  const sasagawa = defMg.find(function (m) { return m.name === '笹川 晴央'; });
+  assert.ok(sasagawa && sasagawa.short === '笹川' && sasagawa.title === '副支配人' && sasagawa.grade === 'S3', JSON.stringify(plain(defMg)));
   // レコードとレポート
   const a = exampleA();
   const h = R.buildHandoff(a, p, OPTS);
@@ -1404,7 +1406,7 @@ test('53 押印（ハンコSVG・名簿の正規化・レコードとレポー�
   assert.ok(html.indexOf('function stampSvg(') > 0 && html.indexOf('function shortName(') > 0, 'stamp functions embedded');
   assert.ok(html.indexOf('</script') < 0 || true);
   const cfg = JSON.parse(html.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
-  assert.strictEqual(cfg.managers[0].short, '笹川');
+  assert.ok(cfg.managers.some(function (m) { return m.short === '笹川'; }));
   assert.strictEqual(cfg.fields.length, 3);
   // 埋め込みレコードは読み戻せる（JSON の </ エスケープを含めて）
   const back = JSON.parse(html.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1]);

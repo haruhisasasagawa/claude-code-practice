@@ -210,5 +210,5 @@
 - 名簿は `profile.management.managers`（`{ name, short, title }`）。設定画面「応募者の管理（押印）」で `氏名|印字名|役職` の行形式で編集。印字名を省略すると姓（スペースの前）。`allowFreeName` で名簿にない氏名の手入力を許可。
 - ハンコは `src/stamp.js` の `stampSvg`（外部参照なしの純関数）。レポートには `RecruitStamp.source()` で関数ソースを埋め込み、レポート単体でも押印できる。
 - レコードは `management: { <fieldId>: { name, short, title, date, at } }`。アプリ（Step2/Step4 の押印カード）とレポート（`#mgmt` + 「押印を保存」で `document.documentElement.outerHTML` を再出力）の両方で編集でき、読込で引き継ぐ。
-- 既定の名簿は「笹川 晴央（副支配人）」のみ。**マネージャー名簿は副支配人から受領して `config.default.js` の `management.managers` に反映すること**（本セッションの環境には名簿のメモリは存在しなかった）。
+- 既定の名簿はリポジトリ上では「笹川 晴央（副支配人）」のみ。新宿の所属メンバー 15 名（支配人 1・副支配人 1・MGR 13）は副支配人から受領済みで、**リポジトリが非公開になった後に `config.default.js` の `management.managers` へ反映する**（公開リポジトリに実名を置かないため）。それまでは名簿入りの配布 HTML を直接渡す。異動時は設定画面の名簿（氏名|印字名|役職|等級）を編集する。
 - テスト: rules.test.js #53、e2e E22（アプリで押印 → 保存 → レポート上で押印・再出力 → 読込 → 印刷時の表示）。
