@@ -3424,43 +3424,125 @@ p.handoff-comment { font-size: 13.5px; }
   const SHORT_RESULT = { recommend: '推奨', review: '上長', reject: '不採用' };
   const FLAG_LABELS = { unanswered: '未確認', restricted: '法令/運用で対象外', estimated: '推定' };
 
+  // ---------- HTML レポートのスタイル（アプリと同じデザイントークン。印刷・共有向けにライトテーマ固定） ----------
   function reportCss() {
-    return '' +
-      'body{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;max-width:860px;margin:0 auto;padding:24px;color:#1a2233;background:#fff;line-height:1.6}\n' +
-      '.head{border-bottom:3px solid #1f5fbf;padding-bottom:12px;margin-bottom:20px}\n' +
-      '.head h1{font-size:20px;margin:0 0 4px}\n.head p{margin:0;color:#5b6675;font-size:13px}\n' +
-      'h2{font-size:15px;margin:28px 0 10px;padding-left:10px;border-left:4px solid #1f5fbf}\n' +
-      'h3{font-size:13.5px;margin:16px 0 6px;color:#3a4556}\n' +
-      'table{width:100%;border-collapse:collapse;font-size:14px}\n' +
-      'th,td{border:1px solid #dde3ea;padding:7px 10px;text-align:left;vertical-align:top}\n' +
-      'th{width:9em;background:#f3f5f8;font-weight:600;color:#5b6675}\ntd.num{text-align:right;width:6em;white-space:nowrap}\n' +
-      'table.list th{width:auto}\ntr.total td{font-weight:800;background:#f8fafc}\ntr.na td{color:#8a94a3}\n' +
-      'ul{padding-left:0;list-style:none;margin:0}\n' +
-      'li.h{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid #dde3ea;border-left-width:4px;border-radius:6px;margin-bottom:6px;font-size:14px}\n' +
-      'li.h.block{border-left-color:#dc2626}li.h.warn{border-left-color:#d97706}li.h.info{border-left-color:#2563eb}\n' +
-      'li.h.done{background:#f3faf6}\n.box{font-size:16px}\n' +
-      '.sev{font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:#eef2f7;white-space:nowrap}\n' +
-      '.cat{font-size:11px;color:#5b6675;white-space:nowrap;padding-top:2px}\n.txt{flex:1}\n' +
-      '.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:4px;background:#eef2f7;color:#3a4556;white-space:nowrap}\n' +
-      '.tag.warn{background:#fdf1dc;color:#9a5b00}.tag.danger{background:#fde8e8;color:#b42318}.tag.ok{background:#e3f6ee;color:#0b7a55}\n' +
-      '.callout{border:1px solid #dde3ea;border-left:4px solid #d97706;border-radius:6px;padding:10px 12px;margin-top:10px;font-size:14px;background:#fffaf0}\n' +
-      '.callout.danger{border-left-color:#dc2626;background:#fff5f5}.callout.ok{border-left-color:#0e9f6e;background:#f3faf6}\n' +
-      '.strengths li{padding:4px 0 4px 1.2em;position:relative}.strengths li:before{content:"✓";position:absolute;left:0;color:#0e9f6e;font-weight:700}\n' +
-      '.result{border-radius:10px;padding:18px 20px;border:2px solid}\n' +
-      '.result.recommend{background:#e3f6ee;border-color:#0e9f6e}.result.review{background:#fdf1dc;border-color:#d97706}.result.reject{background:#fde8e8;border-color:#dc2626}\n' +
-      '.result-title{font-size:20px;font-weight:800;margin-bottom:6px}\n.result-score{margin-top:8px;font-weight:600}\n' +
-      '.result-axes{margin-top:8px;font-weight:700;font-size:15px}\n.result-note{margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.65);border-radius:6px;font-size:13.5px}\n' +
-      '.result-mode{margin-top:4px;font-size:12.5px;color:#3a4556}\n' +
-      '.mx-wrap{margin-top:12px;background:#fff;border-radius:8px;padding:8px}\n' +
-      '.mx{border-collapse:collapse;width:100%;font-size:13px}.mx th,.mx td{border:1px solid #dde3ea;padding:6px 8px}\n' +
-      '.mx th{text-align:center;width:auto}.mx th small{display:block;font-weight:600;color:#5b6675;font-size:11px}\n' +
-      '.mx td{text-align:center}.mx td.recommend{background:#e3f6ee}.mx td.review{background:#fdf1dc}.mx td.reject{background:#fde8e8}\n' +
-      '.mx td.cur{outline:3px solid #1a2233;outline-offset:-3px;font-weight:800}\n' +
-      '.adj{margin-top:8px;font-size:13px;padding-left:1.2em;list-style:disc}\n' +
-      '.warn-list{margin-top:10px;padding-left:1.2em;list-style:disc;font-size:13px}\n' +
-      '.disclaimer{margin-top:10px;font-size:12px;color:#5b6675}\n.note{white-space:pre-wrap;background:#f8fafc;border:1px solid #dde3ea;border-radius:6px;padding:10px;font-size:14px}\n' +
-      '.muted{color:#5b6675}\n.foot{margin-top:36px;padding-top:12px;border-top:1px solid #dde3ea;font-size:11px;color:#5b6675}\n' +
-      '@media print{body{padding:0}.mx,.result,table{break-inside:avoid}}\n';
+    return [
+      ':root{--bg:#f3f5f8;--surface:#fff;--surface-2:#f8fafc;--surface-3:#eef2f6;--text:#1a2233;--muted:#5b6675;--border:#dde3ea;--accent:#1f5fbf;--accent-soft:#e6eefb;--ok:#0e9f6e;--ok-soft:#e3f6ee;--warn:#d97706;--warn-soft:#fdf1dc;--danger:#dc2626;--danger-soft:#fde8e8;--info:#2563eb;--info-soft:#e5edff;color-scheme:light}',
+      '*{box-sizing:border-box}',
+      'body{margin:0;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}',
+      '.page{max-width:900px;margin:0 auto;padding:28px 20px 48px;counter-reset:sec}',
+      'h1,h2,h3,p{margin:0}',
+      // ヘッダー
+      '.rh{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1)}',
+      '.rh-top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border);background:var(--surface-2);font-size:12px;color:var(--muted)}',
+      '.rh-brand{display:flex;align-items:center;gap:10px;color:var(--text)}',
+      '.rh-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#6f3fd1);color:#fff;font-weight:800;display:grid;place-items:center;font-size:14px;flex:none}',
+      '.rh-theater{font-weight:700;font-size:13.5px;line-height:1.3}.rh-app{font-size:11.5px;color:var(--muted);line-height:1.3}',
+      '.rh-meta{text-align:right;line-height:1.5}',
+      '.rh-main{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px 22px;flex-wrap:wrap}',
+      '.rh-main>div:first-child{flex:1 1 400px;min-width:0}.rh-main>.verdict{flex:0 0 auto}',
+      '.rh-kicker{font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--muted)}',
+      '.rh-name{font-size:28px;font-weight:800;line-height:1.2;margin:2px 0 8px}.rh-name small{font-size:14px;font-weight:600;color:var(--muted);margin-left:4px}',
+      '.rh-chips{display:flex;flex-wrap:wrap;gap:6px}',
+      '.chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:var(--surface-3);font-size:12px;font-weight:600;color:var(--text)}',
+      '.verdict{display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:12px 18px;border-radius:12px;border:2px solid var(--border);background:var(--surface-2);min-width:230px}',
+      '.verdict .v-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted)}',
+      '.verdict .v-title{font-size:22px;font-weight:800;line-height:1.25}',
+      '.verdict .v-sub{font-size:12.5px;color:var(--muted)}',
+      '.verdict.recommend{border-color:var(--ok);background:var(--ok-soft)}.verdict.recommend .v-title{color:var(--ok)}',
+      '.verdict.review{border-color:var(--warn);background:var(--warn-soft)}.verdict.review .v-title{color:var(--warn)}',
+      '.verdict.reject{border-color:var(--danger);background:var(--danger-soft)}.verdict.reject .v-title{color:var(--danger)}',
+      // サマリータイル
+      '.dash{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}',
+      '.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:0}',
+      '.tile .t-label{font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted)}',
+      '.tile .t-val{font-size:24px;font-weight:800;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}.tile .t-val small{font-size:12px;font-weight:600;color:var(--muted);margin-left:2px}',
+      '.tile .t-val.txt{font-size:15px;line-height:1.4;margin-top:6px}',
+      '.tile .t-sub{font-size:12px;color:var(--muted);margin-top:2px}',
+      '.meter{height:7px;border-radius:999px;background:var(--surface-3);overflow:hidden;margin-top:8px}.meter>span{display:block;height:100%;border-radius:999px;background:var(--accent)}',
+      '.meter>span.hi{background:var(--ok)}.meter>span.mid{background:var(--warn)}.meter>span.lo{background:var(--danger)}',
+      '.counts{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}',
+      // セクション
+      '.sec{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px 20px;margin-top:16px;box-shadow:0 1px 2px rgba(16,24,40,.05)}',
+      '.sec h2{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--border)}',
+      '.sec h2::before{counter-increment:sec;content:counter(sec);display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:800;flex:none}',
+      '.sec h3{font-size:12.5px;font-weight:700;letter-spacing:.04em;color:var(--muted);margin:18px 0 8px;padding-bottom:5px;border-bottom:1px dashed var(--border)}',
+      // 項目表
+      'table.kv{width:100%;border-collapse:collapse;font-size:13.5px}',
+      'table.kv th{width:10em;text-align:left;font-weight:600;color:var(--muted);padding:7px 10px 7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}',
+      'table.kv td{padding:7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}',
+      'table.kv tr:last-child th,table.kv tr:last-child td{border-bottom:none}',
+      'table.list{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}',
+      'table.list th{text-align:left;font-weight:600;color:var(--muted);background:var(--surface-2);padding:7px 10px;border-bottom:1px solid var(--border)}',
+      'table.list td{padding:7px 10px;border-bottom:1px solid var(--surface-3);vertical-align:top}',
+      'table.list td.num,table.list th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}',
+      'table.list tr.total td{font-weight:800;background:var(--surface-2);border-top:2px solid var(--border)}table.list tr.na td{color:#8a94a3}',
+      // バー
+      '.bars{display:flex;flex-direction:column;gap:7px}',
+      '.bar{display:grid;grid-template-columns:minmax(0,1fr) 150px 4.5em;gap:12px;align-items:center;font-size:13.5px}',
+      '.bar.wide{grid-template-columns:minmax(0,1fr) 150px 5.5em}',
+      '.bar .b-label{min-width:0}.bar .b-label small{display:block;font-size:11.5px;color:var(--muted);line-height:1.4}',
+      '.bar .b-track{height:9px;border-radius:999px;background:var(--surface-3);overflow:hidden}.bar .b-track>span{display:block;height:100%;border-radius:999px;background:var(--accent)}',
+      '.bar .b-track>span.hi{background:var(--ok)}.bar .b-track>span.mid{background:var(--warn)}.bar .b-track>span.lo{background:var(--danger)}',
+      '.bar .b-val{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}.bar .b-val small{font-weight:600;color:var(--muted)}',
+      '.bar.overall .b-label{font-weight:700}.bar.na{color:#8a94a3}',
+      '.total-line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);font-size:13.5px}',
+      '.total-line b{font-size:22px;font-weight:800}.total-line .right{margin-left:auto;font-weight:700;display:flex;align-items:center;gap:8px}',
+      // バッジ・タグ
+      '.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;background:var(--surface-3);color:var(--muted)}',
+      '.badge.ok{background:var(--ok-soft);color:var(--ok)}.badge.warn{background:var(--warn-soft);color:var(--warn)}.badge.danger{background:var(--danger-soft);color:var(--danger)}.badge.info{background:var(--info-soft);color:var(--info)}.badge.accent{background:var(--accent-soft);color:var(--accent)}',
+      '.badge.lg{font-size:14px;padding:5px 14px}',
+      '.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:5px;background:var(--surface-3);color:#3a4556;white-space:nowrap;vertical-align:1px}',
+      '.tag.warn{background:var(--warn-soft);color:#9a5b00}.tag.danger{background:var(--danger-soft);color:#b42318}.tag.ok{background:var(--ok-soft);color:#0b7a55}',
+      // 留意点
+      '.hgroup{margin-bottom:12px}.hgroup:last-child{margin-bottom:0}',
+      '.hgroup-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px;color:var(--muted)}.hgroup-head b{color:var(--text)}',
+      'ul.hlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}',
+      'li.h{display:grid;grid-template-columns:20px 1fr;gap:10px;align-items:start;padding:9px 12px;border:1px solid var(--border);border-left-width:4px;border-radius:8px;font-size:13.5px;background:var(--surface)}',
+      'li.h.block{border-left-color:var(--danger)}li.h.warn{border-left-color:var(--warn)}li.h.info{border-left-color:var(--info)}',
+      'li.h.done{background:var(--ok-soft);border-color:#bfe3d3;border-left-color:var(--ok)}li.h.done .txt{color:var(--muted)}',
+      'li.h .box{font-size:16px;line-height:1.2;color:var(--muted)}li.h.done .box{color:var(--ok)}',
+      'li.h .hmeta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:2px}',
+      'li.h .sev{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--surface-3);color:var(--muted)}',
+      'li.h .sev.block{background:var(--danger-soft);color:var(--danger)}li.h .sev.warn{background:var(--warn-soft);color:var(--warn)}li.h .sev.info{background:var(--info-soft);color:var(--info)}',
+      'li.h .cat{font-size:11px;color:var(--muted);padding:0 6px;border:1px solid var(--border);border-radius:4px}',
+      'li.h .txt{line-height:1.55}',
+      'ul.strengths{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 16px}',
+      'ul.strengths li{position:relative;padding-left:1.4em;font-size:13.5px}ul.strengths li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:800}',
+      '.callout{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-left:4px solid var(--warn);border-radius:8px;padding:10px 12px;margin-top:12px;font-size:13.5px;background:var(--warn-soft)}',
+      '.callout.danger{border-left-color:var(--danger);background:var(--danger-soft)}.callout.ok{border-left-color:var(--ok);background:var(--ok-soft)}.callout.info{border-left-color:var(--info);background:var(--info-soft)}',
+      '.callout>div{min-width:0}.callout .muted{display:block}',
+      '.note{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.7}',
+      '.muted{color:var(--muted)}.empty{color:var(--muted);font-size:13.5px}',
+      // 判定
+      '.result{border:2px solid var(--border);border-radius:12px;padding:18px 20px;background:var(--surface)}',
+      '.result.recommend{border-color:var(--ok);background:linear-gradient(180deg,var(--ok-soft),#fff 60%)}.result.review{border-color:var(--warn);background:linear-gradient(180deg,var(--warn-soft),#fff 60%)}.result.reject{border-color:var(--danger);background:linear-gradient(180deg,var(--danger-soft),#fff 60%)}',
+      '.result-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted)}',
+      '.result-title{font-size:24px;font-weight:800;margin:2px 0 6px}',
+      '.result.recommend .result-title{color:var(--ok)}.result.review .result-title{color:var(--warn)}.result.reject .result-title{color:var(--danger)}',
+      '.result-body{font-size:14.5px}',
+      '.result-note{margin-top:10px;padding:9px 12px;background:rgba(255,255,255,.75);border:1px solid var(--border);border-radius:8px;font-size:13.5px}',
+      '.axes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px}',
+      '.axis{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-width:0}',
+      '.axis .a-label{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em}.axis .a-val{font-size:20px;font-weight:800;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}.axis .a-val small{font-size:12px;font-weight:600;color:var(--muted)}.axis .a-val.txt{font-size:13.5px;line-height:1.45;margin-top:4px}.axis .a-sub{font-size:12px;color:var(--muted);margin-top:2px}',
+      '.mx-wrap{margin-top:12px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px}',
+      '.mx{border-collapse:separate;border-spacing:4px;width:100%;font-size:12.5px}',
+      '.mx th{font-weight:700;text-align:center;padding:6px 4px;color:var(--text)}.mx th small{display:block;font-weight:600;color:var(--muted);font-size:11px}',
+      '.mx thead th:first-child{text-align:left;color:var(--muted);font-size:11.5px;font-weight:600}',
+      '.mx td{text-align:center;padding:9px 6px;border-radius:7px;font-weight:600;background:var(--surface-3)}',
+      '.mx td.recommend{background:var(--ok-soft);color:#0b7a55}.mx td.review{background:var(--warn-soft);color:#9a5b00}.mx td.reject{background:var(--danger-soft);color:#b42318}',
+      '.mx td.cur{outline:3px solid var(--text);outline-offset:-3px;font-weight:800}',
+      '.mx-note{font-size:12px;color:var(--muted);margin-top:6px}',
+      '.adj{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}',
+      '.adj li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.75);border:1px solid var(--border);font-size:13px}',
+      '.adj .step{white-space:nowrap;font-weight:700;color:var(--muted)}',
+      '.adj-head{margin-top:14px;font-size:13px;font-weight:700}',
+      '.warn-list{margin:10px 0 0;padding-left:1.3em;font-size:13px}.warn-list li{margin-bottom:3px}',
+      '.disclaimer{margin-top:12px;font-size:12px;color:var(--muted)}',
+      '.foot{margin-top:28px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}',
+      '@media (max-width:720px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}.rh-main{flex-direction:column;align-items:stretch}.verdict{align-items:flex-start}ul.strengths{grid-template-columns:1fr}.bar,.bar.wide{grid-template-columns:minmax(0,1fr) 90px 4.5em}.rh-top{flex-direction:column;align-items:flex-start}.rh-meta{text-align:left}}',
+      '@media print{@page{size:A4;margin:12mm}body{background:#fff;font-size:12px}.page{padding:0;max-width:none}.rh,.sec,.tile,.result,li.h{box-shadow:none}.rh,.dash,.tile,.result,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line{break-inside:avoid}.sec h2,.sec h3{break-after:avoid}.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+    ].join('\n');
   }
 
   function generateReportHTML(record, profile) {
@@ -3471,18 +3553,31 @@ p.handoff-comment { font-size: 13.5px; }
     const name = a.name ? a.name + 'さん' : '応募者';
     const savedAt = U.fmtDateTime(record.savedAt);
     const texts = profile.texts || {};
+    const o = profile.options || {};
+    const f = profile.features || {};
     const titleOf = function (r) { return ((texts[r] || {}).title) || r; };
     const bandName = function (b) { return ((texts.bandLabels || {})[b]) || { high: '高', mid: '中', low: '低' }[b] || '—'; };
     const fmtN = function (v) { return v == null || v === '' ? '-' : String(v); };
+    const clamp = function (x) { const n = Number(x); return isNaN(n) ? 0 : Math.max(0, Math.min(100, Math.round(n * 10) / 10)); };
+    const pctCls = function (pct) { const n = Number(pct); return isNaN(n) ? '' : n >= 70 ? 'hi' : n >= 40 ? 'mid' : 'lo'; };
+    const bandCls = function (b) { return { high: 'hi', mid: 'mid', low: 'lo' }[b] || ''; };
+    const bandTone = function (b) { return { high: 'ok', mid: 'warn', low: 'danger' }[b] || ''; };
+    const resultTone = function (r) { return { recommend: 'ok', review: 'warn', reject: 'danger' }[r] || ''; };
+    const tagsOf = function (flags) {
+      return (flags || []).map(function (fl) {
+        return '<span class="tag ' + (fl === 'restricted' ? 'danger' : fl === 'unanswered' ? 'warn' : '') + '">' + esc(FLAG_LABELS[fl] || fl) + '</span>';
+      }).join('');
+    };
 
-    // 応募情報を段階で振り分ける（保存時点の段階を優先。どちらも無い旧データは全部「応募時の情報」）
+    // ---- 応募情報を段階で振り分ける（保存時点の段階を優先。どちらも無い旧データは全部「応募時の情報」） ----
     const stages = record.inputStages || profile.inputStages;
     const sp = { inputStages: stages || {} };
     const rowHtml = function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; };
     const descRows = R.describeApplicant(a, profile);
     const preRows = descRows.filter(function (r) { return r.section !== 'notes' && R.stageOf(sp, r.section) === 'pre'; }).map(rowHtml).join('');
     const ivRows = descRows.filter(function (r) { return r.section !== 'notes' && R.stageOf(sp, r.section) === 'interview'; }).map(rowHtml).join('');
-    // 保存時点で未入力の「面接で確認する項目」（判定前に必要なもの・確認漏れが残るもの）
+
+    // 保存時点で未入力の「面接で確認する項目」
     let unconfirmed = '';
     try {
       const cf = R.interviewConfirm(a, Object.assign({}, profile, sp));
@@ -3495,57 +3590,77 @@ p.handoff-comment { font-size: 13.5px; }
       unconfirmed = groups.map(function (g) { return g.label + '：' + g.items.join('、'); }).join('／');
     } catch (e) { unconfirmed = ''; }
 
-    // 高校生の採用方針（保存時点のスナップショットを優先）
+    // ---- 高校生の採用方針（保存時点のスナップショットを優先） ----
     let hs = record.highschool;
     if (hs === undefined) {
-      // 旧形式（スナップショットなし）は現在の設定で計算する
       try { const h0 = R.highschoolStatus(a, profile); hs = h0.applicable ? { status: h0.status, reasonsText: h0.reasonsText } : null; } catch (e) { hs = null; }
     }
     let hsHtml = '';
+    let hsChip = '';
     if (hs && hs.status && hs.status !== 'none' && hs.status !== 'allowed') {
       const cls = hs.status === 'exception_met' ? 'ok' : hs.status === 'exception_incomplete' ? '' : 'danger';
       const policy = (profile.highschoolPolicy || {}).notice || '';
-      hsHtml = '<div class="callout ' + cls + '"><b>高校生の採用方針: ' + esc(HS_STATUS_LABELS[hs.status] || hs.status) + '</b>' +
+      hsHtml = '<div class="callout ' + cls + '"><span>' + (cls === 'ok' ? '✓' : '⚠') + '</span><div><b>高校生の採用方針: ' + esc(HS_STATUS_LABELS[hs.status] || hs.status) + '</b>' +
         (hs.reasonsText ? '（' + esc(hs.reasonsText) + '）' : '') +
-        (policy ? '<div class="muted" style="font-size:12.5px;margin-top:4px">' + esc(policy) + '</div>' : '') + '</div>';
+        (policy ? '<span class="muted" style="font-size:12.5px;margin-top:4px">' + esc(policy) + '</span>' : '') + '</div></div>';
+      hsChip = '<span class="badge ' + (cls === 'ok' ? 'ok' : cls === 'danger' ? 'danger' : 'warn') + '">' + esc(HS_STATUS_LABELS[hs.status] || hs.status) + '</span>';
     }
 
-    const sevLabel = function (s) { return (R.SEVERITY[s] || R.SEVERITY.info).label; };
-    const handoffItems = (record.handoff.items || []).map(function (i) {
-      const done = !!record.handoff.checks[i.id];
-      return '<li class="h ' + esc(i.severity) + (done ? ' done' : '') + '">' +
-        '<span class="box">' + (done ? '☑' : '☐') + '</span>' +
-        '<span class="sev">' + esc(sevLabel(i.severity)) + '</span>' +
-        '<span class="cat">' + esc(R.CATEGORY_LABELS[i.category] || i.category) + '</span>' +
-        '<span class="txt">' + esc(i.text) + (i.deferred || i.aggregate ? '<span class="tag warn">面接で確認</span>' : '') + '</span></li>';
+    // ---- 留意点（重要度ごと） ----
+    const items = record.handoff.items || [];
+    const checks = record.handoff.checks || {};
+    const counts = { block: 0, warn: 0, info: 0 };
+    let doneCount = 0;
+    items.forEach(function (i) { if (counts[i.severity] != null) counts[i.severity]++; if (checks[i.id]) doneCount++; });
+    const handoffHtml = ['block', 'warn', 'info'].map(function (k) {
+      const list = items.filter(function (i) { return i.severity === k; });
+      if (!list.length) return '';
+      const m = R.SEVERITY[k] || R.SEVERITY.info;
+      const tone = k === 'block' ? 'danger' : k === 'warn' ? 'warn' : 'info';
+      return '<div class="hgroup"><div class="hgroup-head"><span class="badge ' + tone + '">' + esc(m.label) + '</span><b>' + list.length + '件</b><span>' + esc(m.desc || '') + '</span></div>' +
+        '<ul class="hlist">' + list.map(function (i) {
+          const done = !!checks[i.id];
+          return '<li class="h ' + esc(i.severity) + (done ? ' done' : '') + '">' +
+            '<span class="box">' + (done ? '☑' : '☐') + '</span>' +
+            '<div><div class="hmeta"><span class="sev ' + esc(i.severity) + '">' + esc(m.label) + '</span>' +
+            '<span class="cat">' + esc(R.CATEGORY_LABELS[i.category] || i.category) + '</span>' +
+            (i.deferred || i.aggregate ? '<span class="tag warn">面接で確認</span>' : '') + '</div>' +
+            '<div class="txt">' + esc(i.text) + '</div></div></li>';
+        }).join('') + '</ul></div>';
     }).join('');
     const strengths = (record.handoff.strengths || []).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
 
     // ---- シフト貢献度（保存時点のスナップショット） ----
     const j = record.judgment;
     const c = record.contribution || (j && j.contribution) || null;
+    const requireComplete = !(profile.contribution && profile.contribution.requireComplete === false);
+    const cPending = !!(c && c.incomplete && requireComplete);
     let contribHtml;
+    let contribBand = '';
+    let contribBandTxt = '';
     if (!c || !Array.isArray(c.parts)) {
-      contribHtml = '<p class="muted">シフト貢献度は未計算です（旧形式のデータ）。</p>';
+      contribHtml = '<p class="empty">シフト貢献度は未計算です（旧形式のデータ）。</p>';
     } else {
+      contribBand = c.band || '';
+      contribBandTxt = c.enabled ? (cPending ? '未確定' : (c.bandLabel || bandName(c.band))) : '2軸判定OFF（参考値）';
       const partRows = c.parts.map(function (pt) {
-        const flags = (pt.flags || []).map(function (fl) {
-          return '<span class="tag ' + (fl === 'restricted' ? 'danger' : fl === 'unanswered' ? 'warn' : '') + '">' + esc(FLAG_LABELS[fl] || fl) + '</span>';
-        }).join('');
-        return '<tr' + (pt.applicable === false ? ' class="na"' : '') + '><td>' + esc(pt.label) + flags + '</td>' +
-          '<td class="num">' + (pt.applicable === false ? '対象外' : esc(fmtN(pt.score))) + '</td>' +
-          '<td class="num">' + esc(fmtN(pt.max)) + '</td><td>' + esc(pt.detail || '') + '</td></tr>';
+        const na = pt.applicable === false;
+        const max = Number(pt.max) || 0;
+        const sc = Number(pt.score) || 0;
+        const pct = na || !max ? 0 : clamp(sc / max * 100);
+        return '<div class="bar wide' + (na ? ' na' : '') + '"><div class="b-label">' + esc(pt.label) + tagsOf(pt.flags) +
+          (pt.detail ? '<small>' + esc(pt.detail) + '</small>' : '') + '</div>' +
+          '<div class="b-track"><span class="' + (na ? '' : pctCls(pct)) + '" style="width:' + pct + '%"></span></div>' +
+          '<div class="b-val">' + (na ? '<small>対象外</small>' : esc(fmtN(pt.score)) + '<small> / ' + esc(fmtN(pt.max)) + '</small>') + '</div></div>';
       }).join('');
-      const bandTxt = c.enabled ? (c.incomplete && profile.contribution && profile.contribution.requireComplete !== false ? '未確定' : (c.bandLabel || bandName(c.band))) : '2軸判定OFF（参考値）';
-      contribHtml = '<table class="list"><thead><tr><th>項目</th><th>得点</th><th>満点</th><th>内容</th></tr></thead><tbody>' + partRows +
-        '<tr class="total"><td>合計</td><td class="num">' + esc(fmtN(c.total)) + '</td><td class="num">' + esc(fmtN(c.max)) + '</td>' +
-        '<td>得点率 ' + esc(fmtN(c.pct)) + '%（' + esc(bandTxt) + '）</td></tr></tbody></table>' +
-        (c.incomplete && c.missing && c.missing.length ? '<div class="callout">未確認: ' + esc(c.missing.join('・')) + '</div>' : '');
+      contribHtml = '<div class="bars">' + partRows + '</div>' +
+        '<div class="total-line">合計 <b>' + esc(fmtN(c.total)) + '</b><span class="muted">/ ' + esc(fmtN(c.max)) + '点</span>' +
+        '<span class="right">得点率 ' + esc(fmtN(c.pct)) + '%<span class="badge ' + (cPending || !c.enabled ? '' : bandTone(c.band)) + '">' + esc(contribBandTxt) + '</span></span></div>' +
+        (c.incomplete && c.missing && c.missing.length ? '<div class="callout"><span>⚠</span><div>未確認: ' + esc(c.missing.join('・')) + '</div></div>' : '');
 
-      // 繁忙期・オールナイトの明細
+      // 繁忙期の明細（表の形式はテスト・読み戻しで参照しているため維持）
       const unitL = R.UNIT_LABEL || {};
       const triL = R.TRI_LABELS || {};
-      const f = profile.features || {};
       const busyRows = (c.busyRows || []).map(function (b) {
         const days = b.days == null ? (R.isTri(b.avail) && f.vacationDays !== false ? '未確認' : '-') : b.days + (unitL[b.unit] || '日');
         return '<tr' + (b.weight > 0 ? '' : ' class="na"') + '><td>' + esc(b.label) + (b.critical && b.weight > 0 ? '<span class="tag">重点</span>' : '') + (b.weight > 0 ? '' : '<span class="tag">記録のみ</span>') + '</td>' +
@@ -3555,9 +3670,8 @@ p.handoff-comment { font-size: 13.5px; }
           '<td class="num">' + esc(fmtN(b.weight)) + '</td></tr>';
       }).join('');
       if (busyRows) {
-        contribHtml += '<h3>繁忙期（3連休・長期休暇）</h3><table class="list"><thead><tr><th>期間</th><th>可否</th><th>出られる日数</th><th>満点の日数</th><th>重み</th></tr></thead><tbody>' + busyRows + '</tbody></table>';
+        contribHtml += '<h3>繁忙期（3連休・長期休暇）</h3><table class="list"><thead><tr><th>期間</th><th>可否</th><th class="num">出られる日数</th><th class="num">満点の日数</th><th class="num">重み</th></tr></thead><tbody>' + busyRows + '</tbody></table>';
       }
-      const o = profile.options || {};
       const an = a.allNight || {};
       const extra = [];
       if (f.holidayWork !== false) extra.push(['祝日', a.holidayWork ? (triL[a.holidayWork] || a.holidayWork) : '未確認']);
@@ -3577,30 +3691,57 @@ p.handoff-comment { font-size: 13.5px; }
         extra.push(['オールナイト', anTxt + (pr.allNightShiftStart ? '（' + pr.allNightShiftStart + '〜翌' + (pr.allNightShiftEnd || '') + '目安）' : '')]);
       }
       if (extra.length) {
-        contribHtml += '<h3>祝日・土日・オールナイト</h3><table>' + extra.map(function (x) { return '<tr><th>' + esc(x[0]) + '</th><td>' + esc(x[1]) + '</td></tr>'; }).join('') + '</table>';
+        contribHtml += '<h3>祝日・土日・オールナイト</h3><table class="kv">' + extra.map(function (x) { return '<tr><th>' + esc(x[0]) + '</th><td>' + esc(x[1]) + '</td></tr>'; }).join('') + '</table>';
       }
     }
 
-    const ev = profile.evaluation;
-    const scoreRows = (ev.items || []).map(function (it) {
-      const s = record.scores[it.id];
-      return '<tr><td>' + esc(it.label) + '</td><td class="num">' + (s == null || s === '' ? '-' : esc(s) + '点') + '</td></tr>';
-    }).join('');
+    // ---- 面接評価 ----
+    const ev = profile.evaluation || {};
+    const scale = Number(ev.scaleMax) || 5;
+    const evItems = ev.items || [];
     const hasScores = Object.keys(record.scores || {}).length > 0;
-    const interviewTotal = j && j.interview
-      ? '<tr class="total"><td>合計（' + esc(j.interview.pct) + '%・' + esc(j.interview.bandLabel || bandName(j.interview.band)) + '）</td><td class="num">' + esc(j.interview.total) + ' / ' + esc(j.interview.max) + '点</td></tr>'
+    let scoreSum = 0;
+    const scoreRows = evItems.map(function (it) {
+      const s = record.scores[it.id];
+      const has = !(s == null || s === '');
+      const n = has ? Number(s) : 0;
+      if (has && !isNaN(n)) scoreSum += n;
+      const pct = has ? clamp(n / scale * 100) : 0;
+      const isOverall = it.id === ev.overallItemId;
+      return '<div class="bar' + (isOverall ? ' overall' : '') + '"><div class="b-label">' + esc(it.label) + '</div>' +
+        '<div class="b-track"><span class="' + (has ? pctCls(pct) : '') + '" style="width:' + pct + '%"></span></div>' +
+        '<div class="b-val">' + (has ? esc(s) + '<small> / ' + scale + '</small>' : '<small>-</small>') + '</div></div>';
+    }).join('');
+    const scoreMax = evItems.length * scale;
+    const scorePct = j && j.interview ? j.interview.pct : (scoreMax ? Math.round(scoreSum / scoreMax * 1000) / 10 : 0);
+    const scoreTotal = j && j.interview ? j.interview.total : scoreSum;
+    const scoreBand = j && j.interview ? j.interview.band : '';
+    const scoreBandTxt = j && j.interview ? (j.interview.bandLabel || bandName(j.interview.band)) : '';
+    const interviewTotal = hasScores
+      ? '<div class="total-line">合計 <b>' + esc(scoreTotal) + '</b><span class="muted">/ ' + esc(scoreMax) + '点</span>' +
+        '<span class="right">得点率 ' + esc(scorePct) + '%' + (scoreBandTxt ? '<span class="badge ' + bandTone(scoreBand) + '">' + esc(scoreBandTxt) + '</span>' : '') + '</span></div>'
       : '';
 
     // ---- 採用可否判定 ----
-    let judgmentHtml = '<p class="muted">採用可否判定は未実施です。</p>';
+    const beforeIv = !j && Number(record.step) < 3;
+    let judgmentHtml = '<p class="empty">' + (beforeIv ? '面接前（申し送り段階）の保存のため、採用可否判定は未実施です。' : '採用可否判定は未実施です。') + '</p>';
+    let axesSummary = '';
     if (j) {
       let axes = '', mx = '', note = '', adj = '', mode = '';
       if (j.interview) {
         const jc = j.contribution || {};
-        const cBand = j.mode === 'incomplete' ? '未確定' : j.mode === 'interviewOnly' ? '—' : (jc.bandLabel || bandName(jc.band));
-        axes = '<div class="result-axes">面接 ' + esc(j.interview.pct) + '%（' + esc(j.interview.bandLabel || bandName(j.interview.band)) + '）× 貢献 ' +
-          (j.mode === 'interviewOnly' ? '—' : esc(fmtN(jc.pct)) + '%') + '（' + esc(cBand) + '）</div>';
-        mode = j.mode ? '<div class="result-mode">判定方式: ' + esc(MODE_LABELS[j.mode] || j.mode) + '</div>' : '';
+        const cBandTxt = j.mode === 'incomplete' ? '未確定' : j.mode === 'interviewOnly' ? '—' : (jc.bandLabel || bandName(jc.band));
+        const iBandTxt = j.interview.bandLabel || bandName(j.interview.band);
+        axesSummary = '面接 ' + j.interview.pct + '%（' + iBandTxt + '）' + (j.mode === 'interviewOnly' ? '' : ' × 貢献 ' + fmtN(jc.pct) + '%（' + cBandTxt + '）');
+        axes = '<div class="axes">' +
+          '<div class="axis"><div class="a-label">面接評価</div><div class="a-val">' + esc(j.interview.total) + '<small> / ' + esc(j.interview.max) + '点</small></div>' +
+          '<div class="a-sub">得点率 ' + esc(j.interview.pct) + '%・' + esc(iBandTxt) + '　採用推奨 ' + esc(j.thresholds.recommendPts) + '点以上／上長判断 ' + esc(j.thresholds.reviewPts) + '点以上</div></div>' +
+          (j.mode !== 'interviewOnly'
+            ? '<div class="axis"><div class="a-label">シフト貢献度</div><div class="a-val">' + (j.mode === 'incomplete' ? '未確定' : esc(fmtN(jc.total)) + '<small> / ' + esc(fmtN(jc.max)) + '点</small>') + '</div>' +
+              '<div class="a-sub">' + (j.mode === 'incomplete' ? '面接評価のみで判定' : '得点率 ' + esc(fmtN(jc.pct)) + '%・' + esc(cBandTxt)) + '</div></div>'
+            : '') +
+          '<div class="axis"><div class="a-label">判定方式</div><div class="a-val txt">' + esc(MODE_LABELS[j.mode] || j.mode || '面接評価のみ') + '</div></div>' +
+          '</div>';
         if (j.mode !== 'interviewOnly' && j.matrix && j.matrix.table) {
           const B = ['high', 'mid', 'low'];
           const bi = (j.matrix.bands || {}).interview || {}, bc = (j.matrix.bands || {}).contribution || {};
@@ -3615,59 +3756,91 @@ p.handoff-comment { font-size: 13.5px; }
                 return '<td class="' + esc(r || '') + (cur ? ' cur' : '') + '">' + (cur ? '▶ ' : '') + esc(r ? titleOf(r) : '-') + '</td>';
               }).join('') + '</tr>';
             }).join('') + '</tbody></table>' +
-            (j.mode === 'incomplete' ? '<div class="muted" style="font-size:12px;margin-top:4px">シフト貢献度が未確定のため、マトリクスには当てていません。</div>' : '') +
+            (j.mode === 'incomplete' ? '<div class="mx-note">シフト貢献度が未確定のため、マトリクスには当てていません。</div>' : '') +
             '</div>';
         }
         if (j.matrix && j.matrix.note) note = '<div class="result-note">' + esc(j.matrix.note) + '</div>';
         if (j.adjustments && j.adjustments.length) {
-          adj = '<div style="margin-top:10px;font-size:13px;font-weight:700">' +
-            (j.mode === 'matrix' ? 'マトリクス' : '面接評価') + ': ' + esc(titleOf(j.baseResult)) + ' → 最終: ' + esc(titleOf(j.result)) + '</div>' +
-            '<ul class="adj">' + j.adjustments.map(function (x) { return '<li>' + esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to)) + '：' + esc(x.reason) + '</li>'; }).join('') + '</ul>';
+          adj = '<div class="adj-head">' + (j.mode === 'matrix' ? 'マトリクスの結果' : '面接評価の結果') + '「' + esc(titleOf(j.baseResult)) + '」から「' + esc(titleOf(j.result)) + '」に調整</div>' +
+            '<ul class="adj">' + j.adjustments.map(function (x) { return '<li><span class="step">' + esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to)) + '</span><span>' + esc(x.reason) + '</span></li>'; }).join('') + '</ul>';
         }
+      } else {
+        axesSummary = '面接評価 ' + j.pct + '%';
       }
       const shownReasons = {};
       (j.adjustments || []).forEach(function (x) { shownReasons[x.reason] = true; });
       const warns = (j.warnings || []).filter(function (w) { return !shownReasons[w]; });
       judgmentHtml = '<div class="result ' + esc(j.result) + '">' +
+        '<div class="result-kicker">採用可否判定</div>' +
         '<div class="result-title">' + esc(j.title) + '</div>' +
-        '<div class="result-body">' + esc(j.body) + '</div>' + note + axes + mode +
-        '<div class="result-score">面接評価 合計 ' + esc(j.total) + ' / ' + esc(j.max) + '点（' + esc(j.pct) + '%）　' +
-        '採用推奨 ' + esc(j.thresholds.recommendPts) + '点以上 ／ 上長判断 ' + esc(j.thresholds.reviewPts) + '点以上</div>' +
-        (j.interview && j.mode !== 'interviewOnly' && j.contribution ? '<div class="result-score">シフト貢献度 ' + esc(fmtN(j.contribution.total)) + ' / ' + esc(fmtN(j.contribution.max)) + '点（' + esc(fmtN(j.contribution.pct)) + '%）</div>' : '') +
+        '<div class="result-body">' + esc(j.body) + '</div>' + note + axes +
+        (j.interview ? '' : '<div class="result-mode">面接評価 合計 ' + esc(j.total) + ' / ' + esc(j.max) + '点（' + esc(j.pct) + '%）　採用推奨 ' + esc(j.thresholds.recommendPts) + '点以上／上長判断 ' + esc(j.thresholds.reviewPts) + '点以上</div>') +
         mx + adj +
         (warns.length ? '<ul class="warn-list">' + warns.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') +
         '<div class="disclaimer">' + esc(j.disclaimer) + (j.evaluatedAt ? '　判定日時: ' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div>' +
         '</div>';
     }
 
-    // 面接前（Step1・Step2）に保存したときは、面接時の項目の値は「面接前に分かっている情報」（申し送りコピー文と同じ扱い）
-    const beforeIv = !j && Number(record.step) < 3;
+    // ---- ヘッダー・サマリー ----
+    const stepLabel = { 1: '応募情報の入力中', 2: '面接者への申し送り', 3: '面接評価の入力中', 4: '採用可否判定まで完了' }[Number(record.step)] || '';
+    const chips = [];
+    if (a.category) chips.push(a.category);
+    if (a.age) chips.push(a.age + '歳');
+    if (a.gender) chips.push(a.gender);
+    if (a.commuteMethod || a.commuteMinutes) chips.push([a.commuteMethod, a.commuteMinutes ? a.commuteMinutes + '分' : ''].filter(Boolean).join(' '));
+    if (a.workPeriod) chips.push(R.labelOf(o.workPeriods, a.workPeriod));
+    if (a.daysMin || a.daysMax) chips.push('週' + (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日');
+    const chipsHtml = chips.map(function (ch) { return '<span class="chip">' + esc(ch) + '</span>'; }).join('') + hsChip;
+    const verdictHtml = j
+      ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title) + '</span><span class="v-sub">' + esc(axesSummary) + '</span></div>'
+      : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">' + (beforeIv ? '面接前' : '未実施') + '</span><span class="v-sub">' + esc(beforeIv ? '申し送り段階で保存' : '面接評価の入力後に判定') + '</span></div>';
+    const headerHtml = '<header class="rh"><div class="rh-top">' +
+      '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
+      '<div class="rh-meta">保存日時 ' + esc(savedAt) + (stepLabel ? '<br>進捗: ' + esc(stepLabel) : '') + '</div></div>' +
+      '<div class="rh-main"><div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' + verdictHtml + '</div></header>\n';
+
+    const tileInterview = hasScores
+      ? '<div class="tile"><div class="t-label">面接評価</div><div class="t-val">' + esc(scoreTotal) + '<small>/ ' + esc(scoreMax) + '点</small></div><div class="meter"><span class="' + (scoreBand ? bandCls(scoreBand) : pctCls(scorePct)) + '" style="width:' + clamp(scorePct) + '%"></span></div><div class="t-sub">得点率 ' + esc(scorePct) + '%' + (scoreBandTxt ? '・' + esc(scoreBandTxt) : '') + '</div></div>'
+      : '<div class="tile"><div class="t-label">面接評価</div><div class="t-val txt muted">未入力</div><div class="t-sub">面接後に採点します</div></div>';
+    const tileContrib = c && Array.isArray(c.parts)
+      ? (cPending
+        ? '<div class="tile"><div class="t-label">シフト貢献度</div><div class="t-val txt">未確定</div><div class="t-sub">面接で確認後に確定（' + esc((c.missing || []).length) + '項目）</div></div>'
+        : '<div class="tile"><div class="t-label">シフト貢献度</div><div class="t-val">' + esc(fmtN(c.total)) + '<small>/ ' + esc(fmtN(c.max)) + '点</small></div><div class="meter"><span class="' + bandCls(contribBand) + '" style="width:' + clamp(c.pct) + '%"></span></div><div class="t-sub">得点率 ' + esc(fmtN(c.pct)) + '%・' + esc(contribBandTxt) + '</div></div>')
+      : '<div class="tile"><div class="t-label">シフト貢献度</div><div class="t-val txt muted">—</div><div class="t-sub">未計算</div></div>';
+    const tileHandoff = '<div class="tile"><div class="t-label">留意点</div><div class="t-val">' + items.length + '<small>件</small></div>' +
+      '<div class="counts"><span class="badge danger">要判断 ' + counts.block + '</span><span class="badge warn">要確認 ' + counts.warn + '</span><span class="badge info">共有 ' + counts.info + '</span></div>' +
+      '<div class="t-sub">確認済み ' + doneCount + ' / ' + items.length + '</div></div>';
+    const tileVerdict = j
+      ? '<div class="tile"><div class="t-label">判定</div><div class="t-val txt"><span class="badge lg ' + resultTone(j.result) + '">' + esc(j.title) + '</span></div><div class="t-sub">' + esc(j.mode === 'matrix' ? '2軸判定' : j.mode === 'incomplete' ? '面接評価のみ（貢献度未確定）' : '面接評価のみ') + (j.evaluatedAt ? '・' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div></div>'
+      : '<div class="tile"><div class="t-label">判定</div><div class="t-val txt muted">' + (beforeIv ? '面接前' : '未実施') + '</div><div class="t-sub">' + esc(beforeIv ? '面接で確認する項目: ' + (unconfirmed ? unconfirmed.split('／').length + 'セクション' : 'なし') : '面接評価の入力後に判定') + '</div></div>';
+    const dashHtml = '<div class="dash">' + tileInterview + tileContrib + tileHandoff + tileVerdict + '</div>\n';
+
+    const sec = function (title, body) { return '<section class="sec"><h2>' + title + '</h2>\n' + body + '</section>\n'; };
     const json = JSON.stringify(record).replace(/<\//g, '<\\/');
     const SCRIPT_END = '</scr' + 'ipt>';
 
     return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
-      '<style>\n' + reportCss() + '</style>\n</head>\n<body>\n' +
-      '<div class="head"><h1>' + esc(meta.theaterName) + '　応募者情報</h1>' +
-      '<p>応募者: ' + esc(name) + '　｜　保存日時: ' + esc(savedAt) + '　｜　' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</p></div>\n' +
-      '<h2>応募時の情報</h2>\n' + (preRows ? '<table>' + preRows + '</table>\n' : '<p class="muted">応募時の情報はありません。</p>\n') + hsHtml +
-      (a.reviewerNotes ? '<h2>面接者への申し送りコメント</h2>\n<div class="note">' + esc(a.reviewerNotes) + '</div>' : '') +
-      '<h2>面接者への申し送り（留意点）</h2>\n' +
-      (handoffItems ? '<ul>' + handoffItems + '</ul>' : '<p class="muted">留意点はありません。</p>') +
-      (strengths ? '<h2>強み</h2>\n<ul class="strengths">' + strengths + '</ul>' : '') +
-      (record.handoff.note ? '<h2>追記（申し送りコメントの補足）</h2>\n<div class="note">' + esc(record.handoff.note) + '</div>' : '') +
-      (beforeIv ? '<h2>面接前に分かっている情報（未確認）</h2>\n' : '<h2>面接で確認した情報</h2>\n') +
-      (ivRows ? '<table>' + ivRows + '</table>\n'
-        : beforeIv ? '<p class="muted">面接前に分かっている項目の入力はありません（面接で確認します）。</p>\n'
-          : '<p class="muted">面接で確認した項目の入力はありません。</p>\n') +
-      (unconfirmed ? '<div class="callout">保存時点で未入力: ' + esc(unconfirmed) + '</div>\n' : '') +
-      '<h2>シフト貢献度</h2>\n' + contribHtml + '\n' +
-      '<h2>面接評価</h2>\n' +
-      (hasScores ? '<table>' + scoreRows + interviewTotal + '</table>' : '<p class="muted">面接評価は未入力です。</p>') +
-      (record.interviewNotes ? '<h2>面接所見</h2>\n<div class="note">' + esc(record.interviewNotes) + '</div>' : '') +
-      '<h2>採用可否判定</h2>\n' + judgmentHtml + '\n' +
-      '<div class="foot">' + esc(meta.footer) + '<br>このファイルはアプリの「読み込み」から再度開けます。ファイル内の埋め込みデータを編集しないでください。</div>\n' +
+      '<style>\n' + reportCss() + '\n</style>\n</head>\n<body>\n<div class="page">\n' +
+      headerHtml + dashHtml +
+      sec('応募時の情報', (preRows ? '<table class="kv">' + preRows + '</table>\n' : '<p class="empty">応募時の情報はありません。</p>\n') + hsHtml) +
+      (a.reviewerNotes ? sec('面接者への申し送りコメント', '<div class="note">' + esc(a.reviewerNotes) + '</div>') : '') +
+      sec('面接者への申し送り（留意点）',
+        (handoffHtml || '<p class="empty">留意点はありません。</p>') +
+        (strengths ? '<h3>強み（面接者へ共有）</h3><ul class="strengths">' + strengths + '</ul>' : '') +
+        (record.handoff.note ? '<h3>追記（申し送りコメントの補足）</h3><div class="note">' + esc(record.handoff.note) + '</div>' : '')) +
+      sec(beforeIv ? '面接前に分かっている情報（未確認）' : '面接で確認した情報',
+        (ivRows ? '<table class="kv">' + ivRows + '</table>\n'
+          : beforeIv ? '<p class="empty">面接前に分かっている項目の入力はありません（面接で確認します）。</p>\n'
+            : '<p class="empty">面接で確認した項目の入力はありません。</p>\n') +
+        (unconfirmed ? '<div class="callout"><span>⚠</span><div>保存時点で未入力: ' + esc(unconfirmed) + '</div></div>\n' : '')) +
+      sec('シフト貢献度', contribHtml) +
+      sec('面接評価', (hasScores ? '<div class="bars">' + scoreRows + '</div>' + interviewTotal : '<p class="empty">面接評価は未入力です。</p>') +
+        (record.interviewNotes ? '<h3>面接所見</h3><div class="note">' + esc(record.interviewNotes) + '</div>' : '')) +
+      sec('採用可否判定', judgmentHtml) +
+      '<div class="foot"><span>' + esc(meta.footer) + '</span><span>このファイルはアプリの「読み込み」から再度開けます。埋め込みデータを編集しないでください。</span></div>\n' +
+      '</div>\n' +
       '<script type="application/json" id="recruit-record">' + json + SCRIPT_END + '\n' +
       '</body>\n</html>\n';
   }

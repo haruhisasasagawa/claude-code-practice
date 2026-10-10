@@ -97,5 +97,5 @@ recruit-system/
   - 重要度: `block` 要判断（採用担当が面接実施・採用の可否を判断）/ `warn` 要確認（面接時に確認）/ `info` 共有
   - カテゴリ: 法令・高校生・全般・繁忙期/休日・オールナイト・深夜帯・専門学校生・外国籍・入力の整合。法令ルールは OFF・重要度変更不可（文言は編集可）
 - **採用可否判定** = 面接評価とシフト貢献度をそれぞれ得点率（%）で帯に分け、マトリクスで決める。項目数や配点を変えても閾値を調整しなくてよい
-- **保存形式** = 人が読める HTML レポート＋ `<script type="application/json" id="recruit-record">` に元データ（`schemaVersion: 2`、保存時点の貢献度スナップショットを含む）を埋め込み。見た目を変えても読込が壊れない
+- **保存形式** = 人が読める HTML レポート＋ `<script type="application/json" id="recruit-record">` に元データ（`schemaVersion: 2`、保存時点の貢献度スナップショットを含む）を埋め込み。見た目を変えても読込が壊れない。レポート本体はアプリと同じデザイントークン（カード・バッジ・バー・マトリクス表）で、先頭に判定サマリーを置き、A4 印刷にも対応（`storage.js` の `reportCss`）
 - **後方互換** = 旧プロファイル・旧保存ファイルは `storage.normalizeProfile` / `app.applyRecord` で補完。既存のルール id・applicant のパス・`PROFILE_KEY` は変えない
