@@ -536,6 +536,39 @@ test('27 高校生ホールド（高2・面接高×貢献高・全確認済み�
   assert.ok(reason(jU).indexOf('未入力のため') < 0);
 });
 
+test('27b 高3・進路が就職（例外の対象外）→ 不採用推奨。設定で上長最終判断要に変更可', function () {
+  const p = P();
+  const base = { age: '18', category: '高校3年生', continueAfterGraduation: 'yes',
+    sh: { fri: ['17:00', '22:00'], sat: ['08:00', '22:00'], sun: ['08:00', '22:00'] } };
+  const aJob = A(merge(allAnswered(merge(base, { highschool: { careerDecided: 'yes', careerPath: 'employment' } })), {}));
+  const j = judge(aJob, scoresAll(5), p);
+  assert.strictEqual(j.highschool.status, 'exception_unmet');
+  assert.strictEqual(j.baseResult, 'recommend');
+  assert.strictEqual(j.result, 'reject', j.adjustments.map(function (x) { return x.code; }).join(','));
+  const adj = j.adjustments.find(function (x) { return x.code === 'highschool_hold'; });
+  assert.ok(adj && adj.to === 'reject' && adj.reason.indexOf('『就職』') >= 0 && adj.reason.indexOf('不採用推奨') >= 0, adj && adj.reason);
+  // その他（浪人・未定など）も対象外 → 不採用推奨
+  const aOther = A(merge(allAnswered(merge(base, { highschool: { careerDecided: 'yes', careerPath: 'other' } })), {}));
+  assert.strictEqual(judge(aOther, scoresAll(5), p).result, 'reject');
+  // 進路未決定は従来どおり上長最終判断要（設定に関係なく）
+  const aUndecided = A(merge(allAnswered(merge(base, { highschool: { careerDecided: 'no' } })), {}));
+  assert.strictEqual(judge(aUndecided, scoresAll(5), p).result, 'review');
+  // 設定で review に変更
+  const p2 = P(); p2.highschoolPolicy.disallowedPathResult = 'review';
+  assert.strictEqual(judge(aJob, scoresAll(5), p2).result, 'review');
+  // 就職を例外の対象に含めれば充足
+  const p3 = P(); p3.highschoolPolicy.allowedCareerPaths.employment = true;
+  assert.strictEqual(judge(aJob, scoresAll(5), p3).result, 'recommend');
+  // holdOnHighschoolException=false なら下げない
+  const p4 = P(); p4.evaluation.holdOnHighschoolException = false;
+  assert.strictEqual(judge(aJob, scoresAll(5), p4).result, 'recommend');
+  // normalizeProfile: 不正値は既定（reject）に戻る
+  const raw = P(); raw.highschoolPolicy.disallowedPathResult = 'xxx';
+  assert.strictEqual(S.normalizeProfile(raw).highschoolPolicy.disallowedPathResult, 'reject');
+  const rawMissing = P(); delete rawMissing.highschoolPolicy.disallowedPathResult;
+  assert.strictEqual(S.normalizeProfile(rawMissing).highschoolPolicy.disallowedPathResult, 'reject');
+});
+
 test('28 法令ホールド（17歳の深夜シフト・minor_late_night 未確認・holdOnUnresolvedBlock=false）', function () {
   const p = P(); p.evaluation.holdOnUnresolvedBlock = false;
   const a = strongApplicant({ age: '17' });

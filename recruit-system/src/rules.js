@@ -271,7 +271,7 @@
   function highschoolStatus(a, profile) {
     a = a || {};
     const group = categoryGroup(profile, a.category);
-    const out = { applicable: false, isExceptionCategory: false, status: 'none', unmet: [], missing: [], reasonsText: '' };
+    const out = { applicable: false, isExceptionCategory: false, status: 'none', unmet: [], missing: [], reasonsText: '', pathDisallowed: false, pathLabel: '' };
     if (group !== 'highschool') return out;
     out.applicable = true;
     const hp = (profile && profile.highschoolPolicy) || { mode: 'allow' };
@@ -289,7 +289,9 @@
       else if (hs.careerDecided === 'yes') {
         if (!hs.careerPath) out.missing.push('進路の種別');
         else if ((hp.allowedCareerPaths || {})[hs.careerPath] !== true) {
-          out.unmet.push('進路が『' + labelOf(((profile.options || {}).careerPaths), hs.careerPath) + '』（例外の対象外）');
+          out.pathDisallowed = true;
+          out.pathLabel = labelOf(((profile.options || {}).careerPaths), hs.careerPath);
+          out.unmet.push('進路が『' + out.pathLabel + '』（例外の対象外）');
         }
       }
     }
@@ -1076,12 +1078,17 @@
     if (ev.holdOnHighschoolException !== false &&
         (hs.status === 'excluded' || hs.status === 'exception_unmet' || hs.status === 'exception_incomplete')) {
       // 未入力（確認待ち）と未充足（条件を満たさない）・原則対象外を区別して理由を示す
+      // 進路が例外の対象外（就職など）は、設定（既定）により不採用推奨まで下げる
+      const hpJ = profile.highschoolPolicy || {};
+      const pathReject = hs.status === 'exception_unmet' && hs.pathDisallowed && hpJ.disallowedPathResult !== 'review';
       const hsReason = hs.status === 'excluded'
         ? '高校生の採用方針（' + (applicant.category || '高校生') + 'は原則対象外）に該当するため、採用推奨ではなく上長最終判断要として扱います。'
         : hs.status === 'exception_incomplete'
           ? '高校3年生の例外条件（' + hs.missing.join('・') + '）が未入力のため、採用推奨ではなく上長最終判断要として扱います。面接で確認し、Step3 の「高校3年生の例外条件」に入力してください。'
-          : '高校3年生の例外条件を満たしていない（' + hs.reasonsText + '）ため、採用推奨ではなく上長最終判断要として扱います。';
-      down('review', 'highschool_hold', hsReason);
+          : pathReject
+            ? '高校3年生ですが進路『' + hs.pathLabel + '』は例外の対象外のため（進学以外は短期採用となりやすいため）、不採用推奨とします。'
+            : '高校3年生の例外条件を満たしていない（' + hs.reasonsText + '）ため、採用推奨ではなく上長最終判断要として扱います。';
+      down(pathReject ? 'reject' : 'review', 'highschool_hold', hsReason);
     }
     // (4) 法令の要判断が未確認（設定に関係なく常に）
     if (unresolvedLegal.length) {

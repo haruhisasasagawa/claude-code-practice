@@ -45,8 +45,9 @@
       requireCareerDecided: true,          // 例外条件: 進路決定済み
       allowedCareerPaths: { university: true, vocational: true, employment: false, other: false },
       requireContinue: true,               // 例外条件: 卒業後も当劇場で継続する意思
+      disallowedPathResult: 'reject',      // 進路が例外の対象外（就職など）のときの判定: 'reject'=不採用推奨 / 'review'=上長最終判断要
       nightRestricted: true,               // 18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う（当劇場運用）
-      notice: '新宿では高校生は原則採用対象外です。例外は高校3年生で進路（進学）が決定済み、かつ進学後も当劇場でアルバイトを継続する方のみです。'
+      notice: '新宿では高校生は原則採用対象外です。例外は高校3年生で進路（進学）が決定済み、かつ進学後も当劇場でアルバイトを継続する方のみです。就職予定の方は短期採用となるため対象外です。'
     },
 
     options: {
@@ -363,7 +364,7 @@
     matrix: {
       cells: {
         high_high: 'recommend', high_mid: 'recommend', high_low: 'review',
-        mid_high: 'review', mid_mid: 'review', mid_low: 'review',
+        mid_high: 'review', mid_mid: 'review', mid_low: 'reject',
         low_high: 'reject', low_mid: 'reject', low_low: 'reject'
       },
       cellNotes: {
@@ -371,7 +372,7 @@
         high_low: '面接評価は高い一方、シフト貢献度（繁忙期・土日祝・オールナイト等）が低めです。配置の見込みを踏まえて上長が最終判断してください。',
         mid_high: 'シフト貢献度が高く、繁忙期・オールナイトの戦力として期待できます。面接評価の懸念点と合わせて前向きに検討してください。',
         mid_mid: '',
-        mid_low: '面接評価が標準的で、シフト貢献度も低めです。採用の必要性を踏まえて上長が最終判断してください。',
+        mid_low: '面接評価が標準的で、シフト貢献度（繁忙期・土日祝・オールナイト等）も低めです。無理に採用する必要はないため、不採用を推奨します。',
         low_high: 'シフト貢献度は高いものの、面接評価が基準に達していません（面接評価を優先します）。',
         low_mid: '', low_low: ''
       }

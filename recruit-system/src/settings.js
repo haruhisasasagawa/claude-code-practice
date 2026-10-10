@@ -340,6 +340,10 @@
       '<div class="check-grid">' +
         cps.map(function (c) { return sCheck('highschoolPolicy.allowedCareerPaths.' + c.value, (c.label || c.value) + 'は例外の対象'); }).join('') +
       '</div>' +
+      sSelect('highschoolPolicy.disallowedPathResult', '進路が例外の対象外（就職など）のときの判定', [
+        { value: 'reject', label: '不採用推奨' },
+        { value: 'review', label: '上長最終判断要' }
+      ], '就職予定は短期採用になりやすいため、既定では不採用推奨にします。進路が未決定・未入力の場合はこの設定に関係なく上長最終判断要です。') +
       sCheck('highschoolPolicy.requireContinue', '卒業後（進学後）も当劇場で継続する意思があること', '「継続する」と答えた場合のみ例外の対象にします。') +
       '<h3 class="sub">深夜帯・オールナイト</h3>' +
       sCheck('highschoolPolicy.nightRestricted', '18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う', '18歳以上の高3も卒業まで深夜帯・オールナイト不可として扱います（18歳未満は法令により常に不可）。') +

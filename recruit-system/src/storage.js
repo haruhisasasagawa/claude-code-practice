@@ -176,6 +176,7 @@
     const hp = merged.highschoolPolicy = U.isObj(merged.highschoolPolicy) ? merged.highschoolPolicy : U.deepClone(base.highschoolPolicy);
     if (HS_MODES.indexOf(hp.mode) < 0) hp.mode = base.highschoolPolicy.mode;
     if (!Array.isArray(hp.exceptionCategories)) hp.exceptionCategories = U.deepClone(base.highschoolPolicy.exceptionCategories);
+    if (hp.disallowedPathResult !== 'reject' && hp.disallowedPathResult !== 'review') hp.disallowedPathResult = base.highschoolPolicy.disallowedPathResult;
   }
 
   // 法令ルールは常に ON・重要度固定
