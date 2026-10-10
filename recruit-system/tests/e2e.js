@@ -1237,6 +1237,93 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   const rowE21 = await page.textContent('#handoffCard .table.kv');
   expect(rowE21.includes('在留資格: 永住者') && !rowE21.includes('詳細は面接で確認'), 'E21 折りたたみで入れた外国籍の詳細を Step2 の応募者表に出す: ' + rowE21.replace(/\s+/g, ' '));
 
+  // =====================================================================
+  // E22 応募者の管理（押印）: アプリで押印 → 保存 → レポート上で押印・保存 → 読込
+  // =====================================================================
+  console.log('\n== E22 応募者の管理（押印） ==');
+  await page.click('#btnNew');
+  await wait(200);
+  await fillBasic({ name: '押印 太郎', age: 24, category: 'フリーター', shifts: [['sat', '10:00', '18:00'], ['sun', '10:00', '18:00']], daysMin: 2, daysMax: 3, workPeriod: 'long', preFill: false });
+  await toHandoff();
+  expect(!!(await page.$('#mgmtCard')) && (await page.$$('#mgmtCard .stamp-box')).length === 3, 'E22 Step2 に押印カード（3枠）');
+  const boxSel = (id) => '#mgmtCard .stamp-box[data-field-id="' + id + '"]';
+  const hankoCount = (h) => (h.replace(/<script>[\s\S]*?<\/script>/g, '').match(/<svg class="hanko"/g) || []).length;
+  await page.selectOption(boxSel('initial') + ' select', '0');
+  await page.click(boxSel('initial') + ' [data-action="stamp"]');
+  await wait(200);
+  const m1 = await st(() => window.RecruitApp.state.management.initial);
+  expect(!!m1 && m1.name === '笹川 晴央' && m1.short === '笹川' && m1.title === '副支配人' && m1.date === '2026.10.10', 'E22 初期対応者に名簿の担当者で押印: ' + JSON.stringify(m1));
+  expect(!!(await page.$(boxSel('initial') + ' svg.hanko')) && (await page.textContent(boxSel('initial') + ' .stamp-meta')).includes('2026.10.10'), 'E22 ハンコ SVG と氏名・日付が表示');
+  await page.click(boxSel('interviewer') + ' [data-action="stamp"]');
+  await wait(100);
+  expect(!(await st(() => window.RecruitApp.state.management.interviewer)), 'E22 担当者未選択では押印されない');
+  await page.selectOption(boxSel('interviewer') + ' select', '__free');
+  await wait(100);
+  expect(await visible(boxSel('interviewer') + ' .stamp-free'), 'E22 手入力を選ぶと氏名欄が出る');
+  await page.fill(boxSel('interviewer') + ' .stamp-free', '山田 太郎');
+  await page.click(boxSel('interviewer') + ' [data-action="stamp"]');
+  await wait(200);
+  const m2 = await st(() => window.RecruitApp.state.management.interviewer);
+  expect(!!m2 && m2.name === '山田 太郎' && m2.short === '山田' && m2.title === '', 'E22 手入力の担当者で押印（印字名は姓）: ' + JSON.stringify(m2));
+  await page.click(boxSel('interviewer') + ' [data-action="unstamp"]');
+  await wait(150);
+  expect(!(await st(() => window.RecruitApp.state.management.interviewer)) && !(await page.$(boxSel('interviewer') + ' svg.hanko')), 'E22 取消で押印が消える');
+  await shot('26-step2-stamps.png', true);
+  const savedE22 = await saveRecord('saved-stamps.html');
+  expect(!!savedE22.rec.management && savedE22.rec.management.initial.name === '笹川 晴央' && !savedE22.rec.management.interviewer, 'E22 保存レコードに management');
+  expect(savedE22.html.includes('<h2>応募者の管理</h2>') && savedE22.html.includes('id="recruit-mgmt-config"') && savedE22.html.includes('data-filename="応募者_押印_太郎_2026-10-10.html"') && hankoCount(savedE22.html) === 1, 'E22 レポートに押印欄・名簿・ファイル名・ハンコ1個');
+  // レポート上で押印 → 「押印を保存」で再出力
+  const rp = await ctx.newPage();
+  const rpErrors = [];
+  rp.on('pageerror', e => rpErrors.push(e.message));
+  rp.on('dialog', d => d.accept());
+  await rp.clock.setFixedTime(NOW);
+  await rp.goto('file://' + savedE22.file);
+  await wait(300);
+  const rbox = (id) => '#mgmt .stamp-box[data-field-id="' + id + '"]';
+  expect((await rp.$$('#mgmt .stamp-box')).length === 3 && !!(await rp.$(rbox('initial') + ' svg.hanko')) && !(await rp.$eval('#mgmtSave', el => el.classList.contains('show'))), 'E22 レポート: 3枠・初期対応者は押印済み・保存バーは非表示');
+  await rp.selectOption(rbox('interviewer') + ' select', '0');
+  await rp.click(rbox('interviewer') + ' [data-act="stamp"]');
+  await wait(200);
+  expect(!!(await rp.$(rbox('interviewer') + ' svg.hanko')) && (await rp.textContent(rbox('interviewer') + ' .stamp-meta')).includes('笹川 晴央') && (await rp.$eval('#mgmtSave', el => el.classList.contains('show'))), 'E22 レポート上で押印すると SVG と保存バーが出る');
+  await rp.selectOption(rbox('final') + ' select', '__free');
+  await rp.fill(rbox('final') + ' input', '鈴木 花子');
+  await rp.click(rbox('final') + ' [data-act="stamp"]');
+  await wait(150);
+  await rp.screenshot({ path: path.join(OUT, '27-report-stamps.png'), fullPage: true });
+  const [dl22] = await Promise.all([rp.waitForEvent('download'), rp.click('#mgmtSaveBtn')]);
+  const file22b = path.join(OUT, 'saved-stamps-2.html');
+  await dl22.saveAs(file22b);
+  const html22b = fs.readFileSync(file22b, 'utf8');
+  const rec22b = parseRecord(html22b);
+  expect(dl22.suggestedFilename() === '応募者_押印_太郎_2026-10-10.html' || dl22.suggestedFilename() === 'download', 'E22 再出力のファイル名: ' + dl22.suggestedFilename());
+  expect(html22b.startsWith('<!DOCTYPE html>') && rec22b.management.initial.name === '笹川 晴央' && rec22b.management.interviewer.name === '笹川 晴央' && rec22b.management.final.name === '鈴木 花子' && rec22b.management.final.short === '鈴木' && rec22b.management.final.date === '2026.10.10', 'E22 再出力したファイルの埋め込みデータに 3 つの押印: ' + JSON.stringify(rec22b.management));
+  expect(hankoCount(html22b) === 3 && html22b.includes('id="recruit-mgmt-config"') && html22b.includes('id="mgmtSaveBtn"') && !/class="mgmt-save show"/.test(html22b), 'E22 再出力したファイルにも押印 UI と 3 個のハンコ・保存バーは閉じた状態');
+  expect(rec22b.applicant.name === '押印 太郎' && rec22b.kind === 'recruit-applicant-record', 'E22 再出力しても応募者データは維持');
+  // 再出力したファイルを開いても動く（押印の取消 → 保存バー）
+  await rp.goto('file://' + file22b);
+  await wait(300);
+  expect((await rp.$$('#mgmt svg.hanko')).length === 3, 'E22 再出力したファイルを開くと 3 個のハンコ');
+  await rp.click(rbox('final') + ' [data-act="unstamp"]');
+  await wait(150);
+  expect((await rp.$$('#mgmt svg.hanko')).length === 2 && (await rp.$eval('#mgmtSave', el => el.classList.contains('show'))), 'E22 再出力ファイル上で取消できる');
+  await rp.emulateMedia({ media: 'print' });
+  expect((await rp.$eval('.stamp-ctl', el => getComputedStyle(el).display)) === 'none' && (await rp.$eval('#mgmtSave', el => getComputedStyle(el).display)) === 'none' && (await rp.$eval('#mgmt svg.hanko', el => getComputedStyle(el).display)) !== 'none', 'E22 印刷時は操作部品を隠しハンコは出す');
+  expect(rpErrors.length === 0, 'E22 レポートのページエラーなし: ' + (rpErrors.join(' / ') || 'none'));
+  await rp.close();
+  // 再出力したファイルをアプリで読み込む → 押印が引き継がれる
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', file22b);
+  await wait(500);
+  const m22 = await st(() => window.RecruitApp.state.management);
+  expect(await st(() => window.RecruitApp.state.applicant.name) === '押印 太郎' && m22.initial && m22.interviewer && m22.final && m22.final.name === '鈴木 花子', 'E22 読込で押印を引き継ぐ: ' + JSON.stringify(Object.keys(m22)));
+  await navStep(2);
+  expect((await page.$$('#mgmtCard svg.hanko')).length === 3, 'E22 読込後の Step2 に 3 個のハンコ');
+  await page.click('#btnNew');
+  await wait(200);
+  expect(Object.keys(await st(() => window.RecruitApp.state.management)).length === 0, 'E22 新規で押印がリセットされる');
+
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');
   await browser.close();

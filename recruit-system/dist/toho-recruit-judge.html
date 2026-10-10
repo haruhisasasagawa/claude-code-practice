@@ -768,6 +768,21 @@ p.handoff-comment { font-size: 13.5px; }
 .sum-later { margin: 8px 0 0; font-size: 12px; }
 .sev-block-text { color: var(--danger); }
 
+/* ---------- 応募者の管理（押印） ---------- */
+.stamp-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.stamp-box { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 10px 10px; text-align: center; background: var(--surface-2); min-width: 0; }
+.stamp-label { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.stamp-hint { font-size: 11px; color: var(--muted); line-height: 1.4; min-height: 1.4em; margin-bottom: 6px; }
+.stamp-area { height: 100px; display: grid; place-items: center; }
+.stamp-empty { width: 84px; height: 84px; border: 2px dashed var(--border-strong); border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: var(--muted); background: var(--surface); }
+.stamp-meta { font-size: 12px; color: var(--muted); min-height: 1.3em; line-height: 1.4; }
+.stamp-ctl { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.stamp-ctl select { width: auto; max-width: 100%; padding: 6px 8px; font-size: 13px; }
+.stamp-ctl .stamp-free { width: 100%; padding: 6px 8px; font-size: 13px; }
+.stamp-preview { display: grid; place-items: center; padding: 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+:root[data-theme="dark"] .hanko { filter: brightness(1.25); }
+@media (max-width: 760px) { .stamp-row { grid-template-columns: 1fr; } }
+
 </style>
 </head>
 <body>
@@ -926,6 +941,88 @@ p.handoff-comment { font-size: 13.5px; }
 
 </script>
   <script>
+/* ---- stamp.js ---- */
+/*
+ * 日付印（ハンコ）の SVG
+ * ----------------------------------------------------------------------
+ * アプリ（Step2/Step4 の「応募者の管理」）と保存レポート（レポート上でも押印できる）の両方で使う。
+ * レポートには stampSvg の関数ソースをそのまま埋め込むため、stampSvg は外部参照を持たない純関数にしておくこと。
+ */
+;(function (global) {
+  'use strict';
+
+  // opts: { name, title, date, size, color, id }
+  function stampSvg(opts) {
+    opts = opts || {};
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    };
+    var chars = function (s) { return Array.from ? Array.from(String(s)).length : String(s).length; };
+    var name = String(opts.name || '').trim();
+    var title = String(opts.title || '').trim();
+    var date = String(opts.date || '').trim();
+    var size = Number(opts.size) || 88;
+    var color = opts.color || '#c8232c';
+    var id = String(opts.id || ('hk' + chars(name) + chars(title) + date.replace(/\D/g, '')));
+    var nl = chars(name);
+    var nameSize = nl <= 2 ? 22 : nl === 3 ? 18 : nl === 4 ? 15 : nl <= 6 ? 12 : 10;
+    var tl = chars(title);
+    var titleSize = tl <= 3 ? 11 : tl <= 5 ? 9.5 : tl <= 7 ? 8 : 7;
+    var font = "'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif";
+    return '<svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="' + size + '" height="' + size + '" role="img" aria-label="' + esc(name + ' ' + date + ' ' + title) + '">' +
+      '<defs><filter id="' + esc(id) + '" x="-10%" y="-10%" width="120%" height="120%">' +
+        '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>' +
+        '<feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>' +
+      '</filter></defs>' +
+      '<g filter="url(#' + esc(id) + ')" transform="rotate(-6 50 50)" opacity="0.93">' +
+        '<circle cx="50" cy="50" r="42" fill="none" stroke="' + esc(color) + '" stroke-width="3"/>' +
+        '<line x1="11" y1="36" x2="89" y2="36" stroke="' + esc(color) + '" stroke-width="1.5"/>' +
+        '<line x1="11" y1="64" x2="89" y2="64" stroke="' + esc(color) + '" stroke-width="1.5"/>' +
+        '<g fill="' + esc(color) + '" font-family="' + font + '" font-weight="700" text-anchor="middle">' +
+          '<text x="50" y="' + (22 + nameSize * 0.36).toFixed(1) + '" font-size="' + nameSize + '"' + (nl >= 5 ? ' textLength="70" lengthAdjust="spacingAndGlyphs"' : '') + '>' + esc(name) + '</text>' +
+          '<text x="50" y="54" font-size="11.5" letter-spacing="0.4">' + esc(date) + '</text>' +
+          '<text x="50" y="' + (78 + titleSize * 0.36).toFixed(1) + '" font-size="' + titleSize + '">' + esc(title) + '</text>' +
+        '</g>' +
+      '</g></svg>';
+  }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  // 押印の日付表記（YYYY.MM.DD）
+  function stampDate(d) {
+    var x = d instanceof Date ? d : new Date(d || Date.now());
+    return x.getFullYear() + '.' + pad2(x.getMonth() + 1) + '.' + pad2(x.getDate());
+  }
+
+  // 氏名から印字名（姓）を作る。「笹川 晴央」→「笹川」、スペースが無ければ 4 文字まで
+  function shortName(name) {
+    var s = String(name || '').trim();
+    var head = s.split(/[\s　]+/)[0] || '';
+    if (!head) return '';
+    var arr = Array.from ? Array.from(head) : head.split('');
+    return arr.length <= 4 ? head : arr.slice(0, 2).join('');
+  }
+
+  // 押印エントリ { name, short, title, date, at } → SVG
+  function render(entry, opts) {
+    if (!entry || !entry.name) return '';
+    return stampSvg(Object.assign({ name: entry.short || shortName(entry.name), title: entry.title || '', date: entry.date || '' }, opts || {}));
+  }
+
+  global.RecruitStamp = {
+    svg: stampSvg,
+    render: render,
+    stampDate: stampDate,
+    shortName: shortName,
+    // レポートに埋め込む関数ソース（stampSvg は外部参照なし）
+    source: function () { return stampSvg.toString() + '\n' + shortName.toString(); }
+  };
+})(window);
+
+</script>
+  <script>
 /* ---- config.default.js ---- */
 /*
  * 劇場プロファイル既定値（TOHOシネマズ新宿）
@@ -1001,6 +1098,20 @@ p.handoff-comment { font-size: 13.5px; }
       rejectCareerPaths: { university: false, vocational: false, employment: true, other: false },
       nightRestricted: true,               // 18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う（当劇場運用）
       notice: '新宿では高校生は原則採用対象外です。例外は高校3年生で進路（進学）が決定済み、かつ進学後も当劇場でアルバイトを継続する方のみです。就職予定の方は短期採用となるため対象外です。'
+    },
+
+    // 応募者の管理（押印欄）。保存レポートの末尾に 3 つの押印欄を出し、名簿から選んで日付印を押す
+    management: {
+      fields: [
+        { id: 'initial', label: '初期対応者', hint: '応募受付・申し送りを行った担当者' },
+        { id: 'interviewer', label: '面接対応者', hint: '面接を行った担当者' },
+        { id: 'final', label: '最終確認', hint: '採用可否を最終確認した上長' }
+      ],
+      // name: 氏名 / short: 印字名（ハンコに入る名前。2〜4文字が目安）/ title: 役職
+      managers: [
+        { name: '笹川 晴央', short: '笹川', title: '副支配人' }
+      ],
+      allowFreeName: true   // 名簿にない氏名を手入力で押せる
     },
 
     options: {
@@ -3155,6 +3266,20 @@ p.handoff-comment { font-size: 13.5px; }
     const hp = merged.highschoolPolicy = U.isObj(merged.highschoolPolicy) ? merged.highschoolPolicy : U.deepClone(base.highschoolPolicy);
     if (HS_MODES.indexOf(hp.mode) < 0) hp.mode = base.highschoolPolicy.mode;
     if (!Array.isArray(hp.exceptionCategories)) hp.exceptionCategories = U.deepClone(base.highschoolPolicy.exceptionCategories);
+
+    // 応募者の管理（押印欄・名簿）
+    const mg = merged.management = U.isObj(merged.management) ? merged.management : U.deepClone(base.management);
+    if (!Array.isArray(mg.fields) || !mg.fields.length) mg.fields = U.deepClone(base.management.fields);
+    mg.fields = mg.fields.filter(function (x) { return U.isObj(x) && x.id; }).map(function (x) {
+      return { id: String(x.id), label: String(x.label || x.id), hint: String(x.hint || '') };
+    });
+    if (!mg.fields.length) mg.fields = U.deepClone(base.management.fields);
+    mg.managers = (Array.isArray(mg.managers) ? mg.managers : []).filter(function (x) { return U.isObj(x) && x.name; }).map(function (x) {
+      const name = String(x.name).trim();
+      const short = String(x.short || '').trim() || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
+      return { name: name, short: short, title: String(x.title || '').trim() };
+    });
+    mg.allowFreeName = mg.allowFreeName !== false;
     if (!U.isObj(hp.rejectCareerPaths)) hp.rejectCareerPaths = U.deepClone(base.highschoolPolicy.rejectCareerPaths);
     // 旧設定 disallowedPathResult（対象外の進路を一律 reject/review）からの移行: 'review' なら不採用推奨にする進路なし
     if (hp.disallowedPathResult === 'review') Object.keys(hp.rejectCareerPaths).forEach(function (k) { hp.rejectCareerPaths[k] = false; });
@@ -3389,6 +3514,8 @@ p.handoff-comment { font-size: 13.5px; }
       },
       scores: U.deepClone(state.scores || {}),
       interviewNotes: state.interviewNotes || '',
+      // 応募者の管理（押印）: { initial: { name, short, title, date, at }, ... }
+      management: U.deepClone(state.management || {}),
       // 保存時点のスナップショット（レポート表示・監査用。読み込み時は現在の設定で再計算する）
       contribution: contribution ? U.deepClone(contribution) : null,
       highschool: highschool,
@@ -3540,6 +3667,24 @@ p.handoff-comment { font-size: 13.5px; }
       '.warn-list{margin:10px 0 0;padding-left:1.3em;font-size:13px}.warn-list li{margin-bottom:3px}',
       '.disclaimer{margin-top:12px;font-size:12px;color:var(--muted)}',
       '.foot{margin-top:28px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}',
+      // 押印欄
+      '.stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}',
+      '.stamp-box{border:1px solid var(--border);border-radius:10px;padding:12px 10px 10px;text-align:center;background:var(--surface-2);min-width:0}',
+      '.stamp-label{font-size:12.5px;font-weight:700;color:var(--muted)}.stamp-hint{font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4}',
+      '.stamp-area{height:100px;display:grid;place-items:center}',
+      '.stamp-empty{width:84px;height:84px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;font-size:11px;color:var(--muted);background:#fff}',
+      '.hanko{mix-blend-mode:multiply}',
+      '.stamp-meta{font-size:12px;color:var(--muted);min-height:1.3em;line-height:1.4}',
+      '.stamp-ctl{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}',
+      '.stamp-ctl select,.stamp-ctl input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;max-width:100%;background:#fff;color:var(--text)}',
+      '.stamp-ctl input{width:100%}',
+      '.stamp-ctl button,.mgmt-save button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:var(--text);cursor:pointer}',
+      '.stamp-ctl button.primary,.mgmt-save button{background:var(--accent);color:#fff;border-color:var(--accent)}',
+      '.stamp-ctl button:hover{filter:brightness(.97)}',
+      '.mgmt-save{display:none;margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--warn-soft);border:1px solid #f3cf8a;font-size:13px;align-items:center;gap:10px;flex-wrap:wrap}.mgmt-save.show{display:flex}',
+      '.mgmt-note{font-size:12px;color:var(--muted);margin-top:10px}',
+      '@media (max-width:720px){.stamp-row{grid-template-columns:1fr}}',
+      '@media print{.stamp-ctl,.mgmt-save,.mgmt-note{display:none !important}.stamp-row{break-inside:avoid}.hanko,.stamp-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
       '@media (max-width:720px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}.rh-main{flex-direction:column;align-items:stretch}.verdict{align-items:flex-start}ul.strengths{grid-template-columns:1fr}.bar,.bar.wide{grid-template-columns:minmax(0,1fr) 90px 4.5em}.rh-top{flex-direction:column;align-items:flex-start}.rh-meta{text-align:left}}',
       '@media print{@page{size:A4;margin:12mm}body{background:#fff;font-size:12px}.page{padding:0;max-width:none}.rh,.sec,.tile,.result,li.h{box-shadow:none}.rh,.dash,.tile,.result,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line{break-inside:avoid}.sec h2,.sec h3{break-after:avoid}.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     ].join('\n');
@@ -3819,10 +3964,70 @@ p.handoff-comment { font-size: 13.5px; }
     const json = JSON.stringify(record).replace(/<\//g, '<\\/');
     const SCRIPT_END = '</scr' + 'ipt>';
 
+    // ---- 応募者の管理（押印欄）。レポート上でも押印でき、「押印を保存」で同じ形式のファイルを再出力する ----
+    const Stamp = global.RecruitStamp;
+    const mg = profile.management || {};
+    const mgFields = Array.isArray(mg.fields) && mg.fields.length ? mg.fields : [];
+    const mgManagers = Array.isArray(mg.managers) ? mg.managers : [];
+    const management = record.management || {};
+    const filename = '応募者_' + safeName(a.name) + '_' + U.fmtDate(record.savedAt || new Date()) + '.html';
+    const stampBoxes = mgFields.map(function (fld, idx) {
+      const e = management[fld.id];
+      const svg = e && e.name && Stamp ? Stamp.render(e, { size: 88, id: 'rp' + idx }) : '';
+      return '<div class="stamp-box" data-field-id="' + esc(fld.id) + '">' +
+        '<div class="stamp-label">' + esc(fld.label) + '</div>' +
+        (fld.hint ? '<div class="stamp-hint">' + esc(fld.hint) + '</div>' : '<div class="stamp-hint"></div>') +
+        '<div class="stamp-area">' + (svg || '<div class="stamp-empty">未押印</div>') + '</div>' +
+        '<div class="stamp-meta">' + (e && e.name ? esc(e.name + (e.title ? '（' + e.title + '）' : '') + '　' + (e.date || '')) : '') + '</div>' +
+        '<div class="stamp-ctl">' +
+          '<select aria-label="' + esc(fld.label) + ' 担当者"><option value="">担当者を選択</option>' +
+            mgManagers.map(function (m, i) { return '<option value="' + i + '">' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
+            (mg.allowFreeName !== false ? '<option value="__free">名簿にない担当者（手入力）</option>' : '') +
+          '</select>' +
+          (mg.allowFreeName !== false ? '<input type="text" placeholder="氏名（例：山田 太郎）" style="display:none">' : '') +
+          '<button type="button" class="primary" data-act="stamp">押印</button>' +
+          '<button type="button" data-act="unstamp"' + (e && e.name ? '' : ' style="display:none"') + '>取消</button>' +
+        '</div></div>';
+    }).join('');
+    const mgmtHtml = mgFields.length
+      ? '<div class="stamp-row" id="mgmt">' + stampBoxes + '</div>' +
+        '<div class="mgmt-save" id="mgmtSave"><span>押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div>' +
+        '<div class="mgmt-note">担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。押印はこのファイルの埋め込みデータにも記録され、アプリの「読み込み」で引き継がれます。</div>'
+      : '<p class="empty">押印欄は設定されていません。</p>';
+    const mgmtConfig = JSON.stringify({ fields: mgFields, managers: mgManagers, allowFreeName: mg.allowFreeName !== false }).replace(/<\//g, '<\\/');
+    const reportScript = Stamp && mgFields.length ? (
+      '<script type="application/json" id="recruit-mgmt-config">' + mgmtConfig + SCRIPT_END + '\n' +
+      '<script>\n(function(){\n' +
+      'var recNode=document.getElementById("recruit-record");var cfgNode=document.getElementById("recruit-mgmt-config");var root=document.getElementById("mgmt");if(!recNode||!cfgNode||!root)return;\n' +
+      'var rec,cfg;try{rec=JSON.parse(recNode.textContent);cfg=JSON.parse(cfgNode.textContent);}catch(e){return;}\n' +
+      Stamp.source() + '\n' +
+      'rec.management=rec.management||{};var dirty=false;\n' +
+      'function pad(n){return String(n).padStart(2,"0");}\n' +
+      'function today(){var d=new Date();return d.getFullYear()+"."+pad(d.getMonth()+1)+"."+pad(d.getDate());}\n' +
+      'function render(){cfg.fields.forEach(function(f,idx){var box=root.querySelector(\'.stamp-box[data-field-id="\'+f.id+\'"]\');if(!box)return;var e=rec.management[f.id];\n' +
+      '  box.querySelector(".stamp-area").innerHTML=e&&e.name?stampSvg({name:e.short||shortName(e.name),title:e.title||"",date:e.date||"",size:88,id:"rp"+idx}):\'<div class="stamp-empty">未押印</div>\';\n' +
+      '  box.querySelector(".stamp-meta").textContent=e&&e.name?(e.name+(e.title?"（"+e.title+"）":"")+"　"+(e.date||"")):"";\n' +
+      '  var un=box.querySelector(\'[data-act="unstamp"]\');if(un)un.style.display=e&&e.name?"":"none";\n' +
+      '  var sel=box.querySelector("select"),inp=box.querySelector("input");if(sel&&inp)inp.style.display=sel.value==="__free"?"":"none";});\n' +
+      '  var bar=document.getElementById("mgmtSave");if(bar)bar.classList.toggle("show",dirty);}\n' +
+      'root.addEventListener("change",function(ev){var sel=ev.target;if(sel.tagName==="SELECT"){var inp=sel.closest(".stamp-box").querySelector("input");if(inp){inp.style.display=sel.value==="__free"?"":"none";if(sel.value==="__free")inp.focus();}}});\n' +
+      'root.addEventListener("click",function(ev){var b=ev.target.closest("[data-act]");if(!b)return;var box=b.closest(".stamp-box");var id=box.getAttribute("data-field-id");var act=b.getAttribute("data-act");\n' +
+      '  if(act==="stamp"){var sel=box.querySelector("select");var v=sel?sel.value:"";var m=null;\n' +
+      '    if(v==="__free"){var inp=box.querySelector("input");var nm=inp?inp.value.trim():"";if(!nm){alert("氏名を入力してください");return;}m={name:nm,short:shortName(nm),title:""};}\n' +
+      '    else{m=cfg.managers[Number(v)];if(!v||!m){alert("担当者を選んでください");return;}}\n' +
+      '    rec.management[id]={name:m.name,short:m.short||shortName(m.name),title:m.title||"",date:today(),at:new Date().toISOString()};dirty=true;render();}\n' +
+      '  else if(act==="unstamp"){delete rec.management[id];dirty=true;render();}});\n' +
+      'var saveBtn=document.getElementById("mgmtSaveBtn");if(saveBtn)saveBtn.addEventListener("click",function(){\n' +
+      '  recNode.textContent=JSON.stringify(rec).replace(/<\\//g,"<\\\\/");dirty=false;render();\n' +
+      '  var html="<!DOCTYPE html>\\n"+document.documentElement.outerHTML;var blob=new Blob([html],{type:"text/html;charset=utf-8"});var url=URL.createObjectURL(blob);\n' +
+      '  var a=document.createElement("a");a.href=url;a.download=document.body.getAttribute("data-filename")||"applicant.html";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1000);});\n' +
+      'render();\n})();\n' + SCRIPT_END + '\n'
+    ) : '';
+
     return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
-      '<style>\n' + reportCss() + '\n</style>\n</head>\n<body>\n<div class="page">\n' +
+      '<style>\n' + reportCss() + '\n</style>\n</head>\n<body data-filename="' + esc(filename) + '">\n<div class="page">\n' +
       headerHtml + dashHtml +
       sec('応募時の情報', (preRows ? '<table class="kv">' + preRows + '</table>\n' : '<p class="empty">応募時の情報はありません。</p>\n') + hsHtml) +
       (a.reviewerNotes ? sec('面接者への申し送りコメント', '<div class="note">' + esc(a.reviewerNotes) + '</div>') : '') +
@@ -3839,9 +4044,11 @@ p.handoff-comment { font-size: 13.5px; }
       sec('面接評価', (hasScores ? '<div class="bars">' + scoreRows + '</div>' + interviewTotal : '<p class="empty">面接評価は未入力です。</p>') +
         (record.interviewNotes ? '<h3>面接所見</h3><div class="note">' + esc(record.interviewNotes) + '</div>' : '')) +
       sec('採用可否判定', judgmentHtml) +
+      sec('応募者の管理', mgmtHtml) +
       '<div class="foot"><span>' + esc(meta.footer) + '</span><span>このファイルはアプリの「読み込み」から再度開けます。埋め込みデータを編集しないでください。</span></div>\n' +
       '</div>\n' +
       '<script type="application/json" id="recruit-record">' + json + SCRIPT_END + '\n' +
+      reportScript +
       '</body>\n</html>\n';
   }
 
@@ -3959,6 +4166,7 @@ p.handoff-comment { font-size: 13.5px; }
     const arr = U.getPath(draft, path) || [];
     let text;
     if (opts.type === 'categories') text = arr.map(function (c) { return c.value + '|' + (c.group || 'other'); }).join('\n');
+    else if (opts.type === 'managers') text = arr.map(function (c) { return [c.name, c.short || '', c.title || ''].join('|'); }).join('\n');
     else text = arr.join('\n');
     return '<div class="field"><label>' + esc(label) + '</label>' +
       '<textarea data-bind="' + esc(path) + '" data-type="' + (opts.type || 'lines') + '" rows="' + (opts.rows || Math.min(Math.max(arr.length + 1, 3), 12)) + '">' + esc(text) + '</textarea>' +
@@ -4012,7 +4220,7 @@ p.handoff-comment { font-size: 13.5px; }
         '<a href="#s-meta">劇場情報</a><a href="#s-features">入力項目のON/OFF</a><a href="#s-stages">面接前／面接時</a><a href="#s-options">選択肢</a>' +
         '<a href="#s-busy">繁忙期・オールナイト</a><a href="#s-params">判定パラメータ</a><a href="#s-hs">高校生の扱い</a>' +
         '<a href="#s-rules">申し送りルール</a><a href="#s-eval">面接評価</a><a href="#s-contrib">シフト貢献度</a>' +
-        '<a href="#s-matrix">2軸判定</a><a href="#s-texts">結果文言</a><a href="#s-io">書き出し／読み込み</a>' +
+        '<a href="#s-matrix">2軸判定</a><a href="#s-texts">結果文言</a><a href="#s-mgmt">応募者の管理（押印）</a><a href="#s-io">書き出し／読み込み</a>' +
       '</nav>' +
       '<div class="settings-body">' +
         issuesHtml() +
@@ -4022,7 +4230,7 @@ p.handoff-comment { font-size: 13.5px; }
           '<div class="legend"><span class="badge danger">要判断</span>採用担当が面接実施・採用の可否を判断　<span class="badge warn">要確認</span>面接時に確認　<span class="badge info">共有</span>面接者へ共有　<span class="badge danger">法令（OFF不可）</span>労働基準法に関わるため OFF・重要度変更不可（文言は編集可）</div>' +
           '<div class="hint" style="margin-bottom:10px">文言で使える変数: <code>' + esc(VARS_HINT) + '</code></div>' +
           rulesHtml()) +
-        evalHtml() + contribHtml() + matrixHtml() + textsHtml() + ioHtml() +
+        evalHtml() + contribHtml() + matrixHtml() + textsHtml() + mgmtHtml() + ioHtml() +
       '</div>' +
     '</div>' +
     '<div class="save-bar"><span class="note">変更は「設定を保存」で反映されます。</span>' +
@@ -4463,6 +4671,22 @@ p.handoff-comment { font-size: 13.5px; }
       '</div>');
   }
 
+  function mgmtHtml() {
+    const mg = draft.management || {};
+    const fields = Array.isArray(mg.fields) ? mg.fields : [];
+    const preview = global.RecruitStamp ? global.RecruitStamp.svg({ name: ((mg.managers || [])[0] || {}).short || '笹川', title: ((mg.managers || [])[0] || {}).title || '副支配人', date: global.RecruitStamp.stampDate(new Date()), size: 76, id: 'stPreview' }) : '';
+    return section('s-mgmt', '応募者の管理（押印）', '保存レポートの末尾に押印欄を出します。名簿から担当者を選ぶと日付入りのハンコが押され、レポート上でも押印・保存できます。',
+      '<div class="field-row">' +
+        '<div>' + fields.map(function (fl, i) {
+          return sInput('management.fields[' + i + '].label', '押印欄 ' + (i + 1) + '（' + esc(fl.id) + '）') +
+            sInput('management.fields[' + i + '].hint', '　説明（任意）', { placeholder: '例：応募受付・申し送りを行った担当者' });
+        }).join('') + '</div>' +
+        '<div><div class="field"><label>ハンコのプレビュー</label><div class="stamp-preview">' + preview + '</div><div class="hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div></div>' +
+      '</div>' +
+      sLines('management.managers', '担当者名簿（氏名|印字名|役職）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人 。印字名を省略すると姓（スペースの前）を使います。' }) +
+      sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。'));
+  }
+
   function ioHtml() {
     return section('s-io', 'プロファイルの書き出し／読み込み', '他劇場へ展開するときは JSON を書き出して、相手側で読み込みます。',
       '<div class="actions">' +
@@ -4479,6 +4703,14 @@ p.handoff-comment { font-size: 13.5px; }
     if (t.type === 'number') return t.value === '' ? '' : Number(t.value);
     const dt = t.dataset.type;
     if (dt === 'lines') return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (dt === 'managers') {
+      return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
+        const parts = line.split('|').map(function (x) { return x.trim(); });
+        const name = parts[0] || '';
+        const short = parts[1] || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
+        return { name: name, short: short, title: parts[2] || '' };
+      }).filter(function (m) { return m.name; });
+    }
     if (dt === 'categories') {
       return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
         const parts = line.split('|');
@@ -4699,6 +4931,7 @@ p.handoff-comment { font-size: 13.5px; }
     continueAt: '',        // Step1 で「卒業後も当劇場で継続」を描いた場所（区分の変更で場所が変わるときだけ描き直す）
     cfSnap: null,          // Step3「面接で確認する項目」を開いた時点の状態（外国籍の該当欄を出すか・応募時に入力があったか）。goStep で作り直す
     handoffBase: null,     // Step2 までに作った留意点の文言 { id: text }（Step3 で入力して新しく出た留意点を見分ける。Step3 以降の作り直しでは更新しない）
+    management: {},        // 応募者の管理（押印）: { initial: { name, short, title, date, at }, ... }
     savedAt: null,
     dirty: false
   };
@@ -5744,6 +5977,12 @@ p.handoff-comment { font-size: 13.5px; }
     const t = e.target;
     if (!t || !t.dataset) return;
 
+    if (t.hasAttribute && t.hasAttribute('data-stamp-select')) {
+      const inp = t.closest('.stamp-box').querySelector('.stamp-free');
+      if (inp) { inp.classList.toggle('hidden', t.value !== '__free'); if (t.value === '__free') inp.focus(); }
+      return;
+    }
+
     if (t.dataset.field) {
       const path = t.dataset.field;
       if (t.type === 'checkbox' && t.hasAttribute('data-array')) {
@@ -5863,6 +6102,36 @@ p.handoff-comment { font-size: 13.5px; }
       case 'save':
         saveRecord();
         break;
+      case 'stamp': {
+        const box = b.closest('.stamp-box');
+        const fid = box && box.dataset.fieldId;
+        if (!fid) break;
+        const sel = box.querySelector('select');
+        const v = sel ? sel.value : '';
+        const mg = state.profile.management || {};
+        let m = null;
+        if (v === '__free') {
+          const inp = box.querySelector('input[type="text"]');
+          const nm = inp ? inp.value.trim() : '';
+          if (!nm) { toast('氏名を入力してください', 'error'); if (inp) inp.focus(); break; }
+          m = { name: nm, short: Stamp.shortName(nm), title: '' };
+        } else {
+          m = (mg.managers || [])[Number(v)];
+          if (v === '' || !m) { toast('担当者を選んでください', 'error'); break; }
+        }
+        state.management[fid] = { name: m.name, short: m.short || Stamp.shortName(m.name), title: m.title || '', date: Stamp.stampDate(new Date()), at: new Date().toISOString() };
+        state.dirty = true;
+        rerenderManagementCard();
+        renderSummary();
+        toast(m.name + ' さんの印を押しました', 'ok');
+        break;
+      }
+      case 'unstamp': {
+        const box = b.closest('.stamp-box');
+        const fid = box && box.dataset.fieldId;
+        if (fid && state.management[fid]) { delete state.management[fid]; state.dirty = true; rerenderManagementCard(); renderSummary(); }
+        break;
+      }
       case 'print':
         window.print();
         break;
@@ -6228,6 +6497,7 @@ p.handoff-comment { font-size: 13.5px; }
         '<div class="prefill-body">' + noteBody + '</div></details>';
     }
 
+    html += managementCardHtml();
     html += '<div class="actions between">' +
       '<button type="button" class="btn" data-action="to-step" data-step="1">← 応募情報に戻る</button>' +
       '<div class="actions"><button type="button" class="btn" data-action="copy-handoff">📋 申し送り文をコピー</button>' +
@@ -6725,6 +6995,7 @@ p.handoff-comment { font-size: 13.5px; }
       (state.savedAt ? '<li class="tl-item"><div><div>保存済み</div><div class="when">' + esc(U.fmtDateTime(state.savedAt)) + '</div></div></li>' : '') +
     '</ul></div>';
 
+    html += managementCardHtml();
     html += '<div class="actions between no-print">' +
       '<button type="button" class="btn" data-action="to-step" data-step="3">← 面接評価に戻る</button>' +
       '<div class="actions"><button type="button" class="btn" data-action="print">🖨 印刷</button>' +
@@ -6916,6 +7187,7 @@ p.handoff-comment { font-size: 13.5px; }
     state.handoffNote = (rec.handoff && rec.handoff.note) || '';
     state.scores = U.deepClone(rec.scores || {});
     state.interviewNotes = rec.interviewNotes || '';
+    state.management = U.isObj(rec.management) ? U.deepClone(rec.management) : {};
     state.judgment = null;
     state.judgmentStale = false;
     state.savedAt = rec.savedAt || null;
@@ -6970,6 +7242,7 @@ p.handoff-comment { font-size: 13.5px; }
     state.applicant = emptyApplicant(state.profile);
     state.handoff = null; state.handoffStale = false; state.handoffChecks = {}; state.handoffNote = ''; state.handoffBase = null;
     state.scores = {}; state.interviewNotes = ''; state.judgment = null; state.judgmentStale = false;
+    state.management = {};
     state.legacyRecord = null;
     state.savedAt = null; state.dirty = false;
     state.preFillOpen = null;
@@ -6981,6 +7254,46 @@ p.handoff-comment { font-size: 13.5px; }
   // =====================================================================
   // 使い方
   // =====================================================================
+  // =====================================================================
+  // 応募者の管理（押印）
+  // =====================================================================
+  const Stamp = global.RecruitStamp;
+
+  function managementCardHtml() {
+    const mg = state.profile.management || {};
+    const fields = Array.isArray(mg.fields) ? mg.fields : [];
+    if (!fields.length || !Stamp) return '';
+    const managers = Array.isArray(mg.managers) ? mg.managers : [];
+    return '<div class="card" id="mgmtCard"><div class="card-head"><h2>応募者の管理（押印）</h2>' +
+      '<p>担当者を選んで押印してください。押印は保存ファイル（HTML）に入り、レポート上でも押印できます。名簿は設定の「応募者の管理」で編集します。</p></div>' +
+      '<div class="stamp-row">' + fields.map(function (fld, idx) {
+        const e = state.management[fld.id];
+        const svg = e && e.name ? Stamp.render(e, { size: 88, id: 'app' + idx }) : '';
+        return '<div class="stamp-box" data-field-id="' + esc(fld.id) + '">' +
+          '<div class="stamp-label">' + esc(fld.label) + '</div>' +
+          '<div class="stamp-hint">' + esc(fld.hint || '') + '</div>' +
+          '<div class="stamp-area">' + (svg || '<div class="stamp-empty">未押印</div>') + '</div>' +
+          '<div class="stamp-meta">' + (e && e.name ? esc(e.name + (e.title ? '（' + e.title + '）' : '') + '　' + (e.date || '')) : '') + '</div>' +
+          '<div class="stamp-ctl no-print">' +
+            '<select data-stamp-select aria-label="' + esc(fld.label) + ' 担当者"><option value="">担当者を選択</option>' +
+              managers.map(function (m, i) { return '<option value="' + i + '">' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
+              (mg.allowFreeName !== false ? '<option value="__free">名簿にない担当者（手入力）</option>' : '') +
+            '</select>' +
+            (mg.allowFreeName !== false ? '<input type="text" class="stamp-free hidden" placeholder="氏名（例：山田 太郎）">' : '') +
+            '<button type="button" class="btn sm primary" data-action="stamp">押印</button>' +
+            (e && e.name ? '<button type="button" class="btn sm ghost" data-action="unstamp">取消</button>' : '') +
+          '</div></div>';
+      }).join('') + '</div></div>';
+  }
+
+  function rerenderManagementCard() {
+    const card = $('#mgmtCard');
+    if (!card) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = managementCardHtml();
+    card.replaceWith(tmp.firstElementChild);
+  }
+
   function helpHtml() {
     const m = state.profile.meta;
     return '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>アルバイト採用の判断基準を統一するためのツールです。面接前は「留意点の申し送り」、面接後は「採用可否の判定」を行います。</p></div>' +

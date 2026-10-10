@@ -43,6 +43,7 @@
     continueAt: '',        // Step1 で「卒業後も当劇場で継続」を描いた場所（区分の変更で場所が変わるときだけ描き直す）
     cfSnap: null,          // Step3「面接で確認する項目」を開いた時点の状態（外国籍の該当欄を出すか・応募時に入力があったか）。goStep で作り直す
     handoffBase: null,     // Step2 までに作った留意点の文言 { id: text }（Step3 で入力して新しく出た留意点を見分ける。Step3 以降の作り直しでは更新しない）
+    management: {},        // 応募者の管理（押印）: { initial: { name, short, title, date, at }, ... }
     savedAt: null,
     dirty: false
   };
@@ -1088,6 +1089,12 @@
     const t = e.target;
     if (!t || !t.dataset) return;
 
+    if (t.hasAttribute && t.hasAttribute('data-stamp-select')) {
+      const inp = t.closest('.stamp-box').querySelector('.stamp-free');
+      if (inp) { inp.classList.toggle('hidden', t.value !== '__free'); if (t.value === '__free') inp.focus(); }
+      return;
+    }
+
     if (t.dataset.field) {
       const path = t.dataset.field;
       if (t.type === 'checkbox' && t.hasAttribute('data-array')) {
@@ -1207,6 +1214,36 @@
       case 'save':
         saveRecord();
         break;
+      case 'stamp': {
+        const box = b.closest('.stamp-box');
+        const fid = box && box.dataset.fieldId;
+        if (!fid) break;
+        const sel = box.querySelector('select');
+        const v = sel ? sel.value : '';
+        const mg = state.profile.management || {};
+        let m = null;
+        if (v === '__free') {
+          const inp = box.querySelector('input[type="text"]');
+          const nm = inp ? inp.value.trim() : '';
+          if (!nm) { toast('氏名を入力してください', 'error'); if (inp) inp.focus(); break; }
+          m = { name: nm, short: Stamp.shortName(nm), title: '' };
+        } else {
+          m = (mg.managers || [])[Number(v)];
+          if (v === '' || !m) { toast('担当者を選んでください', 'error'); break; }
+        }
+        state.management[fid] = { name: m.name, short: m.short || Stamp.shortName(m.name), title: m.title || '', date: Stamp.stampDate(new Date()), at: new Date().toISOString() };
+        state.dirty = true;
+        rerenderManagementCard();
+        renderSummary();
+        toast(m.name + ' さんの印を押しました', 'ok');
+        break;
+      }
+      case 'unstamp': {
+        const box = b.closest('.stamp-box');
+        const fid = box && box.dataset.fieldId;
+        if (fid && state.management[fid]) { delete state.management[fid]; state.dirty = true; rerenderManagementCard(); renderSummary(); }
+        break;
+      }
       case 'print':
         window.print();
         break;
@@ -1572,6 +1609,7 @@
         '<div class="prefill-body">' + noteBody + '</div></details>';
     }
 
+    html += managementCardHtml();
     html += '<div class="actions between">' +
       '<button type="button" class="btn" data-action="to-step" data-step="1">← 応募情報に戻る</button>' +
       '<div class="actions"><button type="button" class="btn" data-action="copy-handoff">📋 申し送り文をコピー</button>' +
@@ -2069,6 +2107,7 @@
       (state.savedAt ? '<li class="tl-item"><div><div>保存済み</div><div class="when">' + esc(U.fmtDateTime(state.savedAt)) + '</div></div></li>' : '') +
     '</ul></div>';
 
+    html += managementCardHtml();
     html += '<div class="actions between no-print">' +
       '<button type="button" class="btn" data-action="to-step" data-step="3">← 面接評価に戻る</button>' +
       '<div class="actions"><button type="button" class="btn" data-action="print">🖨 印刷</button>' +
@@ -2260,6 +2299,7 @@
     state.handoffNote = (rec.handoff && rec.handoff.note) || '';
     state.scores = U.deepClone(rec.scores || {});
     state.interviewNotes = rec.interviewNotes || '';
+    state.management = U.isObj(rec.management) ? U.deepClone(rec.management) : {};
     state.judgment = null;
     state.judgmentStale = false;
     state.savedAt = rec.savedAt || null;
@@ -2314,6 +2354,7 @@
     state.applicant = emptyApplicant(state.profile);
     state.handoff = null; state.handoffStale = false; state.handoffChecks = {}; state.handoffNote = ''; state.handoffBase = null;
     state.scores = {}; state.interviewNotes = ''; state.judgment = null; state.judgmentStale = false;
+    state.management = {};
     state.legacyRecord = null;
     state.savedAt = null; state.dirty = false;
     state.preFillOpen = null;
@@ -2325,6 +2366,46 @@
   // =====================================================================
   // 使い方
   // =====================================================================
+  // =====================================================================
+  // 応募者の管理（押印）
+  // =====================================================================
+  const Stamp = global.RecruitStamp;
+
+  function managementCardHtml() {
+    const mg = state.profile.management || {};
+    const fields = Array.isArray(mg.fields) ? mg.fields : [];
+    if (!fields.length || !Stamp) return '';
+    const managers = Array.isArray(mg.managers) ? mg.managers : [];
+    return '<div class="card" id="mgmtCard"><div class="card-head"><h2>応募者の管理（押印）</h2>' +
+      '<p>担当者を選んで押印してください。押印は保存ファイル（HTML）に入り、レポート上でも押印できます。名簿は設定の「応募者の管理」で編集します。</p></div>' +
+      '<div class="stamp-row">' + fields.map(function (fld, idx) {
+        const e = state.management[fld.id];
+        const svg = e && e.name ? Stamp.render(e, { size: 88, id: 'app' + idx }) : '';
+        return '<div class="stamp-box" data-field-id="' + esc(fld.id) + '">' +
+          '<div class="stamp-label">' + esc(fld.label) + '</div>' +
+          '<div class="stamp-hint">' + esc(fld.hint || '') + '</div>' +
+          '<div class="stamp-area">' + (svg || '<div class="stamp-empty">未押印</div>') + '</div>' +
+          '<div class="stamp-meta">' + (e && e.name ? esc(e.name + (e.title ? '（' + e.title + '）' : '') + '　' + (e.date || '')) : '') + '</div>' +
+          '<div class="stamp-ctl no-print">' +
+            '<select data-stamp-select aria-label="' + esc(fld.label) + ' 担当者"><option value="">担当者を選択</option>' +
+              managers.map(function (m, i) { return '<option value="' + i + '">' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
+              (mg.allowFreeName !== false ? '<option value="__free">名簿にない担当者（手入力）</option>' : '') +
+            '</select>' +
+            (mg.allowFreeName !== false ? '<input type="text" class="stamp-free hidden" placeholder="氏名（例：山田 太郎）">' : '') +
+            '<button type="button" class="btn sm primary" data-action="stamp">押印</button>' +
+            (e && e.name ? '<button type="button" class="btn sm ghost" data-action="unstamp">取消</button>' : '') +
+          '</div></div>';
+      }).join('') + '</div></div>';
+  }
+
+  function rerenderManagementCard() {
+    const card = $('#mgmtCard');
+    if (!card) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = managementCardHtml();
+    card.replaceWith(tmp.firstElementChild);
+  }
+
   function helpHtml() {
     const m = state.profile.meta;
     return '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>アルバイト採用の判断基準を統一するためのツールです。面接前は「留意点の申し送り」、面接後は「採用可否の判定」を行います。</p></div>' +

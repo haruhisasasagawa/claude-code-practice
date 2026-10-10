@@ -89,6 +89,7 @@
     const arr = U.getPath(draft, path) || [];
     let text;
     if (opts.type === 'categories') text = arr.map(function (c) { return c.value + '|' + (c.group || 'other'); }).join('\n');
+    else if (opts.type === 'managers') text = arr.map(function (c) { return [c.name, c.short || '', c.title || ''].join('|'); }).join('\n');
     else text = arr.join('\n');
     return '<div class="field"><label>' + esc(label) + '</label>' +
       '<textarea data-bind="' + esc(path) + '" data-type="' + (opts.type || 'lines') + '" rows="' + (opts.rows || Math.min(Math.max(arr.length + 1, 3), 12)) + '">' + esc(text) + '</textarea>' +
@@ -142,7 +143,7 @@
         '<a href="#s-meta">劇場情報</a><a href="#s-features">入力項目のON/OFF</a><a href="#s-stages">面接前／面接時</a><a href="#s-options">選択肢</a>' +
         '<a href="#s-busy">繁忙期・オールナイト</a><a href="#s-params">判定パラメータ</a><a href="#s-hs">高校生の扱い</a>' +
         '<a href="#s-rules">申し送りルール</a><a href="#s-eval">面接評価</a><a href="#s-contrib">シフト貢献度</a>' +
-        '<a href="#s-matrix">2軸判定</a><a href="#s-texts">結果文言</a><a href="#s-io">書き出し／読み込み</a>' +
+        '<a href="#s-matrix">2軸判定</a><a href="#s-texts">結果文言</a><a href="#s-mgmt">応募者の管理（押印）</a><a href="#s-io">書き出し／読み込み</a>' +
       '</nav>' +
       '<div class="settings-body">' +
         issuesHtml() +
@@ -152,7 +153,7 @@
           '<div class="legend"><span class="badge danger">要判断</span>採用担当が面接実施・採用の可否を判断　<span class="badge warn">要確認</span>面接時に確認　<span class="badge info">共有</span>面接者へ共有　<span class="badge danger">法令（OFF不可）</span>労働基準法に関わるため OFF・重要度変更不可（文言は編集可）</div>' +
           '<div class="hint" style="margin-bottom:10px">文言で使える変数: <code>' + esc(VARS_HINT) + '</code></div>' +
           rulesHtml()) +
-        evalHtml() + contribHtml() + matrixHtml() + textsHtml() + ioHtml() +
+        evalHtml() + contribHtml() + matrixHtml() + textsHtml() + mgmtHtml() + ioHtml() +
       '</div>' +
     '</div>' +
     '<div class="save-bar"><span class="note">変更は「設定を保存」で反映されます。</span>' +
@@ -593,6 +594,22 @@
       '</div>');
   }
 
+  function mgmtHtml() {
+    const mg = draft.management || {};
+    const fields = Array.isArray(mg.fields) ? mg.fields : [];
+    const preview = global.RecruitStamp ? global.RecruitStamp.svg({ name: ((mg.managers || [])[0] || {}).short || '笹川', title: ((mg.managers || [])[0] || {}).title || '副支配人', date: global.RecruitStamp.stampDate(new Date()), size: 76, id: 'stPreview' }) : '';
+    return section('s-mgmt', '応募者の管理（押印）', '保存レポートの末尾に押印欄を出します。名簿から担当者を選ぶと日付入りのハンコが押され、レポート上でも押印・保存できます。',
+      '<div class="field-row">' +
+        '<div>' + fields.map(function (fl, i) {
+          return sInput('management.fields[' + i + '].label', '押印欄 ' + (i + 1) + '（' + esc(fl.id) + '）') +
+            sInput('management.fields[' + i + '].hint', '　説明（任意）', { placeholder: '例：応募受付・申し送りを行った担当者' });
+        }).join('') + '</div>' +
+        '<div><div class="field"><label>ハンコのプレビュー</label><div class="stamp-preview">' + preview + '</div><div class="hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div></div>' +
+      '</div>' +
+      sLines('management.managers', '担当者名簿（氏名|印字名|役職）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人 。印字名を省略すると姓（スペースの前）を使います。' }) +
+      sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。'));
+  }
+
   function ioHtml() {
     return section('s-io', 'プロファイルの書き出し／読み込み', '他劇場へ展開するときは JSON を書き出して、相手側で読み込みます。',
       '<div class="actions">' +
@@ -609,6 +626,14 @@
     if (t.type === 'number') return t.value === '' ? '' : Number(t.value);
     const dt = t.dataset.type;
     if (dt === 'lines') return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (dt === 'managers') {
+      return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
+        const parts = line.split('|').map(function (x) { return x.trim(); });
+        const name = parts[0] || '';
+        const short = parts[1] || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
+        return { name: name, short: short, title: parts[2] || '' };
+      }).filter(function (m) { return m.name; });
+    }
     if (dt === 'categories') {
       return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
         const parts = line.split('|');

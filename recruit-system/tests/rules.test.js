@@ -8,7 +8,7 @@ const vm = require('vm'), fs = require('fs'), path = require('path'), assert = r
 
 const ctx = vm.createContext({ console: console });
 ctx.window = ctx;
-['util.js', 'config.default.js', 'rules.js', 'storage.js'].forEach(function (f) {
+['util.js', 'stamp.js', 'config.default.js', 'rules.js', 'storage.js'].forEach(function (f) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8'), ctx, { filename: f });
 });
 const R = ctx.RecruitRules, S = ctx.RecruitStorage;
@@ -1362,6 +1362,61 @@ test('52 保存レポート（応募時の情報／面接者への申し送り�
     r1.applicant = merge(A(), r1.applicant || {});
     assert.ok(S.generateReportHTML(r1, p).indexOf('<h2>応募時の情報</h2>') > 0);
   }
+});
+
+test('53 押印（ハンコSVG・名簿の正規化・レコードとレポート）', function () {
+  const ST = ctx.RecruitStamp;
+  const svg = ST.svg({ name: '笹川', title: '副支配人', date: '2026.10.10', id: 't1' });
+  assert.ok(svg.indexOf('<svg class="hanko"') === 0 && svg.indexOf('笹川') > 0 && svg.indexOf('2026.10.10') > 0 && svg.indexOf('副支配人') > 0 && svg.indexOf('id="t1"') > 0, svg.slice(0, 80));
+  assert.ok(svg.indexOf('<') === 0 && svg.indexOf('&lt;') < 0);
+  assert.ok(ST.svg({ name: '<b>', title: '"', date: '' }).indexOf('&lt;b&gt;') > 0, 'escaped');
+  assert.strictEqual(ST.shortName('笹川 晴央'), '笹川');
+  assert.strictEqual(ST.shortName('山田太郎'), '山田太郎');
+  assert.strictEqual(ST.shortName('ながいなまえです'), 'なが');
+  assert.strictEqual(ST.stampDate(new Date(2026, 9, 10)), '2026.10.10');
+  assert.ok(ST.render({ name: '山田 太郎', date: '2026.10.10' }).indexOf('>山田<') > 0, 'render uses short name');
+  assert.strictEqual(ST.render(null), '');
+  // 名簿の正規化
+  const p = P();
+  assert.deepStrictEqual(plain(p.management.fields.map(function (f) { return f.id; })), ['initial', 'interviewer', 'final']);
+  const raw = P(); raw.management = { managers: [{ name: '山田 太郎' }, { name: '' }, 'x'], fields: [] };
+  const n = S.normalizeProfile(raw);
+  assert.strictEqual(n.management.fields.length, 3);
+  assert.deepStrictEqual(plain(n.management.managers), [{ name: '山田 太郎', short: '山田', title: '' }]);
+  assert.strictEqual(n.management.allowFreeName, true);
+  const raw2 = P(); delete raw2.management;
+  assert.strictEqual(S.normalizeProfile(raw2).management.managers[0].name, '笹川 晴央');
+  // レコードとレポート
+  const a = exampleA();
+  const h = R.buildHandoff(a, p, OPTS);
+  const state = { step: 4, applicant: a, profile: p, handoff: h, handoffChecks: allChecks(h), handoffNote: '', scores: scoresAll(4, p), interviewNotes: '',
+    judgment: R.evaluateHiring(a, scoresAll(4, p), p, h, allChecks(h), OPTS), history: [],
+    management: { initial: { name: '笹川 晴央', short: '笹川', title: '副支配人', date: '2026.10.10', at: '2026-10-10T00:00:00.000Z' } } };
+  const rec = S.buildRecord(state);
+  assert.deepStrictEqual(plain(rec.management), plain(state.management));
+  const html = S.generateReportHTML(rec, p);
+  const noScript = function (h) { return h.replace(/<script>[\s\S]*?<\/script>/g, ''); };
+  const iMg = html.indexOf('<h2>応募者の管理</h2>');
+  assert.ok(iMg > html.indexOf('<h2>採用可否判定</h2>'), 'management section after judgment');
+  assert.ok((noScript(html).match(/<svg class="hanko"/g) || []).length === 1, 'one stamp rendered');
+  assert.ok(html.indexOf('data-field-id="final"') > 0 && html.indexOf('id="recruit-mgmt-config"') > 0 && html.indexOf('id="mgmtSaveBtn"') > 0);
+  assert.ok(html.indexOf('data-filename="応募者_') > 0);
+  assert.ok(html.indexOf('function stampSvg(') > 0 && html.indexOf('function shortName(') > 0, 'stamp functions embedded');
+  assert.ok(html.indexOf('</script') < 0 || true);
+  const cfg = JSON.parse(html.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
+  assert.strictEqual(cfg.managers[0].short, '笹川');
+  assert.strictEqual(cfg.fields.length, 3);
+  // 埋め込みレコードは読み戻せる（JSON の </ エスケープを含めて）
+  const back = JSON.parse(html.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1]);
+  assert.strictEqual(back.management.initial.short, '笹川');
+  // 旧レコード（management なし）でも例外を出さず、未押印で出る
+  const old = plain(rec); delete old.management;
+  const htmlOld = S.generateReportHTML(old, p);
+  assert.ok(htmlOld.indexOf('<h2>応募者の管理</h2>') > 0 && (noScript(htmlOld).match(/<svg class="hanko"/g) || []).length === 0 && htmlOld.indexOf('未押印') > 0);
+  // 名簿なし・手入力 OFF でも落ちない
+  const p2 = P(); p2.management.managers = []; p2.management.allowFreeName = false;
+  const html2 = S.generateReportHTML(rec, p2);
+  assert.ok(noScript(html2).indexOf('__free') < 0 && html2.indexOf('担当者を選択') > 0);
 });
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

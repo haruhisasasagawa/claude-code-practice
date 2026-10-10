@@ -759,3 +759,18 @@ p.handoff-comment { font-size: 13.5px; }
 }
 .sum-later { margin: 8px 0 0; font-size: 12px; }
 .sev-block-text { color: var(--danger); }
+
+/* ---------- 応募者の管理（押印） ---------- */
+.stamp-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.stamp-box { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 10px 10px; text-align: center; background: var(--surface-2); min-width: 0; }
+.stamp-label { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.stamp-hint { font-size: 11px; color: var(--muted); line-height: 1.4; min-height: 1.4em; margin-bottom: 6px; }
+.stamp-area { height: 100px; display: grid; place-items: center; }
+.stamp-empty { width: 84px; height: 84px; border: 2px dashed var(--border-strong); border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: var(--muted); background: var(--surface); }
+.stamp-meta { font-size: 12px; color: var(--muted); min-height: 1.3em; line-height: 1.4; }
+.stamp-ctl { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.stamp-ctl select { width: auto; max-width: 100%; padding: 6px 8px; font-size: 13px; }
+.stamp-ctl .stamp-free { width: 100%; padding: 6px 8px; font-size: 13px; }
+.stamp-preview { display: grid; place-items: center; padding: 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+:root[data-theme="dark"] .hanko { filter: brightness(1.25); }
+@media (max-width: 760px) { .stamp-row { grid-template-columns: 1fr; } }

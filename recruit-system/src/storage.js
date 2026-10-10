@@ -176,6 +176,20 @@
     const hp = merged.highschoolPolicy = U.isObj(merged.highschoolPolicy) ? merged.highschoolPolicy : U.deepClone(base.highschoolPolicy);
     if (HS_MODES.indexOf(hp.mode) < 0) hp.mode = base.highschoolPolicy.mode;
     if (!Array.isArray(hp.exceptionCategories)) hp.exceptionCategories = U.deepClone(base.highschoolPolicy.exceptionCategories);
+
+    // 応募者の管理（押印欄・名簿）
+    const mg = merged.management = U.isObj(merged.management) ? merged.management : U.deepClone(base.management);
+    if (!Array.isArray(mg.fields) || !mg.fields.length) mg.fields = U.deepClone(base.management.fields);
+    mg.fields = mg.fields.filter(function (x) { return U.isObj(x) && x.id; }).map(function (x) {
+      return { id: String(x.id), label: String(x.label || x.id), hint: String(x.hint || '') };
+    });
+    if (!mg.fields.length) mg.fields = U.deepClone(base.management.fields);
+    mg.managers = (Array.isArray(mg.managers) ? mg.managers : []).filter(function (x) { return U.isObj(x) && x.name; }).map(function (x) {
+      const name = String(x.name).trim();
+      const short = String(x.short || '').trim() || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
+      return { name: name, short: short, title: String(x.title || '').trim() };
+    });
+    mg.allowFreeName = mg.allowFreeName !== false;
     if (!U.isObj(hp.rejectCareerPaths)) hp.rejectCareerPaths = U.deepClone(base.highschoolPolicy.rejectCareerPaths);
     // 旧設定 disallowedPathResult（対象外の進路を一律 reject/review）からの移行: 'review' なら不採用推奨にする進路なし
     if (hp.disallowedPathResult === 'review') Object.keys(hp.rejectCareerPaths).forEach(function (k) { hp.rejectCareerPaths[k] = false; });
@@ -410,6 +424,8 @@
       },
       scores: U.deepClone(state.scores || {}),
       interviewNotes: state.interviewNotes || '',
+      // 応募者の管理（押印）: { initial: { name, short, title, date, at }, ... }
+      management: U.deepClone(state.management || {}),
       // 保存時点のスナップショット（レポート表示・監査用。読み込み時は現在の設定で再計算する）
       contribution: contribution ? U.deepClone(contribution) : null,
       highschool: highschool,
@@ -561,6 +577,24 @@
       '.warn-list{margin:10px 0 0;padding-left:1.3em;font-size:13px}.warn-list li{margin-bottom:3px}',
       '.disclaimer{margin-top:12px;font-size:12px;color:var(--muted)}',
       '.foot{margin-top:28px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}',
+      // 押印欄
+      '.stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}',
+      '.stamp-box{border:1px solid var(--border);border-radius:10px;padding:12px 10px 10px;text-align:center;background:var(--surface-2);min-width:0}',
+      '.stamp-label{font-size:12.5px;font-weight:700;color:var(--muted)}.stamp-hint{font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4}',
+      '.stamp-area{height:100px;display:grid;place-items:center}',
+      '.stamp-empty{width:84px;height:84px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;font-size:11px;color:var(--muted);background:#fff}',
+      '.hanko{mix-blend-mode:multiply}',
+      '.stamp-meta{font-size:12px;color:var(--muted);min-height:1.3em;line-height:1.4}',
+      '.stamp-ctl{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}',
+      '.stamp-ctl select,.stamp-ctl input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;max-width:100%;background:#fff;color:var(--text)}',
+      '.stamp-ctl input{width:100%}',
+      '.stamp-ctl button,.mgmt-save button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:var(--text);cursor:pointer}',
+      '.stamp-ctl button.primary,.mgmt-save button{background:var(--accent);color:#fff;border-color:var(--accent)}',
+      '.stamp-ctl button:hover{filter:brightness(.97)}',
+      '.mgmt-save{display:none;margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--warn-soft);border:1px solid #f3cf8a;font-size:13px;align-items:center;gap:10px;flex-wrap:wrap}.mgmt-save.show{display:flex}',
+      '.mgmt-note{font-size:12px;color:var(--muted);margin-top:10px}',
+      '@media (max-width:720px){.stamp-row{grid-template-columns:1fr}}',
+      '@media print{.stamp-ctl,.mgmt-save,.mgmt-note{display:none !important}.stamp-row{break-inside:avoid}.hanko,.stamp-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
       '@media (max-width:720px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}.rh-main{flex-direction:column;align-items:stretch}.verdict{align-items:flex-start}ul.strengths{grid-template-columns:1fr}.bar,.bar.wide{grid-template-columns:minmax(0,1fr) 90px 4.5em}.rh-top{flex-direction:column;align-items:flex-start}.rh-meta{text-align:left}}',
       '@media print{@page{size:A4;margin:12mm}body{background:#fff;font-size:12px}.page{padding:0;max-width:none}.rh,.sec,.tile,.result,li.h{box-shadow:none}.rh,.dash,.tile,.result,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line{break-inside:avoid}.sec h2,.sec h3{break-after:avoid}.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     ].join('\n');
@@ -840,10 +874,70 @@
     const json = JSON.stringify(record).replace(/<\//g, '<\\/');
     const SCRIPT_END = '</scr' + 'ipt>';
 
+    // ---- 応募者の管理（押印欄）。レポート上でも押印でき、「押印を保存」で同じ形式のファイルを再出力する ----
+    const Stamp = global.RecruitStamp;
+    const mg = profile.management || {};
+    const mgFields = Array.isArray(mg.fields) && mg.fields.length ? mg.fields : [];
+    const mgManagers = Array.isArray(mg.managers) ? mg.managers : [];
+    const management = record.management || {};
+    const filename = '応募者_' + safeName(a.name) + '_' + U.fmtDate(record.savedAt || new Date()) + '.html';
+    const stampBoxes = mgFields.map(function (fld, idx) {
+      const e = management[fld.id];
+      const svg = e && e.name && Stamp ? Stamp.render(e, { size: 88, id: 'rp' + idx }) : '';
+      return '<div class="stamp-box" data-field-id="' + esc(fld.id) + '">' +
+        '<div class="stamp-label">' + esc(fld.label) + '</div>' +
+        (fld.hint ? '<div class="stamp-hint">' + esc(fld.hint) + '</div>' : '<div class="stamp-hint"></div>') +
+        '<div class="stamp-area">' + (svg || '<div class="stamp-empty">未押印</div>') + '</div>' +
+        '<div class="stamp-meta">' + (e && e.name ? esc(e.name + (e.title ? '（' + e.title + '）' : '') + '　' + (e.date || '')) : '') + '</div>' +
+        '<div class="stamp-ctl">' +
+          '<select aria-label="' + esc(fld.label) + ' 担当者"><option value="">担当者を選択</option>' +
+            mgManagers.map(function (m, i) { return '<option value="' + i + '">' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
+            (mg.allowFreeName !== false ? '<option value="__free">名簿にない担当者（手入力）</option>' : '') +
+          '</select>' +
+          (mg.allowFreeName !== false ? '<input type="text" placeholder="氏名（例：山田 太郎）" style="display:none">' : '') +
+          '<button type="button" class="primary" data-act="stamp">押印</button>' +
+          '<button type="button" data-act="unstamp"' + (e && e.name ? '' : ' style="display:none"') + '>取消</button>' +
+        '</div></div>';
+    }).join('');
+    const mgmtHtml = mgFields.length
+      ? '<div class="stamp-row" id="mgmt">' + stampBoxes + '</div>' +
+        '<div class="mgmt-save" id="mgmtSave"><span>押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div>' +
+        '<div class="mgmt-note">担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。押印はこのファイルの埋め込みデータにも記録され、アプリの「読み込み」で引き継がれます。</div>'
+      : '<p class="empty">押印欄は設定されていません。</p>';
+    const mgmtConfig = JSON.stringify({ fields: mgFields, managers: mgManagers, allowFreeName: mg.allowFreeName !== false }).replace(/<\//g, '<\\/');
+    const reportScript = Stamp && mgFields.length ? (
+      '<script type="application/json" id="recruit-mgmt-config">' + mgmtConfig + SCRIPT_END + '\n' +
+      '<script>\n(function(){\n' +
+      'var recNode=document.getElementById("recruit-record");var cfgNode=document.getElementById("recruit-mgmt-config");var root=document.getElementById("mgmt");if(!recNode||!cfgNode||!root)return;\n' +
+      'var rec,cfg;try{rec=JSON.parse(recNode.textContent);cfg=JSON.parse(cfgNode.textContent);}catch(e){return;}\n' +
+      Stamp.source() + '\n' +
+      'rec.management=rec.management||{};var dirty=false;\n' +
+      'function pad(n){return String(n).padStart(2,"0");}\n' +
+      'function today(){var d=new Date();return d.getFullYear()+"."+pad(d.getMonth()+1)+"."+pad(d.getDate());}\n' +
+      'function render(){cfg.fields.forEach(function(f,idx){var box=root.querySelector(\'.stamp-box[data-field-id="\'+f.id+\'"]\');if(!box)return;var e=rec.management[f.id];\n' +
+      '  box.querySelector(".stamp-area").innerHTML=e&&e.name?stampSvg({name:e.short||shortName(e.name),title:e.title||"",date:e.date||"",size:88,id:"rp"+idx}):\'<div class="stamp-empty">未押印</div>\';\n' +
+      '  box.querySelector(".stamp-meta").textContent=e&&e.name?(e.name+(e.title?"（"+e.title+"）":"")+"　"+(e.date||"")):"";\n' +
+      '  var un=box.querySelector(\'[data-act="unstamp"]\');if(un)un.style.display=e&&e.name?"":"none";\n' +
+      '  var sel=box.querySelector("select"),inp=box.querySelector("input");if(sel&&inp)inp.style.display=sel.value==="__free"?"":"none";});\n' +
+      '  var bar=document.getElementById("mgmtSave");if(bar)bar.classList.toggle("show",dirty);}\n' +
+      'root.addEventListener("change",function(ev){var sel=ev.target;if(sel.tagName==="SELECT"){var inp=sel.closest(".stamp-box").querySelector("input");if(inp){inp.style.display=sel.value==="__free"?"":"none";if(sel.value==="__free")inp.focus();}}});\n' +
+      'root.addEventListener("click",function(ev){var b=ev.target.closest("[data-act]");if(!b)return;var box=b.closest(".stamp-box");var id=box.getAttribute("data-field-id");var act=b.getAttribute("data-act");\n' +
+      '  if(act==="stamp"){var sel=box.querySelector("select");var v=sel?sel.value:"";var m=null;\n' +
+      '    if(v==="__free"){var inp=box.querySelector("input");var nm=inp?inp.value.trim():"";if(!nm){alert("氏名を入力してください");return;}m={name:nm,short:shortName(nm),title:""};}\n' +
+      '    else{m=cfg.managers[Number(v)];if(!v||!m){alert("担当者を選んでください");return;}}\n' +
+      '    rec.management[id]={name:m.name,short:m.short||shortName(m.name),title:m.title||"",date:today(),at:new Date().toISOString()};dirty=true;render();}\n' +
+      '  else if(act==="unstamp"){delete rec.management[id];dirty=true;render();}});\n' +
+      'var saveBtn=document.getElementById("mgmtSaveBtn");if(saveBtn)saveBtn.addEventListener("click",function(){\n' +
+      '  recNode.textContent=JSON.stringify(rec).replace(/<\\//g,"<\\\\/");dirty=false;render();\n' +
+      '  var html="<!DOCTYPE html>\\n"+document.documentElement.outerHTML;var blob=new Blob([html],{type:"text/html;charset=utf-8"});var url=URL.createObjectURL(blob);\n' +
+      '  var a=document.createElement("a");a.href=url;a.download=document.body.getAttribute("data-filename")||"applicant.html";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1000);});\n' +
+      'render();\n})();\n' + SCRIPT_END + '\n'
+    ) : '';
+
     return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
-      '<style>\n' + reportCss() + '\n</style>\n</head>\n<body>\n<div class="page">\n' +
+      '<style>\n' + reportCss() + '\n</style>\n</head>\n<body data-filename="' + esc(filename) + '">\n<div class="page">\n' +
       headerHtml + dashHtml +
       sec('応募時の情報', (preRows ? '<table class="kv">' + preRows + '</table>\n' : '<p class="empty">応募時の情報はありません。</p>\n') + hsHtml) +
       (a.reviewerNotes ? sec('面接者への申し送りコメント', '<div class="note">' + esc(a.reviewerNotes) + '</div>') : '') +
@@ -860,9 +954,11 @@
       sec('面接評価', (hasScores ? '<div class="bars">' + scoreRows + '</div>' + interviewTotal : '<p class="empty">面接評価は未入力です。</p>') +
         (record.interviewNotes ? '<h3>面接所見</h3><div class="note">' + esc(record.interviewNotes) + '</div>' : '')) +
       sec('採用可否判定', judgmentHtml) +
+      sec('応募者の管理', mgmtHtml) +
       '<div class="foot"><span>' + esc(meta.footer) + '</span><span>このファイルはアプリの「読み込み」から再度開けます。埋め込みデータを編集しないでください。</span></div>\n' +
       '</div>\n' +
       '<script type="application/json" id="recruit-record">' + json + SCRIPT_END + '\n' +
+      reportScript +
       '</body>\n</html>\n';
   }
 

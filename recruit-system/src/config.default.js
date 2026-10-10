@@ -74,6 +74,20 @@
       notice: '新宿では高校生は原則採用対象外です。例外は高校3年生で進路（進学）が決定済み、かつ進学後も当劇場でアルバイトを継続する方のみです。就職予定の方は短期採用となるため対象外です。'
     },
 
+    // 応募者の管理（押印欄）。保存レポートの末尾に 3 つの押印欄を出し、名簿から選んで日付印を押す
+    management: {
+      fields: [
+        { id: 'initial', label: '初期対応者', hint: '応募受付・申し送りを行った担当者' },
+        { id: 'interviewer', label: '面接対応者', hint: '面接を行った担当者' },
+        { id: 'final', label: '最終確認', hint: '採用可否を最終確認した上長' }
+      ],
+      // name: 氏名 / short: 印字名（ハンコに入る名前。2〜4文字が目安）/ title: 役職
+      managers: [
+        { name: '笹川 晴央', short: '笹川', title: '副支配人' }
+      ],
+      allowFreeName: true   // 名簿にない氏名を手入力で押せる
+    },
+
     options: {
       genders: ['男性', '女性', '回答しない'],
       // group: highschool / university / vocational / freeter / homemaker / doubleworker / other

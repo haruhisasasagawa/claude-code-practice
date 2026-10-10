@@ -203,3 +203,12 @@
 | 保存データの項目を追加 | `src/storage.js` `buildRecord` / `generateReportHTML`、復元は `app.js` `applyRecord` |
 
 変更後は `node tests/rules.test.js`、`node build.js` で `dist/` を再生成、`node tests/e2e.js` を通すこと。
+
+## 7. 応募者の管理（押印）— 追加分
+
+- 保存レポート末尾に「応募者の管理」セクション。`profile.management.fields`（既定: initial 初期対応者 / interviewer 面接対応者 / final 最終確認）ごとに押印枠。
+- 名簿は `profile.management.managers`（`{ name, short, title }`）。設定画面「応募者の管理（押印）」で `氏名|印字名|役職` の行形式で編集。印字名を省略すると姓（スペースの前）。`allowFreeName` で名簿にない氏名の手入力を許可。
+- ハンコは `src/stamp.js` の `stampSvg`（外部参照なしの純関数）。レポートには `RecruitStamp.source()` で関数ソースを埋め込み、レポート単体でも押印できる。
+- レコードは `management: { <fieldId>: { name, short, title, date, at } }`。アプリ（Step2/Step4 の押印カード）とレポート（`#mgmt` + 「押印を保存」で `document.documentElement.outerHTML` を再出力）の両方で編集でき、読込で引き継ぐ。
+- 既定の名簿は「笹川 晴央（副支配人）」のみ。**マネージャー名簿は副支配人から受領して `config.default.js` の `management.managers` に反映すること**（本セッションの環境には名簿のメモリは存在しなかった）。
+- テスト: rules.test.js #53、e2e E22（アプリで押印 → 保存 → レポート上で押印・再出力 → 読込 → 印刷時の表示）。
