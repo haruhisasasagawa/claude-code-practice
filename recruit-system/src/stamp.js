@@ -22,10 +22,30 @@
     var size = Number(opts.size) || 88;
     var color = opts.color || '#c8232c';
     var id = String(opts.id || ('hk' + chars(name) + chars(title) + date.replace(/\D/g, '')));
-    var nl = chars(name);
-    var nameSize = nl <= 2 ? 22 : nl === 3 ? 18 : nl === 4 ? 15 : nl <= 6 ? 12 : 10;
-    var tl = chars(title);
-    var titleSize = tl <= 3 ? 11 : tl <= 5 ? 9.5 : tl <= 7 ? 8 : 7;
+    // 文字幅の目安（em）。ASCII・半角カナは約 0.6em、それ以外（漢字・かな）は 1em
+    var units = function (str) {
+      var u = 0;
+      (Array.from ? Array.from(str) : String(str).split('')).forEach(function (ch) {
+        var c = ch.charCodeAt(0);
+        u += c < 0x80 || (c >= 0xff61 && c <= 0xff9f) ? 0.62 : 1;
+      });
+      return u;
+    };
+    // 外周（r=42・線幅3 → 内側の縁 40.5）の内側に、にじみ分の余白を取った半径
+    var R = 38.5;
+    // 文字の上端・下端の高さで使える弦の幅を超えるときだけ textLength で詰める
+    var fitAttr = function (str, s, base) {
+      var top = base - 0.88 * s, bottom = base + 0.12 * s;
+      var dy = Math.max(Math.abs(50 - top), Math.abs(bottom - 50));
+      var cap = 2 * Math.sqrt(Math.max(0, R * R - dy * dy));
+      return units(str) * s > cap ? ' textLength="' + cap.toFixed(1) + '" lengthAdjust="spacingAndGlyphs"' : '';
+    };
+    var nu = units(name);
+    var nameSize = nu <= 2 ? 18 : nu <= 3 ? 15 : nu <= 4 ? 12 : nu <= 6 ? 10 : 9;
+    var nameBase = 32;
+    var tu = units(title);
+    var titleSize = tu <= 3 ? 11 : tu <= 5 ? 9.5 : tu <= 7 ? 8 : tu <= 9 ? 7 : 6;
+    var titleBase = 75 + titleSize * 0.38;
     var font = "'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif";
     return '<svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="' + size + '" height="' + size + '" role="img" aria-label="' + esc(name + ' ' + date + ' ' + title) + '">' +
       '<defs><filter id="' + esc(id) + '" x="-10%" y="-10%" width="120%" height="120%">' +
@@ -37,9 +57,9 @@
         '<line x1="11" y1="36" x2="89" y2="36" stroke="' + esc(color) + '" stroke-width="1.5"/>' +
         '<line x1="11" y1="64" x2="89" y2="64" stroke="' + esc(color) + '" stroke-width="1.5"/>' +
         '<g fill="' + esc(color) + '" font-family="' + font + '" font-weight="700" text-anchor="middle">' +
-          '<text x="50" y="' + (22 + nameSize * 0.36).toFixed(1) + '" font-size="' + nameSize + '"' + (nl >= 5 ? ' textLength="70" lengthAdjust="spacingAndGlyphs"' : '') + '>' + esc(name) + '</text>' +
+          '<text x="50" y="' + nameBase + '" font-size="' + nameSize + '"' + fitAttr(name, nameSize, nameBase) + '>' + esc(name) + '</text>' +
           '<text x="50" y="54" font-size="11.5" letter-spacing="0.4">' + esc(date) + '</text>' +
-          '<text x="50" y="' + (78 + titleSize * 0.36).toFixed(1) + '" font-size="' + titleSize + '">' + esc(title) + '</text>' +
+          '<text x="50" y="' + titleBase.toFixed(1) + '" font-size="' + titleSize + '"' + fitAttr(title, titleSize, titleBase) + '>' + esc(title) + '</text>' +
         '</g>' +
       '</g></svg>';
   }

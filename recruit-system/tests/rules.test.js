@@ -1376,6 +1376,14 @@ test('53 押印（ハンコSVG・名簿の正規化・レコードとレポー�
   assert.strictEqual(ST.stampDate(new Date(2026, 9, 10)), '2026.10.10');
   assert.ok(ST.render({ name: '山田 太郎', date: '2026.10.10' }).indexOf('>山田<') > 0, 'render uses short name');
   assert.strictEqual(ST.render(null), '');
+  // ハンコの文字は外周の内側に収める（長い印字名・役職は textLength で詰める）
+  const tl = function (svgText, word) { const m = svgText.match(new RegExp('<text([^>]*)>' + word + '</text>')); if (!m) return -1; const t = m[1].match(/textLength="([\d.]+)"/); return t ? Number(t[1]) : 0; };
+  assert.strictEqual(tl(svg, '笹川'), 0, '2 文字は詰めない');
+  assert.strictEqual(tl(svg, '副支配人'), 0, '4 文字の役職は詰めない');
+  const longSvg = ST.svg({ name: '佐々木小次郎', title: 'アシスタントマネージャー', date: '2026.10.10' });
+  const tlTitle = tl(longSvg, 'アシスタントマネージャー');
+  const tlName = tl(longSvg, '佐々木小次郎');
+  assert.ok(tlTitle > 0 && tlTitle <= 54 && tlName > 0 && tlName <= 58, 'long: ' + tlTitle + ' / ' + tlName);
   // 名簿の正規化
   const p = P();
   assert.deepStrictEqual(plain(p.management.fields.map(function (f) { return f.id; })), ['initial', 'interviewer', 'final']);
@@ -1404,7 +1412,25 @@ test('53 押印（ハンコSVG・名簿の正規化・レコードとレポー�
   assert.ok(html.indexOf('data-field-id="final"') > 0 && html.indexOf('id="recruit-mgmt-config"') > 0 && html.indexOf('id="mgmtSaveBtn"') > 0);
   assert.ok(html.indexOf('data-filename="応募者_') > 0);
   assert.ok(html.indexOf('function stampSvg(') > 0 && html.indexOf('function shortName(') > 0, 'stamp functions embedded');
-  assert.ok(html.indexOf('</script') < 0 || true);
+  // 埋め込み JSON は </script> や <!--<script> を含む名前でも要素を閉じ損ねない（< > & は \\u 形式）
+  const closeCount = function (h) { return (h.match(/<\/script/gi) || []).length; };
+  const pEvil = P();
+  pEvil.management.managers = [{ name: 'x</script><script>alert(1)</script>', short: 'a</script>b', title: '<!--<script>' }];
+  const evilMg = { final: { name: 'Y<!--<script>', short: 'Y', title: '', date: '2026.10.10', at: '2026-10-10T00:00:00.000Z' } };
+  const recEvil = plain(rec); recEvil.management = evilMg; recEvil.applicant.reviewerNotes = '<!-- <script> & </script>';
+  const htmlEvil = S.generateReportHTML(recEvil, pEvil);
+  assert.strictEqual(closeCount(htmlEvil), closeCount(html), 'script 要素の数が変わらない');
+  const jsonBlock = function (h, id) { return h.match(new RegExp('id="' + id + '">([\\s\\S]*?)<\\/script>'))[1]; };
+  ['recruit-record', 'recruit-mgmt-config'].forEach(function (id) {
+    assert.ok(!/[<>&]/.test(jsonBlock(htmlEvil, id)), id + ' に生の < > & が無い');
+  });
+  const cfgEvil = JSON.parse(jsonBlock(htmlEvil, 'recruit-mgmt-config'));
+  assert.deepStrictEqual(plain(cfgEvil.managers), plain(pEvil.management.managers));
+  const recBack = JSON.parse(jsonBlock(htmlEvil, 'recruit-record'));
+  assert.deepStrictEqual(plain(recBack.management), evilMg);
+  assert.strictEqual(recBack.applicant.reviewerNotes, '<!-- <script> & </script>');
+  // レポート内の「押印を保存」も同じエスケープで書き戻す
+  assert.ok(html.indexOf('recNode.textContent=JSON.stringify(rec).replace(/[<>&') > 0 && html.indexOf('addEventListener("beforeunload"') > 0);
   const cfg = JSON.parse(html.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
   assert.ok(cfg.managers.some(function (m) { return m.short === '笹川'; }));
   assert.strictEqual(cfg.fields.length, 3);

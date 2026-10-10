@@ -628,7 +628,7 @@
     if (dt === 'lines') return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
     if (dt === 'managers') {
       return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
-        const parts = line.split('|').map(function (x) { return x.trim(); });
+        const parts = line.split(/[|｜]/).map(function (x) { return x.trim(); }); // 全角の「｜」も区切りとして受け付ける
         const name = parts[0] || '';
         const short = parts[1] || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
         const m = { name: name, short: short, title: parts[2] || '' };

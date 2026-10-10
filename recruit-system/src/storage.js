@@ -389,6 +389,13 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
+  // script 要素（type="application/json"）に埋め込む JSON。< > & を \u 形式にして、値に「閉じタグ」や
+  // 「コメント開始＋script 開始タグ」が含まれても HTML パーサが要素を閉じ損ねない（script data double escaped 状態に
+  // 入らない）ようにする。JSON.parse で元の文字に戻る。
+  function jsonForScript(x) {
+    return JSON.stringify(x).replace(/[<>&\u2028\u2029]/g, function (c) { return '\\u' + ('000' + c.charCodeAt(0).toString(16)).slice(-4); });
+  }
+
   function safeName(s) {
     return String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) || '応募者';
   }
@@ -596,6 +603,25 @@
       '.mgmt-save{display:none;margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--warn-soft);border:1px solid #f3cf8a;font-size:13px;align-items:center;gap:10px;flex-wrap:wrap}.mgmt-save.show{display:flex}',
       '.mgmt-note{font-size:12px;color:var(--muted);margin-top:10px}',
       '@media (max-width:720px){.stamp-row{grid-template-columns:1fr}}',
+      // 申し送りシート（A4 1枚）印刷
+      '.rtool{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--muted)}',
+      '.rtool button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:var(--text);cursor:pointer}.rtool button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.rtool-hint{font-size:11.5px}',
+      '.print-only{display:none}',
+      '@page sheet{size:A4;margin:7mm 9mm}',
+      '@media print{.rtool{display:none !important}',
+      'body.print-handoff{page:sheet;font-size:10px;line-height:1.35}',
+      'body.print-handoff .print-only{display:block}body.print-handoff .sheet-title{font-size:13px;font-weight:800;color:var(--accent);margin-bottom:2px}',
+      'body.print-handoff .dash,body.print-handoff .verdict,body.print-handoff .rh-top,body.print-handoff .foot,body.print-handoff .mgmt-note,body.print-handoff .stamp-hint,body.print-handoff .stamp-ctl,body.print-handoff .mgmt-save{display:none !important}',
+      'body.print-handoff section.sec:not([data-sec="pre"]):not([data-sec="comment"]):not([data-sec="handoff"]):not([data-sec="interview"]):not([data-sec="mgmt"]){display:none !important}',
+      'body.print-handoff .rh{border-radius:5px}body.print-handoff .rh-main{padding:3px 10px 4px;gap:10px}body.print-handoff .rh-name{font-size:16px;margin:0 0 3px}body.print-handoff .rh-name small{font-size:10px}body.print-handoff .rh-kicker{display:none}body.print-handoff .chip{font-size:9px;padding:0 6px}body.print-handoff .rh-chips{gap:4px}',
+      'body.print-handoff .sec{padding:4px 8px 5px;margin-top:4px;border-radius:5px;box-shadow:none}body.print-handoff .sec h2{font-size:11px;padding-bottom:3px;margin-bottom:4px;gap:6px}body.print-handoff .sec h2::before{width:15px;height:15px;font-size:9.5px;border-radius:4px}body.print-handoff .sec h3{font-size:9.5px;margin:4px 0 2px;padding-bottom:1px}',
+      'body.print-handoff table.kv{font-size:10px;display:block}body.print-handoff table.kv tbody{display:block;columns:2;column-gap:14px}body.print-handoff table.kv tr{display:grid;grid-template-columns:6.5em 1fr;break-inside:avoid;border-bottom:1px solid #eef2f6}body.print-handoff table.kv th,body.print-handoff table.kv td{padding:1px 4px 1px 0;border:none;width:auto}',
+      'body.print-handoff .note{padding:2px 8px;font-size:10px;line-height:1.35}body.print-handoff .callout{padding:3px 8px;font-size:10px;margin-top:5px}',
+      'body.print-handoff li.h{padding:1px 6px;gap:5px;grid-template-columns:12px 1fr;font-size:9.7px;border-left-width:3px;border-radius:4px;break-inside:avoid}body.print-handoff li.h .box{font-size:11px}body.print-handoff li.h .hmeta{margin-bottom:0;gap:4px}body.print-handoff li.h .sev,body.print-handoff li.h .cat,body.print-handoff .tag{font-size:8px;padding:0 4px}body.print-handoff li.h .txt{line-height:1.3}',
+      'body.print-handoff ul.hlist{gap:2px}body.print-handoff .hgroup{margin-bottom:4px}body.print-handoff .hgroup-head{margin-bottom:2px;font-size:9.5px;gap:6px}body.print-handoff .hgroup-head>span:not(.badge){display:none}body.print-handoff .badge{font-size:8.5px;padding:0 5px}',
+      'body.print-handoff ul.strengths{gap:0 12px}body.print-handoff ul.strengths li{font-size:10px}',
+      'body.print-handoff .sheet-2col ul.hlist{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;align-items:start}',
+      'body.print-handoff .stamp-row{gap:8px}body.print-handoff .stamp-box{display:flex;align-items:center;gap:8px;text-align:left;padding:2px 8px}body.print-handoff .stamp-label{font-size:10px;min-width:5.5em}body.print-handoff .stamp-area{height:auto}body.print-handoff .hanko{width:46px;height:46px}body.print-handoff .stamp-empty{width:44px;height:44px;font-size:8.5px}body.print-handoff .stamp-meta{font-size:9px;min-height:0;line-height:1.3}}',
       '@media print{.stamp-ctl,.mgmt-save,.mgmt-note{display:none !important}.stamp-row{break-inside:avoid}.hanko,.stamp-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
       '@media (max-width:720px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}.rh-main{flex-direction:column;align-items:stretch}.verdict{align-items:flex-start}ul.strengths{grid-template-columns:1fr}.bar,.bar.wide{grid-template-columns:minmax(0,1fr) 90px 4.5em}.rh-top{flex-direction:column;align-items:flex-start}.rh-meta{text-align:left}}',
       '@media print{@page{size:A4;margin:12mm}body{background:#fff;font-size:12px}.page{padding:0;max-width:none}.rh,.sec,.tile,.result,li.h{box-shadow:none}.rh,.dash,.tile,.result,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line{break-inside:avoid}.sec h2,.sec h3{break-after:avoid}.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
@@ -854,7 +880,7 @@
     const headerHtml = '<header class="rh"><div class="rh-top">' +
       '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
       '<div class="rh-meta">保存日時 ' + esc(savedAt) + (stepLabel ? '<br>進捗: ' + esc(stepLabel) : '') + '</div></div>' +
-      '<div class="rh-main"><div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' + verdictHtml + '</div></header>\n';
+      '<div class="rh-main"><div><div class="sheet-title print-only">面接者への申し送りシート</div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' + verdictHtml + '</div></header>\n';
 
     const tileInterview = hasScores
       ? '<div class="tile"><div class="t-label">面接評価</div><div class="t-val">' + esc(scoreTotal) + '<small>/ ' + esc(scoreMax) + '点</small></div><div class="meter"><span class="' + (scoreBand ? bandCls(scoreBand) : pctCls(scorePct)) + '" style="width:' + clamp(scorePct) + '%"></span></div><div class="t-sub">得点率 ' + esc(scorePct) + '%' + (scoreBandTxt ? '・' + esc(scoreBandTxt) : '') + '</div></div>'
@@ -872,8 +898,8 @@
       : '<div class="tile"><div class="t-label">判定</div><div class="t-val txt muted">' + (beforeIv ? '面接前' : '未実施') + '</div><div class="t-sub">' + esc(beforeIv ? '面接で確認する項目: ' + (unconfirmed ? unconfirmed.split('／').length + 'セクション' : 'なし') : '面接評価の入力後に判定') + '</div></div>';
     const dashHtml = '<div class="dash">' + tileInterview + tileContrib + tileHandoff + tileVerdict + '</div>\n';
 
-    const sec = function (title, body) { return '<section class="sec"><h2>' + title + '</h2>\n' + body + '</section>\n'; };
-    const json = JSON.stringify(record).replace(/<\//g, '<\\/');
+    const sec = function (title, body, key) { return '<section class="sec"' + (key ? ' data-sec="' + key + '"' : '') + '><h2>' + title + '</h2>\n' + body + '</section>\n'; };
+    const json = jsonForScript(record);
     const SCRIPT_END = '</scr' + 'ipt>';
 
     // ---- 応募者の管理（押印欄）。レポート上でも押印でき、「押印を保存」で同じ形式のファイルを再出力する ----
@@ -903,17 +929,18 @@
     }).join('');
     const mgmtHtml = mgFields.length
       ? '<div class="stamp-row" id="mgmt">' + stampBoxes + '</div>' +
-        '<div class="mgmt-save" id="mgmtSave"><span>押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div>' +
-        '<div class="mgmt-note">担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。押印はこのファイルの埋め込みデータにも記録され、アプリの「読み込み」で引き継がれます。</div>'
+        '<div class="mgmt-save" id="mgmtSave"><span id="mgmtSaveMsg">押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div>' +
+        '<div class="mgmt-note">担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。レポート上で押した印は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印ごと引き継げます。</div>'
       : '<p class="empty">押印欄は設定されていません。</p>';
-    const mgmtConfig = JSON.stringify({ fields: mgFields, managers: mgManagers, allowFreeName: mg.allowFreeName !== false }).replace(/<\//g, '<\\/');
+    const mgmtConfig = jsonForScript({ fields: mgFields, managers: mgManagers, allowFreeName: mg.allowFreeName !== false });
     const reportScript = Stamp && mgFields.length ? (
       '<script type="application/json" id="recruit-mgmt-config">' + mgmtConfig + SCRIPT_END + '\n' +
       '<script>\n(function(){\n' +
       'var recNode=document.getElementById("recruit-record");var cfgNode=document.getElementById("recruit-mgmt-config");var root=document.getElementById("mgmt");if(!recNode||!cfgNode||!root)return;\n' +
       'var rec,cfg;try{rec=JSON.parse(recNode.textContent);cfg=JSON.parse(cfgNode.textContent);}catch(e){return;}\n' +
       Stamp.source() + '\n' +
-      'rec.management=rec.management||{};var dirty=false;\n' +
+      'rec.management=rec.management||{};var dirty=false,saved=false;\n' +
+      'var MSG_DIRTY="押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。",MSG_SAVED="押印を保存したファイルを書き出しました。保存できなかった場合は「再保存」を押してください。";\n' +
       'function pad(n){return String(n).padStart(2,"0");}\n' +
       'function today(){var d=new Date();return d.getFullYear()+"."+pad(d.getMonth()+1)+"."+pad(d.getDate());}\n' +
       'function render(){cfg.fields.forEach(function(f,idx){var box=root.querySelector(\'.stamp-box[data-field-id="\'+f.id+\'"]\');if(!box)return;var e=rec.management[f.id];\n' +
@@ -921,7 +948,8 @@
       '  box.querySelector(".stamp-meta").textContent=e&&e.name?(e.name+(e.title?"（"+e.title+"）":"")+"　"+(e.date||"")):"";\n' +
       '  var un=box.querySelector(\'[data-act="unstamp"]\');if(un)un.style.display=e&&e.name?"":"none";\n' +
       '  var sel=box.querySelector("select"),inp=box.querySelector("input");if(sel&&inp)inp.style.display=sel.value==="__free"?"":"none";});\n' +
-      '  var bar=document.getElementById("mgmtSave");if(bar)bar.classList.toggle("show",dirty);}\n' +
+      '  var bar=document.getElementById("mgmtSave");if(bar)bar.classList.toggle("show",dirty||saved);\n' +
+      '  var msg=document.getElementById("mgmtSaveMsg");if(msg)msg.textContent=!dirty&&saved?MSG_SAVED:MSG_DIRTY;var sb=document.getElementById("mgmtSaveBtn");if(sb)sb.textContent=!dirty&&saved?"再保存":"押印を保存";}\n' +
       'root.addEventListener("change",function(ev){var sel=ev.target;if(sel.tagName==="SELECT"){var inp=sel.closest(".stamp-box").querySelector("input");if(inp){inp.style.display=sel.value==="__free"?"":"none";if(sel.value==="__free")inp.focus();}}});\n' +
       'root.addEventListener("click",function(ev){var b=ev.target.closest("[data-act]");if(!b)return;var box=b.closest(".stamp-box");var id=box.getAttribute("data-field-id");var act=b.getAttribute("data-act");\n' +
       '  if(act==="stamp"){var sel=box.querySelector("select");var v=sel?sel.value:"";var m=null;\n' +
@@ -930,9 +958,12 @@
       '    rec.management[id]={name:m.name,short:m.short||shortName(m.name),title:m.title||"",date:today(),at:new Date().toISOString()};dirty=true;render();}\n' +
       '  else if(act==="unstamp"){delete rec.management[id];dirty=true;render();}});\n' +
       'var saveBtn=document.getElementById("mgmtSaveBtn");if(saveBtn)saveBtn.addEventListener("click",function(){\n' +
-      '  recNode.textContent=JSON.stringify(rec).replace(/<\\//g,"<\\\\/");dirty=false;render();\n' +
-      '  var html="<!DOCTYPE html>\\n"+document.documentElement.outerHTML;var blob=new Blob([html],{type:"text/html;charset=utf-8"});var url=URL.createObjectURL(blob);\n' +
+      '  recNode.textContent=JSON.stringify(rec).replace(/[<>&\\u2028\\u2029]/g,function(c){return "\\\\u"+("000"+c.charCodeAt(0).toString(16)).slice(-4);});\n' +
+      // 書き出すファイルは保存バーを閉じた状態にする。書き出し後は「再保存」できるようバーを残す（ダウンロードの成否は分からないため）
+      '  dirty=false;saved=false;render();var html="<!DOCTYPE html>\\n"+document.documentElement.outerHTML;saved=true;render();\n' +
+      '  var blob=new Blob([html],{type:"text/html;charset=utf-8"});var url=URL.createObjectURL(blob);\n' +
       '  var a=document.createElement("a");a.href=url;a.download=document.body.getAttribute("data-filename")||"applicant.html";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1000);});\n' +
+      'window.addEventListener("beforeunload",function(e){if(dirty){e.preventDefault();e.returnValue="";}});\n' +
       'render();\n})();\n' + SCRIPT_END + '\n'
     ) : '';
 
@@ -940,26 +971,32 @@
       '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
       '<style>\n' + reportCss() + '\n</style>\n</head>\n<body data-filename="' + esc(filename) + '">\n<div class="page">\n' +
+      '<div class="rtool no-print"><span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button><button type="button" id="rtPrintAll">レポート全体</button><span class="rtool-hint">申し送りシートは応募情報・留意点・面接で確認する項目・押印欄だけを 1 枚にまとめます。</span></div>\n' +
       headerHtml + dashHtml +
-      sec('応募時の情報', (preRows ? '<table class="kv">' + preRows + '</table>\n' : '<p class="empty">応募時の情報はありません。</p>\n') + hsHtml) +
-      (a.reviewerNotes ? sec('面接者への申し送りコメント', '<div class="note">' + esc(a.reviewerNotes) + '</div>') : '') +
+      sec('応募時の情報', (preRows ? '<table class="kv">' + preRows + '</table>\n' : '<p class="empty">応募時の情報はありません。</p>\n') + hsHtml, 'pre') +
+      (a.reviewerNotes ? sec('面接者への申し送りコメント', '<div class="note">' + esc(a.reviewerNotes) + '</div>', 'comment') : '') +
       sec('面接者への申し送り（留意点）',
         (handoffHtml || '<p class="empty">留意点はありません。</p>') +
         (strengths ? '<h3>強み（面接者へ共有）</h3><ul class="strengths">' + strengths + '</ul>' : '') +
-        (record.handoff.note ? '<h3>追記（申し送りコメントの補足）</h3><div class="note">' + esc(record.handoff.note) + '</div>' : '')) +
+        (record.handoff.note ? '<h3>追記（申し送りコメントの補足）</h3><div class="note">' + esc(record.handoff.note) + '</div>' : ''), 'handoff') +
       sec(beforeIv ? '面接前に分かっている情報（未確認）' : '面接で確認した情報',
         (ivRows ? '<table class="kv">' + ivRows + '</table>\n'
           : beforeIv ? '<p class="empty">面接前に分かっている項目の入力はありません（面接で確認します）。</p>\n'
             : '<p class="empty">面接で確認した項目の入力はありません。</p>\n') +
-        (unconfirmed ? '<div class="callout"><span>⚠</span><div>保存時点で未入力: ' + esc(unconfirmed) + '</div></div>\n' : '')) +
-      sec('シフト貢献度', contribHtml) +
+        (unconfirmed ? '<div class="callout"><span>⚠</span><div>保存時点で未入力: ' + esc(unconfirmed) + '</div></div>\n' : ''), 'interview') +
+      sec('シフト貢献度', contribHtml, 'contrib') +
       sec('面接評価', (hasScores ? '<div class="bars">' + scoreRows + '</div>' + interviewTotal : '<p class="empty">面接評価は未入力です。</p>') +
-        (record.interviewNotes ? '<h3>面接所見</h3><div class="note">' + esc(record.interviewNotes) + '</div>' : '')) +
-      sec('採用可否判定', judgmentHtml) +
-      sec('応募者の管理', mgmtHtml) +
+        (record.interviewNotes ? '<h3>面接所見</h3><div class="note">' + esc(record.interviewNotes) + '</div>' : ''), 'scores') +
+      sec('採用可否判定', judgmentHtml, 'judgment') +
+      sec('応募者の管理', mgmtHtml, 'mgmt') +
       '<div class="foot"><span>' + esc(meta.footer) + '</span><span>このファイルはアプリの「読み込み」から再度開けます。埋め込みデータを編集しないでください。</span></div>\n' +
       '</div>\n' +
       '<script type="application/json" id="recruit-record">' + json + SCRIPT_END + '\n' +
+      '<script>\n(function(){var b=document.getElementById("rtPrintSheet"),a=document.getElementById("rtPrintAll");if(!b)return;\n' +
+      'function prep(on){var h=document.querySelector(\'section.sec[data-sec="handoff"]\');if(h){h.classList.toggle("sheet-2col",!!on&&h.querySelectorAll("li.h").length>=9);}document.body.classList.toggle("print-handoff",!!on);}\n' +
+      'window.__prepareHandoffSheet=prep;\n' +
+      'b.addEventListener("click",function(){prep(true);var done=function(){prep(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});\n' +
+      'if(a)a.addEventListener("click",function(){window.print();});\n})();\n' + SCRIPT_END + '\n' +
       reportScript +
       '</body>\n</html>\n';
   }

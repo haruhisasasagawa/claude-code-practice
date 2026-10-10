@@ -35,8 +35,8 @@
 - 保存レコード `schemaVersion: 2`（保存時点の `contribution` と `highschool` のスナップショット付き）。レポートは 応募情報 → 申し送り → 強み → 追記 → シフト貢献度 → 面接評価 → 面接所見 → 採用可否判定（`.mx` 表、白黒印刷でも読める）
 
 ### 1-4. テスト（すべて緑）
-- `node tests/rules.test.js` … 単体テスト 58 件（SPEC 9-1 の #1〜#37 ＋並び順・describeApplicant・P1・非破壊・保存レポートの繁忙期タグ、SPEC-stages 7-1 の #43〜#52）
-- `node build.js && node tests/e2e.js` … 通しテスト 261 件の確認（SPEC 9-2 の E1〜E12 ＋ E13 高3例外を Step3 で入力 → 採用推奨 → 保存・読込、E14 showBeforeInterview=OFF、SPEC-stages 7-2 の E15〜E21。日時は 2026-10-10 に固定）
+- `node tests/rules.test.js` … 単体テスト 59 件（SPEC 9-1 の #1〜#37 ＋並び順・describeApplicant・P1・非破壊・保存レポートの繁忙期タグ、SPEC-stages 7-1 の #43〜#52、押印の #53）
+- `node build.js && node tests/e2e.js` … 通しテスト 286 件の確認（SPEC 9-2 の E1〜E12 ＋ E13 高3例外を Step3 で入力 → 採用推奨 → 保存・読込、E14 showBeforeInterview=OFF、SPEC-stages 7-2 の E15〜E21、押印の E22。日時は 2026-10-10 に固定）
   - E1 主シナリオ（例A: 貢献度 65.4・high_high → 要判断未確認で上長判断 → 全チェックで採用推奨）／E12 保存 → 読込で新項目が復元
   - E2 高2（原則対象外・highschool_hold）／E3 高3 例外充足・17歳のオールナイト／E4 高3 18歳・未決定・深夜帯○
   - E5 例B（17.6・high_low・上長判断）→ 設定でマスを不採用推奨に変更して再判定
@@ -207,8 +207,19 @@
 ## 7. 応募者の管理（押印）— 追加分
 
 - 保存レポート末尾に「応募者の管理」セクション。`profile.management.fields`（既定: initial 初期対応者 / interviewer 面接対応者 / final 最終確認）ごとに押印枠。
-- 名簿は `profile.management.managers`（`{ name, short, title }`）。設定画面「応募者の管理（押印）」で `氏名|印字名|役職` の行形式で編集。印字名を省略すると姓（スペースの前）。`allowFreeName` で名簿にない氏名の手入力を許可。
+- 名簿は `profile.management.managers`（`{ name, short, title }`）。設定画面「応募者の管理（押印）」で `氏名|印字名|役職` の行形式で編集（区切りは半角 `|` と全角 `｜` のどちらも可）。印字名を省略すると姓（スペースの前）。`allowFreeName` で名簿にない氏名の手入力を許可。
 - ハンコは `src/stamp.js` の `stampSvg`（外部参照なしの純関数）。レポートには `RecruitStamp.source()` で関数ソースを埋め込み、レポート単体でも押印できる。
 - レコードは `management: { <fieldId>: { name, short, title, date, at } }`。アプリ（Step2/Step4 の押印カード）とレポート（`#mgmt` + 「押印を保存」で `document.documentElement.outerHTML` を再出力）の両方で編集でき、読込で引き継ぐ。
 - 既定の名簿はリポジトリ上では「笹川 晴央（副支配人）」のみ。新宿の所属メンバー 15 名（支配人 1・副支配人 1・MGR 13）は副支配人から受領済みで、**リポジトリが非公開になった後に `config.default.js` の `management.managers` へ反映する**（公開リポジトリに実名を置かないため）。それまでは名簿入りの配布 HTML を直接渡す。異動時は設定画面の名簿（氏名|印字名|役職|等級）を編集する。
-- テスト: rules.test.js #53、e2e E22（アプリで押印 → 保存 → レポート上で押印・再出力 → 読込 → 印刷時の表示）。
+- ハンコの文字は外周（r=42）の内側（半径 38.5）に収まるよう、印字名・役職の文字数で大きさを決め、それでも弦の幅を超えるときだけ `textLength` で詰める（`stamp.js` の `fitAttr`）。
+- 埋め込み JSON（`#recruit-record`・`#recruit-mgmt-config`、レポート内の再出力も）は `< > &` を `\u` 形式にする（`storage.jsonForScript`）。値に閉じタグやコメント開始が入っても script 要素が壊れない。
+- レポート上の押印は「押印を保存」まで未保存。未保存のまま離れると beforeunload で確認し、保存後も「再保存」できるよう保存バーを残す（書き出すファイルではバーは閉じた状態）。
+- テスト: rules.test.js #53、e2e E22（アプリで押印 → 保存 → レポート上で押印・再出力・再保存 → 読込 → 印刷時の表示 → 特殊文字の手入力名 → 離脱時の確認）。
+
+## 8. 申し送りシート（A4 1枚）— 追加分
+
+- 方針: 「留意点・申し送りは基本 A4 ぺら 1」（副支配人）。Step2 の `[data-action="print-handoff"]` と保存レポートの `#rtPrintSheet` が `body.print-handoff` を付けて印刷する。
+- アプリ: `styles.css` の `@media print body.print-handoff` ブロック。表示するのは `.sheet-head`（印刷専用見出し）・`#handoffCard`・`#interviewTodo`・`#handoffItems`・`#handoffNoteCard`（追記があるときだけ）・`#mgmtCard`（押印のみ）。留意点 9 件以上で `#handoffItems.sheet-2col`（グリッド 2 段組み）。`@page sheet` で余白 7mm/9mm。
+- レポート: `section.sec[data-sec]`（pre / comment / handoff / interview / contrib / scores / judgment / mgmt）で絞り込み。`window.__prepareHandoffSheet(on)` を e2e から呼べる。
+- 検証: tests/e2e.js E23 が最も重いサンプル（留意点 13 件・外国籍・深夜帯）で Playwright の `page.pdf` → `pdfinfo` のページ数 = 1 を確認（pdfinfo が無い環境では省略）。
+- 1 枚に収まらない極端なケース（留意点 20 件超など）は 2 枚目に流れる。その場合は留意点ルールの ON/OFF で減らす運用。

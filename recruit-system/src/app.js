@@ -1178,6 +1178,9 @@
       case 'to-step':
         goStep(Number(b.dataset.step));
         break;
+      case 'print-handoff':
+        printHandoffSheet();
+        break;
       case 'copy-handoff':
         copyHandoffText();
         break;
@@ -1553,6 +1556,10 @@
     }
 
     let html = legacyBannerHtml();
+    const mgInit = (state.management || {}).initial;
+    html += '<div class="sheet-head print-only"><div class="sheet-title">面接者への申し送りシート</div>' +
+      '<div class="sheet-meta">' + esc(p.meta.theaterName) + '　応募者: ' + esc(a.name) + ' さん　作成日: ' + esc(U.fmtDate(new Date()).replace(/-/g, '/')) +
+      (mgInit && mgInit.name ? '　初期対応: ' + esc(mgInit.name) : '') + '</div></div>';
     html += '<div class="card" id="handoffCard"><div class="card-head"><h2>面接者への申し送り</h2>' +
       '<div class="spacer"></div><span class="badge accent lg">' + esc(a.name) + ' さん</span>' +
       '<p>' + esc(p.texts.handoffIntro || '') + '</p></div>' +
@@ -1603,7 +1610,7 @@
     const noteBody = '<p class="hint">面接者への申し送りは、基本は Step1 の「面接者への申し送りコメント」に書いてください。申し送りを作った後に補足したいことがあればここに記入します。</p>' +
       '<textarea data-note="handoff" rows="3" placeholder="例：土曜は月2回程度なら可能とのこと（電話で追加確認）。">' + esc(state.handoffNote) + '</textarea>';
     if (String(state.handoffNote || '').trim()) {
-      html += '<div class="card" id="handoffNoteCard"><div class="card-head"><h2>' + esc(noteTitle) + '</h2></div>' + noteBody + '</div>';
+      html += '<div class="card" id="handoffNoteCard"><div class="card-head"><h2>' + esc(noteTitle) + '</h2></div>' + noteBody + '<div class="note-print print-only">' + esc(state.handoffNote) + '</div></div>';
     } else {
       html += '<details class="card prefill" id="handoffNoteCard"><summary><span class="prefill-title">' + esc(noteTitle) + '</span></summary>' +
         '<div class="prefill-body">' + noteBody + '</div></details>';
@@ -1612,7 +1619,8 @@
     html += managementCardHtml();
     html += '<div class="actions between">' +
       '<button type="button" class="btn" data-action="to-step" data-step="1">← 応募情報に戻る</button>' +
-      '<div class="actions"><button type="button" class="btn" data-action="copy-handoff">📋 申し送り文をコピー</button>' +
+      '<div class="actions"><button type="button" class="btn" data-action="print-handoff" title="留意点・申し送りを A4 1枚に印刷">🖨 申し送りシート（A4）</button>' +
+      '<button type="button" class="btn" data-action="copy-handoff">📋 申し送り文をコピー</button>' +
       '<button type="button" class="btn primary" data-action="to-step" data-step="3">面接評価へ進む →</button></div></div>';
     return html;
   }
@@ -2367,6 +2375,31 @@
   // 使い方
   // =====================================================================
   // =====================================================================
+  // 申し送りシート（A4 1枚）の印刷
+  // =====================================================================
+  // 留意点が多いときは 2 段組みにして 1 枚に収める
+  function prepareHandoffSheet(on) {
+    const items = $('#handoffItems');
+    if (on) {
+      const n = items ? $$('.handoff-item', items).length : 0;
+      if (items) items.classList.toggle('sheet-2col', n >= 9);
+      document.body.classList.add('print-handoff');
+    } else {
+      document.body.classList.remove('print-handoff');
+      if (items) items.classList.remove('sheet-2col');
+    }
+  }
+
+  function printHandoffSheet() {
+    if (state.step !== 2) { goStep(2); }
+    prepareHandoffSheet(true);
+    const done = function () { prepareHandoffSheet(false); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    setTimeout(done, 3000);
+    window.print();
+  }
+
+  // =====================================================================
   // 応募者の管理（押印）
   // =====================================================================
   const Stamp = global.RecruitStamp;
@@ -2441,5 +2474,5 @@
   }
 
   document.addEventListener('DOMContentLoaded', init);
-  global.RecruitApp = { state: state, goStep: goStep, showView: showView, buildHandoffText: buildHandoffText, emptyApplicant: emptyApplicant };
+  global.RecruitApp = { state: state, goStep: goStep, showView: showView, buildHandoffText: buildHandoffText, emptyApplicant: emptyApplicant, prepareHandoffSheet: prepareHandoffSheet };
 })(window);

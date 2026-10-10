@@ -1276,7 +1276,8 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   const rp = await ctx.newPage();
   const rpErrors = [];
   rp.on('pageerror', e => rpErrors.push(e.message));
-  rp.on('dialog', d => d.accept());
+  const rpDialogs = [];
+  rp.on('dialog', d => { rpDialogs.push(d.type()); d.accept(); });
   await rp.clock.setFixedTime(NOW);
   await rp.goto('file://' + savedE22.file);
   await wait(300);
@@ -1294,6 +1295,8 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   const [dl22] = await Promise.all([rp.waitForEvent('download'), rp.click('#mgmtSaveBtn')]);
   const file22b = path.join(OUT, 'saved-stamps-2.html');
   await dl22.saveAs(file22b);
+  await wait(150);
+  expect((await rp.$eval('#mgmtSave', el => el.classList.contains('show'))) && (await rp.textContent('#mgmtSaveBtn')).trim() === '再保存', 'E22 保存後も「再保存」できるよう保存バーを残す');
   const html22b = fs.readFileSync(file22b, 'utf8');
   const rec22b = parseRecord(html22b);
   expect(dl22.suggestedFilename() === '応募者_押印_太郎_2026-10-10.html' || dl22.suggestedFilename() === 'download', 'E22 再出力のファイル名: ' + dl22.suggestedFilename());
@@ -1309,6 +1312,25 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect((await rp.$$('#mgmt svg.hanko')).length === 2 && (await rp.$eval('#mgmtSave', el => el.classList.contains('show'))), 'E22 再出力ファイル上で取消できる');
   await rp.emulateMedia({ media: 'print' });
   expect((await rp.$eval('.stamp-ctl', el => getComputedStyle(el).display)) === 'none' && (await rp.$eval('#mgmtSave', el => getComputedStyle(el).display)) === 'none' && (await rp.$eval('#mgmt svg.hanko', el => getComputedStyle(el).display)) !== 'none', 'E22 印刷時は操作部品を隠しハンコは出す');
+  await rp.emulateMedia({ media: 'screen' });
+  // 「<!--<script>」を含む手入力名でも、再出力したファイルの埋め込みデータが壊れない
+  await rp.selectOption(rbox('final') + ' select', '__free');
+  await rp.fill(rbox('final') + ' input', 'Y<!--<script>');
+  await rp.click(rbox('final') + ' [data-act="stamp"]');
+  await wait(150);
+  const [dl22c] = await Promise.all([rp.waitForEvent('download'), rp.click('#mgmtSaveBtn')]);
+  const file22c = path.join(OUT, 'saved-stamps-3.html');
+  await dl22c.saveAs(file22c);
+  const html22c = fs.readFileSync(file22c, 'utf8');
+  const rec22c = parseRecord(html22c);
+  expect(!!rec22c && rec22c.management.final.name === 'Y<!--<script>' && html22c.includes('id="recruit-mgmt-config"') && !/<!--/.test(html22c.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1]), 'E22 特殊な文字列の手入力名でも再出力ファイルを読み戻せる');
+  // 未保存の押印があるまま閉じようとすると確認が出る
+  await rp.click(rbox('final') + ' [data-act="unstamp"]');
+  await wait(100);
+  rpDialogs.length = 0;
+  await rp.goto('about:blank').catch(() => {});
+  await wait(200);
+  expect(rpDialogs.includes('beforeunload'), 'E22 未保存の押印があるとページを離れる前に確認: ' + JSON.stringify(rpDialogs));
   expect(rpErrors.length === 0, 'E22 レポートのページエラーなし: ' + (rpErrors.join(' / ') || 'none'));
   await rp.close();
   // 再出力したファイルをアプリで読み込む → 押印が引き継がれる
@@ -1323,6 +1345,50 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await page.click('#btnNew');
   await wait(200);
   expect(Object.keys(await st(() => window.RecruitApp.state.management)).length === 0, 'E22 新規で押印がリセットされる');
+
+  // =====================================================================
+  // E23 申し送りシート（A4 1枚）: アプリ Step2 とレポートの印刷モード
+  // =====================================================================
+  console.log('\n== E23 申し送りシート（A4 1枚） ==');
+  const pdfPages = (f) => { try { return Number((require('child_process').execSync('pdfinfo "' + f + '"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().match(/Pages:\s+(\d+)/) || [])[1]); } catch (e) { return -1; } };
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', path.join(OUT, 'saved.html'));   // E1 の応募者（留意点 13 件・外国籍・深夜帯）＝最も重いケース
+  await wait(500);
+  await navStep(2);
+  expect(!!(await page.$('[data-action="print-handoff"]')) && !(await visible('.sheet-head')), 'E23 Step2 に「申し送りシート（A4）」ボタン・画面ではシート見出しは非表示');
+  const nItems = await page.$$eval('#handoffItems .handoff-item', els => els.length);
+  await st(() => window.RecruitApp.prepareHandoffSheet(true));
+  expect(await st(() => document.body.classList.contains('print-handoff') && document.getElementById('handoffItems').classList.contains('sheet-2col')), 'E23 留意点 ' + nItems + ' 件 → 2 段組み');
+  await page.emulateMedia({ media: 'print' });
+  const hiddenE23 = await st(() => ['.summary', '#contribPreview', '.actions', '#mgmtCard .stamp-ctl', '#handoffItems .progress'].map(s => { const el = document.querySelector(s); return el ? getComputedStyle(el).display : 'none'; }));
+  expect(hiddenE23.every(d => d === 'none') && (await st(() => getComputedStyle(document.querySelector('.sheet-head')).display)) === 'flex', 'E23 印刷時はサマリー・貢献度・操作部品を隠しシート見出しを出す: ' + hiddenE23.join(','));
+  const pdfApp = path.join(OUT, 'sheet-app.pdf');
+  await page.pdf({ path: pdfApp, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const pagesApp = pdfPages(pdfApp);
+  expect(pagesApp === 1 || pagesApp === -1, 'E23 アプリの申し送りシートは A4 1 枚: ' + (pagesApp === -1 ? 'pdfinfo なし（省略）' : pagesApp + ' ページ'));
+  await page.emulateMedia({ media: 'screen' });
+  await st(() => window.RecruitApp.prepareHandoffSheet(false));
+  expect(await st(() => !document.body.classList.contains('print-handoff') && !document.getElementById('handoffItems').classList.contains('sheet-2col')), 'E23 印刷後に通常表示へ戻る');
+  // レポート側
+  const savedE23 = await saveRecord('saved-sheet.html');
+  expect(savedE23.html.includes('id="rtPrintSheet"') && savedE23.html.includes('section class="sec" data-sec="handoff"') && savedE23.html.includes('data-sec="mgmt"'), 'E23 レポートに印刷ツールバーと data-sec');
+  const rp23 = await ctx.newPage();
+  rp23.on('dialog', d => d.accept());
+  await rp23.goto('file://' + savedE23.file);
+  await wait(300);
+  expect(await rp23.$eval('.rtool', el => getComputedStyle(el).display) !== 'none' && await rp23.$eval('.sheet-title', el => getComputedStyle(el).display) === 'none', 'E23 レポート画面ではツールバー表示・シート見出し非表示');
+  await rp23.evaluate(() => window.__prepareHandoffSheet(true));
+  await rp23.emulateMedia({ media: 'print' });
+  const shownSecs = await rp23.$$eval('section.sec', els => els.filter(el => getComputedStyle(el).display !== 'none').map(el => el.dataset.sec));
+  expect(shownSecs.join(',') === 'pre,comment,handoff,interview,mgmt' && await rp23.$eval('.dash', el => getComputedStyle(el).display) === 'none' && await rp23.$eval('.rtool', el => getComputedStyle(el).display) === 'none', 'E23 レポートのシート印刷は 応募時・コメント・留意点・面接で確認・押印 だけ: ' + shownSecs.join(','));
+  const pdfRep = path.join(OUT, 'sheet-report.pdf');
+  await rp23.pdf({ path: pdfRep, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const pagesRep = pdfPages(pdfRep);
+  expect(pagesRep === 1 || pagesRep === -1, 'E23 レポートの申し送りシートは A4 1 枚: ' + (pagesRep === -1 ? 'pdfinfo なし（省略）' : pagesRep + ' ページ'));
+  await rp23.evaluate(() => window.__prepareHandoffSheet(false));
+  expect(await rp23.evaluate(() => !document.body.classList.contains('print-handoff')), 'E23 レポート側も印刷後に通常表示へ戻る');
+  await rp23.close();
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');
