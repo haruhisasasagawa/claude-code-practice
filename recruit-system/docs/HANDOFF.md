@@ -223,3 +223,9 @@
 - レポート: `section.sec[data-sec]`（pre / comment / handoff / interview / contrib / scores / judgment / mgmt）で絞り込み。`window.__prepareHandoffSheet(on)` を e2e から呼べる。
 - 検証: tests/e2e.js E23 が最も重いサンプル（留意点 13 件・外国籍・深夜帯）で Playwright の `page.pdf` → `pdfinfo` のページ数 = 1 を確認（pdfinfo が無い環境では省略）。
 - 1 枚に収まらない極端なケース（留意点 20 件超など）は 2 枚目に流れる。その場合は留意点ルールの ON/OFF で減らす運用。
+
+## 9. 全体印刷の改ページ — 追加分
+
+- 症状: 「出力する HTML を印刷すると空白が多い」。原因は `.result`（判定カード）や `.card` に `break-inside: avoid` が付いており、収まらないブロックが丸ごと次ページへ送られていたこと。
+- 対応: 大きなブロック（`.sec` / `.card` / `.result`）は `break-inside: auto`、小さな行（`li.h` / `.bar` / `tr` / `.tile` など）だけ `avoid`。見出しは `break-after: avoid`。印刷時の余白・文字サイズを画面用より詰めた（レポート: `storage.js` の `@media print{...}`、アプリ: `styles.css` の `@media print`）。
+- 結果（留意点 13 件のサンプル）: レポート 6 → 5 ページ（途中ページの下部空白は最大 15%）、アプリ Step4 の印刷 7 → 4 ページ。e2e E24 でページ数の上限を固定。

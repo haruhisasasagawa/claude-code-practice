@@ -624,7 +624,18 @@
       'body.print-handoff .stamp-row{gap:8px}body.print-handoff .stamp-box{display:flex;align-items:center;gap:8px;text-align:left;padding:2px 8px}body.print-handoff .stamp-label{font-size:10px;min-width:5.5em}body.print-handoff .stamp-area{height:auto}body.print-handoff .hanko{width:46px;height:46px}body.print-handoff .stamp-empty{width:44px;height:44px;font-size:8.5px}body.print-handoff .stamp-meta{font-size:9px;min-height:0;line-height:1.3}}',
       '@media print{.stamp-ctl,.mgmt-save,.mgmt-note{display:none !important}.stamp-row{break-inside:avoid}.hanko,.stamp-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
       '@media (max-width:720px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}.rh-main{flex-direction:column;align-items:stretch}.verdict{align-items:flex-start}ul.strengths{grid-template-columns:1fr}.bar,.bar.wide{grid-template-columns:minmax(0,1fr) 90px 4.5em}.rh-top{flex-direction:column;align-items:flex-start}.rh-meta{text-align:left}}',
-      '@media print{@page{size:A4;margin:12mm}body{background:#fff;font-size:12px}.page{padding:0;max-width:none}.rh,.sec,.tile,.result,li.h{box-shadow:none}.rh,.dash,.tile,.result,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line{break-inside:avoid}.sec h2,.sec h3{break-after:avoid}.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+      // 全体印刷: 画面用の余白を詰め、大きなブロックは途中で改ページ可にして各ページ下部の空白を減らす
+      '@media print{@page{size:A4;margin:10mm 11mm}body{background:#fff;font-size:11px;line-height:1.45}.page{padding:0;max-width:none}',
+      '.rh,.sec,.tile,.result,li.h{box-shadow:none}.rh{border-radius:8px}.rh-top{padding:5px 14px}.rh-main{padding:8px 14px;gap:12px}.rh-name{font-size:19px;margin:0 0 4px}.rh-chips{gap:4px}.chip{font-size:10.5px;padding:1px 8px}.verdict{padding:6px 12px;min-width:170px;gap:0}.verdict .v-title{font-size:16px}',
+      '.dash{margin-top:8px;gap:8px}.tile{padding:7px 10px}.tile .t-val{font-size:17px}.tile .t-label{font-size:10.5px}.meter{margin-top:5px}',
+      '.sec{margin-top:8px;padding:9px 14px 11px;border-radius:8px}.sec h2{font-size:12.5px;margin-bottom:7px;padding-bottom:5px}.sec h2::before{width:20px;height:20px;font-size:11px}.sec h3{margin:9px 0 5px}',
+      'table.kv th,table.kv td{padding:2px 8px 2px 0}table.kv tr{break-inside:avoid}table.list th,table.list td{padding:3px 8px}',
+      'li.h{padding:4px 9px}ul.hlist{gap:4px}.hgroup{margin-bottom:7px}.hgroup-head{margin-bottom:4px}ul.strengths{gap:3px 14px}.note{padding:7px 11px}.callout{padding:7px 10px;margin-top:8px}',
+      '.bars{gap:4px}.bar{grid-template-columns:minmax(0,1fr) 120px 4.5em}.bar.wide{grid-template-columns:minmax(0,1fr) 120px 5.5em}.total-line{padding:6px 10px;margin-top:8px}.total-line b{font-size:16px}',
+      '.result{padding:11px 14px;break-inside:auto}.result-title{font-size:18px}.axes{margin-top:8px;gap:8px}.axis{padding:6px 10px}.axis .a-val{font-size:15px}.mx-wrap{margin-top:8px;padding:6px}.mx td{padding:6px 4px}.adj{margin-top:8px}.adj li{padding:5px 10px}',
+      '.stamp-row{gap:8px}.stamp-box{padding:8px}.stamp-area{height:80px}.hanko{width:70px;height:70px}.stamp-empty{width:66px;height:66px}.foot{margin-top:12px}',
+      '.dash,.tile,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line,.axes,.stamp-row,.adj li{break-inside:avoid}.sec h2,.sec h3,.result-kicker,.result-title,.result-body,.hgroup-head{break-after:avoid}',
+      '.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     ].join('\n');
   }
 

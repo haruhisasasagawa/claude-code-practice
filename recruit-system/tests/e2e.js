@@ -1390,6 +1390,31 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect(await rp23.evaluate(() => !document.body.classList.contains('print-handoff')), 'E23 レポート側も印刷後に通常表示へ戻る');
   await rp23.close();
 
+  // =====================================================================
+  // E24 全体印刷の改ページ（大きなブロックで次ページへ送られて空白が出ないこと）
+  // =====================================================================
+  console.log('\n== E24 全体印刷 ==');
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', path.join(OUT, 'saved.html'));
+  await wait(500);
+  await page.emulateMedia({ media: 'print' });
+  const pdfFullApp = path.join(OUT, 'full-app.pdf');
+  await page.pdf({ path: pdfFullApp, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const pFullApp = pdfPages(pdfFullApp);
+  expect(pFullApp === -1 || pFullApp <= 5, 'E24 アプリ Step4 の全体印刷は 5 ページ以内（旧 7 ページ）: ' + (pFullApp === -1 ? 'pdfinfo なし' : pFullApp));
+  await page.emulateMedia({ media: 'screen' });
+  const rp24 = await ctx.newPage();
+  await rp24.goto('file://' + savedE23.file);
+  await wait(300);
+  await rp24.emulateMedia({ media: 'print' });
+  const pdfFullRep = path.join(OUT, 'full-report.pdf');
+  await rp24.pdf({ path: pdfFullRep, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const pFullRep = pdfPages(pdfFullRep);
+  expect(pFullRep === -1 || pFullRep <= 5, 'E24 レポートの全体印刷は 5 ページ以内（旧 6 ページ）: ' + (pFullRep === -1 ? 'pdfinfo なし' : pFullRep));
+  expect(await rp24.$eval('section.sec[data-sec="judgment"] .result', el => getComputedStyle(el).breakInside) === 'auto', 'E24 判定カードは途中で改ページ可（丸ごと次ページへ送らない）');
+  await rp24.close();
+
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');
   await browser.close();

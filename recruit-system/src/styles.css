@@ -743,17 +743,33 @@ p.handoff-comment { font-size: 13.5px; }
 
 /* ---------- 印刷 ---------- */
 @media print {
-  @page { size: A4; margin: 14mm; }
-  html { font-size: 12px; }
-  body { background: #fff; color: #000; }
+  @page { size: A4; margin: 10mm 11mm; }
+  html { font-size: 11px; }
+  body { background: #fff; color: #000; line-height: 1.45; }
   .sidebar, .topbar, .summary, .actions, .toast, .no-print, .view-footer { display: none !important; }
   .app { display: block; }
   .view { padding: 0; }
   .judge-layout { display: block; }
-  .card, .result-card { box-shadow: none; break-inside: avoid; border-color: #bbb; }
-  .result-card { background: #fff !important; }
-  .handoff-item { break-inside: avoid; }
-  .matrix, .bars, .busy-mini { break-inside: avoid; }
+  .work { gap: 8px; }
+  /* 大きなカードは途中で改ページしてよい（丸ごと次ページへ送ると大きな空白が出る）。小さな行だけ分割を避ける */
+  .card, .result-card { box-shadow: none; break-inside: auto; border-color: #bbb; padding: 10px 14px 12px; border-radius: 8px; }
+  .card-head { margin-bottom: 8px; break-after: avoid; }
+  .card-head h2 { font-size: 13px; }
+  .card h3.sub { margin: 10px 0 6px; break-after: avoid; }
+  .result-card { background: #fff !important; padding: 12px 16px; }
+  .result-title { font-size: 20px; }
+  .metrics { margin-top: 10px; gap: 8px; }
+  .metric { padding: 8px 10px; }
+  .metric-val { font-size: 17px; }
+  .handoff-item, .bar-row, .metric, .eval-item, .tl-item, .stamp-row, .table tr, .matrix, .busy-mini, .alert, .handoff-group-head { break-inside: avoid; }
+  .grid-2 { grid-template-columns: 1fr; gap: 8px; }
+  .bar-row { grid-template-columns: minmax(0, 1fr) 140px 3em; }
+  .handoff-item { padding: 6px 10px; }
+  .handoff-list { gap: 5px; }
+  .bars { gap: 5px; }
+  .table th, .table td { padding: 4px 8px; }
+  .stamp-area { height: 80px; }
+  .hanko { width: 70px; height: 70px; }
   .legacy-banner .btn { display: none; }
   .handoff-comment .btn, .sum-later { display: none; }
 }
@@ -798,7 +814,7 @@ p.handoff-comment { font-size: 13.5px; }
   body.print-handoff .badge.lg { font-size: 10px; padding: 0 7px; }
   body.print-handoff .table th, body.print-handoff .table td { padding: 1px 6px; font-size: 10px; }
   body.print-handoff .list-plain { font-size: 10px; gap: 0; }
-  body.print-handoff .grid-2 { gap: 8px; }
+  body.print-handoff .grid-2 { grid-template-columns: 1fr 1fr; gap: 8px; }
   body.print-handoff .alert { padding: 3px 8px; font-size: 10px; }
   body.print-handoff .handoff-comment-body { font-size: 10px; }
   body.print-handoff .strength-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
