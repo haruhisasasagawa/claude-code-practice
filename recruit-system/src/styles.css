@@ -819,6 +819,28 @@ p.handoff-comment { font-size: 13.5px; }
 @media (max-width: 760px) { .decision-body { grid-template-columns: 1fr; } }
 @media print { #decisionCard.is-none { display: none !important; } #decisionCard .verdict-stamp { width: 96px; height: 61px; filter: none; } }
 
+/* ---------- 台本モード（docs/SPEC-script-mode.md） ---------- */
+.cl-head-attrs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cl-attr { display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-size: 13px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
+.cl-attr small { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.cl-attr[data-attr="negatives"] { border-color: var(--warn); color: var(--warn); }
+.report-paper-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px 2px 14px; }
+.report-paper-cap { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; width: 210mm; max-width: 100%; margin: 0 auto 6px; font-size: 12px; color: var(--muted); }
+.report-paper-cap b { color: var(--text); }
+.report-paper { box-sizing: content-box; width: 190mm; margin: 0 auto; padding: 10mm; background: #fff; color: #111; border: 1px solid #d5dbe3; border-radius: 2px; box-shadow: 0 1px 2px rgba(16,24,40,.08), 0 12px 32px rgba(16,24,40,.12); color-scheme: light; }
+.report-paper .cl-mode-sheet .cl-page + .cl-page { margin-top: 8mm; padding-top: 6mm; border-top: 1px dashed #b8c2cf; }
+.sum-stamps { font-size: 12px; font-weight: 600; text-align: right; }
+#sumStamps .sum-label { white-space: nowrap; }
+.mode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mode-opt { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; background: var(--surface); }
+.mode-opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.mode-opt .lbl { font-weight: 800; }
+.settings-advanced { border: 1px dashed var(--border-strong); border-radius: 12px; padding: 10px 12px; }
+.settings-advanced > summary { cursor: pointer; font-weight: 800; padding: 4px 2px; }
+.settings-advanced[open] > summary { margin-bottom: 10px; }
+@media (max-width: 640px) { .mode-options { grid-template-columns: 1fr; } }
+@media print { .report-paper-wrap { display: none !important; } }
+
 /* ---------- 申し送りシート（A4 1枚）印刷 ---------- */
 .print-only { display: none; }
 @page sheet { size: A4; margin: 7mm 9mm; }

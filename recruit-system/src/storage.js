@@ -562,6 +562,11 @@
     fillChecklist(merged, base, raw, report);
     upgradeTexts(merged, base);
     enforceLocked(merged);
+    // 運用モード（docs/SPEC-script-mode.md 1-1）。無い・不正は台本モード。保存済みの設定に mode が無かったときは report.modeAdded
+    // （空オブジェクト = 保存済み設定なし は知らせない）
+    const rawMode = raw.mode;
+    merged.mode = (rawMode === 'script' || rawMode === 'full') ? rawMode : 'script';
+    if (report && rawMode !== 'script' && rawMode !== 'full' && Object.keys(raw).length) report.modeAdded = true;
     merged.schemaVersion = 2;
     return merged;
   }
@@ -570,6 +575,7 @@
   function validateProfile(p) {
     const errors = [], warnings = [];
     p = p || {};
+    if (p.mode !== undefined && p.mode !== 'script' && p.mode !== 'full') errors.push('運用モード（台本モード／詳細モード）が正しくありません。');
     const inRange = function (v, lo, hi) { return isNum(v) && Number(v) >= lo && Number(v) <= hi; };
     const isTime = function (v) { return /^\d{1,2}:\d{2}$/.test(String(v || '')) && Number(String(v).split(':')[0]) < 24 && Number(String(v).split(':')[1]) < 60; };
     const ev = p.evaluation || {}, th = ev.thresholds || {};
@@ -723,6 +729,8 @@
       savedAt: new Date().toISOString(),
       profile: { theaterName: state.profile.meta.theaterName, version: state.profile.meta.version, schemaVersion: 2 },
       step: state.step,
+      // 保存時の運用モード（'script' | 'full'）。保存 HTML の形はこれで決める（旧レコードは無し＝'full'）
+      mode: R.isScriptMode(state.profile) ? 'script' : 'full',
       // 保存時点の入力の段階（レポートの「応募時の情報／面接で確認した情報」の振り分け用。読込では使わない）
       inputStages: U.deepClone(state.profile.inputStages || null),
       applicant: U.deepClone(state.applicant),
@@ -1010,7 +1018,9 @@
     const a = record.applicant || {};
     const cl = U.isObj(record.checklist) ? record.checklist : R.emptyChecklist();
     const def = normalizeChecklistDef(record.checklistDef || profile.checklist, defaults().checklist);
-    const prof = Object.assign({}, profile, { checklist: def });
+    // 運用モードは保存時の記録で決める（台本モードの記録は自動表示なし。docs/SPEC-script-mode.md 3-6）
+    const scriptRec = R.isScriptRecord(record);
+    const prof = Object.assign({}, profile, { checklist: def, mode: scriptRec ? 'script' : 'full' });
     const sum = R.checklistSummary(a, cl, prof, { scores: record.scores, management: record.management });
     const showQ = !(U.isObj(def.print) && def.print.showQuestions === false);
     const tone = function (t) { return CL_TONE_CLASS[t] || ''; };
@@ -1071,7 +1081,7 @@
 
     // 「面接で確認した勤務条件」（① の直後・sheet のみ）: 応募情報のうち面接時に確認する段階の行
     let confirmedHtml = '';
-    if (mode === 'sheet') {
+    if (mode === 'sheet' && !scriptRec) {
       const stages = record.inputStages || profile.inputStages || {};
       let rows = [];
       try {
@@ -1142,15 +1152,18 @@
       (m.total ? '<div class="cl-ov-row"><span class="cl-ov-k">必須条件</span><span class="cl-ov-v ' + (m.mismatch ? 't-danger' : m.unknown ? 't-muted' : 't-ok') + '">' + esc(mustCountsText(m)) +
         (mustDetail.length ? '<small>（' + esc(mustDetail.join('／')) + '）</small>' : '') + '</span></div>' : '') +
       '<div class="cl-ov-row cl-ov-notes"><span class="cl-ov-k">面接所見</span><span class="cl-ov-v cl-memo-t">' + txt(record.interviewNotes) + '</span></div>' +
+      // 台本モード: Step① の備考（面接者メモ）も報告に載せる
+      (scriptRec && mode === 'sheet' && asStr(a.reviewerNotes).trim() ? '<div class="cl-ov-row cl-ov-notes"><span class="cl-ov-k">備考</span><span class="cl-ov-v cl-memo-t">' + esc(asStr(a.reviewerNotes).trim()) + '</span></div>' : '') +
       '</div>';
 
     // ---- 台本ヘッダー（面接日・担当・タクシー可否・料金・消極属性・応募した求人）。section / sheet 共通 ----
     const hd = sum.header;
     const negOn = hd.negatives.filter(function (n) { return n.on; });
     const chips = [];
-    chips.push('<span class="cl-hchip ' + tone(hd.taxi.tone) + '"><b>タクシー可否・料金</b>' + txt(hd.taxi.text) + (hd.taxi.auto ? '' : '<small>（手入力）</small>') + '</span>');
+    // 台本モードの記録は常に手入力（「（手入力）」「（自動）」を付けない）
+    chips.push('<span class="cl-hchip ' + tone(hd.taxi.tone) + '"><b>タクシー可否・料金</b>' + txt(hd.taxi.text) + (hd.taxi.auto || scriptRec ? '' : '<small>（手入力）</small>') + '</span>');
     chips.push('<span class="cl-hchip' + (negOn.length ? ' t-danger' : '') + '"><b>消極属性</b>' +
-      (negOn.length ? negOn.map(function (n) { return esc(n.label) + (n.auto ? '<small>（自動）</small>' : ''); }).join('・') : 'なし') + '</span>');
+      (negOn.length ? negOn.map(function (n) { return esc(n.label) + (n.auto && !scriptRec ? '<small>（自動）</small>' : ''); }).join('・') : 'なし') + '</span>');
     chips.push('<span class="cl-hchip"><b>' + esc(((def.header || {}).posting || {}).label || '応募した求人') + '</b>' + txt(hd.postingLabel) + '</span>');
     const kvHtml = '<dl class="cl-sh-kv"><div><dt>面接日</dt><dd>' + (hd.date ? esc(clFmtDate(hd.date)) : dash) + '</dd></div>' +
       '<div><dt>担当</dt><dd>' + txt(hd.interviewer) + (hd.interviewerFromStamp ? '<small>（押印より）</small>' : '') + '</dd></div>' +
@@ -1164,12 +1177,19 @@
     // ---- sheet: ヘッダー ----
     const meta = profile.meta || {};
     const opts = profile.options || {};
-    let shiftsLine = '';
-    try { shiftsLine = R.describeShifts(a, profile).join('、'); } catch (e) { shiftsLine = ''; }
-    const who = [a.category, a.age ? a.age + '歳' : ''].filter(Boolean).join('・');
-    if (a.workPeriod) chips.push('<span class="cl-hchip"><b>勤務期間</b>' + esc(R.labelOf(opts.workPeriods, a.workPeriod)) + '</span>');
-    if (a.daysMin || a.daysMax) chips.push('<span class="cl-hchip"><b>週</b>' + esc((a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日') + '</span>');
-    if (shiftsLine) chips.push('<span class="cl-hchip cl-hchip-wide"><b>希望シフト</b>' + esc(shiftsLine) + '</span>');
+    let who;
+    if (scriptRec) {
+      // 台本モード: 区分・年齢・性別と卒業予定（勤務期間・週・希望シフトは出さない）
+      who = [a.category, a.age ? a.age + '歳' : '', a.gender].filter(Boolean).join('・');
+      if (asStr(a.graduationDate).trim()) chips.push('<span class="cl-hchip"><b>卒業予定</b>' + esc(clFmtMonth(asStr(a.graduationDate).trim())) + '</span>');
+    } else {
+      let shiftsLine = '';
+      try { shiftsLine = R.describeShifts(a, profile).join('、'); } catch (e) { shiftsLine = ''; }
+      who = [a.category, a.age ? a.age + '歳' : ''].filter(Boolean).join('・');
+      if (a.workPeriod) chips.push('<span class="cl-hchip"><b>勤務期間</b>' + esc(R.labelOf(opts.workPeriods, a.workPeriod)) + '</span>');
+      if (a.daysMin || a.daysMax) chips.push('<span class="cl-hchip"><b>週</b>' + esc((a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日') + '</span>');
+      if (shiftsLine) chips.push('<span class="cl-hchip cl-hchip-wide"><b>希望シフト</b>' + esc(shiftsLine) + '</span>');
+    }
     const created = U.fmtDate(record.savedAt ? new Date(record.savedAt) : new Date());
     const headHtml = '<div class="cl-sheet-head">' +
       '<div class="cl-sh-top"><span class="cl-sh-theater">' + esc(meta.theaterName || '') + '</span>' +
@@ -1201,7 +1221,17 @@
         : j.mode === 'interviewOnly' || !j.interview
           ? '<div class="cl-tile"><span class="cl-tile-k">シフト貢献度</span><span class="cl-tile-v">OFF</span><span class="cl-tile-s">面接評価のみで判定</span></div>'
           : '<div class="cl-tile ' + (bandTone[jc.band] || '') + '"><span class="cl-tile-k">シフト貢献度</span><span class="cl-tile-v">' + esc(jc.total == null ? '-' : jc.total) + '<small> / ' + esc(jc.max == null ? '-' : jc.max) + '点</small></span><span class="cl-tile-s">' + esc((jc.pct == null ? '-' : jc.pct) + '%' + (jc.bandLabel ? '・' + jc.bandLabel : '')) + '</span></div>';
-      const tilesHtml = '<div class="cl-tiles">' +
+      const mustTile = m.total ? '<div class="cl-tile ' + (m.mismatch ? 't-danger' : m.unknown ? 't-muted' : 't-ok') + '"><span class="cl-tile-k">必須条件</span><span class="cl-tile-v">' + (m.mismatch ? '不一致 ' + m.mismatch : m.unknown ? '未確認 ' + m.unknown : 'すべて一致') + '</span><span class="cl-tile-s">' + esc(mustCountsText(m)) + '</span></div>' : '';
+      const resTile = '<div class="cl-tile cl-tile-res ' + (resTone[j.result] || '') + '"><span class="cl-tile-k">結果</span><span class="cl-tile-v">' + esc(j.title || titleOf(j.result)) + '</span><span class="cl-tile-s">' + esc(j.evaluatedAt ? '判定 ' + U.fmtDateTime(j.evaluatedAt) : '') + '</span></div>';
+      // 台本モード: 面接評価（確認点）・必須条件・総合判断・結果（シフト貢献度のタイルは出さない）
+      const jo = (j.overall && typeof j.overall === 'object') ? j.overall : (j.checklist && j.checklist.overall) || sum.overall;
+      const joTone = jo && jo.value ? (CL_TONE_CLASS[R.OVERALL_TONE[jo.value]] || '') : 't-muted';
+      const tilesHtml = scriptRec ? '<div class="cl-tiles">' +
+        '<div class="cl-tile ' + (bandTone[iv.band] || '') + '"><span class="cl-tile-k">面接評価（確認点）</span><span class="cl-tile-v">' + esc(iv.total) + '<small> / ' + esc(iv.max) + '点</small></span><span class="cl-tile-s">' + esc(iv.pct + '%' + (iv.bandLabel ? '・' + iv.bandLabel : '')) + '</span></div>' +
+        mustTile +
+        '<div class="cl-tile ' + joTone + '"><span class="cl-tile-k">総合判断</span><span class="cl-tile-v">' + esc(jo && jo.value ? jo.label : '未入力') + '</span><span class="cl-tile-s">' + esc(def.overallLabel || '面接者の総合判断') + '</span></div>' +
+        resTile +
+        '</div>' : '<div class="cl-tiles">' +
         '<div class="cl-tile ' + (bandTone[iv.band] || '') + '"><span class="cl-tile-k">面接評価</span><span class="cl-tile-v">' + esc(iv.total) + '<small> / ' + esc(iv.max) + '点</small></span><span class="cl-tile-s">' + esc(iv.pct + '%' + (iv.bandLabel ? '・' + iv.bandLabel : '')) + '</span></div>' +
         contribTile +
         (m.total ? '<div class="cl-tile ' + (m.mismatch ? 't-danger' : m.unknown ? 't-muted' : 't-ok') + '"><span class="cl-tile-k">必須条件</span><span class="cl-tile-v">' + (m.mismatch ? '不一致 ' + m.mismatch : m.unknown ? '未確認 ' + m.unknown : 'すべて一致') + '</span><span class="cl-tile-s">' + esc(mustCountsText(m)) + '</span></div>' : '') +
@@ -1351,6 +1381,8 @@
     const R = global.RecruitRules;
     const esc = U.esc;
     const a = record.applicant || {};
+    // 台本モードの記録（record.mode === 'script'）は応募者情報・面接チェックリスト・採用可否判定（台本）・応募者の管理だけ（docs/SPEC-script-mode.md 3 章）
+    const scriptRec = R.isScriptRecord(record);
     // 押印・最終合否（docs/SPEC-report.md 4-1）。ファイル名は合否付き（有効かつ合否ありのとき 基本名_採用.html）
     const Stamp = global.RecruitStamp;
     const dcfg = decisionConfig(profile);
@@ -1666,6 +1698,82 @@
     const json = jsonForScript(record);
     const SCRIPT_END = '</scr' + 'ipt>';
 
+    // ---- 台本モードの記録（docs/SPEC-script-mode.md 3-3〜3-5）。留意点・面接で確認した情報・シフト貢献度は出さない ----
+    let scriptHeaderHtml = '', scriptDashHtml = '', scriptApplicantSecHtml = '', scriptJudgmentSecHtml = '';
+    if (scriptRec) {
+      const sRows = R.scriptApplicantRows(a, clRec, clProf, record.management);
+      const rowVal = function (k) { const r = sRows.find(function (x) { return x.key === k; }); return r ? r.value : ''; };
+      const ivS = R.interviewModel(clProf, {}, clRec);
+      const cntS = ivS.counts || { good: 0, fair: 0, poor: 0, blank: 0 };
+      const marksS = '○' + cntS.good + ' △' + cntS.fair + ' ×' + cntS.poor;
+      const oo = (clProf.checklist && clProf.checklist.overallOptions) || {};
+      const ovV = R.OVERALL_POINTS.hasOwnProperty(clRec.overall) ? clRec.overall : '';
+      const ovL = ovV ? (oo[ovV] || { hire: '採用', hold: '保留', reject: '不採用' }[ovV]) : '';
+      const mustShort = function (m) { return !m || !m.total ? 'なし' : m.mismatch ? '不一致 ' + m.mismatch : m.unknown ? '未確認 ' + m.unknown : 'すべて一致'; };
+      const mustCounts = function (m) { return '一致 ' + m.match + '・不一致 ' + m.mismatch + '・未確認 ' + m.unknown; };
+      const jMust = j ? ((j.checklist && j.checklist.must) || j.must || clMust) : clMust;
+      const jOv = j ? ((j.overall && typeof j.overall === 'object') ? j.overall : (j.checklist && j.checklist.overall) || { value: ovV, label: ovL }) : { value: ovV, label: ovL };
+      // ヘッダー
+      const sStep = { 1: '応募者の入力中', 3: '面接チェックリストの入力中', 4: '報告書まで完了' }[Number(record.step)] || '';
+      const sChips = [rowVal('category'), rowVal('age'), rowVal('gender'), rowVal('graduation') ? '卒業予定 ' + rowVal('graduation') : '', rowVal('posting'), rowVal('negatives')].filter(Boolean)
+        .map(function (ch) { return '<span class="chip">' + esc(ch) + '</span>'; }).join('');
+      const sVerdict = j
+        ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title) + '</span><span class="v-sub">' + esc('必須条件 ' + mustShort(jMust) + '・総合判断 ' + (jOv.label || '未入力')) + '</span></div>'
+        : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">未実施</span><span class="v-sub">アプリの「報告書」を開くと判定します</span></div>';
+      scriptHeaderHtml = '<header class="rh"><div class="rh-top">' +
+        '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
+        '<div class="rh-meta">保存日時 ' + esc(savedAt) + (sStep ? '<br>進捗: ' + esc(sStep) : '') + '</div></div>' +
+        '<div class="rh-main"><div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + sChips + '</div></div>' +
+        sVerdict + (dcfg.enabled ? '<div class="rh-decision" id="rhDecision">' + decSvg(72, 'vdHead') + '</div>' : '') + '</div></header>\n';
+      // ダッシュ（面接評価〔確認点〕・必須条件・総合判断・結果）
+      const ivBandTxt = ivS.bandLabel || '';
+      scriptDashHtml = '<div class="dash">' +
+        (ivS.rated > 0
+          ? '<div class="tile" data-tile="interview"><div class="t-label">面接評価（確認点）</div><div class="t-val">' + esc(ivS.total) + '<small>/ ' + esc(ivS.max) + '点</small></div><div class="meter"><span class="' + (ivS.band ? bandCls(ivS.band) : pctCls(ivS.pct)) + '" style="width:' + clamp(ivS.pct) + '%"></span></div><div class="t-sub">得点率 ' + esc(ivS.pct) + '%' + (ivBandTxt ? '・' + esc(ivBandTxt) : '') + '　' + esc(marksS) + '</div></div>'
+          : '<div class="tile" data-tile="interview"><div class="t-label">面接評価（確認点）</div><div class="t-val txt muted">未入力</div><div class="t-sub">' + esc(marksS) + '</div></div>') +
+        '<div class="tile" data-tile="must"><div class="t-label">必須条件</div><div class="t-val txt"' + (clMust.mismatch ? ' style="color:var(--danger)"' : '') + '>' + esc(mustShort(clMust)) + '</div><div class="t-sub">' + esc(mustCounts(clMust)) + '</div></div>' +
+        '<div class="tile" data-tile="overall"><div class="t-label">総合判断</div><div class="t-val txt' + (ovV ? '' : ' muted') + '">' + esc(ovL || '未入力') + '</div><div class="t-sub">面接者の総合判断</div></div>' +
+        (j
+          ? '<div class="tile" data-tile="result"><div class="t-label">結果</div><div class="t-val txt"><span class="badge lg ' + resultTone(j.result) + '">' + esc(j.title) + '</span></div><div class="t-sub">台本モード' + (j.evaluatedAt ? '・' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div></div>'
+          : '<div class="tile" data-tile="result"><div class="t-label">結果</div><div class="t-val txt muted">未実施</div><div class="t-sub">台本モード</div></div>') +
+        '</div>\n';
+      // 応募者情報（Step① の項目だけ）
+      scriptApplicantSecHtml = sec('応募者情報', sRows.length
+        ? '<table class="kv">' + sRows.map(function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; }).join('') + '</table>\n'
+        : '<p class="empty">応募者情報の入力はありません。</p>\n', 'applicant');
+      // 採用可否判定（台本モード）
+      let sj = '<p class="empty">採用可否判定は未実施です（アプリの「報告書」を開くと判定します）。</p>';
+      if (j) {
+        const jiv = j.interview || { total: j.total, max: j.max, pct: j.pct, band: '', bandLabel: '' };
+        const jc = (j.checklist && j.checklist.counts) || cntS;
+        const mDet = [];
+        if ((jMust.mismatchLabels || []).length) mDet.push('不一致: ' + jMust.mismatchLabels.join('、'));
+        if ((jMust.unknownLabels || []).length) mDet.push('未確認: ' + jMust.unknownLabels.join('、'));
+        let adjS = '';
+        if (j.adjustments && j.adjustments.length) {
+          const fixed = j.adjustments.some(function (x) { return x.code === 'must_conditions' && x.from === x.to; });
+          adjS = '<div class="adj-head">' + (fixed ? '必須条件の不一致により「' + esc(j.title) + '」に固定' : '総合判断による結果「' + esc(titleOf(j.baseResult)) + '」から「' + esc(j.title) + '」に調整') + '</div>' +
+            '<ul class="adj">' + j.adjustments.map(function (x) {
+              return '<li><span class="step">' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</span><span>' + esc(x.reason) + '</span></li>';
+            }).join('') + '</ul>';
+        }
+        const shownS = {};
+        (j.adjustments || []).forEach(function (x) { shownS[x.reason] = true; });
+        const warnsS = (j.warnings || []).filter(function (w) { return !shownS[w]; });
+        sj = '<div class="result ' + esc(j.result) + '"><div class="result-kicker">採用可否判定（台本モード）</div>' +
+          '<div class="result-title">' + esc(j.title) + '</div><div class="result-body">' + esc(j.body) + '</div>' +
+          '<table class="kv script-judge">' +
+            '<tr><th>必須条件</th><td>' + esc(mustCounts(jMust) + (mDet.length ? '（' + mDet.join('／') + '）' : '')) + '</td></tr>' +
+            '<tr><th>面接評価（確認点）</th><td>' + esc(jiv.total + '/' + jiv.max + '点（' + jiv.pct + '%' + (jiv.bandLabel ? '・' + jiv.bandLabel : '') + '）　○' + jc.good + ' △' + jc.fair + ' ×' + jc.poor) + '</td></tr>' +
+            '<tr><th>総合判断</th><td>' + esc(jOv.label || '未入力') + '</td></tr>' +
+            '<tr><th>結果</th><td>' + esc(j.title) + '</td></tr>' +
+          '</table>' + adjS +
+          (warnsS.length ? '<ul class="warn-list">' + warnsS.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') +
+          '<div class="disclaimer">' + esc(j.disclaimer) + (j.evaluatedAt ? '　判定日時: ' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div></div>';
+      }
+      scriptJudgmentSecHtml = sec('採用可否判定', sj, 'judgment');
+    }
+
     // ---- 応募者の管理（押印欄）。レポート上でも押印でき、「押印を保存」で同じ形式のファイルを再出力する ----
     const mg = profile.management || {};
     const mgFields = Array.isArray(mg.fields) && mg.fields.length ? mg.fields : [];
@@ -1724,7 +1832,9 @@
         '</div></div>';
     }
     const saveBarHtml = '<div class="mgmt-save" id="mgmtSave"><span id="mgmtSaveMsg">押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div>';
-    const mgmtNoteHtml = '<div class="mgmt-note">' + (dcfg.enabled
+    const mgmtNoteHtml = '<div class="mgmt-note">' + (dcfg.enabled && scriptRec
+      ? '運用: 面接者はアプリで面接チェックリストを入力し、報告書の「面接対応者」に押印して保存したファイルをスレッドに添付します。副支配人はこのファイルをブラウザで開き、「' + esc(dcfg.label) + '」で担当者を選んで「' + esc(dcfg.hireLabel) + '」または「' + esc(dcfg.rejectLabel) + '」を押し（押印欄「最終確認」が未押印なら同じ担当者の印も押されます）、「押印を保存」で再出力したファイルをスレッドに添付してください。レポート上で押した印・合否は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。'
+      : dcfg.enabled
       ? '運用: 面接者はアプリで面接チェックリストを入力・判定し、「面接対応者」に押印して保存したファイルをスレッドに添付します。副支配人はこのファイルをブラウザで開き、「' + esc(dcfg.label) + '」で担当者を選んで「' + esc(dcfg.hireLabel) + '」または「' + esc(dcfg.rejectLabel) + '」を押し（押印欄「最終確認」が未押印なら同じ担当者の印も押されます）、「押印を保存」で再出力したファイルをスレッドに添付してください。レポート上で押した印・合否は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。'
       : '担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。レポート上で押した印は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印ごと引き継げます。') + '</div>';
     const mgmtHtml = decPanelHtml + (mgFields.length
@@ -1803,13 +1913,9 @@
       'initDecSel();render();\n})();\n' + SCRIPT_END + '\n'
     ) : '';
 
-    return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
-      '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
-      '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
-      '<style>\n' + reportCss() + '\n' + checklistSheetCss() + '\n</style>\n</head>\n<body class="view-report' + (clHas ? ' has-cl' : '') + '" data-filename="' + esc(filename) + '">\n<div class="page">\n' +
-      // 表示切替（報告書＝既定／詳細＝全体レポート）＋印刷（docs/SPEC-report.md 4-3）
-      '<div class="rtool no-print"><div class="rtool-view" role="group" aria-label="表示"><button type="button" id="rtViewReport" class="on" aria-pressed="true">報告書</button><button type="button" id="rtViewFull" aria-pressed="false">詳細</button></div><span class="rtool-sep"></span>' +
-        '<span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button>' +
+    // 詳細モード・旧レコードの本文（従来どおり）
+    function fullBodyHtml() {
+      return '<span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button>' +
         (clHas ? '<button type="button" id="rtPrintChecklist">面接チェックリスト報告（A4）</button>' : '') +
         '<button type="button" id="rtPrintAll">レポート全体</button><span class="rtool-hint">申し送りシートは応募情報・留意点・面接で確認する項目・押印欄だけを 1 枚にまとめます。' +
         (clHas ? '面接チェックリスト報告は台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2 枚にまとめます。' : '') + '</span></div>\n' +
@@ -1832,14 +1938,32 @@
       checklistSecHtml + legacySecHtml +
       sec('採用可否判定', judgmentHtml, 'judgment') +
       (clHas ? '<div id="clSheet" class="cl-sheet-print">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '' }) + '</div>\n' : '') +
-      sec('応募者の管理', mgmtHtml, 'mgmt') +
+      sec('応募者の管理', mgmtHtml, 'mgmt');
+    }
+
+    return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+      '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
+      '<style>\n' + reportCss() + '\n' + checklistSheetCss() + '\n</style>\n</head>\n<body class="view-report' + (scriptRec ? ' has-cl mode-script' : clHas ? ' has-cl' : '') + '" data-filename="' + esc(filename) + '">\n<div class="page">\n' +
+      // 表示切替（報告書＝既定／詳細＝全体レポート）＋印刷（docs/SPEC-report.md 4-3）
+      '<div class="rtool no-print"><div class="rtool-view" role="group" aria-label="表示"><button type="button" id="rtViewReport" class="on" aria-pressed="true">報告書</button><button type="button" id="rtViewFull" aria-pressed="false">詳細</button></div><span class="rtool-sep"></span>' +
+      (scriptRec
+        // 台本モード: 申し送りシートは無い（回答が無くても白紙の台本として A4 報告を出す。docs/SPEC-script-mode.md 3-2）
+        ? '<span>印刷:</span><button type="button" id="rtPrintChecklist" class="primary">面接チェックリスト報告（A4）</button><button type="button" id="rtPrintAll">レポート全体</button>' +
+          '<span class="rtool-hint">面接チェックリスト報告は台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2 枚にまとめます。「レポート全体」は「詳細」の内容を印刷します。</span></div>\n' +
+          '<div class="paper-wrap" id="reportPaper"><div class="paper-cap"><b>面接チェックリスト報告（A4 プレビュー）</b><span>印刷は「面接チェックリスト報告（A4）」で 1〜2 枚。全体は「詳細」</span></div>' +
+          '<div class="paper" id="clPaper">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '', decisionId: 'clPaperDecision', decisionSvgId: 'vdPaper' }) + '</div></div>\n' +
+          scriptHeaderHtml + scriptDashHtml + scriptApplicantSecHtml + checklistSecHtml + legacySecHtml + scriptJudgmentSecHtml +
+          '<div id="clSheet" class="cl-sheet-print">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '' }) + '</div>\n' +
+          sec('応募者の管理', mgmtHtml, 'mgmt')
+        : fullBodyHtml()) +
       '<div class="foot"><span>' + esc(meta.footer) + '</span><span>このファイルはアプリの「読み込み」から再度開けます。埋め込みデータを編集しないでください。</span></div>\n' +
       '</div>\n' +
       '<script type="application/json" id="recruit-record">' + json + SCRIPT_END + '\n' +
-      '<script>\n(function(){var b=document.getElementById("rtPrintSheet"),a=document.getElementById("rtPrintAll");if(!b)return;\n' +
+      '<script>\n(function(){var b=document.getElementById("rtPrintSheet"),a=document.getElementById("rtPrintAll");\n' +
       'function prep(on){var h=document.querySelector(\'section.sec[data-sec="handoff"]\');if(h){h.classList.toggle("sheet-2col",!!on&&h.querySelectorAll("li.h").length>=9);}document.body.classList.toggle("print-handoff",!!on);}\n' +
       'window.__prepareHandoffSheet=prep;\n' +
-      'b.addEventListener("click",function(){prep(true);var done=function(){prep(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});\n' +
+      'if(b)b.addEventListener("click",function(){prep(true);var done=function(){prep(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});\n' +
       'if(a)a.addEventListener("click",function(){printingAll=true;try{window.print();}finally{printingAll=false;}});\n' +
       // 面接チェックリスト報告（A4）: body.print-checklist の付け外しと、1 ページ目があふれるときの強制改ページ解除（アプリと同じ規則）
       'var c=document.getElementById("rtPrintChecklist"),host=document.getElementById("clSheet");\n' +

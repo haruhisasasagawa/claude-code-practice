@@ -14,7 +14,8 @@ ctx.window = ctx;
 const R = ctx.RecruitRules, S = ctx.RecruitStorage;
 // vm 内のオブジェクトは別 realm なので、比較用に JSON で持ち出す
 const plain = function (o) { return JSON.parse(JSON.stringify(o)); };
-const P = function () { return S.defaults(); };
+const P = function () { const p = S.defaults(); p.mode = 'full'; return p; };   // 既存 #01〜#71 は詳細モードの検証（docs/SPEC-script-mode.md Y10）
+const PS = function () { return S.defaults(); };                                  // 台本モード（既定）
 const NOW = new Date(2026, 9, 10); // 2026-10-10 固定
 const OPTS = { now: NOW };
 const FIX = path.join(__dirname, 'fixtures');
@@ -2352,6 +2353,251 @@ test('71 保存レポートの報告書表示・最終合否（generateReportHTM
   const sh = S.checklistSheetHtml(rec, p, { mode: 'sheet' });
   ['cl-decision is-none', '未押印', 'class="cl-judge"', 'cl-judge-row'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
   assert.ok(S.reportCss().indexOf('</' + 'script') < 0 && S.checklistSheetCss().indexOf('</' + 'script') < 0);
+});
+
+// ======================================================================
+// 台本モード（docs/SPEC-script-mode.md 7-1。#72〜#77）
+function scriptState(over) {
+  const p = PS();
+  const a = A({ name: '台本 花子', age: '20', gender: '女性', category: '大学2年生', graduationDate: '2029-03', reviewerNotes: '電話の受け答えが丁寧。' }, p);
+  const cl = clAll('good', 'hire', null, p);
+  cl.header = { date: '2026-10-10', interviewer: '笹川 晴央', posting: 'short', taxi: '可・2,500円', negatives: { short: 'on' } };
+  const j = R.evaluateScript(a, cl, p, OPTS);
+  return Object.assign({ step: 4, applicant: a, profile: p, handoff: null, handoffChecks: {}, handoffNote: '', scores: {}, checklist: cl,
+    interviewNotes: '受け答えが丁寧', judgment: j, management: { interviewer: { name: '笹川 晴央', short: '笹川', title: '副支配人', date: '2026.10.10', at: '' } }, decision: null }, over || {});
+}
+
+test('72 運用モード（profile.mode・isScriptMode・isScriptRecord・validateProfile）', function () {
+  assert.strictEqual(PS().mode, 'script');
+  assert.strictEqual(P().mode, 'full');
+  assert.strictEqual(S.normalizeProfile({}).mode, 'script');
+  assert.strictEqual(S.normalizeProfile({ mode: 'full' }).mode, 'full');
+  assert.strictEqual(S.normalizeProfile({ mode: 'script' }).mode, 'script');
+  [{ mode: 'FULL' }, { mode: 1 }, { mode: null }].forEach(function (x) { assert.strictEqual(S.normalizeProfile(x).mode, 'script', JSON.stringify(x)); });
+  // 冪等
+  const n1 = plain(S.normalizeProfile({ mode: 'x' }));
+  assert.deepStrictEqual(plain(S.normalizeProfile(n1)), n1);
+  assert.deepStrictEqual(plain(S.normalizeProfile(P())), plain(P()));
+  // report.modeAdded（保存済みの設定に mode が無いときだけ）
+  const raw = PS(); delete raw.mode;
+  const r1 = {};
+  assert.ok(S.normalizeProfile(raw, r1).mode === 'script' && r1.modeAdded === true, JSON.stringify(r1));
+  const r2 = {}; S.normalizeProfile(P(), r2);
+  assert.ok(!r2.modeAdded, '詳細モードの設定は modeAdded なし');
+  const r3 = {}; S.normalizeProfile({}, r3);
+  assert.ok(!r3.modeAdded, '空（保存済み設定なし）は modeAdded なし');
+  // 旧プロファイル
+  assert.strictEqual(S.parseProfileJSON(fs.readFileSync(path.join(FIX, 'v1-profile-other.json'), 'utf8')).mode, 'script');
+  // isScriptMode / isScriptRecord
+  assert.strictEqual(R.isScriptMode(PS()), true);
+  assert.strictEqual(R.isScriptMode(P()), false);
+  assert.strictEqual(R.isScriptMode({}), true);
+  assert.strictEqual(R.isScriptMode(null), true);
+  assert.strictEqual(R.isScriptMode({ mode: 'full' }), false);
+  assert.strictEqual(R.isScriptRecord({ mode: 'script' }), true);
+  assert.strictEqual(R.isScriptRecord({}), false);
+  assert.strictEqual(R.isScriptRecord({ mode: 'full' }), false);
+  assert.strictEqual(R.isScriptRecord(null), false);
+  // validate
+  assert.ok(!S.validateProfile(PS()).errors.some(function (e) { return e.indexOf('運用モード') >= 0; }), '既定は運用モードのエラーなし');
+  assert.ok(S.validateProfile(Object.assign(PS(), { mode: 'x' })).errors.indexOf('運用モード（台本モード／詳細モード）が正しくありません。') >= 0);
+  // texts.script
+  assert.ok(typeof PS().texts.script.recommend === 'string' && PS().texts.script.recommend.length > 0);
+  assert.strictEqual(S.normalizeProfile({}).texts.script.mustGate, PS().texts.script.mustGate);
+  Object.keys(PS().texts.script).forEach(function (k) {
+    const t = PS().texts.script[k];
+    assert.ok(t.indexOf('シフト貢献度') < 0 && t.indexOf('2軸') < 0, 'texts.script.' + k);
+  });
+});
+
+test('73 evaluateScript（総合判断で結果・mode=script・判定の形）', function () {
+  const p = PS();
+  const a = A({ name: '台本 花子', age: '20', category: '大学2年生' }, p);
+  const j = R.evaluateScript(a, clAll('good', 'hire', null, p), p, OPTS);
+  assert.strictEqual(j.result, 'recommend');
+  assert.strictEqual(j.title, '採用推奨');
+  assert.strictEqual(j.mode, 'script');
+  assert.strictEqual(j.interviewMode, 'checklist');
+  assert.strictEqual(j.scaleMax, 2);
+  assert.strictEqual(j.total, 16);
+  assert.strictEqual(j.max, 16);
+  assert.strictEqual(j.pct, 100);
+  assert.deepStrictEqual(plain(j.interview), { total: 16, max: 16, pct: 100, band: 'high', bandLabel: '高' });
+  assert.ok(j.contribution === null && j.matrix === null && j.highschool === null, 'contribution / matrix / highschool は null');
+  assert.strictEqual(j.unresolved.length, 0);
+  assert.strictEqual(j.adjustments.length, 0);
+  assert.strictEqual(j.adjusted, false);
+  assert.deepStrictEqual(plain(j.warnings), []);
+  assert.strictEqual(j.baseResult, 'recommend');
+  assert.strictEqual(j.evaluatedAt, NOW.toISOString());
+  assert.strictEqual(j.checklist.must.match, 2);
+  assert.deepStrictEqual(plain(j.checklist.overall), { value: 'hire', label: '採用', points: 2 });
+  assert.strictEqual(j.must.total, 2);
+  assert.strictEqual(j.breakdown.length, 8);
+  assert.strictEqual(j.strengths.length, 7);
+  assert.strictEqual(j.concerns.length, 0);
+  assert.strictEqual(j.thresholds.recommendPts, 12);
+  assert.strictEqual(j.thresholds.reviewPts, 7);
+  assert.ok(j.body.indexOf('台本 花子さん') >= 0 && j.body.indexOf('「採用」') >= 0 && j.body.indexOf('シフト貢献度') < 0, j.body);
+  const jh = R.evaluateScript(a, clAll('good', 'hold', null, p), p, OPTS);
+  assert.ok(jh.result === 'review' && jh.adjustments.length === 0 && jh.body.indexOf('「保留」') >= 0, JSON.stringify(plain([jh.result, jh.adjustments, jh.body])));
+  const jr = R.evaluateScript(a, clAll('good', 'reject', null, p), p, OPTS);
+  assert.ok(jr.result === 'reject' && jr.adjustments.length === 0, JSON.stringify(plain([jr.result, jr.adjustments])));
+  // 詳細項目に依存しない（応募情報との食い違いの警告を出さない）
+  const jd = R.evaluateScript(A({ name: 'x', workPeriod: 'short', sh: { mon: ['10:00', '11:00'] } }, p), clAll('good', 'hire', null, p), p, OPTS);
+  assert.ok(jd.result === 'recommend' && jd.warnings.length === 0, JSON.stringify(plain(jd.warnings)));
+});
+
+test('74 evaluateScript（必須条件: 不一致・未確認・設定）', function () {
+  const p = PS();
+  const a = A({ name: '台本 花子', age: '20', category: '大学2年生' }, p);
+  const ML = '土日を含む週3日以上、5時間以上';
+  const cl = clAll('good', 'hire', null, p); cl.values.must_weekly = 'mismatch';
+  const j = R.evaluateScript(a, cl, p, OPTS);
+  const reason = '必須条件が一致しないため（' + ML + '）、不採用推奨とします。';
+  assert.strictEqual(j.result, 'reject');
+  assert.deepStrictEqual(plain(j.adjustments), [{ code: 'must_conditions', from: 'recommend', to: 'reject', reason: reason }]);
+  assert.strictEqual(j.warnings[0], reason);
+  assert.ok(j.body.indexOf('必須条件（' + ML + '）') >= 0 && j.body.indexOf('面接者の総合判断・面接評価にかかわらず不採用推奨とします') >= 0 && j.body.indexOf('シフト貢献度') < 0, j.body);
+  // 打ち切り（確認点・総合判断は未入力）
+  const cl2 = R.emptyChecklist(); cl2.values.must_weekly = 'mismatch';
+  const j2 = R.evaluateScript(a, cl2, p, OPTS);
+  assert.ok(j2.result === 'reject' && j2.adjustments[0].from === 'review', JSON.stringify(plain(j2.adjustments)));
+  assert.ok(!hasWarn(j2, '未入力の確認点') && !hasWarn(j2, '総合判断が未入力'), JSON.stringify(plain(j2.warnings)));
+  // mustFailResult = review
+  const p2 = PS(); p2.checklist.mustFailResult = 'review';
+  const j3 = R.evaluateScript(a, cl, p2, OPTS);
+  assert.strictEqual(j3.result, 'review');
+  assert.deepStrictEqual(plain(j3.adjustments), [{ code: 'must_conditions', from: 'recommend', to: 'review', reason: '必須条件が一致しないため（' + ML + '）、採用推奨ではなく上長最終判断要として扱います。' }]);
+  // 未確認（既定は警告のみ）
+  const cl3 = clAll('good', 'hire', null, p); delete cl3.values.must_busy;
+  const j4 = R.evaluateScript(a, cl3, p, OPTS);
+  assert.ok(j4.result === 'recommend' && j4.adjustments.length === 0, JSON.stringify(plain([j4.result, j4.adjustments])));
+  assert.ok(j4.warnings.indexOf('必須条件に未確認が1件あります（指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆））。面接で確認してください。') >= 0, JSON.stringify(plain(j4.warnings)));
+  // mustUnknownResult = review
+  const p3 = PS(); p3.checklist.mustUnknownResult = 'review';
+  const j5 = R.evaluateScript(a, cl3, p3, OPTS);
+  assert.strictEqual(j5.result, 'review');
+  assert.ok(j5.adjustments[0].code === 'must_unconfirmed' && j5.adjustments[0].from === 'recommend' && j5.adjustments[0].to === 'review' &&
+    j5.adjustments[0].reason.indexOf('面接チェックリストの ① で一致／不一致を入力してください。') >= 0, JSON.stringify(plain(j5.adjustments)));
+});
+
+test('75 evaluateScript（総合判断の未入力・overallCaps・× の警告・壊れた入力・本文の設定）', function () {
+  const p = PS();
+  const a = A({ name: '台本 花子', age: '20', category: '大学2年生' }, p);
+  // 総合判断が未入力
+  const c1 = clAll('good', 'hire', null, p); c1.overall = '';
+  const j1 = R.evaluateScript(a, c1, p, OPTS);
+  assert.ok(j1.result === 'review' && j1.adjustments.length === 0 && j1.total === 14, JSON.stringify(plain([j1.result, j1.adjustments, j1.total])));
+  assert.ok(j1.warnings.indexOf('面接者の総合判断が未入力です（結果は上長最終判断要として扱います）。') >= 0, JSON.stringify(plain(j1.warnings)));
+  assert.ok(j1.body.indexOf('未入力') >= 0, j1.body);
+  // 確認点の未入力
+  const c2 = clAll('good', 'hire', null, p); delete c2.values.rt_team;
+  const j2 = R.evaluateScript(a, c2, p, OPTS);
+  assert.ok(j2.result === 'recommend' && j2.warnings.indexOf('未入力の確認点が1件あります（0点として集計）。') >= 0, JSON.stringify(plain(j2.warnings)));
+  // overallCaps（厳しくしたときだけ下がる）
+  const p4 = PS(); p4.checklist.overallCaps.hold = 'reject';
+  const j3 = R.evaluateScript(a, clAll('good', 'hold', null, p4), p4, OPTS);
+  assert.strictEqual(j3.result, 'reject');
+  assert.deepStrictEqual(plain(j3.adjustments), [{ code: 'overall_hold', from: 'review', to: 'reject', reason: '面接者の総合判断が「保留」のため、不採用推奨とします。' }]);
+  assert.ok(j3.body.indexOf('下記の理由により不採用推奨とします') >= 0, j3.body);
+  ['none', 'review'].forEach(function (cap) {
+    const pc = PS(); pc.checklist.overallCaps.reject = cap;
+    const jc = R.evaluateScript(a, clAll('good', 'reject', null, pc), pc, OPTS);
+    assert.ok(jc.result === 'reject' && jc.adjustments.length === 0, cap + ': ' + JSON.stringify(plain([jc.result, jc.adjustments])));
+  });
+  // × の警告（結果は変えない）
+  const c4 = clAll('good', 'hire', null, p); c4.values.rt_team = 'poor';
+  const j4 = R.evaluateScript(a, c4, p, OPTS);
+  assert.strictEqual(j4.result, 'recommend');
+  assert.ok(j4.warnings.indexOf('確認点に × が1件あります（自己判断せずチームで動けるか）。総合判断「採用」と合わせて確認してください。') >= 0, JSON.stringify(plain(j4.warnings)));
+  assert.ok(j4.concerns.some(function (c) { return c.indexOf('自己判断せずチームで動けるか') >= 0; }), JSON.stringify(plain(j4.concerns)));
+  // 壊れた入力
+  let jb;
+  assert.doesNotThrow(function () { jb = R.evaluateScript({}, null, PS()); });
+  assert.ok(jb.result === 'review' && jb.total === 0, JSON.stringify(plain([jb.result, jb.total])));
+  let jn;
+  assert.doesNotThrow(function () { jn = R.evaluateScript({}, R.emptyChecklist(), { checklist: null }); });
+  assert.strictEqual(jn.max, 2);
+  // 本文の設定（空なら既定の文）
+  const p5 = PS(); p5.texts.script.recommend = 'OK {name} {overallLabel}';
+  assert.strictEqual(R.evaluateScript(a, clAll('good', 'hire', null, p5), p5, OPTS).body, 'OK 台本 花子さん 採用');
+  const p6 = PS(); p6.texts.script.recommend = '';
+  assert.ok(R.evaluateScript(a, clAll('good', 'hire', null, p6), p6, OPTS).body.indexOf('採用を推奨します。') >= 0);
+});
+
+test('76 保存レコードと保存 HTML（台本モードの記録／詳細モードの記録）', function () {
+  const noScript = function (h) { return h.replace(/<script>[\s\S]*?<\/script>/g, ''); };
+  const rec = S.buildRecord(scriptState());
+  assert.strictEqual(rec.mode, 'script');
+  assert.strictEqual(rec.schemaVersion, 2);
+  assert.strictEqual(S.buildRecord(decisionState()).mode, 'full');
+  const html = S.generateReportHTML(rec, PS());
+  const ns = noScript(html);
+  assert.ok(html.indexOf('<body class="view-report has-cl mode-script" data-filename="応募者_台本_花子_') > 0, 'body の class');
+  ['<h2>応募者情報</h2>', '<h2>面接チェックリスト</h2>', '<h2>採用可否判定</h2>', '<h2>応募者の管理</h2>', 'id="rtPrintChecklist"', 'id="rtPrintAll"', 'id="clPaper"', 'id="clSheet"',
+    'id="decision"', 'id="rtViewReport"', 'class="kv script-judge"', '<div class="result recommend">'].forEach(function (t) { assert.ok(html.indexOf(t) > 0, '含む: ' + t); });
+  ['<h2>応募時の情報</h2>', '<h2>面接者への申し送りコメント</h2>', '<h2>面接者への申し送り（留意点）</h2>', '<h2>面接で確認した情報</h2>', '<h2>面接前に分かっている情報（未確認）</h2>',
+    '<h2>シフト貢献度</h2>', 'id="rtPrintSheet"']
+    .forEach(function (t) { assert.ok(html.indexOf(t) < 0, '含まない: ' + t); });
+  // 節（section.sec）として生成しない（reportCss・埋め込みスクリプトのセレクタには data-sec="handoff" などの文字列が残るため、要素の形で調べる）
+  ['contrib', 'handoff', 'pre', 'interview', 'comment'].forEach(function (k) { assert.ok(html.indexOf('<section class="sec" data-sec="' + k + '"') < 0, '節を生成しない: ' + k); });
+  assert.ok(ns.indexOf('シフト貢献度') < 0 && ns.indexOf('2軸') < 0, 'script 要素以外に「シフト貢献度」「2軸」が無い');
+  const at = function (t) { return html.indexOf(t); };
+  assert.ok(at('<h2>応募者情報</h2>') < at('<h2>面接チェックリスト</h2>') && at('<h2>面接チェックリスト</h2>') < at('<h2>採用可否判定</h2>') &&
+    at('<h2>採用可否判定</h2>') < at('id="clSheet"') && at('id="clSheet"') < at('<h2>応募者の管理</h2>'), '節の並び');
+  const appSec = html.slice(at('<h2>応募者情報</h2>'), at('<h2>面接チェックリスト</h2>'));
+  ['2029年3月', '短期求人', '短期希望', '可・2,500円', '2026/10/10', '笹川 晴央', '電話の受け答えが丁寧。'].forEach(function (t) { assert.ok(appSec.indexOf(t) > 0, '応募者情報に ' + t); });
+  assert.strictEqual((html.match(/<\/script>/g) || []).length, (html.match(/<script[ >]/g) || []).length, 'script 要素の開始・終了の数が同じ');
+  // 埋め込みスクリプト 1 の「#rtPrintSheet が無ければ抜ける」を消した（押印のスクリプトのクリック処理にも if(!b)return; があるため、スクリプト 1 の並びで調べる）
+  const S1_EXIT = 'getElementById("rtPrintAll");if(!b)return;';
+  assert.ok(html.indexOf(S1_EXIT) < 0 && html.indexOf('if(b)b.addEventListener("click"') > 0, '埋め込みスクリプト 1 の if(!b)return; を消した');
+  // 回答なし（白紙の台本も has-cl）
+  const rec0 = S.buildRecord(scriptState({ checklist: (function () { const c = R.emptyChecklist(); c.header.date = '2026-10-10'; return c; })(), judgment: null, step: 1 }));
+  const html0 = S.generateReportHTML(rec0, PS());
+  ['class="view-report has-cl mode-script"', 'id="clPaper"', 'id="rtPrintChecklist"', '採用可否判定は未実施です（アプリの「報告書」を開くと判定します）。']
+    .forEach(function (t) { assert.ok(html0.indexOf(t) > 0, '回答なし: ' + t); });
+  // 詳細モードの記録は従来どおり
+  const htmlF = S.generateReportHTML(S.buildRecord(decisionState()), P());
+  ['<body class="view-report has-cl" data-filename=', '<h2>面接者への申し送り（留意点）</h2>', '<h2>シフト貢献度</h2>', 'id="rtPrintSheet"'].forEach(function (t) { assert.ok(htmlF.indexOf(t) > 0, '詳細: ' + t); });
+  assert.ok(htmlF.indexOf('mode-script') < 0, '詳細の記録に mode-script なし');
+  const old = plain(S.buildRecord(decisionState())); delete old.mode;
+  assert.ok(S.generateReportHTML(old, P()).indexOf('<h2>シフト貢献度</h2>') > 0, '旧レコード（mode なし）は詳細');
+  assert.ok(htmlF.indexOf(S1_EXIT) < 0);
+});
+
+test('77 checklistAuto・scriptApplicantRows・checklistSheetHtml（台本モード）', function () {
+  const aD = A({ workPeriod: 'short', sh: { sat: ['08:00', '11:00'] }, lateNight: { availability: 'ok', returnMethod: 'taxi', taxiFare: '2500' } }, PS());
+  const au = R.checklistAuto(aD, R.emptyChecklist(), PS());
+  assert.ok(au.taxi.text === '' && Object.keys(au.fields).length === 0 && Object.keys(au.must).length === 0 && au.negatives.short.on === false && au.negatives.morningOnly.on === false,
+    '台本モードは自動なし: ' + JSON.stringify(plain(au)));
+  const auF = R.checklistAuto(aD, R.emptyChecklist(), P());
+  assert.ok(auF.taxi.text === '可・2,500円（規定3,000円以内）' && auF.negatives.short.on === true && Object.keys(auF.must).length === 2, '詳細モードは従来どおり: ' + JSON.stringify(plain(auF.taxi)));
+  const clH = R.emptyChecklist(); clH.header.negatives.short = 'on';
+  assert.deepStrictEqual(plain(R.checklistAuto(aD, clH, PS()).negatives.short), { autoOn: false, on: true, overridden: true, text: '短期希望' });
+  // evaluateHiring は台本モードのプロファイルでも自動の見込みと照合する
+  const aW = A({ sh: { mon: ['10:00', '12:00'] }, daysMin: '1', daysMax: '1' }, PS());
+  const jW = R.evaluateHiring(aW, {}, PS(), HO(aW, PS()), allChecks(HO(aW, PS())), Object.assign({}, OPTS, { checklist: clAll('good', 'hire', null, PS()) }));
+  assert.ok(hasWarn(jW, '応募情報と食い違いがあります'), JSON.stringify(plain(jW.warnings)));
+  // scriptApplicantRows
+  const st = scriptState();
+  const rows = R.scriptApplicantRows(st.applicant, st.checklist, PS(), st.management);
+  assert.deepStrictEqual(plain(rows.map(function (r) { return r.key; })), ['name', 'age', 'gender', 'category', 'graduation', 'posting', 'negatives', 'taxi', 'date', 'interviewer', 'notes']);
+  const rv = function (rs, k) { return (rs.find(function (r) { return r.key === k; }) || {}).value; };
+  assert.ok(rv(rows, 'age') === '20歳' && rv(rows, 'graduation') === '2029年3月' && rv(rows, 'posting') === '短期求人' && rv(rows, 'negatives') === '短期希望' && rv(rows, 'date') === '2026/10/10',
+    JSON.stringify(plain(rows)));
+  const cl2 = plain(st.checklist); cl2.header.interviewer = '';
+  assert.strictEqual(rv(R.scriptApplicantRows(st.applicant, cl2, PS(), st.management), 'interviewer'), '笹川 晴央', '担当が空なら押印（面接対応者）から');
+  assert.deepStrictEqual(plain(R.scriptApplicantRows(A({}, PS()), R.emptyChecklist(), PS(), {})), []);
+  // checklistSheetHtml（詳細の項目も入っている台本モードの記録）
+  const rec2 = S.buildRecord(scriptState({ applicant: A({ name: '台本 花子', age: '20', category: '大学2年生', workPeriod: 'long', daysMin: '3', daysMax: '4', sh: { sat: ['10:00', '18:00'] }, reviewerNotes: '電話の受け答えが丁寧。' }, PS()) }));
+  const sh = S.checklistSheetHtml(rec2, PS(), { mode: 'sheet' });
+  ['<span class="cl-tile-k">面接評価（確認点）</span>', '<span class="cl-tile-k">必須条件</span>', '<span class="cl-tile-k">総合判断</span>', '<span class="cl-tile-k">結果</span>', 'class="cl-judge"',
+    '可・2,500円', '短期希望', '短期求人', '<span class="cl-ov-k">備考</span>'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
+  ['シフト貢献度', '（自動）', '（応募情報より）', '（手入力）', '<b>希望シフト</b>', '<b>勤務期間</b>', '面接で確認した勤務条件'].forEach(function (t) { assert.ok(sh.indexOf(t) < 0, 'sheet に無い: ' + t); });
+  const sec = S.checklistSheetHtml(rec2, PS(), { mode: 'section' });
+  assert.ok(sec.indexOf('可・2,500円') > 0 && sec.indexOf('（手入力）') < 0 && sec.indexOf('（自動）') < 0, 'section');
+  assert.ok(S.checklistSheetHtml(S.buildRecord(decisionState()), P(), { mode: 'sheet' }).indexOf('<span class="cl-tile-k">シフト貢献度</span>') > 0, '詳細の記録は従来どおり');
 });
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

@@ -14,6 +14,10 @@
   const DEFAULT_PROFILE = {
     schemaVersion: 2,
 
+    // 運用モード: 'script'=台本モード（既定。応募者 → 面接チェックリスト → 報告書の 3 ステップ）
+    //            'full'=詳細モード（応募情報 → 申し送り → 面接チェックリスト → 採用可否判定〔2 軸〕の 4 ステップ。他劇場向け）
+    mode: 'script',
+
     meta: {
       theaterName: 'TOHOシネマズ新宿',
       appTitle: 'リクルート判定システム',
@@ -605,6 +609,15 @@
         allNightOk: 'オールナイト上映のシフトに入れます（{allNightFreq}）',
         holidayOk: '祝日も勤務できます',
         busyStrong: '繁忙期（3連休・長期休暇）の貢献が見込めます（{busyPct}%）'
+      },
+      // 台本モード（運用モード script）の結果の本文。変数: {name} {overallLabel} {total} {max} {pct} {band} {marks} {mustLabels} {resultTitle} {baseTitle}
+      script: {
+        recommend: '{name}は面接者の総合判断が「{overallLabel}」です（面接評価 {total}/{max}点・{pct}%）。採用を推奨します。',
+        review: '{name}は面接者の総合判断が「{overallLabel}」です（面接評価 {total}/{max}点・{pct}%）。上長の最終判断が必要です。',
+        reject: '{name}は面接者の総合判断が「{overallLabel}」です（面接評価 {total}/{max}点・{pct}%）。不採用を推奨します。',
+        missing: '{name}は面接者の総合判断が未入力です（面接評価 {total}/{max}点・{pct}%）。上長の最終判断が必要です。',
+        mustGate: '{name}は必須条件（{mustLabels}）が一致しないため、面接者の総合判断・面接評価にかかわらず{resultTitle}とします。',
+        adjusted: '{name}は面接者の総合判断が「{overallLabel}」（面接評価 {total}/{max}点）ですが、下記の理由により{resultTitle}とします。'
       }
     }
   };

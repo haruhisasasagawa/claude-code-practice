@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>リクルート判定システム</title>
-  <meta name="description" content="アルバイト採用の基準統一を支援する判定アプリ。応募情報から面接者への留意点を自動生成し、面接チェックリスト（面接台本）の評価とシフト貢献度から採用可否を判定します。">
+  <meta name="description" content="アルバイト面接を面接台本（スタッフ面接チェックリスト）のとおりに入力し、A4 の面接チェックリスト報告（電子印・最終合否つき）を作るアプリ。応募者の名前と属性 → 面接チェックリスト → 報告書の 3 ステップ。設定で詳細モード（留意点の申し送り・シフト貢献度の 2 軸判定）にも切り替えられます。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -26,7 +26,7 @@
       </nav>
 
       <div id="stepSection">
-        <div class="side-section-title">判定ステップ</div>
+        <div class="side-section-title" id="stepSectionTitle">判定ステップ</div>
         <ol class="steps" id="stepNav"></ol>
       </div>
 

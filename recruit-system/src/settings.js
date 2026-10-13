@@ -23,6 +23,7 @@
   let downInRoot = false;
   let repaintPending = false;
   let pointerBound = false;
+  let advOpen = false;   // 台本モードの「詳細モードの設定」（<details>）の開閉。再描画で閉じないように覚える
 
   function R() { return global.RecruitRules || {}; }
   function categoryLabels() { return R().CATEGORY_LABELS || {}; }
@@ -135,24 +136,101 @@
     return bl[b] || { high: '高', mid: '中', low: '低' }[b];
   }
 
+  // 運用モード（docs/SPEC-script-mode.md 4 章）。設定画面の並びは保存前でも選んだモード（draft.mode）で決める
+  function draftScript() { return !(draft && draft.mode === 'full'); }
+
+  function modeHtml() {
+    const cur = draftScript() ? 'script' : 'full';
+    const saved = handlers && handlers.current ? ((handlers.current() || {}).mode === 'full' ? 'full' : 'script') : cur;
+    const opt = function (value, label, hint) {
+      const on = cur === value;
+      return '<label class="mode-opt' + (on ? ' on' : '') + '"><input type="radio" name="s-mode" value="' + value + '" data-bind="mode" data-repaint' + (on ? ' checked' : '') + '>' +
+        '<div><div class="lbl">' + esc(label) + '</div><div class="hint">' + esc(hint) + '</div></div></label>';
+    };
+    return '<section class="card" id="s-mode"><div class="card-head"><h2>運用モード</h2><p>アプリの流れを選びます。保存すると判定ステップを作り直し、Step1 に戻ります（入力中の応募者のデータは保持されます）。</p></div>' +
+      '<div class="mode-options" role="radiogroup" aria-label="運用モード">' +
+        opt('script', '台本モード（既定）', '応募者 → 面接チェックリスト → 報告書 の 3 ステップ。面接台本のとおりに入力し、A4 の報告書（電子印・最終合否）にします。') +
+        opt('full', '詳細モード', '応募情報 → 面接者への申し送り → 面接チェックリスト → 採用可否判定 の 4 ステップ。勤務条件・留意点・シフト貢献度・2 軸判定を使います（他劇場向け）。') +
+      '</div>' +
+      (cur !== saved ? '<div class="hint" id="modeChangeNote">「設定を保存」で切り替わります。</div>' : '') +
+      '</section>';
+  }
+
+  // 台本モードだけ: Step① で選ぶ区分・性別と卒業予定年月の表示（詳細モードでは「選択肢」「入力項目の ON/OFF」に描く）
+  function applicantHtml() {
+    return section('s-applicant', '応募者の属性', 'Step① 応募者で選ぶ区分・性別と、学生の卒業予定年月の表示です。',
+      '<div class="field-row">' +
+        sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。グループ: ' + GROUP_HINT }) +
+        sLines('options.genders', '性別') +
+      '</div>' +
+      sCheck('features.graduationDate', '卒業予定年月（学生）', '学生の区分のとき Step① に卒業予定年月の欄を出します。'));
+  }
+
+  // 台本モードだけ: 結果のタイトルと本文（texts.script）
+  function textsScriptHtml() {
+    return section('s-texts-script', '結果文言（台本モード）', '報告書の「結果」と本文です。',
+      '<div class="hint" style="margin:-6px 0 10px">変数: <code>{name} {overallLabel} {total} {max} {pct} {band} {marks} {mustLabels} {resultTitle} {baseTitle}</code></div>' +
+      '<div class="field-row cols-3">' +
+        sInput('texts.recommend.title', '採用推奨: タイトル') + sInput('texts.review.title', '上長最終判断要: タイトル') + sInput('texts.reject.title', '不採用推奨: タイトル') +
+      '</div>' +
+      sInput('texts.script.recommend', '採用推奨の本文') +
+      sInput('texts.script.review', '上長最終判断要の本文') +
+      sInput('texts.script.reject', '不採用推奨の本文') +
+      sInput('texts.script.missing', '総合判断が未入力のときの本文') +
+      sInput('texts.script.mustGate', '必須条件の不一致で固定したときの本文') +
+      sInput('texts.script.adjusted', '総合判断の上限などで結果が下がったときの本文') +
+      sTextarea('texts.disclaimer', '判定結果の注記', { rows: 2 }));
+  }
+
+  function rulesSectionHtml() {
+    return section('s-rules', '面接者への申し送りルール',
+      '応募情報が条件に合致したときに表示される留意点です。ON/OFF・重要度・文言を変更できます（条件そのものはコードで定義）。',
+      '<div class="legend"><span class="badge danger">要判断</span>採用担当が面接実施・採用の可否を判断　<span class="badge warn">要確認</span>面接時に確認　<span class="badge info">共有</span>面接者へ共有　<span class="badge danger">法令（OFF不可）</span>労働基準法に関わるため OFF・重要度変更不可（文言は編集可）</div>' +
+      '<div class="hint" style="margin-bottom:10px">文言で使える変数: <code>' + esc(VARS_HINT) + '</code></div>' +
+      rulesHtml());
+  }
+
   // ---------- テンプレート ----------
   function template() {
+    return draftScript() ? scriptTemplate() : fullTemplate();
+  }
+
+  // 台本モードの並び（4-2）: 使う節を上に、詳細モード用の節は「詳細モードの設定」に畳む（同じ data-bind を 2 回描かない）
+  function scriptTemplate() {
+    const o = { scriptLayout: true };
     return '' +
     '<div class="settings-layout">' +
       '<nav class="settings-nav">' +
-        '<a href="#s-meta">劇場情報</a><a href="#s-features">入力項目のON/OFF</a><a href="#s-stages">面接前／面接時</a><a href="#s-options">選択肢</a>' +
+        '<a href="#s-mode">運用モード</a><a href="#s-meta">劇場情報</a><a href="#s-applicant">応募者の属性</a><a href="#s-checklist">面接チェックリスト</a>' +
+        '<a href="#s-texts-script">結果文言</a><a href="#s-mgmt">応募者の管理（押印）</a><a href="#s-io">書き出し／読み込み</a><a href="#s-advanced">詳細モードの設定</a>' +
+      '</nav>' +
+      '<div class="settings-body">' +
+        issuesHtml() +
+        modeHtml() + metaHtml() + applicantHtml() + checklistHtml(o) + textsScriptHtml() + mgmtHtml() + ioHtml() +
+        '<details class="settings-advanced" id="s-advanced"' + (advOpen ? ' open' : '') + '><summary>詳細モードの設定（台本モードでは使いません）</summary>' +
+          '<p class="hint">詳細モード（4 ステップ）に切り替えたときに使う設定です。台本モードのままでも編集・保存できます。</p>' +
+          featuresHtml(o) + stagesHtml() + optionsHtml(o) + busyHtml() + paramsHtml() + hsHtml() + rulesSectionHtml() + contribHtml() + matrixHtml() + textsHtml(o) +
+        '</details>' +
+      '</div>' +
+    '</div>' +
+    '<div class="save-bar"><span class="note">変更は「設定を保存」で反映されます。</span>' +
+      '<button type="button" class="btn ghost" data-action="discard">変更を破棄</button>' +
+      '<button type="button" class="btn primary" data-action="save">設定を保存</button></div>';
+  }
+
+  function fullTemplate() {
+    return '' +
+    '<div class="settings-layout">' +
+      '<nav class="settings-nav">' +
+        '<a href="#s-mode">運用モード</a><a href="#s-meta">劇場情報</a><a href="#s-features">入力項目のON/OFF</a><a href="#s-stages">面接前／面接時</a><a href="#s-options">選択肢</a>' +
         '<a href="#s-busy">繁忙期・オールナイト</a><a href="#s-params">判定パラメータ</a><a href="#s-hs">高校生の扱い</a>' +
         '<a href="#s-rules">申し送りルール</a><a href="#s-checklist">面接チェックリスト</a><a href="#s-contrib">シフト貢献度</a>' +
         '<a href="#s-matrix">2軸判定</a><a href="#s-texts">結果文言</a><a href="#s-mgmt">応募者の管理（押印）</a><a href="#s-io">書き出し／読み込み</a>' +
       '</nav>' +
       '<div class="settings-body">' +
         issuesHtml() +
-        metaHtml() + featuresHtml() + stagesHtml() + optionsHtml() + busyHtml() + paramsHtml() + hsHtml() +
-        section('s-rules', '面接者への申し送りルール',
-          '応募情報が条件に合致したときに表示される留意点です。ON/OFF・重要度・文言を変更できます（条件そのものはコードで定義）。',
-          '<div class="legend"><span class="badge danger">要判断</span>採用担当が面接実施・採用の可否を判断　<span class="badge warn">要確認</span>面接時に確認　<span class="badge info">共有</span>面接者へ共有　<span class="badge danger">法令（OFF不可）</span>労働基準法に関わるため OFF・重要度変更不可（文言は編集可）</div>' +
-          '<div class="hint" style="margin-bottom:10px">文言で使える変数: <code>' + esc(VARS_HINT) + '</code></div>' +
-          rulesHtml()) +
+        modeHtml() + metaHtml() + featuresHtml() + stagesHtml() + optionsHtml() + busyHtml() + paramsHtml() + hsHtml() +
+        rulesSectionHtml() +
         checklistHtml() + contribHtml() + matrixHtml() + textsHtml() + mgmtHtml() + ioHtml() +
       '</div>' +
     '</div>' +
@@ -174,9 +252,11 @@
       sTextarea('meta.footer', 'フッター（著作権表記など）', { rows: 2 }));
   }
 
-  function featuresHtml() {
+  // o.scriptLayout: 台本モードの並び（卒業予定年月は「応募者の属性」に描くので出さない）
+  function featuresHtml(o) {
+    o = o || {};
     return section('s-features', '入力項目のON/OFF', '劇場で不要な項目はOFFにすると入力画面・判定から除外されます。',
-      sCheck('features.graduationDate', '卒業予定年月（学生）', '卒業までの残り月数と勤務期間の確認、勤務期間の貢献度の上限に使います。OFF にしても「卒業後も当劇場で継続」の欄は高校3年生の例外判定のために表示されます。') +
+      (o.scriptLayout ? '' : sCheck('features.graduationDate', '卒業予定年月（学生）', '卒業までの残り月数と勤務期間の確認、勤務期間の貢献度の上限に使います。OFF にしても「卒業後も当劇場で継続」の欄は高校3年生の例外判定のために表示されます。')) +
       sCheck('features.vacation', '繁忙期（連休・長期休暇）の勤務可否', '3連休・GW・お盆・年末年始など。期間は「繁忙期・オールナイト」で編集。', { repaint: true }) +
       sCheck('features.vacationDays', '繁忙期ごとの出られる日数', '○△の期間に「何日出られるか」を入力させ、貢献度に反映します（繁忙期の勤務可否が前提）。') +
       sCheck('features.holidayWork', '祝日の勤務可否', '平日の祝日・振替休日に勤務できるか。') +
@@ -238,14 +318,16 @@
       '</div>');
   }
 
-  function optionsHtml() {
+  // o.scriptLayout: 台本モードの並び（区分・性別は「応募者の属性」に描くので出さない）
+  function optionsHtml(o) {
+    o = o || {};
     const wps = (draft.options.workPeriods || []);
     const cps = (draft.options.careerPaths || []);
     return section('s-options', '選択肢', '入力画面のプルダウンに表示される項目です。繁忙期の期間・土日／オールナイトの頻度は「繁忙期・オールナイト」で編集します。',
-      '<div class="field-row">' +
+      (o.scriptLayout ? '' : '<div class="field-row">' +
         sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。グループ: ' + GROUP_HINT }) +
         sLines('options.genders', '性別') +
-      '</div>' +
+      '</div>') +
       '<div class="field-row">' +
         sLines('options.commuteMethods', '通勤方法') +
         sLines('options.stationHints', '最寄り駅の候補', { hint: '入力補完に使います。' }) +
@@ -581,7 +663,9 @@
     '</details>';
   }
 
-  function checklistHtml() {
+  // o.scriptLayout: 台本モードの並び（総合判断の上限の説明を足す）
+  function checklistHtml(o) {
+    o = o || {};
     const cl = clDraft();
     const secs = cl.sections;
     const pages = Array.isArray(cl.pages) ? cl.pages : (cl.pages = []);
@@ -619,6 +703,7 @@
         sSelect('checklist.overallCaps.hold', '総合判断「' + (oo.hold || '保留') + '」のとき', capOpts) +
         sSelect('checklist.overallCaps.reject', '総合判断「' + (oo.reject || '不採用') + '」のとき', capOpts) +
       '</div>' +
+      (o.scriptLayout ? '<div class="hint" id="clCapsScriptHint" style="margin:-6px 0 8px">台本モードでは総合判断がそのまま結果になります（採用→採用推奨・保留→上長最終判断要・不採用→不採用推奨）。ここで厳しくした場合だけ結果が下がります。</div>' : '') +
       '<div class="field-row">' +
         sSelect('checklist.mustFailJumpTo', '不一致のとき案内するセクション', [{ value: '', label: '案内しない' }].concat(secs.map(function (s, i) { return { value: s.id, label: clCirc(i + 1) + ' ' + (s.title || '') }; }))) +
       '</div>' +
@@ -894,13 +979,16 @@
       '</details>');
   }
 
-  function textsHtml() {
+  // o.scriptLayout: 台本モードの並び（3 つのタイトルと注記は「結果文言（台本モード）」に描くので出さない）
+  function textsHtml(o) {
+    o = o || {};
+    const sl = !!o.scriptLayout;
     return section('s-texts', '結果文言', '',
       '<div class="hint" style="margin:-6px 0 10px">変数: <code>' + esc(RESULT_VARS_HINT) + '</code></div>' +
       '<h3 class="sub">判定のタイトルと本文（面接評価のみで判定するとき）</h3>' +
-      '<div class="field-row">' + sInput('texts.recommend.title', '採用推奨: タイトル') + sInput('texts.recommend.body', '採用推奨: 本文') + '</div>' +
-      '<div class="field-row">' + sInput('texts.review.title', '上長最終判断要: タイトル') + sInput('texts.review.body', '上長最終判断要: 本文') + '</div>' +
-      '<div class="field-row">' + sInput('texts.reject.title', '不採用推奨: タイトル') + sInput('texts.reject.body', '不採用推奨: 本文') + '</div>' +
+      '<div class="field-row">' + (sl ? '' : sInput('texts.recommend.title', '採用推奨: タイトル')) + sInput('texts.recommend.body', '採用推奨: 本文') + '</div>' +
+      '<div class="field-row">' + (sl ? '' : sInput('texts.review.title', '上長最終判断要: タイトル')) + sInput('texts.review.body', '上長最終判断要: 本文') + '</div>' +
+      '<div class="field-row">' + (sl ? '' : sInput('texts.reject.title', '不採用推奨: タイトル')) + sInput('texts.reject.body', '不採用推奨: 本文') + '</div>' +
       '<h3 class="sub">2軸判定の本文</h3>' +
       sInput('texts.matrix.recommend', '採用推奨（2軸）') +
       sInput('texts.matrix.review', '上長最終判断要（2軸）') +
@@ -910,7 +998,7 @@
       '<div class="field-row cols-3">' +
         sInput('texts.bandLabels.high', '帯の表示: 高') + sInput('texts.bandLabels.mid', '帯の表示: 中') + sInput('texts.bandLabels.low', '帯の表示: 低') +
       '</div>' +
-      sTextarea('texts.disclaimer', '判定結果の注記', { rows: 2 }) +
+      (sl ? '' : sTextarea('texts.disclaimer', '判定結果の注記', { rows: 2 })) +
       sTextarea('texts.handoffIntro', '申し送り画面の説明文', { rows: 2 }) +
       sTextarea('texts.busyIntro', '繁忙期カードの説明文', { rows: 2 }) +
       sTextarea('texts.allNightIntro', 'オールナイトカードの説明文', { rows: 2, hint: '変数: {allNightShiftStart} {allNightShiftEnd} {lateNightStartHour}' }) +
@@ -1146,6 +1234,8 @@
     repaintPending = false;
     // 面接チェックリストのセクション（<details>）の開閉を覚えておく
     if (root) Array.prototype.forEach.call(root.querySelectorAll('details.s-cl-sec[data-sec-id]'), function (d) { clOpen[d.getAttribute('data-sec-id')] = d.open; });
+    const adv = root ? root.querySelector('#s-advanced') : null;
+    if (adv) advOpen = adv.open;
     root.innerHTML = template();
     root.oninput = onEdit;
     root.onchange = onEdit;
@@ -1159,6 +1249,7 @@
     draft = U.deepClone(profile);
     issues = null;
     clOpen = {};
+    advOpen = false;
     bindPointer();
     paint();
   }

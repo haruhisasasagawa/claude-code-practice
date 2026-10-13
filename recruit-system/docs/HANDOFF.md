@@ -1,11 +1,12 @@
-# 引き継ぎメモ — フェーズ5（報告書表示・最終合否スタンプ）完了時点
+# 引き継ぎメモ — フェーズ6（台本モード・既定）完了時点
 
 - フェーズ1（Fable 5.1）: UI と骨格（4 ステップ・設定画面・HTML 保存・判定エンジンの土台）
 - **フェーズ2（Opus）: 新宿の運用要件（高校生ポリシー／繁忙期・3連休／オールナイト／2軸判定）を実装済み**。詳細仕様は `docs/SPEC.md`（確定版）
 - **フェーズ3: 入力の段階分け（面接前に入力／面接時に確認）を実装済み**。詳細仕様は `docs/SPEC-stages.md`（確定版）。副支配人の要望「面接前の確認項目が多すぎる。繁忙期の出勤頻度などは面接の時に確認したい。面接に進めるかの判断は週何日・時間帯・勤務期間くらい。あとは留意点を引き継げるフリーコメントがあれば十分」への対応
 - **フェーズ4: 面接チェックリスト（面接台本 2026-10-08 版）を実装済み**。詳細仕様は `docs/SPEC-checklist.md`（確定版）。副支配人の要望「印鑑部分以外なんか微妙。添付の面接台本のチェックリスト（採点リスト）を入力して出力・報告できるようにしたほうがいい」への対応。Step3 の 10 項目×5 点の採点を台本のチェックリストに置き換え、A4「面接チェックリスト報告」を追加した（10 章）
 - **フェーズ5: 保存 HTML の「報告書」表示と最終合否スタンプ（採用／不採用）を実装済み**。詳細仕様は `docs/SPEC-report.md`（確定版）。運用「面接者が報告書 HTML を出力 → 副支配人が開いて合否＋電子印 → 再出力してスレッドに添付」への対応（11 章）
-- 本メモは「現状」「決定事項」「ver4.4 からの移植状況」「残 TODO」をまとめたもの。フェーズ2の記述のうちフェーズ3で変わった点は 1-7 に書いた（1-1〜1-4 はフェーズ2時点の記述に、フェーズ3の変更を追記している）
+- **フェーズ6: 台本モード（既定）を実装済み**。詳細仕様は `docs/SPEC-script-mode.md`（確定版）。副支配人の要望「応募者の名前と属性入れたらもう渡した面接台本のとおりの報告でいい」への対応。従来の 4 ステップは詳細モードとして残した（12 章）
+- 本メモは「現状」「決定事項」「ver4.4 からの移植状況」「残 TODO」をまとめたもの。**1 章〜11 章はフェーズ5までの記述で、すべて詳細モード（`profile.mode === 'full'`）の話**。既定の台本モードは 12 章。フェーズ2の記述のうちフェーズ3で変わった点は 1-7 に書いた（1-1〜1-4 はフェーズ2時点の記述に、フェーズ3の変更を追記している）
 
 ## 1. 現状の到達点
 
@@ -37,8 +38,8 @@
 - 保存レコード `schemaVersion: 2`（保存時点の `contribution` と `highschool` のスナップショット付き）。レポートは 応募情報 → 申し送り → 強み → 追記 → シフト貢献度 → 面接評価 → 面接所見 → 採用可否判定（`.mx` 表、白黒印刷でも読める）
 
 ### 1-4. テスト（すべて緑）
-- `node tests/rules.test.js` … 単体テスト 77 件（SPEC 9-1 の #1〜#37 ＋並び順・describeApplicant・P1・非破壊・保存レポートの繁忙期タグ、SPEC-stages 7-1 の #43〜#52、押印の #53、SPEC-checklist 7-1 の #54〜#66、SPEC-report 8-1 の #67〜#71）
-- `node build.js && node tests/e2e.js` … 通しテスト 418 件の確認（SPEC 9-2 の E1〜E12 ＋ E13 高3例外を Step3 で入力 → 採用推奨 → 保存・読込、E14 showBeforeInterview=OFF、SPEC-stages 7-2 の E15〜E21、押印の E22、印刷の E23・E24、SPEC-checklist 7-2 の E25〜E29、SPEC-report 8-2・8-3 の E30・E31。日時は 2026-10-10 に固定）
+- `node tests/rules.test.js` … 単体テスト 83 件（SPEC 9-1 の #1〜#37 ＋並び順・describeApplicant・P1・非破壊・保存レポートの繁忙期タグ、SPEC-stages 7-1 の #43〜#52、押印の #53、SPEC-checklist 7-1 の #54〜#66、SPEC-report 8-1 の #67〜#71、**SPEC-script-mode 7-1 の #72〜#77（台本モード）**。#01〜#71 の `P()` は詳細モードのプロファイル）
+- `node build.js && node tests/e2e.js` … 通しテスト 469 件の確認（**E1〜E31 は詳細モード**、E32〜E36 は台本モード＝12-4。SPEC 9-2 の E1〜E12 ＋ E13 高3例外を Step3 で入力 → 採用推奨 → 保存・読込、E14 showBeforeInterview=OFF、SPEC-stages 7-2 の E15〜E21、押印の E22、印刷の E23・E24、SPEC-checklist 7-2 の E25〜E29、SPEC-report 8-2・8-3 の E30・E31。日時は 2026-10-10 に固定）
   - フェーズ4: 既存シナリオの `scoreAll`（10 項目の採点）は `setCl` / `rateAll`（必須条件すべて一致・確認点すべて同じ印・総合判断）に置き換えた。E1 は ○4 △3＋採用 = 13/16（81.3%・高）でマトリクスの結果は従来どおり。E25〜E29 は 10-4
   - E1 主シナリオ（例A: 貢献度 65.4・high_high → 要判断未確認で上長判断 → 全チェックで採用推奨）／E12 保存 → 読込で新項目が復元
   - E2 高2（原則対象外・highschool_hold）／E3 高3 例外充足・17歳のオールナイト／E4 高3 18歳・未決定・深夜帯○
@@ -100,6 +101,7 @@
 | D. オールナイト | 深夜〜早朝の通しシフトに入れるか（○△×・頻度）を、22 時以降の深夜帯とは別軸で判定材料にする。18 歳未満は法令上不可 |
 | E. 判定モデル | 面接評価とシフト貢献度を別々に点数化し、2軸マトリクスで最終判定。両軸の点数と内訳を画面と保存レポートに表示。配点・区切りは設定で編集可。「要判断が未確認なら採用推奨に留めない」は維持 |
 | G. 面接チェックリスト（フェーズ4） | Step3 の面接評価を面接台本（スタッフ面接チェックリスト 2026-10-08 版）のチェックリストに**置き換える**（10 項目×5 点は廃止）。面接評価の点数は台本の確認事項／確認点の ○△× と面接者の総合判断から算出し、2 軸判定（面接評価 × シフト貢献度）は維持。必須条件が 1 つでも不一致なら不採用推奨（台本どおり。設定で上長最終判断要に変更可）。必須条件は台本 PPTX の配置どおり ① の 2 件（土日含む週3日・5時間以上／指定繁忙期すべて可）。当初の決定で必須条件に挙げていたシフト提出ルール・シフト連絡は電話・欠勤・遅刻連絡は、PPTX では ② の【説明】だったため説明済みチェックにした（抽出テキストの誤読。8-3 で要確認）。「面接チェックリスト報告」を A4 1〜2 枚で印刷でき（台本と同じ ①〜⑤・記入済みチェック・メモ・確認点・判定・押印欄）、保存レポートにも同じ章を入れる |
+| H. 台本モード（フェーズ6） | 既定は 3 ステップ（① 応募者〔氏名と属性・台本のヘッダー〕→ ② 面接チェックリスト〔台本 2026-10-08 版の ①〜⑤〕→ ③ 報告書〔A4 プレビュー・電子印・最終合否・保存 HTML／印刷〕）。面接前の詳細入力・留意点・面接で確認する項目・シフト貢献度・2 軸判定は台本モードでは一切表示しない。消さずに「詳細モード」として残し、設定の先頭「運用モード」で切り替える。mode の無い設定・プロファイルは台本モード。印鑑部分（電子印・最終合否・報告書 HTML の往復）はそのまま |
 | F. 入力の段階（フェーズ3） | 面接前（Step1）に入力するのは 基本情報（氏名・性別・年齢・区分・卒業予定年月）・高校生の表示と高3の例外条件・外国籍の該当（する／しない）・通勤・勤務条件（曜日・時間・週の最低/最大日数・勤務期間）・面接者への申し送りコメント。繁忙期ごとの可否と日数・祝日・土日の頻度、深夜帯（可否・帰宅手段・終電・タクシー料金）、オールナイト、かけもち、外国籍の詳細、希望部署・応募経路などは面接時（Step3）。段階は設定でセクションごとに変更可。判定ロジックは段階に依存しない |
 
 統合時に決めた既定値と理由は `docs/SPEC.md` 10-1 を参照（未確認は 0 点にせず判定を保留、高3例外は進学のみ、18 歳以上の高3も深夜・オールナイト不可、など）。フェーズ3の決定事項（D1〜D20: セクション単位の段階、閉じた折りたたみでの先行入力、Step3 は全項目表示、`shift_unanswered` の条件は変えない、deferred / aggregate の印、週の最大勤務日数は既定で必須にしない、など）とリスクは `docs/SPEC-stages.md` 8 章。
@@ -322,3 +324,46 @@
 - ブラウザのメニューから印刷しても beforeprint で面接チェックリスト報告に切り替わる（報告書表示・回答ありのとき）。全体を印刷したいときは「詳細」に切り替えるか「レポート全体」ボタンを使う
 - ブラウザ以外（メールやチャットのプレビュー等）で開くとスクリプトが動かず、合否・押印は押せない（表示は保存時点の内容）
 - Playwright（Chromium）で file:// のページの「押印を保存」をダウンロードすると `suggestedFilename()` が `download` になることがあるため、e2e はファイル名を `body[data-filename]` と再出力 HTML の `data-filename` で検証している（実際のブラウザでは `a.download` に合否付きの名前を渡している）
+
+## 12. 台本モード（既定）— 追加分（フェーズ6。詳細は `docs/SPEC-script-mode.md`）
+
+### 12-1. 運用フロー
+1. 面接者がアプリで **① 応募者**（氏名と属性・台本のヘッダー）を入れる
+2. **② 面接チェックリスト**（面接台本 2026-10-08 版の ①〜⑤ ＋総合判断）を台本の順に入力する
+3. **③ 報告書** を開くと A4「面接チェックリスト報告」のプレビュー（判定サマリー＝面接評価〔確認点〕・必須条件・総合判断・結果）が出る。押印欄「面接対応者」に電子印 →「報告書を保存（HTML）」→ 社内スレッドに添付
+4. 副支配人が HTML を開く（報告書表示）→「最終合否」で採用／不採用（最終確認の印も自動）→「押印を保存」で再出力（`_採用` / `_不採用`）→ スレッドに添付
+5. 再出力ファイルはアプリの「読み込み」で押印・合否ごと引き継げる（フェーズ5の往復はそのまま）
+
+### 12-2. 決定事項（S1〜S3・Y1〜Y14 の要約）
+- S1〜S3: 既定は 3 ステップ。詳細入力・留意点・面接で確認する項目・シフト貢献度・2 軸は台本モードで一切出さない（画面・サマリー・保存 HTML・印刷・ヘルプ）。詳細モード（`profile.mode === 'full'`）は ff2d405 と同じ動き
+- **Y1 内部ステップキーは 1 / 3 / 4 のまま**（`state.step`・`data-step`・`record.step`）。表示番号だけ `STEPS_SCRIPT[i].no` で ①②③。`updateChecklistUI` の `state.step !== 3` などはそのまま。e2e の `navStep(3)` は台本モードでも面接チェックリスト
+- **Y2 分岐の基準**: アプリは `R.isScriptMode(state.profile)`（app.js の `isScript()`。mode が 'full' 以外はすべて台本）。保存 HTML・`checklistSheetHtml` は保存時の `R.isScriptRecord(record)`（`record.mode === 'script'` だけ。mode の無い旧レコードは詳細）
+- **Y3 `checklistAuto` は台本モードで自動なし**（手入力のみ。タクシー・消極属性・記入欄・必須条件の見込みを出さない）。`evaluateHiring` は常に `mode: 'full'` を渡して自動の見込みと照合する（詳細モードの判定は不変）
+- **Y4 判定 `evaluateScript`**: 総合判断が基準（採用→採用推奨・保留→上長最終判断要・不採用→不採用推奨・未入力→上長最終判断要＋警告）。必須条件の不一致（既定 reject）は不採用推奨に固定し `must_conditions` を必ず記録、未確認は警告（設定で review）、`overallCaps` は下げる方向のみ（既定値では効かない）。○△× は面接評価として報告するだけ（採用なのに × があれば警告 1 行）。戻り値は `record.judgment` と同じ形（`mode: 'script'`、`contribution` / `matrix` / `highschool` は null、`must`・`overall` を追加）
+- **Y5 台本モードの記録は回答が無くても `has-cl`**（紙プレビュー・A4 報告を常に出す。白紙の台本として印刷できる）
+- Y6 台本モードでは留意点を作り直さない（`goStep`・`renderStep`・`saveRecord`）。`applyRecord` は従来どおり作る（詳細の記録のデータを保持）
+- Y7 判定は ③ 報告書を開いたときに走らせる。Y8「報告書へ進む →」は入力チェックで止めない（`data-action="judge"` のまま）。Y9 台本モードのアプリは Ctrl+P・トップバー 🖨 も A4 報告
+- Y10・Y11 テスト: 単体の `P()` は詳細モード（`PS()` が台本）、e2e の `fresh()` は詳細モードの設定を書き込む（台本は `freshScript()`）
+- Y12 mode の無い保存済みの設定は台本モードにし、`report.modeAdded` で 1 回だけ toast（`MODE_ADDED_MSG`）して保存
+- Y13 設定画面は同じ data-bind をモードごとに 1 回だけ描く（台本モードでは区分・性別・卒業予定年月を「応募者の属性」、結果タイトル・注記を「結果文言（台本モード）」に描き、詳細モード用の節は `details.settings-advanced#s-advanced` に畳む）
+- Y14 台本モードの本文は `texts.script`（recommend / review / reject / missing / mustGate / adjusted。シフト貢献度・2軸に触れない）
+
+### 12-3. 触る場所
+- `rules.js` `isScriptMode` / `isScriptRecord` / `OVERALL_RESULT` / `DEFAULT_SCRIPT_TEXTS` / `scriptApplicantRows`（台本順の応募者情報の行。アプリの Step② ヘッダー・右サマリーと保存 HTML で共用）/ `evaluateScript`、`checklistAuto` の台本分岐、`evaluateHiring` の `checklistAuto` 呼び出し
+- `storage.js` `normalizeProfile`（mode・`report.modeAdded`）・`validateProfile`（運用モードのエラー）・`buildRecord`（`mode`）・`checklistSheetHtml`（`scriptRec`: 判定サマリー 4 枚・ヘッダーのチップ・備考・「面接で確認した勤務条件」なし）・`generateReportHTML`（`body.view-report.has-cl.mode-script`・`.rtool` の印刷 2 種・ヘッダー・ダッシュ 4 枚 `data-tile`・`applicant` / `checklist` / `judgment`〔`table.kv.script-judge`〕/ `#clSheet` / `mgmt`・mgmt-note。詳細モードの本文は `fullBodyHtml()` に移しただけで中身は不変）、**埋め込みスクリプト 1 の `if(!b)return;` を削除**（`#rtPrintSheet` が無い台本モードの記録で表示切替・`__prepareChecklistSheet`・beforeprint が動くように。両モード共通）
+- `app.js` `STEPS_FULL` / `STEPS_SCRIPT` / `steps()` / `isScript()` / `onModeChanged()`、`renderStepNav`（`#stepSectionTitle`）・`goStep`・`renderStep`・`evaluateNow`、`scriptApplicantStepHtml` / `validateScriptApplicant`（`#scriptApplicantCard`・`#saPosting`・`#saNegatives`〔`data-cl-on`〕・`#saTaxi`・`#saDate`・`#saInterviewer`・`#saNext`）、`scriptClHeaderHtml`（`#clHeaderAttrs`）・`syncClButtons`、`interviewStepHtml` の台本分岐（`#backToApplicant`・`#toReportBtn`）、`reportStepHtml` / `reportPaperInnerHtml` / `rerenderReportPaper`（`#scriptWarnings`・`#appPaperWrap` > `#appPaper`・`#backToChecklist`・`#reportPrintBtn`・`#reportSaveBtn`）、`scriptSummaryHtml`（`#sumApplicant` … `#sumSaved`）、`scriptHelpHtml`、`applyRecord`（遷移先・toast）、設定の `onSave` / `onReset` / `importProfileText`、`bindGlobal`（🖨 と beforeprint）、`legacyBannerHtml` の台本分岐
+- `settings.js` `modeHtml`（`#s-mode`・`[data-bind="mode"]` のラジオ）・`applicantHtml`（`#s-applicant`）・`textsScriptHtml`（`#s-texts-script`）・`scriptTemplate` / `fullTemplate`・`featuresHtml(o)` / `optionsHtml(o)` / `textsHtml(o)` / `checklistHtml(o)` の `scriptLayout`・`advOpen`
+- `config.default.js` `mode: 'script'`・`texts.script`、`styles.css`「台本モード」（`.cl-head-attrs`・`.cl-attr`・`.report-paper*`・`.mode-opt`・`.settings-advanced`）、`index.html` `#stepSectionTitle`・meta description
+
+### 12-4. テスト
+- 単体 #72（mode の既定・不正値・冪等・modeAdded・旧プロファイル・isScriptMode / isScriptRecord・validate・texts.script）、#73（evaluateScript: 採用・保留・不採用・判定の形・詳細項目に依存しない）、#74（必須条件の不一致・打ち切り・review 設定・未確認・mustUnknownResult）、#75（総合判断の未入力・確認点の未入力・overallCaps・× の警告・壊れた入力・本文の設定）、#76（buildRecord の mode、台本の記録の保存 HTML〔節・並び・応募者情報・`mode-script`・回答なし〕、詳細・旧レコードは従来どおり）、#77（checklistAuto の台本／詳細、evaluateHiring の照合、scriptApplicantRows、checklistSheetHtml の台本分岐）。既存部分の変更は `P()` / `PS()` の定義だけ
+- e2e E32〜E36（台本モード。7-3）。既存 E1〜E31 は期待値を変えず、`fresh()`（詳細モードの設定を書き込む）・`freshScript()`・`ensureFullMode()` を足し、`await ensureFullMode();` を 6 か所（冒頭の goto 後・設定の初期化後・E3 の `defaults()` 保存後・E9 / E20 / E29 の他劇場プロファイル取り込み後。E20 は `toView('settings')` も）に入れた
+- 実測（2026-10-13）: 台本モードの保存 HTML を報告書表示のまま印刷 2 ページ（`tests/shots/script-report.pdf`）、アプリの A4 印刷 2 ページ（`script-report-app.pdf`）。単体 83 件・e2e 469 件すべて緑
+- スクリーンショット（`tests/shots/`）: `40-script-step1.png`（① 応募者）、`41-script-step2.png`（② 面接チェックリスト）、`42-script-step3.png`（③ 報告書）、`43-script-step3-dark.png`（③ ダークモード・紙は白地）、`44-script-report.png`（保存 HTML の報告書表示）、`45-script-report-full.png`（保存 HTML の詳細）、`46-script-report-loaded.png`（再出力ファイルの読込）、`47-script-narrow.png`（390px）
+
+### 12-5. 既知の制限
+- 旧形式 v1 の 10 項目×5 点の記録は台本モードの判定に使わない（② に参考表示。報告書の判定は面接チェックリストの入力から作る）
+- 台本モードで保存し直した詳細の記録は、保存 HTML に詳細項目を出さない（データは記録に残り、詳細モードで読むと使える）
+- 名簿にない面接担当者は ① で選べない（設定の名簿に追加する。押印欄では従来どおり手入力できる。読み込んだ記録の担当が名簿外なら「（名簿外）」として選択肢に残す）
+- 台本モードの保存 HTML でも `reportCss` と埋め込みスクリプト 1 には詳細モード用のセレクタ（`data-sec="handoff"` など）の文字列が残る（節は生成しない）。単体 #76・e2e E34 は節の有無を `<section class="sec" data-sec="…"` の形で調べている
+- 結果の帯（面接評価の高・中・低）の境界 `evaluation.thresholds` は設定の「詳細モードの設定」の中（2 軸判定の節）にある

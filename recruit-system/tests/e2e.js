@@ -33,6 +33,12 @@
  *   E29 旧データ（v1・checklist なし v2）・他劇場の旧プロファイル・390px・ダークモード
  *   E30 報告書表示・最終合否（アプリで面接 → 保存 → 保存 HTML で採用＋最終確認の自動押印 → 押印を保存 → 印刷 → 読込 → 再判定・再保存）
  *   E31 不採用・取消・チェックリスト無しの報告書表示・詳細からの全体印刷・ダーク・画面幅・アプリの取消／不採用・設定の ON/OFF
+ * 台本モード（docs/SPEC-script-mode.md 7-3）。E1〜E31 は詳細モードの検証（fresh() が詳細モードの設定を書き込む）
+ *   E32 台本モード（既定）・3 ステップ・Step① 応募者（mode の無い設定は台本モード・詳細項目なし・390px）
+ *   E33 Step② 面接チェックリスト（①〜⑤ のみ・読み取り専用ヘッダー）→ Step③ 報告書（紙プレビュー・判定サマリー・必須条件・総合判断）
+ *   E34 押印 → 保存 → 保存 HTML（報告書表示・詳細・最終合否・押印を保存・A4 印刷）→ アプリで読込
+ *   E35 詳細モードの記録の読み込み・設定の運用モード（畳み込み・切替）・使い方
+ *   E36 台本モードの記録を詳細モードで読む・ダークモードの紙・390px
  */
 const { chromium } = (function(){ try { return require('playwright'); } catch (e) { return require('/opt/node-tools/node_modules/playwright'); } })();
 const path = require('path');
@@ -85,10 +91,19 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
     const c = window.RecruitRules.computeContribution(window.RecruitApp.state.applicant, window.RecruitApp.state.profile);
     return { total: c.total, max: c.max, band: c.band, missing: c.missing, incomplete: c.incomplete, parts: c.parts.map(p => ({ id: p.id, score: p.score, flags: p.flags, applicable: p.applicable })) };
   });
+  // 詳細モード（既存 E1〜E31 の前提）で始める: localStorage を空にし、詳細モードの既定プロファイルを書き込んで 1 回だけ再読込（docs/SPEC-script-mode.md 7-2）
   const fresh = async () => {
-    await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await page.evaluate(() => { try { localStorage.clear(); const p = window.RecruitStorage.defaults(); p.mode = 'full'; localStorage.setItem('recruit.profile.v1', JSON.stringify(p)); } catch (e) {} });
     await page.reload();
     await wait(300);
+  };
+  // 台本モード（既定）で始める: localStorage を空にして再読込
+  const freshScript = async () => { await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} }); await page.reload(); await wait(300); };
+  // 保存済みの設定を詳細モードにする（既に詳細なら何もしない）。旧プロファイルの取り込み・初期化の後に使う
+  const ensureFullMode = async () => {
+    if (await st(() => window.RecruitApp.state.profile.mode) === 'full') return;
+    await page.evaluate(() => { const S = window.RecruitStorage; const p = S.loadProfile(); p.mode = 'full'; S.saveProfile(p); });
+    await page.reload(); await wait(300);
   };
   const toView = async (v) => { await page.click('.nav-item[data-view="' + v + '"]'); await wait(300); };
   const navStep = async (n) => { await page.click('#stepNav [data-step="' + n + '"]'); await wait(300); };
@@ -166,6 +181,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await page.clock.setFixedTime(NOW);
   await page.goto(FILE);
   await wait(300);
+  await ensureFullMode();
   await shot('01-step1-empty.png');
 
   // =====================================================================
@@ -389,6 +405,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await page.click('[data-action="reset"]');
   await wait(300);
   expect(await page.textContent('#brandTheater') === 'TOHOシネマズ新宿', '初期化で新宿既定に戻る');
+  await ensureFullMode();
 
   // ---- 使い方・ダークモード・狭い画面 ----
   await toView('help');
@@ -622,6 +639,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await page.evaluate(() => { const p = window.RecruitStorage.defaults(); p.features.graduationDate = false; window.RecruitStorage.saveProfile(p); });
   await page.reload();
   await wait(300);
+  await ensureFullMode();
   await fillBasic({ name: '田中 三咲', age: 17, category: '高校3年生', shifts: [['sat', '10:00', '18:00']], daysMin: 1, daysMax: 1, workPeriod: 'long' });
   await pick('highschool.careerDecided', 'yes');
   await page.selectOption('[data-field="highschool.careerPath"]', 'university');
@@ -724,6 +742,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect(other.mode === 'allow' && other.contrib === false && other.allNight === false, 'E9 他劇場の旧プロファイルは従来動作（高校生 allow・2軸 OFF）: ' + JSON.stringify(other));
   const stagesE9 = await st(() => JSON.stringify(window.RecruitApp.state.profile.inputStages) === JSON.stringify(window.RecruitStorage.defaults().inputStages));
   expect(stagesE9, 'E9 inputStages の無い旧プロファイルは既定の段階');
+  await ensureFullMode();
   await toView('judge');
   expect(!!(await page.$('#preFill')), 'E9 旧プロファイルでも Step1 に「面接前に分かっている項目」の折りたたみ');
 
@@ -1199,6 +1218,8 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   // 他劇場の旧プロファイル（2軸 OFF・shift_unanswered なし）
   await page.setInputFiles('#profileFileInput', path.join(FIX, 'v1-profile-other.json'));
   await wait(400);
+  await ensureFullMode();
+  await toView('settings');
   // 旧プロファイルも既定どおり週の最大勤務日数は必須。ここでは空欄のときの Step3 の欄を確かめるため OFF にする
   expect(await st(() => window.RecruitApp.state.profile.stageOptions.requireDaysMax === true), 'E20 他劇場の旧プロファイルも requireDaysMax は既定 ON');
   await page.click('label:has([data-bind="stageOptions.requireDaysMax"])');
@@ -1872,6 +1893,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await wait(400);
   expect((await toastText()).includes('面接チェックリスト（新宿の台本 2026-10-08 版）を既定で追加'), 'E29 他劇場の旧プロファイルには既定の台本を補い toast で知らせる');
   await saveSettings();
+  await ensureFullMode();
   await toView('judge');
   await page.setInputFiles('#fileInput', saved25.file);
   await wait(500);
@@ -2161,6 +2183,358 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await saveSettings();
   await toView('judge');
   expect(!!(await page.$('#decisionCard svg.verdict-stamp')), 'E31 ON に戻すと Step4 のカードが戻る');
+
+  // =====================================================================
+  // E32 台本モード（既定）: 3 ステップ・Step① 応募者（docs/SPEC-script-mode.md 7-3）
+  // =====================================================================
+  console.log('\n== E32 台本モード（既定）: 3 ステップ・Step① 応募者 ==');
+  const stepNav = () => page.$$eval('#stepNav li', els => els.map(e => [e.dataset.step, e.querySelector('.step-num').textContent, e.querySelector('.step-label').textContent]));
+  const stepLabels = () => page.$$eval('#stepNav .step-label', els => els.map(e => e.textContent));
+  const fillScript = async (o) => {
+    await page.fill('[data-field="name"]', o.name);
+    if (o.age) await page.fill('[data-field="age"]', String(o.age));
+    if (o.gender) await page.selectOption('[data-field="gender"]', o.gender);
+    if (o.category) await page.selectOption('[data-field="category"]', o.category);
+    if (o.graduationDate) await page.fill('[data-field="graduationDate"]', o.graduationDate);
+    if (o.posting) await setCl('header.posting', o.posting);
+    for (const id of (o.negatives || [])) await page.click('label:has([data-cl="header.negatives.' + id + '"])');
+    if (o.taxi) await page.fill('[data-cl="header.taxi"]', o.taxi);
+    if (o.interviewer) await page.selectOption('[data-cl="header.interviewer"]', o.interviewer);
+    if (o.notes) await page.fill('[data-field="reviewerNotes"]', o.notes);
+    await wait(100);
+  };
+  const overflowX = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  // 台本モードのスクリーンショット（先頭までスクロールし、toast を隠してから全体を撮る）
+  const sshot = async (name) => { await page.evaluate(() => { window.scrollTo(0, 0); const t = document.getElementById('toast'); if (t) t.classList.remove('show'); }); await wait(250); await shot(name, true); };
+  // 1. mode の無い保存済みの設定（既存ユーザー）
+  await page.evaluate(() => { localStorage.clear(); const p = window.RecruitStorage.defaults(); delete p.mode; localStorage.setItem('recruit.profile.v1', JSON.stringify(p)); });
+  await page.reload();
+  await wait(300);
+  const m32 = await st(() => window.RecruitApp.state.profile.mode);
+  const t32 = await toastText();
+  expect(m32 === 'script' && t32.includes('台本モード') && (await storedProfile()).mode === 'script', 'E32 mode の無い保存済みの設定は台本モードで開き、mode を書き込む（toast で案内）: ' + JSON.stringify({ m32, t32 }));
+  // 2. 既定
+  await freshScript();
+  expect(await st(() => window.RecruitApp.state.profile.mode === 'script' && window.RecruitRules.isScriptMode(window.RecruitApp.state.profile)), 'E32 既定（設定なし）は台本モード');
+  // 3. サイドバー
+  const nav32 = await stepNav();
+  expect(JSON.stringify(nav32) === JSON.stringify([['1', '1', '応募者'], ['3', '2', '面接チェックリスト'], ['4', '3', '報告書']]) && (await page.textContent('#stepSectionTitle')) === '報告書の作成',
+    'E32 サイドバーは 3 ステップ（応募者／面接チェックリスト／報告書）・見出し「報告書の作成」: ' + JSON.stringify(nav32));
+  // 4. Step① の項目
+  const f32 = await page.evaluate(() => {
+    const q = (s) => document.querySelector(s);
+    const iv = q('#saInterviewer');
+    const notes = q('textarea[data-field="reviewerNotes"]');
+    return {
+      card: !!q('#scriptApplicantCard'), name: !!q('#scriptApplicantCard [data-field="name"][data-required]'), age: !!q('[data-field="age"]'),
+      gender: !!q('select[data-field="gender"]'), category: !!q('select[data-field="category"]'),
+      posting: document.querySelectorAll('#saPosting [data-action="cl-set"][data-cl="header.posting"]').length,
+      negShort: !!q('#saNegatives input[type="checkbox"][data-cl="header.negatives.short"]'), negMorning: !!q('#saNegatives input[type="checkbox"][data-cl="header.negatives.morningOnly"]'),
+      taxi: !!q('#saTaxi[data-cl="header.taxi"]'), date: q('#saDate[data-cl="header.date"]') ? q('#saDate').value : null,
+      ivOpts: iv ? Array.from(iv.options).map(o => o.value) : [], notes: notes ? notes.closest('.field').textContent.includes('備考（面接者メモ）') : false
+    };
+  });
+  expect(f32.card && f32.name && f32.age && f32.gender && f32.category && f32.posting === 2 && f32.negShort && f32.negMorning && f32.taxi && f32.date === '2026-10-10' && f32.ivOpts.includes('笹川 晴央') && f32.notes,
+    'E32 Step① に氏名（必須）・年齢・性別・区分・応募した求人・消極属性・タクシー可否・料金・面接日（今日）・面接担当者（名簿）・備考（面接者メモ）: ' + JSON.stringify(f32));
+  // 5. 詳細項目なし
+  const absent32 = [];
+  for (const sel of ['[data-field="workDays"]', '[data-field="anyDay"]', '[data-field="shifts.mon.start"]', '[data-field="daysMin"]', '[data-field="daysMax"]', '[data-field="workPeriod"]', '[data-field="commuteMethod"]',
+    '[data-field="nearestStation"]', '[data-field="sideJob"]', '[data-field="foreign.isForeign"]', '[data-field="vacation.gw"]', '[data-field="lateNight.availability"]', '[data-field="allNight.availability"]',
+    '#preFill', '#notesCard', '[data-action="generate-handoff"]']) if (await page.$(sel)) absent32.push(sel);
+  expect(absent32.length === 0, 'E32 Step① に詳細項目（曜日・時間帯・週日数・勤務期間・通勤・かけもち・外国籍・繁忙期・深夜帯・オールナイト・申し送り）が無い: ' + absent32.join(' '));
+  // 6. 卒業予定年月
+  await page.selectOption('[data-field="category"]', '大学2年生');
+  await wait(100);
+  const grad32a = await visible('#grp-graduation');
+  await page.selectOption('[data-field="category"]', 'フリーター');
+  await wait(100);
+  const grad32b = await visible('#grp-graduation');
+  expect(grad32a && !grad32b, 'E32 卒業予定年月は学生の区分のときだけ表示');
+  // 7. 氏名が空
+  await page.click('[data-action="script-next"]');
+  await wait(300);
+  expect(await step() === 1 && (await toastText()).includes('必須'), 'E32 氏名が空なら面接チェックリストへ進めない');
+  // 8. 入力
+  await fillScript({ name: '台本 花子', age: 20, gender: '女性', category: '大学2年生', graduationDate: '2029-03', posting: 'short', negatives: ['short'], taxi: '可・2,500円', interviewer: '笹川 晴央', notes: '電話の受け答えが丁寧。' });
+  const s32 = await st(() => { const s = window.RecruitApp.state; return { a: s.applicant, h: s.checklist.header }; });
+  expect(s32.a.name === '台本 花子' && s32.a.age === '20' && s32.a.gender === '女性' && s32.a.category === '大学2年生' && s32.a.graduationDate === '2029-03' && s32.a.reviewerNotes === '電話の受け答えが丁寧。' &&
+    s32.h.posting === 'short' && s32.h.negatives.short === 'on' && !s32.h.negatives.morningOnly && s32.h.taxi === '可・2,500円' && s32.h.interviewer === '笹川 晴央' && s32.h.date === '2026-10-10',
+    'E32 Step① の入力は applicant と checklist.header に入る: ' + JSON.stringify(s32.h));
+  // 9. 右サマリー
+  const sum32 = await page.textContent('#summaryPanel');
+  expect(['台本 花子', '大学2年生', '20歳', '短期希望', '短期求人', '笹川 晴央'].every(t => sum32.includes(t)) && !['シフト貢献度', '留意点', '通勤'].some(t => sum32.includes(t)),
+    'E32 右サマリー（台本モード）に氏名・属性・消極属性・求人・担当。貢献度・留意点・通勤は出さない');
+  // 10. 390px
+  await page.setViewportSize({ width: 390, height: 900 });
+  await wait(300);
+  const ov32 = await overflowX();
+  expect(ov32 <= 1, 'E32 390px 幅の Step① で横スクロールなし: ' + ov32);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await wait(200);
+  await sshot('40-script-step1.png');
+  // 11. 面接チェックリストへ
+  await page.click('[data-action="script-next"]');
+  await wait(400);
+  expect(await step() === 3, 'E32 「面接チェックリストへ進む」で面接チェックリスト（内部キー 3）へ');
+
+  // =====================================================================
+  // E33 台本モード: 面接チェックリスト → 報告書（判定）
+  // =====================================================================
+  console.log('\n== E33 台本モード: 面接チェックリスト → 報告書 ==');
+  const has33 = {};
+  for (const sel of ['#cl-conditions', '#cl-continuity', '#cl-job', '#cl-teamwork', '#cl-reverse', '#clOverall', '#shiftConfirm', '#unresolvedAlert', '.cl-group-label']) has33[sel] = !!(await page.$(sel));
+  expect(has33['#cl-conditions'] && has33['#cl-continuity'] && has33['#cl-job'] && has33['#cl-teamwork'] && has33['#cl-reverse'] && has33['#clOverall'] && !has33['#shiftConfirm'] && !has33['#unresolvedAlert'] && !has33['.cl-group-label'],
+    'E33 Step② は ①〜⑤ と総合判断だけ（「面接で確認する項目」・未確認の留意点は出さない）: ' + JSON.stringify(has33));
+  const hd33 = await page.textContent('#clHeader');
+  expect(['大学2年生', '20歳', '短期希望', '短期求人', '笹川 晴央', '2026/10/10'].every(t => hd33.includes(t)) && !hd33.includes('自動') && !(await page.$('#clHeader input, #clHeader select')),
+    'E33 #clHeader の属性は Step① の入力から（読み取り専用・自動の表示なし）');
+  const auto33 = await page.$$eval('#stepContent .cl-auto, #stepContent .cl-auto-hint', els => els.map(e => e.textContent.trim()).filter(Boolean));
+  expect(auto33.length === 0, 'E33 必須条件・記入欄に応募情報からの自動表示（見込み・自動: …）を出さない: ' + auto33.join(' / '));
+  expect((await page.textContent('#backToApplicant')).trim() === '← 応募者に戻る' && (await page.textContent('#toReportBtn')).trim() === '報告書へ進む →' && !(await page.$('#stepContent [data-action="to-step"][data-step="2"]')),
+    'E33 戻る＝「← 応募者に戻る」・進む＝「報告書へ進む →」（申し送りへの導線なし）');
+  await rateAll('good');
+  await sshot('41-script-step2.png');
+  await judge();
+  const j33 = await judgment();
+  expect(await step() === 4 && j33.mode === 'script' && j33.result === 'recommend' && j33.adjustments.length === 0, 'E33 必須条件すべて一致・確認点すべて○・総合判断「採用」→ 採用推奨（mode=script）: ' + JSON.stringify(j33));
+  const paper33 = await page.evaluate(() => ({
+    sheet: !!document.querySelector('#appPaper .cl-sheet.cl-mode-sheet'), tiles: Array.from(document.querySelectorAll('#appPaper .cl-tile .cl-tile-k')).map(e => e.textContent),
+    judge: (document.querySelector('#appPaper .cl-judge') || {}).textContent || '', dec: !!document.querySelector('#appPaper .cl-decision.is-none#appPaperDecision') }));
+  expect(paper33.sheet && JSON.stringify(paper33.tiles) === JSON.stringify(['面接評価（確認点）', '必須条件', '総合判断', '結果']) && paper33.judge.includes('採用推奨') && !paper33.judge.includes('シフト貢献度') && paper33.dec,
+    'E33 報告書の紙プレビュー: 判定サマリーは 面接評価（確認点）・必須条件・総合判断・結果（貢献度タイルなし）＋最終合否（未押印）: ' + JSON.stringify(paper33.tiles));
+  const lay33 = await page.evaluate(() => { const t = (s) => { const el = document.querySelector(s); return el ? el.getBoundingClientRect().top : null; };
+    return { paper: t('#appPaperWrap'), mgmt: t('#mgmtCard'), dec: t('#decisionCard'), boxes: document.querySelectorAll('#mgmtCard .stamp-box').length,
+      save: (document.querySelector('#reportSaveBtn') || {}).textContent, print: (document.querySelector('#reportPrintBtn') || {}).textContent }; });
+  expect(lay33.paper != null && lay33.paper < lay33.mgmt && lay33.mgmt < lay33.dec && lay33.boxes === 3 && lay33.save === '💾 報告書を保存（HTML）' && lay33.print === '🖨 A4 で印刷',
+    'E33 報告書: 紙プレビュー → 押印（3 欄）→ 最終合否 → 「報告書を保存（HTML）」「A4 で印刷」: ' + JSON.stringify(lay33));
+  const no33 = [];
+  for (const sel of ['.result-card', '#clBreakdown', '.axis-grid', '#busyAllNightResult', '#applicantSummary', '#judgeWarnings']) if (await page.$('#stepContent ' + sel)) no33.push(sel);
+  expect(no33.length === 0 && !(await page.textContent('#stepContent')).includes('シフト貢献度'), 'E33 報告書ステップに 2軸判定・貢献度・応募情報サマリーを出さない: ' + no33.join(' '));
+  expect(await page.$eval('#mgmtCard .stamp-box[data-field-id="interviewer"] select', el => el.value) === '0', 'E33 Step① の面接担当者が押印欄「面接対応者」の初期選択');
+  // 必須条件を不一致
+  await navStep(3);
+  await setCl('values.must_weekly', 'mismatch');
+  await judge();
+  const j33b = await judgment();
+  expect(j33b.result === 'reject' && j33b.adjustments[0] === 'must_conditions' && (await page.textContent('#appPaper .cl-tile-res')).includes('不採用推奨'), 'E33 必須条件を「不一致」にすると不採用推奨（紙の結果タイルも）: ' + JSON.stringify(j33b));
+  // 保留
+  await navStep(3);
+  await setCl('values.must_weekly', 'match');
+  await setCl('overall', 'hold');
+  await judge();
+  const j33c = await judgment();
+  expect(j33c.result === 'review' && j33c.adjustments.length === 0, 'E33 総合判断「保留」→ 上長最終判断要: ' + JSON.stringify(j33c));
+  // 総合判断を未入力に
+  await navStep(3);
+  await page.click('[data-action="cl-set"][data-cl="overall"][data-value="hold"]');
+  await wait(100);
+  await judge();
+  const j33d = await judgment();
+  expect(await step() === 4 && j33d.result === 'review' && await st(() => window.RecruitApp.state.checklist.overall) === '' && (await txtIn(page, '#scriptWarnings')).includes('総合判断が未入力'),
+    'E33 総合判断が未入力でも報告書へ進め、上長最終判断要＋警告（#scriptWarnings）: ' + JSON.stringify(j33d));
+  await navStep(3);
+  await setCl('overall', 'hire');
+  await judge();
+  expect((await judgment()).result === 'recommend' && !(await page.$('#scriptWarnings')), 'E33 総合判断「採用」に戻すと採用推奨・警告なし');
+  const sm33 = { result: await txtIn(page, '#sumResult'), must: await txtIn(page, '#sumMust'), marks: await txtIn(page, '#sumMarks'), ov: await txtIn(page, '#sumOverall'), stamps: await txtIn(page, '#sumStamps') };
+  expect(sm33.result.includes('採用推奨') && sm33.must.includes('すべて一致') && sm33.marks.includes('○7') && sm33.ov.includes('採用') && sm33.stamps.includes('面接対応者'),
+    'E33 右サマリーに必須条件・採点・総合判断・結果・押印状況: ' + JSON.stringify(sm33));
+  await sshot('42-script-step3.png');
+
+  // =====================================================================
+  // E34 台本モード: 押印 → 保存 → 保存 HTML（報告書表示・詳細・最終合否）→ 読込
+  // =====================================================================
+  console.log('\n== E34 台本モード: 押印 → 保存 HTML → 最終合否 → 読込 ==');
+  await page.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
+  await wait(150);
+  expect(!!(await page.$('#mgmtCard .stamp-box[data-field-id="interviewer"] svg.hanko')) && await st(() => (window.RecruitApp.state.management.interviewer || {}).name) === '笹川 晴央',
+    'E34 「面接対応者」に押印（初期選択のまま押せる）');
+  await page.selectOption('#decisionManager', { label: SASA });
+  await page.click('#decisionCard [data-action="decide"][data-value="hire"]');
+  await wait(200);
+  const hire34 = !!(await page.$('#appPaper .cl-decision.is-hire svg.verdict-stamp'));
+  await page.click('#decisionCard [data-action="undecide"]');
+  await wait(150);
+  const none34 = !!(await page.$('#appPaper .cl-decision.is-none'));
+  await page.click('#mgmtCard .stamp-box[data-field-id="final"] [data-action="unstamp"]');
+  await wait(150);
+  expect(hire34 && none34 && !(await st(() => window.RecruitApp.state.management.final)), 'E34 アプリの最終合否で紙プレビューの合否欄も描き直す（採用 → 取消で未押印）');
+  const saved34 = await saveRecord('script-report.html');
+  const r34 = saved34.rec;
+  expect(r34.mode === 'script' && r34.decision == null && r34.step === 4 && r34.management.interviewer.name === '笹川 晴央' && r34.checklist.header.taxi === '可・2,500円' && r34.judgment.mode === 'script' &&
+    saved34.html.includes('<body class="view-report has-cl mode-script" data-filename="応募者_台本_花子_2026-10-10.html">'),
+    'E34 保存: record.mode=script・判定（mode=script）・body.view-report.has-cl.mode-script');
+  const in34 = ['<h2>応募者情報</h2>', '<h2>面接チェックリスト</h2>', '<h2>採用可否判定</h2>', '<h2>応募者の管理</h2>', 'id="rtPrintChecklist"', 'id="rtPrintAll"', 'id="clPaper"', 'id="clSheet"'].filter(t => !saved34.html.includes(t));
+  // 節（section.sec）は要素の形で調べる（reportCss のセレクタに data-sec="handoff" の文字列が残るため）
+  const out34 = ['<h2>面接者への申し送り（留意点）</h2>', '<h2>シフト貢献度</h2>', '<h2>面接で確認した情報</h2>', '<h2>面接前に分かっている情報（未確認）</h2>', '<h2>応募時の情報</h2>', '<h2>面接者への申し送りコメント</h2>',
+    'id="rtPrintSheet"', '<section class="sec" data-sec="contrib"', '<section class="sec" data-sec="handoff"'].filter(t => saved34.html.includes(t));
+  expect(!in34.length && !out34.length, 'E34 保存 HTML は台本モードの節だけ（留意点・面接で確認した情報・シフト貢献度・申し送りの節と申し送りシートの印刷ボタンなし）: ' + JSON.stringify({ missing: in34, extra: out34 }));
+  const rp34Err = [];
+  const rp34 = await newReportPage(rp34Err);
+  await rp34.goto('file://' + saved34.file);
+  await rp34.waitForTimeout(300);
+  const cls34 = await rp34.evaluate(() => document.body.className);
+  expect(cls34.includes('view-report') && cls34.includes('mode-script') && await shownIn(rp34, '#clPaper .cl-sheet') && !(await shownIn(rp34, '.rh')) && await shownIn(rp34, '#decision') && await shownIn(rp34, '#mgmt') && await dispIn(rp34, '#clSheet') === 'none',
+    'E34 保存 HTML は報告書表示で開く（紙プレビュー・最終合否・押印。印刷用 #clSheet は非表示）: ' + cls34);
+  const pj34 = await txtIn(rp34, '#clPaper .cl-judge');
+  expect(pj34.includes('総合判断') && pj34.includes('採用推奨') && !pj34.includes('シフト貢献度'), 'E34 紙プレビューの判定サマリー（総合判断・結果。貢献度なし）');
+  await rp34.screenshot({ path: path.join(OUT, '44-script-report.png'), fullPage: true });
+  await rp34.click('#rtViewFull');
+  await rp34.waitForTimeout(150);
+  const secs34 = await rp34.$$eval('section.sec', els => els.filter(el => getComputedStyle(el).display !== 'none').map(el => el.dataset.sec));
+  const dash34 = await txtIn(rp34, '.dash');
+  expect(JSON.stringify(secs34) === JSON.stringify(['applicant', 'checklist', 'judgment', 'mgmt']) && await shownIn(rp34, '.rh') && !dash34.includes('シフト貢献度') && !dash34.includes('留意点'),
+    'E34 「詳細」は ヘッダー・ダッシュ・応募者情報・面接チェックリスト・採用可否判定・応募者の管理 だけ: ' + secs34.join(','));
+  const app34 = await txtIn(rp34, 'section.sec[data-sec="applicant"]');
+  expect(['台本 花子', '20歳', '女性', '大学2年生', '2029年3月', '短期求人', '短期希望', '可・2,500円', '2026/10/10', '笹川 晴央', '電話の受け答えが丁寧。'].every(t => app34.includes(t)) && !app34.includes('通勤') && !app34.includes('勤務期間'),
+    'E34 「応募者情報」は Step① の項目だけ');
+  const jd34 = await txtIn(rp34, 'section.sec[data-sec="judgment"]');
+  expect(['必須条件', '面接評価（確認点）', '総合判断', '採用推奨'].every(t => jd34.includes(t)) && !jd34.includes('2軸') && !jd34.includes('シフト貢献度'), 'E34 「採用可否判定」は台本モードの要約（必須条件・採点・総合判断・結果）');
+  const pb34 = await rp34.$$eval('.rtool button[id^="rtPrint"]', els => els.map(e => e.id));
+  expect(JSON.stringify(pb34) === JSON.stringify(['rtPrintChecklist', 'rtPrintAll']), 'E34 印刷ボタンは「面接チェックリスト報告（A4）」「レポート全体」: ' + pb34.join(','));
+  await rp34.screenshot({ path: path.join(OUT, '45-script-report-full.png'), fullPage: true });
+  await rp34.click('#rtViewReport');
+  await rp34.waitForTimeout(150);
+  await rp34.selectOption('#decision select', { label: SASA });
+  await rp34.click('#decision [data-act="decide"][data-value="hire"]');
+  await rp34.waitForTimeout(200);
+  const fn34 = await rp34.evaluate(() => document.body.getAttribute('data-filename'));
+  expect(!!(await rp34.$('#clPaper .cl-decision svg.verdict-stamp')) && !!(await rp34.$('#mgmt .stamp-box[data-field-id="final"] svg.hanko')) && fn34 === '応募者_台本_花子_2026-10-10_採用.html',
+    'E34 保存 HTML で「採用」→ 紙に採用スタンプ・最終確認に自動押印・ファイル名 _採用: ' + fn34);
+  const [dl34] = await Promise.all([rp34.waitForEvent('download'), rp34.click('#mgmtSaveBtn')]);
+  const file34b = path.join(OUT, 'script-report-hire.html');
+  await dl34.saveAs(file34b);
+  const r34b = parseRecord(fs.readFileSync(file34b, 'utf8'));
+  expect(r34b.mode === 'script' && r34b.decision && r34b.decision.result === 'hire' && r34b.management.final && r34b.management.final.name === '笹川 晴央' && r34b.management.interviewer.name === '笹川 晴央',
+    'E34 押印を保存した再出力ファイルに decision（採用）・最終確認・mode=script');
+  await rp34.goto('file://' + file34b);
+  await rp34.waitForTimeout(300);
+  const pdf34 = path.join(OUT, 'script-report.pdf');
+  await rp34.pdf({ path: pdf34, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  await rp34.waitForTimeout(100);
+  const n34 = pdfPages30(pdf34);
+  const t34 = pdfText30(pdf34);
+  console.log('script-report.pdf pages:', n34);
+  expect((n34 === -1 || (n34 >= 1 && n34 <= 2)) && (t34 === null || (t34.includes('面接チェックリスト報告') && !t34.includes('シフト貢献度'))),
+    'E34 報告書表示のまま印刷すると面接チェックリスト報告（A4 2 ページ以内・貢献度なし）: ' + n34);
+  expect(rp34Err.length === 0, 'E34 保存 HTML のページエラー・console error なし: ' + (rp34Err.join(' / ') || 'none'));
+  await rp34.close();
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', file34b);
+  await wait(500);
+  const s34 = await st(() => { const s = window.RecruitApp.state; return { step: s.step, d: s.decision && s.decision.result, final: (s.management.final || {}).name }; });
+  expect(s34.step === 4 && (await page.$$('#stepNav li')).length === 3 && s34.d === 'hire' && s34.final === '笹川 晴央' && !!(await page.$('#decisionCard svg.verdict-stamp')) &&
+    !!(await page.$('#appPaper .cl-decision svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('採用・笹川'),
+    'E34 アプリで読み込むと台本モードの報告書（Step③）に合否・押印を引き継ぐ: ' + JSON.stringify(s34));
+  await st(() => window.RecruitApp.prepareChecklistSheet(true));
+  await page.emulateMedia({ media: 'print' });
+  const pdf34a = path.join(OUT, 'script-report-app.pdf');
+  await page.pdf({ path: pdf34a, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  await page.emulateMedia({ media: null });
+  await st(() => window.RecruitApp.prepareChecklistSheet(false));
+  const n34a = pdfPages30(pdf34a);
+  expect(n34a === -1 || (n34a >= 1 && n34a <= 2), 'E34 アプリの A4 印刷（面接チェックリスト報告）も 2 ページ以内: ' + n34a);
+  await sshot('46-script-report-loaded.png');
+
+  // =====================================================================
+  // E35 台本モード: 詳細モードの記録の読み込み・運用モードの切替・使い方
+  // =====================================================================
+  console.log('\n== E35 詳細モードの記録・運用モードの切替・使い方 ==');
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', saved25.file);
+  await wait(500);
+  const t35 = await toastText();
+  expect(t35.includes('詳細モードで保存された記録です（表示されない項目も保持されます）') && await step() === 4 && (await page.$$('#stepNav li')).length === 3 &&
+    await st(() => window.RecruitApp.state.applicant.workDays.length > 0) && !(await page.textContent('#stepContent')).includes('シフト貢献度'),
+    'E35 詳細モードの記録を台本モードで読むと 3 ステップの報告書で表示（詳細項目は保持・toast）: ' + t35);
+  const saved35 = await saveRecord('script-from-full.html');
+  const r35 = saved35.rec;
+  expect(r35.mode === 'script' && JSON.stringify(r35.applicant.workDays) === JSON.stringify(r25.applicant.workDays) && JSON.stringify(r35.applicant.shifts) === JSON.stringify(r25.applicant.shifts) &&
+    Object.keys(r35.handoff.checks).length === Object.keys(r25.handoff.checks).length,
+    'E35 台本モードで保存し直しても応募情報の詳細・留意点のチェックは保持（mode=script）');
+  await toView('settings');
+  const set35 = await page.evaluate(() => {
+    const body = document.querySelector('#view-settings .settings-body');
+    const first = body.querySelector(':scope > section.card');
+    const adv = document.querySelector('details.settings-advanced');
+    const inAdv = ['s-features', 's-stages', 's-options', 's-busy', 's-params', 's-hs', 's-rules', 's-contrib', 's-matrix', 's-texts'].every(id => { const el = document.getElementById(id); return !!el && !!adv && adv.contains(el); });
+    const outAdv = ['s-mode', 's-meta', 's-applicant', 's-checklist', 's-texts-script', 's-mgmt', 's-io'].every(id => { const el = document.getElementById(id); return !!el && !(adv && adv.contains(el)); });
+    const chk = document.querySelector('[data-bind="mode"]:checked');
+    return { first: first ? first.id : '', mode: chk ? chk.value : '', adv: !!adv, open: adv ? adv.open : null, inAdv, outAdv, cats: !!document.querySelector('#s-applicant [data-bind="options.categories"]') };
+  });
+  expect(set35.first === 's-mode' && set35.mode === 'script' && set35.adv && set35.open === false && set35.inAdv && set35.outAdv && set35.cats,
+    'E35 設定の先頭に「運用モード」（台本）・詳細モードの節は「詳細モードの設定」に畳む（台本・押印・劇場情報・区分・書き出しは常に表示）: ' + JSON.stringify(set35));
+  await page.click('label:has([data-bind="mode"][value="full"])');
+  await wait(300);
+  expect(!(await page.$('details.settings-advanced')), 'E35 詳細モードを選ぶと設定の節を畳まずに表示');
+  await saveSettings();
+  const t35b = await toastText();
+  await toView('judge');
+  expect(JSON.stringify(await stepLabels()) === JSON.stringify(['応募情報', '面接者への申し送り', '面接チェックリスト', '採用可否判定']) && await step() === 1 && !!(await page.$('[data-field="workDays"]')) &&
+    (await storedProfile()).mode === 'full' && t35b.includes('詳細モード'),
+    'E35 詳細モードに切り替えると 4 ステップ・Step1（詳細の応募情報）に戻る: ' + t35b);
+  await toView('settings');
+  await page.click('label:has([data-bind="mode"][value="script"])');
+  await wait(300);
+  await saveSettings();
+  await toView('judge');
+  expect(JSON.stringify(await stepLabels()) === JSON.stringify(['応募者', '面接チェックリスト', '報告書']) && await step() === 1 && !!(await page.$('#scriptApplicantCard')) && (await storedProfile()).mode === 'script',
+    'E35 台本モードに戻すと 3 ステップ・Step① 応募者');
+  await toView('help');
+  const help35 = await page.textContent('#view-help');
+  expect((await page.$$('#view-help .help-step')).length === 3 && ['応募者', '面接チェックリスト', '報告書', '最終合否', '詳細モード'].every(t => help35.includes(t)) && !help35.includes('2軸（マトリクス）'),
+    'E35 使い方は台本モード向け（3 ステップ・報告書 HTML の往復・詳細モードは末尾）');
+  await toView('judge');
+
+  // =====================================================================
+  // E36 台本モードの記録を詳細モードで読む・ダークモード・390px
+  // =====================================================================
+  console.log('\n== E36 台本モードの記録を詳細モードで・ダーク・390px ==');
+  await toView('settings');
+  await page.click('label:has([data-bind="mode"][value="full"])');
+  await wait(300);
+  await saveSettings();
+  await toView('judge');
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', file34b);
+  await wait(500);
+  const t36 = await toastText();
+  const s36 = await st(() => { const s = window.RecruitApp.state; return { name: s.applicant.name, wd: s.applicant.workDays.length, step: s.step, d: s.decision && s.decision.result }; });
+  expect((await page.$$('#stepNav li')).length === 4 && s36.name === '台本 花子' && s36.wd === 0 && s36.step === 4 && s36.d === 'hire' && t36.includes('台本モードで保存された記録です'),
+    'E36 台本モードの記録も詳細モードで読める（詳細項目は空・合否は保持）: ' + JSON.stringify(s36) + ' ' + t36);
+  await toView('settings');
+  await page.click('label:has([data-bind="mode"][value="script"])');
+  await wait(300);
+  await saveSettings();
+  await toView('judge');
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', file34b);
+  await wait(500);
+  await page.click('#btnTheme');
+  await wait(200);
+  const dk36 = await page.evaluate(() => ({ theme: document.documentElement.getAttribute('data-theme'), bg: getComputedStyle(document.getElementById('appPaper')).backgroundColor,
+    color: getComputedStyle(document.querySelector('#appPaper .cl-sheet')).color }));
+  expect(await step() === 4 && dk36.theme === 'dark' && dk36.bg === 'rgb(255, 255, 255)' && dk36.color === 'rgb(17, 17, 17)', 'E36 ダークモードでも報告書の紙プレビューは白地・黒字: ' + JSON.stringify(dk36));
+  await sshot('43-script-step3-dark.png');
+  await page.click('#btnTheme');
+  await wait(150);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await wait(300);
+  const nw36 = await page.evaluate(() => { const w = document.getElementById('appPaperWrap'); return { sw: w.scrollWidth, cw: w.clientWidth, ov: document.documentElement.scrollWidth - window.innerWidth }; });
+  await st(() => window.RecruitApp.goStep(3));
+  await wait(300);
+  const ov36b = await overflowX();
+  await st(() => window.RecruitApp.goStep(1));
+  await wait(300);
+  const ov36c = await overflowX();
+  expect(nw36.sw > nw36.cw && nw36.ov <= 1 && ov36b <= 1 && ov36c <= 1, 'E36 390px 幅で横スクロールなし（報告書は紙だけ横スクロール・面接チェックリスト・応募者も）: ' + JSON.stringify({ nw36, ov36b, ov36c }));
+  await sshot('47-script-narrow.png');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await wait(200);
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');
