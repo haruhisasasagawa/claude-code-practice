@@ -943,7 +943,33 @@
         '<div><div class="field"><label>ハンコのプレビュー</label><div class="stamp-preview">' + preview + '</div><div class="hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div></div>' +
       '</div>' +
       sLines('management.managers', '担当者名簿（氏名|印字名|役職|等級）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人|S3 。印字名を省略すると姓（スペースの前）を使います。等級は任意（押印には使いません）。', rows: 17 }) +
-      sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。'));
+      sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。') +
+      decisionSettingsHtml(fields));
+  }
+
+  // 最終合否（採用／不採用のスタンプ。docs/SPEC-report.md 7 章）
+  function decisionSettingsHtml(fields) {
+    const St = global.RecruitStamp;
+    const dc = global.RecruitStorage && global.RecruitStorage.decisionConfig ? global.RecruitStorage.decisionConfig(draft) : null;
+    const today = St ? St.stampDate(new Date()) : '';
+    const preview = St && dc
+      ? St.verdict({ label: dc.hireLabel, date: today, color: dc.hireColor, size: 96, id: 'stVdHire', sub: dc.sub }) +
+        St.verdict({ label: dc.rejectLabel, date: today, color: dc.rejectColor, size: 96, id: 'stVdReject', sub: dc.sub })
+      : '';
+    return '<h3 class="sub">最終合否（採用／不採用のスタンプ）</h3>' +
+      sCheck('management.decision.enabled', '最終合否のスタンプを使う', '保存ファイル（HTML）と Step4 に「採用」「不採用」のボタンを出します。アプリの判定（推奨）とは別の、最終確認者の決定として記録します。') +
+      '<div class="field-row">' +
+        '<div>' + sInput('management.decision.label', '表示名') +
+          sInput('management.decision.hireLabel', '「採用」の表示名', { repaint: true }) +
+          sInput('management.decision.rejectLabel', '「不採用」の表示名', { repaint: true }) +
+          sInput('management.decision.hint', '説明（任意）') + '</div>' +
+        '<div><div class="field"><label>スタンプのプレビュー</label><div class="stamp-preview verdict-preview">' + preview + '</div>' +
+          '<div class="hint">採用は朱、不採用は藍。日付と劇場名が入ります。</div></div></div>' +
+      '</div>' +
+      sSelect('management.decision.stampField', '押印欄と連動', fields.filter(function (fl) { return fl && fl.id; }).map(function (fl) { return { value: fl.id, label: fl.label + '（' + fl.id + '）' }; }).concat([{ value: '', label: '連動しない' }]),
+        '合否を押したとき、この押印欄にも同じ担当者の印を押せます。') +
+      sCheck('management.decision.autoStampFinal', '合否を押すと、連動する押印欄にも同じ担当者の印を押す（未押印のときだけ）') +
+      sCheck('management.decision.filenameSuffix', '合否を付けて保存するとき、ファイル名の末尾に「_採用」「_不採用」を付ける');
   }
 
   function ioHtml() {

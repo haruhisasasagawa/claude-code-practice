@@ -1,9 +1,10 @@
-# 引き継ぎメモ — フェーズ4（面接チェックリスト）完了時点
+# 引き継ぎメモ — フェーズ5（報告書表示・最終合否スタンプ）完了時点
 
 - フェーズ1（Fable 5.1）: UI と骨格（4 ステップ・設定画面・HTML 保存・判定エンジンの土台）
 - **フェーズ2（Opus）: 新宿の運用要件（高校生ポリシー／繁忙期・3連休／オールナイト／2軸判定）を実装済み**。詳細仕様は `docs/SPEC.md`（確定版）
 - **フェーズ3: 入力の段階分け（面接前に入力／面接時に確認）を実装済み**。詳細仕様は `docs/SPEC-stages.md`（確定版）。副支配人の要望「面接前の確認項目が多すぎる。繁忙期の出勤頻度などは面接の時に確認したい。面接に進めるかの判断は週何日・時間帯・勤務期間くらい。あとは留意点を引き継げるフリーコメントがあれば十分」への対応
 - **フェーズ4: 面接チェックリスト（面接台本 2026-10-08 版）を実装済み**。詳細仕様は `docs/SPEC-checklist.md`（確定版）。副支配人の要望「印鑑部分以外なんか微妙。添付の面接台本のチェックリスト（採点リスト）を入力して出力・報告できるようにしたほうがいい」への対応。Step3 の 10 項目×5 点の採点を台本のチェックリストに置き換え、A4「面接チェックリスト報告」を追加した（10 章）
+- **フェーズ5: 保存 HTML の「報告書」表示と最終合否スタンプ（採用／不採用）を実装済み**。詳細仕様は `docs/SPEC-report.md`（確定版）。運用「面接者が報告書 HTML を出力 → 副支配人が開いて合否＋電子印 → 再出力してスレッドに添付」への対応（11 章）
 - 本メモは「現状」「決定事項」「ver4.4 からの移植状況」「残 TODO」をまとめたもの。フェーズ2の記述のうちフェーズ3で変わった点は 1-7 に書いた（1-1〜1-4 はフェーズ2時点の記述に、フェーズ3の変更を追記している）
 
 ## 1. 現状の到達点
@@ -36,8 +37,8 @@
 - 保存レコード `schemaVersion: 2`（保存時点の `contribution` と `highschool` のスナップショット付き）。レポートは 応募情報 → 申し送り → 強み → 追記 → シフト貢献度 → 面接評価 → 面接所見 → 採用可否判定（`.mx` 表、白黒印刷でも読める）
 
 ### 1-4. テスト（すべて緑）
-- `node tests/rules.test.js` … 単体テスト 72 件（SPEC 9-1 の #1〜#37 ＋並び順・describeApplicant・P1・非破壊・保存レポートの繁忙期タグ、SPEC-stages 7-1 の #43〜#52、押印の #53、SPEC-checklist 7-1 の #54〜#66）
-- `node build.js && node tests/e2e.js` … 通しテスト 383 件の確認（SPEC 9-2 の E1〜E12 ＋ E13 高3例外を Step3 で入力 → 採用推奨 → 保存・読込、E14 showBeforeInterview=OFF、SPEC-stages 7-2 の E15〜E21、押印の E22、印刷の E23・E24、SPEC-checklist 7-2 の E25〜E29。日時は 2026-10-10 に固定）
+- `node tests/rules.test.js` … 単体テスト 77 件（SPEC 9-1 の #1〜#37 ＋並び順・describeApplicant・P1・非破壊・保存レポートの繁忙期タグ、SPEC-stages 7-1 の #43〜#52、押印の #53、SPEC-checklist 7-1 の #54〜#66、SPEC-report 8-1 の #67〜#71）
+- `node build.js && node tests/e2e.js` … 通しテスト 418 件の確認（SPEC 9-2 の E1〜E12 ＋ E13 高3例外を Step3 で入力 → 採用推奨 → 保存・読込、E14 showBeforeInterview=OFF、SPEC-stages 7-2 の E15〜E21、押印の E22、印刷の E23・E24、SPEC-checklist 7-2 の E25〜E29、SPEC-report 8-2・8-3 の E30・E31。日時は 2026-10-10 に固定）
   - フェーズ4: 既存シナリオの `scoreAll`（10 項目の採点）は `setCl` / `rateAll`（必須条件すべて一致・確認点すべて同じ印・総合判断）に置き換えた。E1 は ○4 △3＋採用 = 13/16（81.3%・高）でマトリクスの結果は従来どおり。E25〜E29 は 10-4
   - E1 主シナリオ（例A: 貢献度 65.4・high_high → 要判断未確認で上長判断 → 全チェックで採用推奨）／E12 保存 → 読込で新項目が復元
   - E2 高2（原則対象外・highschool_hold）／E3 高3 例外充足・17歳のオールナイト／E4 高3 18歳・未決定・深夜帯○
@@ -276,3 +277,48 @@
 
 ### 10-5. フェーズ4で直した既存の不具合
 - 同じ応募者ファイルを続けて読み込むと何も起きなかった（`#fileInput` の値を「読み込み」ボタン経由でしか空にしていなかったため、同じファイルを選び直すと change が起きない）。`onFileChosen` / `onProfileFileChosen` で読み取り後に値を空にした。フェーズ4の作業中、e2e の E24（E23 と同じ saved.html を続けて読み込む）が読込に失敗したまま空の Step1 を印刷して「2 ページ」と数えていることが分かった（上限内なので PASS していた）。修正後は実際の Step4 を 4 ページで印刷している。
+
+## 11. 報告書表示・最終合否スタンプ — 追加分（フェーズ5。詳細は `docs/SPEC-report.md`）
+
+### 11-1. 運用フロー
+1. 面接者がアプリで面接チェックリストを入力・判定し、Step4 の押印欄「面接対応者」に電子印を押して「保存（HTML）」→ 社内スレッドに添付
+2. 副支配人がその HTML をブラウザで開く（常に「報告書」表示＝A4 の面接チェックリスト報告の紙プレビュー＋「応募者の管理」節〔最終合否パネル＋押印欄〕）
+3. 担当者（自分）を選んで「採用」または「不採用」を押す → 合否スタンプが押され、押印欄「最終確認」が未押印なら同じ担当者の電子印も自動で押される → 「押印を保存」で再出力（ファイル名の末尾に `_採用` / `_不採用`）→ スレッドに添付
+4. 再出力ファイルをアプリの「読み込み」で開いても、合否・押印はすべて引き継がれる（Step4 の「最終合否」カード・右サマリー「採用・笹川」）
+
+### 11-2. 決定事項（D1〜D12・X1〜X13 の要約）
+- D1: 保存 HTML は常に報告書表示（`body.view-report`）で開く。表示は localStorage に保存しない。ツールバー `.rtool-view` の `#rtViewReport`「報告書」/ `#rtViewFull`「詳細」（`body.view-full`＝従来の全体レポート）。回答ありの記録（`body.has-cl`）は紙プレビュー＋「応募者の管理」節、回答なしは申し送りシート相当（pre / comment / handoff / interview / mgmt の節。`.dash` は隠す）。印刷 3 種（申し送りシート／面接チェックリスト報告／レポート全体）は表示に依存しない
+- **X1 紙プレビューは `#clPaper`（`.paper-wrap#reportPaper > .paper#clPaper`）で、印刷用の `#clSheet` とは別に描く**。E27 が「画面で `#clSheet` は非表示」「報告印刷で見える `.page > *` は `clSheet,mgmt` だけ」を検証しているため。`checklistSheetHtml(..., { mode: 'sheet' })` を 2 回描く（紙 = `decisionId: 'clPaperDecision'`・`vdPaper`、印刷用 = 既定の `clDecision`・`vdSheet`）
+- X2: 報告書表示の CSS はすべて `@media screen` かつ `body:not(.print-checklist):not(.print-handoff)`。`__prepareChecklistSheet(true)` の高さ計測（`.cl-fit`）中に `#clSheet` を隠さないため
+- **X3: 報告書表示（回答あり）のままブラウザで印刷すると面接チェックリスト報告になる**（`beforeprint` で `prepCl(true)`、`afterprint` で戻す。「レポート全体」ボタンは `printingAll` で切替を抑止。回答なしは従来どおり全体）。**Playwright の `page.pdf()` も beforeprint / afterprint を発火する**ため、既存 E24 の「レポートの全体印刷 ≤ 6 ページ」は報告書表示で開いたファイルに対して面接チェックリスト報告（実測 2 ページ）を印刷して通る（E24 は変更していない）。全体レポートのページ数は E31 で「詳細」表示から検証し直している（実測 6 ページ）
+- D2: `stamp.js` の `verdictSvg`（角丸二重枠・太字ゴシック・日付＋劇場名の副文・-3°・feTurbulence のにじみ・`class="verdict-stamp"`・`role="img"`・`aria-label`）。採用 朱 `#c8232c`／不採用 藍 `#1f4e8c`（色は設定値、文字は記録時の `decision.label`＝X8）。`hanko` クラスは付けない（既存のハンコ数え上げに混ざらない）
+- D3: `record.decision = { result: 'hire'|'reject', label, date: 'YYYY.MM.DD', at, by: { name, short, title } } | null`。`buildRecord` は常にキーを書き、`parseRecordFromHTML` / `applyRecord` は `normalizeDecision` で整える（旧レコード・不正値は null）。`schemaVersion` は 2 のまま
+- D4: `profile.management.decision`（`enabled` / `label` / `hireLabel` / `rejectLabel` / `hireColor` / `rejectColor` / `stampField: 'final'` / `autoStampFinal` / `filenameSuffix` / `hint`）。`normalizeProfile`（`fillArrays`）で補完、`validateProfile` は採用・不採用の表示名の空・同一をエラー、連動欄が無いと警告
+- D5: 押す場所は保存 HTML の `#decision` パネルとアプリ Step4 の `#decisionCard`（同じ振る舞い）。`autoStampFinal` で `stampField` の欄が未押印なら同じ担当者の印も押す。ファイル名は `decisionFilename`（`基本名_採用.html`。付いている接尾辞は置き換え、冪等）
+- **X5: 「取消」は合否だけを消す**。自動で押した「最終確認」の印は残る（押印は押印欄の「取消」で消す）
+- D6: 合否の表示は (1) A4 報告の【判定サマリー】右端 `.cl-decision`（sheet のみ。未押印は点線枠「最終合否 未押印」。高さはタイル以下）、(2) `#decision` パネル、(3) Step4 カード、(4) 全体レポートのヘッダー `#rhDecision`。保存 HTML で押すと埋め込みスクリプトの `renderDecision()` が (1)(2)(4) と `data-filename` を描き直す
+- D7・X10: 合否は判定とは独立（再判定・設定保存で消えない）。食い違い（採用 × 不採用推奨、不採用 × 採用推奨）は注記 1 行だけ
+- X9: `decision.enabled=false` で合否の UI（パネル・カード・`.cl-decision`・ヘッダー・サマリー・ファイル名の接尾辞）を一切出さない。`record.decision` は消さずに往復する
+- X11: 未押印の `#decision` は印刷しない（全体印刷のページ数を増やさない）。`print-checklist` / `print-handoff` ではパネルを出さない（報告には `.cl-decision` が出る）。申し送りシートには合否を出さない
+- X12: 保存 HTML はライトテーマ固定（ダークモードでも紙・パネルとも明るい）。アプリのカードはトークンでダーク対応
+
+### 11-3. 触る場所
+- `stamp.js` `verdictSvg` / `decisionSheetHtml` / `decisionFilename`（`RecruitStamp.verdict` / `.decisionSheet` / `.decisionFilename`。`source()` に 5 関数。ES5・外部参照なし）
+- `storage.js` `normalizeDecision` / `decisionConfig` / `decisionFields`（正規化）/ `decOpts`、`fillArrays`・`validateProfile`・`buildRecord`・`parseRecordFromHTML`、`checklistSheetHtml`（`.cl-judge-row` / `.cl-judge-main` / `.cl-decision`。外側の `class="cl-judge"` と `<ul class="cl-adj">` の形は単体 #66 のため維持）、`checklistSheetCss`（`.cl-decision` 系）、`reportCss`（`.rtool-view`・`.paper-wrap`・`.paper`・報告書表示の `@media screen`・`.decision` パネル）、`generateReportHTML`（`body.view-report[.has-cl]`・`.rtool-view`・`#reportPaper`・`#rhDecision`・`#decision`・mgmt-note の運用文言・埋め込み設定の `decision`、埋め込みスクリプト 1 の `setView` / `__setReportView` / beforeprint・afterprint、埋め込みスクリプト 2 の `renderDecision` / `initDecSel` / `pickPerson` / decide・undecide）
+- `app.js` `state.decision`、`decisionCardHtml` / `rerenderDecisionCard` / `decide` / `decisionSummaryHtml`（`#sumDecision`）、`onContentClick` の `decide` / `undecide`、`onFieldEvent` の `data-decision-select`、`applyRecord` / `newRecord` / `saveRecord`（合否付きファイル名）、使い方
+- `settings.js` `decisionSettingsHtml`（s-mgmt の末尾。プレビュー `#stVdHire` / `#stVdReject`）、`config.default.js` `management.decision`、`styles.css`「最終合否（Step4）」
+
+### 11-4. テスト
+- 単体 #67（verdictSvg・decisionSheetHtml・source を空の vm で実行）、#68（decisionFilename の付け外し・冪等）、#69（normalizeProfile の既定・不正値・stampField・冪等、decisionConfig の sub、validateProfile）、#70（normalizeDecision、buildRecord・parseRecordFromHTML の往復。DOMParser はこのテストの中だけスタブ）、#71（body の class・ファイル名・id の並び・合否 svg 4 つ・埋め込み設定・注記・回答なし・無効・section に出さない）
+- e2e E30（アプリで面接 → 判定 → 面接対応者の押印 → 保存 → file:// で開くと報告書表示〔紙は白地・影・シート幅 718px〕→ 詳細／報告書の切替 → 笹川で「採用」〔紙・印刷用・パネル・ヘッダーに朱のスタンプ、最終確認の自動押印、`data-filename` が `_採用.html`〕→「詳細」のまま押印を保存 → 再出力ファイルは報告書表示・合否と押印が残り担当者を初期選択 → 面接チェックリスト報告の PDF〔2 ページ・「最終合否」「笹川晴央」を含む〕→ 報告書表示のままの印刷も報告〔2 ページ〕で、印刷後は報告書表示に戻る → アプリで読込〔Step4・右サマリー「採用・笹川」〕→ 再判定・再保存でも残る）
+- e2e E31（不採用への切替〔藍・最終確認の印は増えない・接尾辞の付け替え・食い違いの注記〕→ 取消〔未押印・接尾辞なし・最終確認の印は残る・保存すると decision は null〕→ E22 の Step2 保存ファイルは申し送りシート相当 → 「詳細」で全節 → E23 のファイルを「詳細」から全体印刷 6 ページ → ダークモードでも紙は白地・黒字 → 1280/1440px で紙が画面内・390px は紙だけ横スクロール → アプリの取消・最終確認を外して「不採用」で自動押印・右サマリー「不採用・笹川」→ 設定の項目・OFF でカードとサマリーが消え記録は残る・ON で戻る）
+- 実測（2026-10-13）: 面接チェックリスト報告（合否入り）2 ページ、報告書表示のままの印刷 2 ページ、「詳細」からの全体印刷 6 ページ、E24（報告書表示のまま全体印刷の経路）2 ページ。単体 77 件・e2e 418 件すべて緑
+- e2e の注意: `emulateMedia({ media: 'screen' })` で戻すと、その後の `page.pdf()` も screen で描かれて印刷用 CSS が効かない（Playwright の挙動）。印刷のエミュレートを解除するときは `emulateMedia({ media: null })` を使う（E30 の「報告書表示のまま印刷」の前）
+- スクリーンショット（`tests/shots/`）: `33-report-view.png`（報告書表示 1440px・採用押印後）、`34-report-view-dark.png`（ダークモード）、`35-report-full.png`（詳細・ヘッダーに合否）、`36-step4-decision.png`（アプリ Step4）、`37-report-view-narrow.png`（390px）。PDF `checklist-report-decision.pdf`（2 ページ）
+
+### 11-5. 既知の制限
+- チェックリストの回答が無い記録は、報告書表示のまま Ctrl+P しても全体印刷のまま（申し送りシートは「申し送りシート（A4 1枚）」ボタンで印刷する）
+- 申し送りシートの印刷には合否を出さない（面接前の資料のため）
+- ブラウザのメニューから印刷しても beforeprint で面接チェックリスト報告に切り替わる（報告書表示・回答ありのとき）。全体を印刷したいときは「詳細」に切り替えるか「レポート全体」ボタンを使う
+- ブラウザ以外（メールやチャットのプレビュー等）で開くとスクリプトが動かず、合否・押印は押せない（表示は保存時点の内容）
+- Playwright（Chromium）で file:// のページの「押印を保存」をダウンロードすると `suggestedFilename()` が `download` になることがあるため、e2e はファイル名を `body[data-filename]` と再出力 HTML の `data-filename` で検証している（実際のブラウザでは `a.download` に合否付きの名前を渡している）

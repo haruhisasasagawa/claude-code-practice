@@ -45,6 +45,7 @@
     cfSnap: null,          // Step3「面接で確認する項目」を開いた時点の状態（外国籍の該当欄を出すか・応募時に入力があったか）。goStep で作り直す
     handoffBase: null,     // Step2 までに作った留意点の文言 { id: text }（Step3 で入力して新しく出た留意点を見分ける。Step3 以降の作り直しでは更新しない）
     management: {},        // 応募者の管理（押印）: { initial: { name, short, title, date, at }, ... }
+    decision: null,        // 最終合否（人の決定）: { result, label, date, at, by }。判定とは独立。再判定で消さない（「取消」でだけ消える）
     savedAt: null,
     dirty: false
   };
@@ -1123,6 +1124,11 @@
       if (inp) { inp.classList.toggle('hidden', t.value !== '__free'); if (t.value === '__free') inp.focus(); }
       return;
     }
+    if (t.hasAttribute && t.hasAttribute('data-decision-select')) {
+      const inp = $('#decisionFree');
+      if (inp) { inp.classList.toggle('hidden', t.value !== '__free'); if (t.value === '__free') inp.focus(); }
+      return;
+    }
 
     // 面接チェックリスト（data-field より先に処理する。チェックボックス → true／外すと消す、それ以外 → 値）
     if (t.dataset.cl) {
@@ -1305,6 +1311,16 @@
         if (fid && state.management[fid]) { delete state.management[fid]; state.dirty = true; rerenderManagementCard(); renderSummary(); }
         break;
       }
+      case 'decide':
+        decide(b.dataset.value);
+        break;
+      case 'undecide':
+        state.decision = null;
+        state.dirty = true;
+        rerenderDecisionCard();
+        renderSummary();
+        toast('最終合否を取り消しました');
+        break;
       case 'print':
         window.print();
         break;
@@ -2652,6 +2668,7 @@
     '</ul></div>';
 
     html += managementCardHtml();
+    html += decisionCardHtml();
     html += '<div class="actions between no-print">' +
       '<button type="button" class="btn" data-action="to-step" data-step="3">← 面接チェックリストに戻る</button>' +
       '<div class="actions">' + (isCl ? '<button type="button" class="btn" data-action="print-checklist" title="台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2枚に印刷">🖨 面接チェックリスト報告（A4）</button>' : '') +
@@ -2797,6 +2814,7 @@
           : state.judgmentStale
             ? '<p class="empty" id="sumJudgmentStale">判定後に入力・設定が変わりました。Step4 で再判定してください（保存時は現在の内容で再判定して記録します）。</p>'
             : '<p class="empty">' + (contribOn() ? '面接評価とシフト貢献度の2軸で判定します。' : '面接チェックリストを入力後に判定します。') + '</p>') +
+        decisionSummaryHtml() +
         (state.savedAt ? '<div class="sum-sub" style="margin-top:8px">最終保存 ' + esc(U.fmtDateTime(state.savedAt)) + '</div>' : '') +
       '</div>';
   }
@@ -2820,7 +2838,10 @@
     }
     const rec = S.buildRecord(state);
     const html = S.generateReportHTML(rec, state.profile);
-    S.download('応募者_' + S.safeName(a.name) + '_' + U.fmtDate(new Date()) + '.html', html, 'text/html;charset=utf-8');
+    // 合否ありのときはファイル名の末尾に _採用 / _不採用（設定 management.decision.filenameSuffix）
+    const dcfg = decisionCfg();
+    const fname = Stamp.decisionFilename('応募者_' + S.safeName(a.name) + '_' + U.fmtDate(new Date()) + '.html', dcfg.enabled ? S.normalizeDecision(state.decision) : null, dcfg);
+    S.download(fname, html, 'text/html;charset=utf-8');
     state.savedAt = rec.savedAt;
     state.dirty = false;
     renderSummary();
@@ -2862,6 +2883,7 @@
     ensureChecklist();
     state.interviewNotes = rec.interviewNotes || '';
     state.management = U.isObj(rec.management) ? U.deepClone(rec.management) : {};
+    state.decision = S.normalizeDecision(rec.decision);
     state.judgment = null;
     state.judgmentStale = false;
     state.savedAt = rec.savedAt || null;
@@ -2925,6 +2947,7 @@
     state.handoff = null; state.handoffStale = false; state.handoffChecks = {}; state.handoffNote = ''; state.handoffBase = null;
     state.scores = {}; state.checklist = R.emptyChecklist(); state.interviewNotes = ''; state.judgment = null; state.judgmentStale = false;
     state.management = {};
+    state.decision = null;
     state.legacyRecord = null;
     state.savedAt = null; state.dirty = false;
     state.preFillOpen = null;
@@ -3078,6 +3101,124 @@
     card.replaceWith(tmp.firstElementChild);
   }
 
+  // =====================================================================
+  // 最終合否（採用／不採用のスタンプ。docs/SPEC-report.md 6 章）
+  //   アプリの判定（推奨）とは別の「人の決定」。保存 HTML の「最終合否」パネルと同じ振る舞い
+  // =====================================================================
+  function decisionCfg() { return S.decisionConfig(state.profile); }
+
+  // 判定と食い違う合否の注記（採用 × 不採用推奨、不採用 × 採用推奨のときだけ。止めない）
+  function decisionNoteText(d, j) {
+    if (!d || !j) return '';
+    if ((d.result === 'hire' && j.result === 'reject') || (d.result === 'reject' && j.result === 'recommend')) {
+      return '※ アプリの判定「' + (j.title || '') + '」と異なる最終合否です（記録はそのまま残ります）。';
+    }
+    return '';
+  }
+
+  function decisionLabelOf(d, dcfg) { return d.label || (d.result === 'hire' ? dcfg.hireLabel : dcfg.rejectLabel); }
+
+  function decisionCardHtml() {
+    const dcfg = decisionCfg();
+    if (!dcfg.enabled || !Stamp) return '';
+    const mg = state.profile.management || {};
+    const managers = Array.isArray(mg.managers) ? mg.managers : [];
+    const fields = Array.isArray(mg.fields) ? mg.fields : [];
+    const allowFree = mg.allowFreeName !== false;
+    const d = S.normalizeDecision(state.decision);
+    // 担当者の初期選択: 連動する押印欄（最終確認）の押印者 → 合否を押した人
+    const st = dcfg.stampField ? (state.management || {})[dcfg.stampField] : null;
+    const selName = (st && st.name) || (d ? d.by.name : '') || '';
+    const selIdx = selName ? managers.findIndex(function (m) { return m && m.name === selName; }) : -1;
+    const useFree = !!selName && selIdx < 0 && allowFree;
+    const note = decisionNoteText(d, state.judgment);
+    const linked = dcfg.autoStampFinal && dcfg.stampField ? fields.find(function (f) { return f.id === dcfg.stampField; }) : null;
+    const btn = function (r, lbl, col) {
+      const on = !!d && d.result === r;
+      return '<button type="button" class="btn sm decide-btn decide-' + r + (on ? ' on' : '') + '" data-action="decide" data-value="' + r + '" aria-pressed="' + (on ? 'true' : 'false') + '" style="--dec:' + esc(col) + '">' + esc(lbl) + '</button>';
+    };
+    const stamp = d
+      ? Stamp.verdict({ label: decisionLabelOf(d, dcfg), date: d.date, color: d.result === 'hire' ? dcfg.hireColor : dcfg.rejectColor, size: 120, id: 'vdApp', sub: dcfg.sub })
+      : '<div class="verdict-empty">未押印</div>';
+    const meta = d ? decisionLabelOf(d, dcfg) + '・' + d.by.name + (d.by.title ? '（' + d.by.title + '）' : '') + '　' + (d.date || '') : 'まだ押されていません';
+    return '<div class="card decision-card ' + (d ? 'is-' + d.result : 'is-none') + '" id="decisionCard" data-result="' + (d ? d.result : '') + '">' +
+      '<div class="card-head"><h2>' + esc(dcfg.label) + '</h2><p>' + (dcfg.hint ? esc(dcfg.hint) + '。' : '') +
+        'アプリの判定（推奨）とは別に、最終確認者が「' + esc(dcfg.hireLabel) + '」「' + esc(dcfg.rejectLabel) + '」を決めて押します。保存した HTML 上でも押せます。</p></div>' +
+      '<div class="decision-body">' +
+        '<div class="decision-stamp" id="decisionStamp">' + stamp + '</div>' +
+        '<div class="decision-main">' +
+          '<div class="decision-meta" id="decisionMeta">' + esc(meta) + '</div>' +
+          (note ? '<div class="decision-note" id="decisionNote">' + esc(note) + '</div>' : '') +
+          '<div class="decision-ctl no-print">' +
+            '<select id="decisionManager" data-decision-select aria-label="' + esc(dcfg.label) + ' 担当者"><option value="">担当者を選択</option>' +
+              managers.map(function (m, i) { return '<option value="' + i + '"' + (i === selIdx ? ' selected' : '') + '>' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
+              (allowFree ? '<option value="__free"' + (useFree ? ' selected' : '') + '>名簿にない担当者（手入力）</option>' : '') +
+            '</select>' +
+            (allowFree ? '<input type="text" id="decisionFree" class="stamp-free' + (useFree ? '' : ' hidden') + '" placeholder="氏名（例：山田 太郎）" value="' + (useFree ? esc(selName) : '') + '">' : '') +
+            btn('hire', dcfg.hireLabel, dcfg.hireColor) + btn('reject', dcfg.rejectLabel, dcfg.rejectColor) +
+            (d ? '<button type="button" class="btn sm ghost" data-action="undecide">取消</button>' : '') +
+          '</div>' +
+          (linked ? '<div class="hint no-print">「' + esc(dcfg.hireLabel) + '」「' + esc(dcfg.rejectLabel) + '」を押すと、押印欄「' + esc(linked.label) + '」が未押印なら同じ担当者の印も押します。</div>' : '') +
+        '</div>' +
+      '</div></div>';
+  }
+
+  function rerenderDecisionCard() {
+    const card = $('#decisionCard');
+    if (!card) return;
+    const html = decisionCardHtml();
+    if (!html) { card.remove(); return; }
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    card.replaceWith(tmp.firstElementChild);
+  }
+
+  // 「採用」「不採用」を押す（担当者は押印と同じ規則。autoStampFinal なら連動する押印欄も押す）
+  function decide(r) {
+    const dcfg = decisionCfg();
+    if (!dcfg.enabled || !Stamp || (r !== 'hire' && r !== 'reject')) return;
+    const mg = state.profile.management || {};
+    const sel = $('#decisionManager');
+    const v = sel ? sel.value : '';
+    let m = null;
+    if (v === '__free') {
+      const inp = $('#decisionFree');
+      const nm = inp ? inp.value.trim() : '';
+      if (!nm) { toast('氏名を入力してください', 'error'); if (inp) inp.focus(); return; }
+      m = { name: nm, short: Stamp.shortName(nm), title: '' };
+    } else {
+      m = (mg.managers || [])[Number(v)];
+      if (v === '' || !m) { toast('担当者を選んでください', 'error'); return; }
+    }
+    const who = { name: m.name, short: m.short || Stamp.shortName(m.name), title: m.title || '' };
+    const dt = Stamp.stampDate(new Date()), at = new Date().toISOString();
+    const label = r === 'hire' ? dcfg.hireLabel : dcfg.rejectLabel;
+    state.decision = { result: r, label: label, date: dt, at: at, by: who };
+    let auto = null;
+    if (dcfg.autoStampFinal && dcfg.stampField) {
+      const fld = (mg.fields || []).find(function (f) { return f.id === dcfg.stampField; });
+      const cur = state.management[dcfg.stampField];
+      if (fld && !(cur && cur.name)) {
+        state.management[dcfg.stampField] = { name: who.name, short: who.short, title: who.title, date: dt, at: at };
+        auto = fld;
+      }
+    }
+    state.dirty = true;
+    rerenderDecisionCard();
+    rerenderManagementCard();
+    renderSummary();
+    toast(who.name + ' さんが「' + label + '」を押しました' + (auto ? '（' + auto.label + 'にも押印）' : ''), 'ok');
+  }
+
+  // 右サマリーの「最終合否」（有効かつ押印済みのときだけ）
+  function decisionSummaryHtml() {
+    const dcfg = decisionCfg();
+    const d = dcfg.enabled ? S.normalizeDecision(state.decision) : null;
+    if (!d) return '';
+    return '<div class="sum-row" id="sumDecision" style="margin-top:8px"><span class="sum-label">' + esc(dcfg.label) + '</span><span class="sum-val"><span class="badge dec-' + d.result + '">' +
+      esc(decisionLabelOf(d, dcfg) + '・' + (d.by.short || Stamp.shortName(d.by.name))) + '</span></span></div>';
+  }
+
   function helpHtml() {
     const m = state.profile.meta;
     return '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>アルバイト採用の判断基準を統一するためのツールです。面接前は「留意点の申し送り」、面接後は「採用可否の判定」を行います。</p></div>' +
@@ -3090,6 +3231,7 @@
       '<div class="card"><div class="card-head"><h3>保存と読み込み</h3></div>' +
         '<ul class="list-plain"><li><b>保存（HTML）</b>：応募者ごとに1ファイル。ブラウザで開けば判定レポートとして読め、アプリの「読み込み」でそのまま再開できます。</li>' +
         '<li>途中段階でも保存できます。読み込むと保存時点のステップに戻ります。</li>' +
+        '<li><b>最終合否</b>：副支配人は保存ファイル（HTML）をブラウザで開き、「最終合否」で「採用」「不採用」を押して「押印を保存」で再出力します（最終確認の印も自動で押されます）。アプリの判定（推奨）とは別の記録です。</li>' +
         '<li>旧形式のファイルも読み込めます。繁忙期の日数などは未確認になるため、Step3 で入力してから再判定してください。</li>' +
         '<li>応募者データはこの端末のブラウザには残りません（保存したファイルのみが記録です）。</li></ul></div>' +
       '<div class="card"><div class="card-head"><h3>設定（劇場プロファイル）</h3></div>' +

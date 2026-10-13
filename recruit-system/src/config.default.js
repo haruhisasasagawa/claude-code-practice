@@ -87,7 +87,21 @@
       managers: [
         { name: '笹川 晴央', short: '笹川', title: '副支配人', grade: 'S3' }
       ],
-      allowFreeName: true   // 名簿にない氏名を手入力で押せる
+      allowFreeName: true,  // 名簿にない氏名を手入力で押せる
+      // 最終合否（採用／不採用のスタンプ）。アプリの判定（推奨）とは別の「人の決定」。
+      // 保存 HTML の「最終合否」パネルとアプリ Step4 で押す。押すと stampField の押印欄が未押印なら同じ担当者の印も押す
+      decision: {
+        enabled: true,
+        label: '最終合否',
+        hireLabel: '採用',
+        rejectLabel: '不採用',
+        hireColor: '#c8232c',      // 朱
+        rejectColor: '#1f4e8c',    // 藍
+        stampField: 'final',       // 連動する押印欄の id（'' = 連動しない）
+        autoStampFinal: true,      // 合否を押したとき stampField の欄が未押印なら同じ担当者の印も押す
+        filenameSuffix: true,      // 合否ありの保存ファイル名に _採用 / _不採用 を付ける
+        hint: '最終確認者が合否を決めて押します'
+      }
     },
 
     options: {

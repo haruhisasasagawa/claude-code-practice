@@ -108,6 +108,67 @@
     }
   }
 
+  // ---------- 最終合否（profile.management.decision / record.decision。docs/SPEC-report.md 1 章） ----------
+  const DECISION_FALLBACK = {
+    enabled: true, label: '最終合否', hireLabel: '採用', rejectLabel: '不採用', hireColor: '#c8232c', rejectColor: '#1f4e8c',
+    stampField: 'final', autoStampFinal: true, filenameSuffix: true, hint: '最終確認者が合否を決めて押します'
+  };
+  function decisionDefaults() {
+    const mg = (global.RECRUIT_DEFAULT_PROFILE || {}).management || {};
+    return U.deepClone(U.isObj(mg.decision) ? mg.decision : DECISION_FALLBACK);
+  }
+  // management.decision の既知のキーを既定値で補って整える（未知のキーは呼び出し側で残す）。fields = management.fields
+  function decisionFields(src, fields, def) {
+    src = U.isObj(src) ? src : {};
+    def = U.isObj(def) ? def : decisionDefaults();
+    const label = function (v, d) { return typeof v === 'string' && v.trim() ? v.trim() : d; };
+    const color = function (v, d) { return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : d; };
+    const ids = (Array.isArray(fields) ? fields : []).filter(function (f) { return U.isObj(f) && f.id; }).map(function (f) { return String(f.id); });
+    let sf = typeof src.stampField === 'string' ? src.stampField : def.stampField;
+    if (sf && ids.indexOf(sf) < 0) sf = ids.indexOf('final') >= 0 ? 'final' : '';
+    return {
+      enabled: src.enabled !== false,
+      label: label(src.label, def.label),
+      hireLabel: label(src.hireLabel, def.hireLabel),
+      rejectLabel: label(src.rejectLabel, def.rejectLabel),
+      hireColor: color(src.hireColor, def.hireColor),
+      rejectColor: color(src.rejectColor, def.rejectColor),
+      stampField: sf || '',
+      autoStampFinal: src.autoStampFinal !== false,
+      filenameSuffix: src.filenameSuffix !== false,
+      hint: typeof src.hint === 'string' ? src.hint : def.hint
+    };
+  }
+  // 画面・レポートで使う最終合否の設定（正規化前の profile でも可）。sub = 劇場名から「TOHOシネマズ」を除いたもの
+  function decisionConfig(profile) {
+    profile = profile || {};
+    const mg = U.isObj(profile.management) ? profile.management : {};
+    const defMg = (global.RECRUIT_DEFAULT_PROFILE || {}).management || {};
+    const fields = Array.isArray(mg.fields) && mg.fields.length ? mg.fields : (defMg.fields || []);
+    const out = decisionFields(Object.assign(decisionDefaults(), U.isObj(mg.decision) ? mg.decision : {}), fields);
+    out.sub = String(((profile.meta || {}).theaterName) || '').replace(/^TOHOシネマズ\s*/, '').trim();
+    return out;
+  }
+  // record.decision の正規化。不正値・押した人のいない決定は null（docs/SPEC-report.md 1-2）
+  function normalizeDecision(d) {
+    if (!U.isObj(d) || (d.result !== 'hire' && d.result !== 'reject')) return null;
+    if (!U.isObj(d.by)) return null;
+    const name = asStr(d.by.name).trim();
+    if (!name) return null;
+    const short = asStr(d.by.short).trim() || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
+    return {
+      result: d.result,
+      label: typeof d.label === 'string' && d.label.trim() ? d.label.trim() : (d.result === 'hire' ? '採用' : '不採用'),
+      date: typeof d.date === 'string' && /^\d{4}\.\d{2}\.\d{2}$/.test(d.date) ? d.date : '',
+      at: typeof d.at === 'string' ? d.at : '',
+      by: { name: name, short: short, title: asStr(d.by.title).trim() }
+    };
+  }
+  // A4 報告の .cl-decision（RecruitStamp.decisionSheet）に渡す設定
+  function decOpts(dcfg, id, svgId) {
+    return { id: id, svgId: svgId, title: dcfg.label, hireLabel: dcfg.hireLabel, rejectLabel: dcfg.rejectLabel, hireColor: dcfg.hireColor, rejectColor: dcfg.rejectColor, sub: dcfg.sub, size: 64 };
+  }
+
   // deepMerge は配列を丸ごと置き換えるため、配列の要素単位で不足キーを補う（毎回・冪等）
   function fillArrays(merged, base) {
     const o = merged.options = U.isObj(merged.options) ? merged.options : U.deepClone(base.options);
@@ -192,6 +253,8 @@
       return out;
     });
     mg.allowFreeName = mg.allowFreeName !== false;
+    // 最終合否（mg.fields 確定後。既知のキーだけ整え、未知のキーは残す）
+    mg.decision = Object.assign({}, U.isObj(mg.decision) ? mg.decision : {}, decisionFields(mg.decision, mg.fields, (base.management || {}).decision));
     if (!U.isObj(hp.rejectCareerPaths)) hp.rejectCareerPaths = U.deepClone(base.highschoolPolicy.rejectCareerPaths);
     // 旧設定 disallowedPathResult（対象外の進路を一律 reject/review）からの移行: 'review' なら不採用推奨にする進路なし
     if (hp.disallowedPathResult === 'review') Object.keys(hp.rejectCareerPaths).forEach(function (k) { hp.rejectCareerPaths[k] = false; });
@@ -574,6 +637,15 @@
       if (cats.indexOf(c) < 0) warnings.push('高校生の例外区分「' + c + '」は区分の選択肢にありません。');
     });
     validateChecklist(p, errors, warnings);
+    // 最終合否（docs/SPEC-report.md 1-5）
+    const dc = (p.management || {}).decision;
+    if (U.isObj(dc) && dc.enabled !== false) {
+      const hl = asStr(dc.hireLabel).trim(), rl = asStr(dc.rejectLabel).trim();
+      if (!hl || !rl) errors.push('最終合否の「採用」「不採用」の表示名を入力してください。');
+      else if (hl === rl) errors.push('最終合否の「採用」と「不採用」の表示名が同じです。');
+      const fids = ((p.management || {}).fields || []).map(function (f) { return f && f.id; });
+      if (dc.stampField && fids.indexOf(dc.stampField) < 0) warnings.push('最終合否と連動する押印欄が見つかりません。');
+    }
     return { errors: errors, warnings: warnings };
   }
 
@@ -674,6 +746,8 @@
       interviewNotes: state.interviewNotes || '',
       // 応募者の管理（押印）: { initial: { name, short, title, date, at }, ... }
       management: U.deepClone(state.management || {}),
+      // 最終合否（人の決定）: { result, label, date, at, by: { name, short, title } } または null。判定とは独立
+      decision: normalizeDecision(state.decision),
       // 保存時点のスナップショット（レポート表示・監査用。読み込み時は現在の設定で再計算する）
       contribution: contribution ? U.deepClone(contribution) : null,
       highschool: highschool,
@@ -687,7 +761,10 @@
       const node = doc.querySelector('script#recruit-record[type="application/json"]');
       if (!node) return null;
       const rec = JSON.parse(node.textContent);
-      return rec && rec.kind === RECORD_KIND ? rec : null;
+      if (!rec || rec.kind !== RECORD_KIND) return null;
+      // 最終合否は正規化して返す（キーの無い旧レコード・不正値は null）
+      rec.decision = normalizeDecision(rec.decision);
+      return rec;
     } catch (e) {
       return null;
     }
@@ -846,6 +923,42 @@
       // 申し送りシート（A4 1枚）印刷
       '.rtool{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--muted)}',
       '.rtool button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:var(--text);cursor:pointer}.rtool button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.rtool-hint{font-size:11.5px}',
+      // 表示切替（報告書／詳細）と報告書表示（docs/SPEC-report.md 5-1）。報告書表示の規則は画面だけ・印刷準備中（print-*）は外す
+      '.rtool-view{display:inline-flex;border:1px solid #c7d0db;border-radius:7px;overflow:hidden;background:#fff}',
+      '.rtool .rtool-view button{border:none;border-radius:0;padding:5px 14px;color:var(--muted);background:#fff}',
+      '.rtool .rtool-view button+button{border-left:1px solid #c7d0db}',
+      '.rtool .rtool-view button.on{background:#24324a;color:#fff}',
+      '.rtool-sep{width:1px;height:20px;background:var(--border);margin:0 4px}',
+      '.paper-wrap{display:none}',
+      '.paper-cap{display:flex;justify-content:space-between;gap:4px 12px;flex-wrap:wrap;width:210mm;max-width:100%;margin:0 auto 6px;font-size:12px;color:var(--muted)}.paper-cap b{color:var(--text)}',
+      '.paper{box-sizing:content-box;width:190mm;margin:0 auto;padding:10mm;background:#fff;color:#111;border:1px solid #d5dbe3;border-radius:2px;box-shadow:0 1px 2px rgba(16,24,40,.08),0 12px 32px rgba(16,24,40,.12)}',
+      '.paper .cl-mode-sheet .cl-page+.cl-page{margin-top:8mm;padding-top:6mm;border-top:1px dashed #b8c2cf}',
+      '@media screen{',
+      'body.view-report.has-cl:not(.print-checklist):not(.print-handoff) .page>:not(.rtool):not(.paper-wrap):not(section[data-sec="mgmt"]):not(.foot){display:none}',
+      'body.view-report.has-cl:not(.print-checklist):not(.print-handoff) .paper-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 2px 14px}',
+      'body.view-report.has-cl:not(.print-checklist):not(.print-handoff) section.sec[data-sec="mgmt"]{max-width:210mm;margin:12px auto 0}',
+      'body.view-report.has-cl:not(.print-checklist):not(.print-handoff) section.sec[data-sec="mgmt"] h2::before{display:none}',
+      'body.view-report:not(.has-cl):not(.print-checklist):not(.print-handoff) .dash{display:none}',
+      'body.view-report:not(.has-cl):not(.print-checklist):not(.print-handoff) section.sec:not([data-sec="pre"]):not([data-sec="comment"]):not([data-sec="handoff"]):not([data-sec="interview"]):not([data-sec="mgmt"]){display:none}',
+      '}',
+      // 最終合否パネル（「応募者の管理」節の先頭）
+      '.decision{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 18px;align-items:center;padding:12px 16px;margin:0 0 14px;border:1px solid var(--border);border-left:4px solid #24324a;border-radius:10px;background:var(--surface-2)}',
+      '.decision.is-hire{border-left-color:var(--dec-hire,#c8232c)}.decision.is-reject{border-left-color:var(--dec-reject,#1f4e8c)}',
+      '.dec-head{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.dec-title{font-size:14px;font-weight:800}.dec-hint{font-size:12px;color:var(--muted)}',
+      '.dec-stamp{width:124px;height:80px;display:grid;place-items:center}',
+      '.dec-empty{width:116px;height:70px;border:2px dashed #c7d0db;border-radius:9px;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted);background:#fff}',
+      '.dec-body{min-width:0;display:flex;flex-direction:column;gap:8px}',
+      '.dec-meta{font-size:13.5px;font-weight:700;min-height:1.4em}.dec-meta:empty::before{content:"まだ押されていません";color:var(--muted);font-weight:600}',
+      '.dec-note{font-size:12.5px;color:#9a5b00;background:var(--warn-soft);border:1px solid #f3cf8a;border-radius:6px;padding:4px 10px}.dec-note:empty{display:none}',
+      '.dec-ctl{display:flex;gap:6px;flex-wrap:wrap;align-items:center}',
+      '.dec-ctl select,.dec-ctl input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;background:#fff;color:var(--text);max-width:100%}',
+      '.dec-ctl button{font:inherit;font-size:13px;font-weight:800;padding:5px 16px;border-radius:6px;cursor:pointer;background:#fff;color:var(--text);border:1px solid #c7d0db}',
+      '.dec-ctl .dec-btn{color:var(--dec);border:1.5px solid var(--dec)}.dec-ctl .dec-hire{--dec:var(--dec-hire,#c8232c)}.dec-ctl .dec-reject{--dec:var(--dec-reject,#1f4e8c)}',
+      '.dec-ctl .dec-btn:hover,.dec-ctl .dec-btn.on{background:var(--dec);color:#fff}',
+      '.verdict-stamp{mix-blend-mode:multiply}',
+      '.rh-decision{flex:0 0 auto;display:grid;place-items:center}.rh-decision:empty{display:none}',
+      '@media (max-width:720px){.decision{grid-template-columns:1fr}}',
+      '@media print{.paper-wrap,.dec-ctl,.dec-hint{display:none !important}.decision.is-none{display:none !important}body.print-checklist #decision,body.print-handoff #decision,body.print-handoff .rh-decision{display:none !important}.decision{break-inside:avoid;padding:6px 10px;margin-bottom:8px;gap:4px 12px}.dec-stamp{width:100px;height:64px}.dec-stamp .verdict-stamp{width:96px;height:61px}.decision,.verdict-stamp,.dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
       '.print-only{display:none}',
       '@page sheet{size:A4;margin:7mm 9mm}',
       '@media print{.rtool{display:none !important}',
@@ -1072,6 +1185,13 @@
     const titleOf = function (r) { return ((texts[r] || {}).title) || r; };
     const resTone = { recommend: 't-ok', review: 't-warn', reject: 't-danger' };
     const bandTone = { high: 't-ok', mid: 't-warn', low: 't-danger' };
+    // 最終合否（sheet のみ・有効時のみ）。【判定サマリー】の右端に置く（docs/SPEC-report.md 4-7）
+    let decHtml = '';
+    if (global.RecruitStamp) {
+      const dcfg = decisionConfig(profile);
+      if (dcfg.enabled) decHtml = global.RecruitStamp.decisionSheet(normalizeDecision(record.decision), decOpts(dcfg, o.decisionId || 'clDecision', o.decisionSvgId || 'vdSheet'));
+    }
+    const judgeHead = '<div class="cl-bt">【判定サマリー】</div>';
     let judgeHtml;
     if (j && j.result) {
       const iv = j.interview || { total: j.total, max: j.max, pct: j.pct, band: '', bandLabel: '' };
@@ -1081,18 +1201,23 @@
         : j.mode === 'interviewOnly' || !j.interview
           ? '<div class="cl-tile"><span class="cl-tile-k">シフト貢献度</span><span class="cl-tile-v">OFF</span><span class="cl-tile-s">面接評価のみで判定</span></div>'
           : '<div class="cl-tile ' + (bandTone[jc.band] || '') + '"><span class="cl-tile-k">シフト貢献度</span><span class="cl-tile-v">' + esc(jc.total == null ? '-' : jc.total) + '<small> / ' + esc(jc.max == null ? '-' : jc.max) + '点</small></span><span class="cl-tile-s">' + esc((jc.pct == null ? '-' : jc.pct) + '%' + (jc.bandLabel ? '・' + jc.bandLabel : '')) + '</span></div>';
-      judgeHtml = '<div class="cl-judge"><div class="cl-bt">【判定サマリー】</div><div class="cl-tiles">' +
+      const tilesHtml = '<div class="cl-tiles">' +
         '<div class="cl-tile ' + (bandTone[iv.band] || '') + '"><span class="cl-tile-k">面接評価</span><span class="cl-tile-v">' + esc(iv.total) + '<small> / ' + esc(iv.max) + '点</small></span><span class="cl-tile-s">' + esc(iv.pct + '%' + (iv.bandLabel ? '・' + iv.bandLabel : '')) + '</span></div>' +
         contribTile +
         (m.total ? '<div class="cl-tile ' + (m.mismatch ? 't-danger' : m.unknown ? 't-muted' : 't-ok') + '"><span class="cl-tile-k">必須条件</span><span class="cl-tile-v">' + (m.mismatch ? '不一致 ' + m.mismatch : m.unknown ? '未確認 ' + m.unknown : 'すべて一致') + '</span><span class="cl-tile-s">' + esc(mustCountsText(m)) + '</span></div>' : '') +
         '<div class="cl-tile cl-tile-res ' + (resTone[j.result] || '') + '"><span class="cl-tile-k">結果</span><span class="cl-tile-v">' + esc(j.title || titleOf(j.result)) + '</span><span class="cl-tile-s">' + esc(j.evaluatedAt ? '判定 ' + U.fmtDateTime(j.evaluatedAt) : '') + '</span></div>' +
-        '</div>' +
-        ((j.adjustments || []).length ? '<ul class="cl-adj">' + j.adjustments.map(function (x) {
-          return '<li><b>' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</b>：' + esc(x.reason) + '</li>';
-        }).join('') + '</ul>' : '') +
         '</div>';
+      const adjHtml = (j.adjustments || []).length ? '<ul class="cl-adj">' + j.adjustments.map(function (x) {
+        return '<li><b>' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</b>：' + esc(x.reason) + '</li>';
+      }).join('') + '</ul>' : '';
+      judgeHtml = decHtml
+        ? '<div class="cl-judge"><div class="cl-judge-row"><div class="cl-judge-main">' + judgeHead + tilesHtml + '</div>' + decHtml + '</div>' + adjHtml + '</div>'
+        : '<div class="cl-judge">' + judgeHead + tilesHtml + adjHtml + '</div>';
     } else {
-      judgeHtml = '<div class="cl-judge cl-judge-none"><div class="cl-bt">【判定サマリー】</div><p>採用可否判定は未実施（面接評価 ' + esc(sc.total + '/' + sc.max + '・' + sc.pct + '%') + ' の時点）</p></div>';
+      const noneHtml = '<p>採用可否判定は未実施（面接評価 ' + esc(sc.total + '/' + sc.max + '・' + sc.pct + '%') + ' の時点）</p>';
+      judgeHtml = decHtml
+        ? '<div class="cl-judge cl-judge-none"><div class="cl-judge-row"><div class="cl-judge-main">' + judgeHead + noneHtml + '</div>' + decHtml + '</div></div>'
+        : '<div class="cl-judge cl-judge-none">' + judgeHead + noneHtml + '</div>';
     }
     const stampsHtml = o.stamps ? '<div class="cl-stamps"><div class="cl-bt">【押印】</div>' + o.stamps + '</div>' : '';
     return '<div class="cl-sheet cl-mode-sheet">' + headHtml + pagesHtml + overallHtml + judgeHtml + stampsHtml + '</div>';
@@ -1183,6 +1308,16 @@
       '.cl-mode-sheet .cl-tile.t-danger{border-color:#f5b5b5;background:#fde8e8}.cl-mode-sheet .cl-tile.t-danger .cl-tile-v{color:#b42318}.cl-mode-sheet .cl-tile.t-muted .cl-tile-v{color:#5b6675}',
       '.cl-mode-sheet .cl-tile-res{border-width:2px}',
       '.cl-mode-sheet .cl-adj{margin:3px 0 0;padding-left:1.3em;font-size:9px}.cl-mode-sheet .cl-adj li{break-inside:avoid}.cl-mode-sheet .cl-judge-none p{margin:0;font-weight:700;color:#5b6675}',
+      // 最終合否（【判定サマリー】の右端。高さはタイル以下）
+      '.cl-mode-sheet .cl-judge-row{display:flex;gap:6px;align-items:stretch}',
+      '.cl-mode-sheet .cl-judge-main{flex:1 1 auto;min-width:0}',
+      '.cl-mode-sheet .cl-decision{flex:0 0 auto;display:flex;align-items:center;gap:5px;margin-top:2px;padding:2px 6px;border:1px solid #c9d2dd;border-radius:4px;background:#fff}',
+      '.cl-mode-sheet .cl-dec-stamp{flex:none;display:grid;place-items:center}.cl-mode-sheet .cl-dec-stamp .verdict-stamp{width:64px;height:41px;mix-blend-mode:multiply;filter:none}',
+      '.cl-mode-sheet .cl-dec-meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}',
+      '.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#5b6675}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}',
+      '.cl-mode-sheet .cl-dec-by,.cl-mode-sheet .cl-dec-date{font-size:8.5px;color:#3a4556;white-space:nowrap}',
+      '.cl-mode-sheet .cl-dec-empty{width:64px;height:38px;border:1.5px dashed #b8c2cf;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.25;color:#5b6675;text-align:center}',
+      '.cl-sheet .cl-decision,.cl-sheet .verdict-stamp,.cl-sheet .cl-dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}',
       '.cl-mode-sheet .cl-stamps{margin:0;break-inside:avoid}',
       '.cl-sheet .stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;break-inside:avoid}',
       '.cl-sheet .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px;border:1px solid #c9d2dd;border-radius:4px;background:#fff;min-width:0}',
@@ -1216,6 +1351,16 @@
     const R = global.RecruitRules;
     const esc = U.esc;
     const a = record.applicant || {};
+    // 押印・最終合否（docs/SPEC-report.md 4-1）。ファイル名は合否付き（有効かつ合否ありのとき 基本名_採用.html）
+    const Stamp = global.RecruitStamp;
+    const dcfg = decisionConfig(profile);
+    const dec = dcfg.enabled ? normalizeDecision(record.decision) : null;   // 表示用（埋め込み JSON は record のまま）
+    const baseName = '応募者_' + safeName(a.name) + '_' + U.fmtDate(record.savedAt || new Date()) + '.html';
+    const filename = Stamp ? Stamp.decisionFilename(baseName, dec, dcfg) : baseName;
+    const decLabelOf = function (d) { return d.label || (d.result === 'hire' ? dcfg.hireLabel : dcfg.rejectLabel); };
+    const decSvg = function (size, id) {
+      return dec && Stamp ? Stamp.verdict({ label: decLabelOf(dec), date: dec.date, color: dec.result === 'hire' ? dcfg.hireColor : dcfg.rejectColor, size: size, id: id, sub: dcfg.sub }) : '';
+    };
     const meta = profile.meta;
     const name = a.name ? a.name + 'さん' : '応募者';
     const savedAt = U.fmtDateTime(record.savedAt);
@@ -1484,10 +1629,12 @@
     const verdictHtml = j
       ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title) + '</span><span class="v-sub">' + esc(axesSummary) + '</span></div>'
       : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">' + (beforeIv ? '面接前' : '未実施') + '</span><span class="v-sub">' + esc(beforeIv ? '申し送り段階で保存' : '面接チェックリストの入力後に判定') + '</span></div>';
+    // 全体レポートのヘッダー: 判定バッジの横に最終合否（小）
+    const rhDecHtml = dcfg.enabled ? '<div class="rh-decision" id="rhDecision">' + decSvg(72, 'vdHead') + '</div>' : '';
     const headerHtml = '<header class="rh"><div class="rh-top">' +
       '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
       '<div class="rh-meta">保存日時 ' + esc(savedAt) + (stepLabel ? '<br>進捗: ' + esc(stepLabel) : '') + '</div></div>' +
-      '<div class="rh-main"><div><div class="sheet-title print-only">面接者への申し送りシート</div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' + verdictHtml + '</div></header>\n';
+      '<div class="rh-main"><div><div class="sheet-title print-only">面接者への申し送りシート</div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' + verdictHtml + rhDecHtml + '</div></header>\n';
 
     // 面接評価: チェックリスト方式は ○△× ＋総合判断、旧レコードは旧 10 項目（interviewModel が方式を決める）
     const tileMustNg = ivModel.mode === 'checklist' && clMust.mismatch ? '<span style="color:var(--danger);font-weight:700">・必須 不一致' + clMust.mismatch + '</span>' : '';
@@ -1520,12 +1667,10 @@
     const SCRIPT_END = '</scr' + 'ipt>';
 
     // ---- 応募者の管理（押印欄）。レポート上でも押印でき、「押印を保存」で同じ形式のファイルを再出力する ----
-    const Stamp = global.RecruitStamp;
     const mg = profile.management || {};
     const mgFields = Array.isArray(mg.fields) && mg.fields.length ? mg.fields : [];
     const mgManagers = Array.isArray(mg.managers) ? mg.managers : [];
     const management = record.management || {};
-    const filename = '応募者_' + safeName(a.name) + '_' + U.fmtDate(record.savedAt || new Date()) + '.html';
     const stampBoxes = mgFields.map(function (fld, idx) {
       const e = management[fld.id];
       const svg = e && e.name && Stamp ? Stamp.render(e, { size: 88, id: 'rp' + idx }) : '';
@@ -1544,36 +1689,110 @@
           '<button type="button" data-act="unstamp"' + (e && e.name ? '' : ' style="display:none"') + '>取消</button>' +
         '</div></div>';
     }).join('');
-    const mgmtHtml = mgFields.length
-      ? '<div class="stamp-row" id="mgmt">' + stampBoxes + '</div>' +
-        '<div class="mgmt-save" id="mgmtSave"><span id="mgmtSaveMsg">押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div>' +
-        '<div class="mgmt-note">担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。レポート上で押した印は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印ごと引き継げます。</div>'
-      : '<p class="empty">押印欄は設定されていません。</p>';
-    const mgmtConfig = jsonForScript({ fields: mgFields, managers: mgManagers, allowFreeName: mg.allowFreeName !== false });
-    const reportScript = Stamp && mgFields.length ? (
+    // ---- 最終合否パネル（「応募者の管理」節の先頭・#mgmt の外。docs/SPEC-report.md 4-6） ----
+    let decPanelHtml = '';
+    if (dcfg.enabled) {
+      const allowFree = mg.allowFreeName !== false;
+      const stEntry = dcfg.stampField ? management[dcfg.stampField] : null;
+      // 担当者の初期選択: 連動する押印欄（最終確認）の押印者 → 合否を押した人
+      const selName = (stEntry && stEntry.name) || (dec ? dec.by.name : '') || '';
+      let selIdx = -1;
+      mgManagers.forEach(function (m, i) { if (selIdx < 0 && selName && m.name === selName) selIdx = i; });
+      const useFree = !!selName && selIdx < 0 && allowFree;
+      const jd = record.judgment;
+      const noteText = dec && jd && ((dec.result === 'hire' && jd.result === 'reject') || (dec.result === 'reject' && jd.result === 'recommend'))
+        ? '※ アプリの判定「' + (jd.title || '') + '」と異なる最終合否です（記録はそのまま残ります）。' : '';
+      const decBtn = function (r, cls, label) {
+        const on = !!dec && dec.result === r;
+        return '<button type="button" class="dec-btn ' + cls + (on ? ' on' : '') + '" data-act="decide" data-value="' + r + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(label) + '</button>';
+      };
+      decPanelHtml = '<div class="decision ' + (dec ? 'is-' + dec.result : 'is-none') + '" id="decision" data-result="' + (dec ? dec.result : '') + '" style="--dec-hire:' + esc(dcfg.hireColor) + ';--dec-reject:' + esc(dcfg.rejectColor) + '">' +
+        '<div class="dec-head"><span class="dec-title">' + esc(dcfg.label) + '</span><span class="dec-hint">' + esc(dcfg.hint) + '</span></div>' +
+        '<div class="dec-stamp">' + (dec ? decSvg(120, 'vdPanel') : '<div class="dec-empty">未押印</div>') + '</div>' +
+        '<div class="dec-body">' +
+          '<div class="dec-meta">' + (dec ? esc(decLabelOf(dec) + '・' + dec.by.name + (dec.by.title ? '（' + dec.by.title + '）' : '') + '　' + dec.date) : '') + '</div>' +
+          '<div class="dec-note">' + esc(noteText) + '</div>' +
+          '<div class="dec-ctl">' +
+            '<select aria-label="' + esc(dcfg.label) + ' 担当者"><option value="">担当者を選択</option>' +
+              mgManagers.map(function (m, i) { return '<option value="' + i + '"' + (i === selIdx ? ' selected' : '') + '>' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
+              (allowFree ? '<option value="__free"' + (useFree ? ' selected' : '') + '>名簿にない担当者（手入力）</option>' : '') +
+            '</select>' +
+            (allowFree ? '<input type="text" placeholder="氏名（例：山田 太郎）"' + (useFree ? ' value="' + esc(selName) + '"' : ' style="display:none"') + '>' : '') +
+            decBtn('hire', 'dec-hire', dcfg.hireLabel) + decBtn('reject', 'dec-reject', dcfg.rejectLabel) +
+            '<button type="button" class="dec-undo" data-act="undecide"' + (dec ? '' : ' style="display:none"') + '>取消</button>' +
+          '</div>' +
+        '</div></div>';
+    }
+    const saveBarHtml = '<div class="mgmt-save" id="mgmtSave"><span id="mgmtSaveMsg">押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div>';
+    const mgmtNoteHtml = '<div class="mgmt-note">' + (dcfg.enabled
+      ? '運用: 面接者はアプリで面接チェックリストを入力・判定し、「面接対応者」に押印して保存したファイルをスレッドに添付します。副支配人はこのファイルをブラウザで開き、「' + esc(dcfg.label) + '」で担当者を選んで「' + esc(dcfg.hireLabel) + '」または「' + esc(dcfg.rejectLabel) + '」を押し（押印欄「最終確認」が未押印なら同じ担当者の印も押されます）、「押印を保存」で再出力したファイルをスレッドに添付してください。レポート上で押した印・合否は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。'
+      : '担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。レポート上で押した印は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印ごと引き継げます。') + '</div>';
+    const mgmtHtml = decPanelHtml + (mgFields.length
+      ? '<div class="stamp-row" id="mgmt">' + stampBoxes + '</div>' + saveBarHtml + mgmtNoteHtml
+      : '<p class="empty">押印欄は設定されていません。</p>' + (dcfg.enabled ? saveBarHtml + mgmtNoteHtml : ''));
+    const mgmtConfig = jsonForScript({ fields: mgFields, managers: mgManagers, allowFreeName: mg.allowFreeName !== false,
+      decision: dcfg.enabled ? { label: dcfg.label, hireLabel: dcfg.hireLabel, rejectLabel: dcfg.rejectLabel, hireColor: dcfg.hireColor, rejectColor: dcfg.rejectColor,
+        stampField: dcfg.stampField, autoStampFinal: dcfg.autoStampFinal, filenameSuffix: dcfg.filenameSuffix, hint: dcfg.hint, sub: dcfg.sub } : null });
+    const reportScript = Stamp && (mgFields.length || dcfg.enabled) ? (
       '<script type="application/json" id="recruit-mgmt-config">' + mgmtConfig + SCRIPT_END + '\n' +
       '<script>\n(function(){\n' +
-      'var recNode=document.getElementById("recruit-record");var cfgNode=document.getElementById("recruit-mgmt-config");var root=document.getElementById("mgmt");if(!recNode||!cfgNode||!root)return;\n' +
+      'var recNode=document.getElementById("recruit-record");var cfgNode=document.getElementById("recruit-mgmt-config");var root=document.getElementById("mgmt");if(!recNode||!cfgNode)return;\n' +
       'var rec,cfg;try{rec=JSON.parse(recNode.textContent);cfg=JSON.parse(cfgNode.textContent);}catch(e){return;}\n' +
+      'var D=cfg.decision||null,dpanel=D?document.getElementById("decision"):null;if(!root&&!dpanel)return;\n' +
       Stamp.source() + '\n' +
       'rec.management=rec.management||{};var dirty=false,saved=false;\n' +
       'var MSG_DIRTY="押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。",MSG_SAVED="押印を保存したファイルを書き出しました。保存できなかった場合は「再保存」を押してください。";\n' +
       'function pad(n){return String(n).padStart(2,"0");}\n' +
       'function today(){var d=new Date();return d.getFullYear()+"."+pad(d.getMonth()+1)+"."+pad(d.getDate());}\n' +
-      'function render(){cfg.fields.forEach(function(f,idx){var box=root.querySelector(\'.stamp-box[data-field-id="\'+f.id+\'"]\');if(!box)return;var e=rec.management[f.id];\n' +
+      // 最終合否（docs/SPEC-report.md 4-9）。描画・ファイル名は stamp.js の純関数（verdictSvg / decisionSheetHtml / decisionFilename）
+      'function hasField(id){return !!id&&cfg.fields.some(function(f){return f.id===id;});}\n' +
+      'function curDec(){var d=rec.decision;return d&&(d.result==="hire"||d.result==="reject")&&d.by&&d.by.name?d:null;}\n' +
+      'function decLabel(d){return d.label||(d.result==="hire"?D.hireLabel:D.rejectLabel);}\n' +
+      'function decColor(d){return d.result==="hire"?D.hireColor:D.rejectColor;}\n' +
+      'function decSvg(d,size,id){return verdictSvg({label:decLabel(d),date:d.date||"",color:decColor(d),size:size,id:id,sub:D.sub||""});}\n' +
+      'function decOpts(id,svgId){return {id:id,svgId:svgId,title:D.label,hireLabel:D.hireLabel,rejectLabel:D.rejectLabel,hireColor:D.hireColor,rejectColor:D.rejectColor,sub:D.sub||"",size:64};}\n' +
+      'function noteText(d){var j=rec.judgment;if(!d||!j)return "";if((d.result==="hire"&&j.result==="reject")||(d.result==="reject"&&j.result==="recommend"))return "※ アプリの判定「"+(j.title||"")+"」と異なる最終合否です（記録はそのまま残ります）。";return "";}\n' +
+      'function pickPerson(sel,inp){var v=sel?sel.value:"";if(v==="__free"){var nm=inp?inp.value.trim():"";if(!nm){alert("氏名を入力してください");return null;}return {name:nm,short:shortName(nm),title:""};}\n' +
+      '  var m=cfg.managers[Number(v)];if(!v||!m){alert("担当者を選んでください");return null;}return {name:m.name,short:m.short||shortName(m.name),title:m.title||""};}\n' +
+      'function initDecSel(){if(!dpanel)return;var sel=dpanel.querySelector(".dec-ctl select"),inp=dpanel.querySelector(".dec-ctl input");if(!sel)return;\n' +
+      '  var st=D.stampField?rec.management[D.stampField]:null,d=curDec();var nm=(st&&st.name)||(d?d.by.name:"")||"";var idx=-1;\n' +
+      '  cfg.managers.some(function(m,i){if(nm&&m.name===nm){idx=i;return true;}return false;});\n' +
+      '  if(idx>=0)sel.value=String(idx);else if(nm&&inp&&sel.querySelector(\'option[value="__free"]\')){sel.value="__free";inp.value=nm;}else sel.value="";\n' +
+      '  if(inp)inp.style.display=sel.value==="__free"?"":"none";}\n' +
+      'function renderDecision(){if(!D)return;var d=curDec();\n' +
+      '  [["clPaperDecision","vdPaper"],["clDecision","vdSheet"]].forEach(function(x){var el=document.getElementById(x[0]);if(el)el.outerHTML=decisionSheetHtml(d,decOpts(x[0],x[1]));});\n' +
+      '  if(dpanel){dpanel.className="decision "+(d?"is-"+d.result:"is-none");dpanel.setAttribute("data-result",d?d.result:"");\n' +
+      '    dpanel.querySelector(".dec-stamp").innerHTML=d?decSvg(d,120,"vdPanel"):\'<div class="dec-empty">未押印</div>\';\n' +
+      '    dpanel.querySelector(".dec-meta").textContent=d?(decLabel(d)+"・"+d.by.name+(d.by.title?"（"+d.by.title+"）":"")+"　"+(d.date||"")):"";\n' +
+      '    dpanel.querySelector(".dec-note").textContent=noteText(d);\n' +
+      '    Array.prototype.forEach.call(dpanel.querySelectorAll(\'[data-act="decide"]\'),function(b){var on=!!d&&b.getAttribute("data-value")===d.result;b.classList.toggle("on",on);b.setAttribute("aria-pressed",String(on));});\n' +
+      '    var un=dpanel.querySelector(\'[data-act="undecide"]\');if(un)un.style.display=d?"":"none";}\n' +
+      '  var rh=document.getElementById("rhDecision");if(rh)rh.innerHTML=d?decSvg(d,72,"vdHead"):"";\n' +
+      '  document.body.setAttribute("data-filename",decisionFilename(document.body.getAttribute("data-filename")||"applicant.html",d,D));}\n' +
+      'function render(){if(root)cfg.fields.forEach(function(f,idx){var box=root.querySelector(\'.stamp-box[data-field-id="\'+f.id+\'"]\');if(!box)return;var e=rec.management[f.id];\n' +
       '  box.querySelector(".stamp-area").innerHTML=e&&e.name?stampSvg({name:e.short||shortName(e.name),title:e.title||"",date:e.date||"",size:88,id:"rp"+idx}):\'<div class="stamp-empty">未押印</div>\';\n' +
       '  box.querySelector(".stamp-meta").textContent=e&&e.name?(e.name+(e.title?"（"+e.title+"）":"")+"　"+(e.date||"")):"";\n' +
       '  var un=box.querySelector(\'[data-act="unstamp"]\');if(un)un.style.display=e&&e.name?"":"none";\n' +
       '  var sel=box.querySelector("select"),inp=box.querySelector("input");if(sel&&inp)inp.style.display=sel.value==="__free"?"":"none";});\n' +
+      '  renderDecision();\n' +
       '  var bar=document.getElementById("mgmtSave");if(bar)bar.classList.toggle("show",dirty||saved);\n' +
       '  var msg=document.getElementById("mgmtSaveMsg");if(msg)msg.textContent=!dirty&&saved?MSG_SAVED:MSG_DIRTY;var sb=document.getElementById("mgmtSaveBtn");if(sb)sb.textContent=!dirty&&saved?"再保存":"押印を保存";}\n' +
-      'root.addEventListener("change",function(ev){var sel=ev.target;if(sel.tagName==="SELECT"){var inp=sel.closest(".stamp-box").querySelector("input");if(inp){inp.style.display=sel.value==="__free"?"":"none";if(sel.value==="__free")inp.focus();}}});\n' +
+      'if(root){root.addEventListener("change",function(ev){var sel=ev.target;if(sel.tagName==="SELECT"){var inp=sel.closest(".stamp-box").querySelector("input");if(inp){inp.style.display=sel.value==="__free"?"":"none";if(sel.value==="__free")inp.focus();}}});\n' +
       'root.addEventListener("click",function(ev){var b=ev.target.closest("[data-act]");if(!b)return;var box=b.closest(".stamp-box");var id=box.getAttribute("data-field-id");var act=b.getAttribute("data-act");\n' +
       '  if(act==="stamp"){var sel=box.querySelector("select");var v=sel?sel.value:"";var m=null;\n' +
       '    if(v==="__free"){var inp=box.querySelector("input");var nm=inp?inp.value.trim():"";if(!nm){alert("氏名を入力してください");return;}m={name:nm,short:shortName(nm),title:""};}\n' +
       '    else{m=cfg.managers[Number(v)];if(!v||!m){alert("担当者を選んでください");return;}}\n' +
       '    rec.management[id]={name:m.name,short:m.short||shortName(m.name),title:m.title||"",date:today(),at:new Date().toISOString()};dirty=true;render();}\n' +
-      '  else if(act==="unstamp"){delete rec.management[id];dirty=true;render();}});\n' +
+      '  else if(act==="unstamp"){delete rec.management[id];dirty=true;render();}});}\n' +
+      'if(dpanel){dpanel.addEventListener("change",function(ev){var sel=ev.target;if(sel.tagName!=="SELECT")return;var inp=dpanel.querySelector(".dec-ctl input");if(inp){inp.style.display=sel.value==="__free"?"":"none";if(sel.value==="__free")inp.focus();}});\n' +
+      'dpanel.addEventListener("click",function(ev){var b=ev.target.closest("[data-act]");if(!b)return;var act=b.getAttribute("data-act");\n' +
+      '  if(act==="decide"){var r=b.getAttribute("data-value");if(r!=="hire"&&r!=="reject")return;var p=pickPerson(dpanel.querySelector(".dec-ctl select"),dpanel.querySelector(".dec-ctl input"));if(!p)return;\n' +
+      '    var dt=today(),at=new Date().toISOString();rec.decision={result:r,label:r==="hire"?D.hireLabel:D.rejectLabel,date:dt,at:at,by:{name:p.name,short:p.short,title:p.title}};\n' +
+      // 連動する押印欄（最終確認）が未押印なら同じ担当者の印も押す
+      '    if(D.autoStampFinal&&hasField(D.stampField)){var cur=rec.management[D.stampField];if(!cur||!cur.name)rec.management[D.stampField]={name:p.name,short:p.short,title:p.title,date:dt,at:at};}\n' +
+      '    dirty=true;render();}\n' +
+      // 取消は合否だけを消す（押印は押印欄の「取消」で消す）
+      '  else if(act==="undecide"){rec.decision=null;dirty=true;render();}});}\n' +
       'var saveBtn=document.getElementById("mgmtSaveBtn");if(saveBtn)saveBtn.addEventListener("click",function(){\n' +
       '  recNode.textContent=JSON.stringify(rec).replace(/[<>&\\u2028\\u2029]/g,function(c){return "\\\\u"+("000"+c.charCodeAt(0).toString(16)).slice(-4);});\n' +
       // 書き出すファイルは保存バーを閉じた状態にする。書き出し後は「再保存」できるようバーを残す（ダウンロードの成否は分からないため）
@@ -1581,17 +1800,22 @@
       '  var blob=new Blob([html],{type:"text/html;charset=utf-8"});var url=URL.createObjectURL(blob);\n' +
       '  var a=document.createElement("a");a.href=url;a.download=document.body.getAttribute("data-filename")||"applicant.html";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1000);});\n' +
       'window.addEventListener("beforeunload",function(e){if(dirty){e.preventDefault();e.returnValue="";}});\n' +
-      'render();\n})();\n' + SCRIPT_END + '\n'
+      'initDecSel();render();\n})();\n' + SCRIPT_END + '\n'
     ) : '';
 
     return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
-      '<style>\n' + reportCss() + '\n' + checklistSheetCss() + '\n</style>\n</head>\n<body data-filename="' + esc(filename) + '">\n<div class="page">\n' +
-      '<div class="rtool no-print"><span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button>' +
+      '<style>\n' + reportCss() + '\n' + checklistSheetCss() + '\n</style>\n</head>\n<body class="view-report' + (clHas ? ' has-cl' : '') + '" data-filename="' + esc(filename) + '">\n<div class="page">\n' +
+      // 表示切替（報告書＝既定／詳細＝全体レポート）＋印刷（docs/SPEC-report.md 4-3）
+      '<div class="rtool no-print"><div class="rtool-view" role="group" aria-label="表示"><button type="button" id="rtViewReport" class="on" aria-pressed="true">報告書</button><button type="button" id="rtViewFull" aria-pressed="false">詳細</button></div><span class="rtool-sep"></span>' +
+        '<span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button>' +
         (clHas ? '<button type="button" id="rtPrintChecklist">面接チェックリスト報告（A4）</button>' : '') +
         '<button type="button" id="rtPrintAll">レポート全体</button><span class="rtool-hint">申し送りシートは応募情報・留意点・面接で確認する項目・押印欄だけを 1 枚にまとめます。' +
         (clHas ? '面接チェックリスト報告は台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2 枚にまとめます。' : '') + '</span></div>\n' +
+      // 報告書表示の紙プレビュー（画面用。印刷用の #clSheet とは別に描く。docs/SPEC-report.md 4-4）
+      (clHas ? '<div class="paper-wrap" id="reportPaper"><div class="paper-cap"><b>面接チェックリスト報告（A4 プレビュー）</b><span>印刷は「面接チェックリスト報告（A4）」で 1〜2 枚。全体は「詳細」</span></div>' +
+        '<div class="paper" id="clPaper">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '', decisionId: 'clPaperDecision', decisionSvgId: 'vdPaper' }) + '</div></div>\n' : '') +
       headerHtml + dashHtml +
       sec('応募時の情報', (preRows ? '<table class="kv">' + preRows + '</table>\n' : '<p class="empty">応募時の情報はありません。</p>\n') + hsHtml, 'pre') +
       (a.reviewerNotes ? sec('面接者への申し送りコメント', '<div class="note">' + esc(a.reviewerNotes) + '</div>', 'comment') : '') +
@@ -1616,12 +1840,26 @@
       'function prep(on){var h=document.querySelector(\'section.sec[data-sec="handoff"]\');if(h){h.classList.toggle("sheet-2col",!!on&&h.querySelectorAll("li.h").length>=9);}document.body.classList.toggle("print-handoff",!!on);}\n' +
       'window.__prepareHandoffSheet=prep;\n' +
       'b.addEventListener("click",function(){prep(true);var done=function(){prep(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});\n' +
-      'if(a)a.addEventListener("click",function(){window.print();});\n' +
+      'if(a)a.addEventListener("click",function(){printingAll=true;try{window.print();}finally{printingAll=false;}});\n' +
       // 面接チェックリスト報告（A4）: body.print-checklist の付け外しと、1 ページ目があふれるときの強制改ページ解除（アプリと同じ規則）
       'var c=document.getElementById("rtPrintChecklist"),host=document.getElementById("clSheet");\n' +
       'function prepCl(on){if(!host)return false;var sh=host.querySelector(".cl-sheet");document.body.classList.toggle("print-checklist",!!on);if(sh){sh.classList.remove("cl-fit");if(on){var p1=sh.querySelector(\'.cl-page[data-page="1"]\')||sh.querySelector(".cl-page");if(p1){var t0=sh.getBoundingClientRect().top,h1=p1.getBoundingClientRect().bottom-t0,ht=sh.getBoundingClientRect().bottom-t0;if(h1>' + CL_SHEET_PAGE_PX + '||(ht-h1>' + CL_SHEET_PAGE_PX + '&&ht<=' + (CL_SHEET_PAGE_PX * 2) + '))sh.classList.add("cl-fit");}}}return true;}\n' +
       'window.__prepareChecklistSheet=prepCl;\n' +
       'if(c)c.addEventListener("click",function(){prepCl(true);var done=function(){prepCl(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});\n' +
+      // 表示切替（報告書／詳細）。保存時の表示に関係なく、開いたときは必ず報告書表示（docs/SPEC-report.md 4-8）
+      'var vr=document.getElementById("rtViewReport"),vf=document.getElementById("rtViewFull");\n' +
+      'function setView(v){var r=v!=="full",bd=document.body;bd.classList.toggle("view-report",r);bd.classList.toggle("view-full",!r);\n' +
+      '  if(vr){vr.classList.toggle("on",r);vr.setAttribute("aria-pressed",String(r));}if(vf){vf.classList.toggle("on",!r);vf.setAttribute("aria-pressed",String(!r));}}\n' +
+      'window.__setReportView=setView;\n' +
+      'if(vr)vr.addEventListener("click",function(){setView("report");});\n' +
+      'if(vf)vf.addEventListener("click",function(){setView("full");});\n' +
+      'setView("report");\n' +
+      // 報告書表示（チェックリスト回答あり）のままブラウザで印刷したときは面接チェックリスト報告にする。「レポート全体」ボタンは除く
+      'var autoCl=false,printingAll=false;\n' +
+      'window.addEventListener("beforeprint",function(){var bd=document.body;\n' +
+      '  if(printingAll||!bd.classList.contains("view-report")||!bd.classList.contains("has-cl")||bd.classList.contains("print-handoff")||bd.classList.contains("print-checklist"))return;\n' +
+      '  if(prepCl(true))autoCl=true;});\n' +
+      'window.addEventListener("afterprint",function(){if(autoCl){autoCl=false;prepCl(false);}});\n' +
       '})();\n' + SCRIPT_END + '\n' +
       reportScript +
       '</body>\n</html>\n';
@@ -1635,6 +1873,9 @@
     normalizeChecklistDef: normalizeChecklistDef,
     checklistSheetHtml: checklistSheetHtml,
     checklistSheetCss: checklistSheetCss,
+    reportCss: reportCss,
+    normalizeDecision: normalizeDecision,
+    decisionConfig: decisionConfig,
     V1_DEFAULT_TEXTS: V1_DEFAULT_TEXTS,
     loadProfile: loadProfile,
     saveProfile: saveProfile,

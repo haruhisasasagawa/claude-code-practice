@@ -31,6 +31,8 @@
  *   E27 A4「面接チェックリスト報告」（アプリ・レポート。PDF 1〜2 ページ・重いサンプル・質問文 OFF）
  *   E28 設定で台本を変更（文言・項目の追加・確認点の削除で満点が変わる・既定に戻す・壊れた設定）
  *   E29 旧データ（v1・checklist なし v2）・他劇場の旧プロファイル・390px・ダークモード
+ *   E30 報告書表示・最終合否（アプリで面接 → 保存 → 保存 HTML で採用＋最終確認の自動押印 → 押印を保存 → 印刷 → 読込 → 再判定・再保存）
+ *   E31 不採用・取消・チェックリスト無しの報告書表示・詳細からの全体印刷・ダーク・画面幅・アプリの取消／不採用・設定の ON/OFF
  */
 const { chromium } = (function(){ try { return require('playwright'); } catch (e) { return require('/opt/node-tools/node_modules/playwright'); } })();
 const path = require('path');
@@ -1887,6 +1889,278 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await shot('32-step3-checklist-dark.png');
   await page.click('#btnTheme');
   await wait(100);
+
+  // =====================================================================
+  // E30 報告書表示・最終合否スタンプ: アプリで面接 → 面接対応者の押印 → 保存 → 保存 HTML で合否＋最終確認 → 押印を保存 → 読込（docs/SPEC-report.md 8-2）
+  // =====================================================================
+  console.log('\n== E30 報告書表示・最終合否 ==');
+  const pdfPages30 = (f) => { try { return Number((require('child_process').execSync('pdfinfo "' + f + '"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().match(/Pages:\s+(\d+)/) || [])[1]); } catch (e) { return -1; } };
+  const pdfText30 = (f) => { try { return require('child_process').execSync('pdftotext -layout "' + f + '" -', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().replace(/\s+/g, ''); } catch (e) { return null; } };
+  const shownIn = (pg, sel) => pg.evaluate(s => { const el = document.querySelector(s); return !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0 && (!el.checkVisibility || el.checkVisibility()); }, sel);
+  const txtIn = (pg, sel) => pg.evaluate(s => (document.querySelector(s) || {}).textContent || '', sel);
+  const dispIn = (pg, sel) => pg.evaluate(s => { const el = document.querySelector(s); return el ? getComputedStyle(el).display : 'missing'; }, sel);
+  const SASA = '笹川 晴央（副支配人）';
+  const newReportPage = async (errs) => {
+    const p = await ctx.newPage();
+    p.on('pageerror', e => errs.push(e.message));
+    p.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
+    p.on('dialog', d => d.accept());
+    await p.clock.setFixedTime(NOW);
+    return p;
+  };
+  // 1. 入力 → 判定
+  await fresh();
+  await fillBasic({ name: '合否 太郎', age: 20, category: '大学2年生', graduationDate: '2029-03', shifts: [['sat', '10:00', '18:00'], ['sun', '10:00', '18:00']], daysMin: 2, daysMax: 3, workPeriod: 'long', preFill: false });
+  await toHandoff();
+  await page.click('[data-action="to-step"][data-step="3"]');
+  await wait(300);
+  await busyAllFull();
+  await page.selectOption('#shiftConfirm [data-field="weekendFreq"]', 'every_both');
+  await pick('holidayWork', 'ok');
+  await pick('allNight.availability', 'ng');
+  await pick('lateNight.availability', 'ok');
+  await wait(150);
+  await page.selectOption('#shiftConfirm [data-field="lateNight.returnMethod"]', 'taxi');
+  await page.fill('#shiftConfirm [data-field="lateNight.taxiFare"]', '2500');
+  await pick('sideJob', 'no');
+  await pick('continueAfterGraduation', 'undecided');
+  await wait(200);
+  await rateAll('good');
+  await navStep(2);
+  await checkAll();
+  await page.click('[data-action="to-step"][data-step="3"]');
+  await wait(300);
+  await judge();
+  const j30 = await judgment();
+  expect(await step() === 4 && !!(await page.$('#decisionCard')) && (await page.textContent('#decisionCard')).includes('未押印') && !(await page.$('#decisionCard svg.verdict-stamp')) && !(await page.$('#sumDecision')),
+    'E30 判定後の Step4 に「最終合否」カード（未押印）: ' + (j30 && j30.result));
+  // 2. Step4 で面接対応者に押印 → 保存
+  await page.selectOption('#mgmtCard .stamp-box[data-field-id="interviewer"] select', { label: SASA });
+  await page.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
+  await wait(150);
+  const saved30 = await saveRecord('saved-decision.html');
+  expect(saved30.rec.decision == null && saved30.rec.management.interviewer && saved30.rec.management.interviewer.name === '笹川 晴央' &&
+    saved30.html.includes('<body class="view-report has-cl" data-filename="応募者_合否_太郎_2026-10-10.html">') && saved30.html.includes('id="clPaper"') && saved30.html.includes('id="decision"') && saved30.html.includes('id="rtViewReport"'),
+    'E30 保存（面接対応者の押印あり・合否なし）: body.view-report.has-cl・紙プレビュー・最終合否パネル');
+  // 3. 保存 HTML を file:// で開く → 報告書表示
+  const rp30Err = [];
+  const rp30 = await newReportPage(rp30Err);
+  await rp30.goto('file://' + saved30.file);
+  await rp30.waitForTimeout(300);
+  const v30 = await rp30.evaluate(() => ({ report: document.body.classList.contains('view-report'), full: document.body.classList.contains('view-full') }));
+  expect(v30.report && !v30.full && await shownIn(rp30, '#clPaper .cl-sheet') && !(await shownIn(rp30, '.rh')) && !(await shownIn(rp30, 'section.sec[data-sec="judgment"]')) &&
+    await dispIn(rp30, '.dash') === 'none' && await shownIn(rp30, '#decision') && await shownIn(rp30, '#mgmt') && await dispIn(rp30, '#clSheet') === 'none',
+    'E30 保存HTMLは報告書表示で開く（紙の報告シート・最終合否・押印だけ。ヘッダー・ダッシュ・判定の節は隠し、印刷用 #clSheet は非表示のまま）');
+  const paper30 = await rp30.evaluate(() => { const p = document.getElementById('clPaper'), cs = getComputedStyle(p); return { bg: cs.backgroundColor, shadow: cs.boxShadow, w: document.querySelector('#clPaper .cl-sheet').getBoundingClientRect().width }; });
+  expect(paper30.bg === 'rgb(255, 255, 255)' && paper30.shadow !== 'none' && Math.abs(paper30.w - 718.1) <= 2, 'E30 紙プレビュー（白地・影・シート幅 190mm）: ' + JSON.stringify(paper30));
+  // 4〜5. 表示切替
+  await rp30.click('#rtViewFull');
+  await rp30.waitForTimeout(150);
+  const vf30 = await rp30.evaluate(() => ({ report: document.body.classList.contains('view-report'), full: document.body.classList.contains('view-full'), pressed: document.getElementById('rtViewFull').getAttribute('aria-pressed') }));
+  expect(vf30.full && !vf30.report && vf30.pressed === 'true' && await shownIn(rp30, '.rh') && await shownIn(rp30, '.dash') && await shownIn(rp30, 'section.sec[data-sec="judgment"]') && !(await shownIn(rp30, '#clPaper')) && await shownIn(rp30, '#decision'),
+    'E30 「詳細」で全体レポート（ヘッダー・ダッシュ・全節）に切り替わる');
+  await rp30.click('#rtViewReport');
+  await rp30.waitForTimeout(150);
+  expect(await rp30.evaluate(() => document.body.classList.contains('view-report') && !document.body.classList.contains('view-full')) && await shownIn(rp30, '#clPaper .cl-sheet'), 'E30 「報告書」で報告書表示に戻る');
+  // 6. 最終合否: 担当者（笹川）を選んで「採用」
+  await rp30.selectOption('#decision select', { label: SASA });
+  await rp30.click('#decision [data-act="decide"][data-value="hire"]');
+  await rp30.waitForTimeout(200);
+  const d30 = await rp30.evaluate(() => {
+    const q = (s) => document.querySelector(s);
+    const pv = q('#clPaper .cl-decision'), ps = q('#clPaper .cl-decision svg.verdict-stamp'), sh = q('#clSheet .cl-decision');
+    return { paperTxt: pv ? pv.textContent : '', paperSvg: !!ps, aria: ps ? ps.getAttribute('aria-label') : '', stroke: ps && ps.querySelector('rect') ? ps.querySelector('rect').getAttribute('stroke') : '',
+      sheetId: sh ? sh.id : '', sheetSvg: !!(sh && sh.querySelector('svg.verdict-stamp')), panelSvg: !!q('#decision svg.verdict-stamp'), meta: (q('#decision .dec-meta') || {}).textContent || '', head: !!q('#rhDecision svg.verdict-stamp') };
+  });
+  expect(d30.paperSvg && d30.paperTxt.includes('採用') && d30.paperTxt.includes('笹川 晴央') && d30.aria.indexOf('採用') === 0 && d30.stroke === '#c8232c' && d30.sheetId === 'clDecision' && d30.sheetSvg && d30.panelSvg && d30.meta.includes('採用・笹川 晴央') && d30.head,
+    'E30 「採用」で報告シート（紙・印刷用）・最終合否パネル・ヘッダーに朱の採用スタンプ: ' + JSON.stringify(Object.assign({}, d30, { paperTxt: undefined })));
+  expect(!!(await rp30.$('#mgmt .stamp-box[data-field-id="final"] svg.hanko')) && (await txtIn(rp30, '#mgmt .stamp-box[data-field-id="final"] .stamp-meta')).includes('笹川 晴央') &&
+    await rp30.$eval('#mgmtSave', el => el.classList.contains('show')) && await dispIn(rp30, '#decision [data-act="undecide"]') !== 'none',
+    'E30 最終確認欄に同じ担当者の電子印が自動で押され、保存バーと「取消」が出る');
+  expect(await rp30.evaluate(() => document.body.getAttribute('data-filename')) === '応募者_合否_太郎_2026-10-10_採用.html', 'E30 ファイル名（data-filename）が _採用.html になる');
+  await rp30.screenshot({ path: path.join(OUT, '33-report-view.png'), fullPage: true });
+  // 7. 「詳細」のまま「押印を保存」（保存時の表示に関係なく報告書表示で開くことの確認を兼ねる）
+  await rp30.click('#rtViewFull');
+  await rp30.waitForTimeout(100);
+  await rp30.screenshot({ path: path.join(OUT, '35-report-full.png'), fullPage: true });
+  const [dl30] = await Promise.all([rp30.waitForEvent('download'), rp30.click('#mgmtSaveBtn')]);
+  const file30b = path.join(OUT, 'saved-decision-hire.html');
+  await dl30.saveAs(file30b);
+  const html30b = fs.readFileSync(file30b, 'utf8');
+  const rec30b = parseRecord(html30b);
+  expect((dl30.suggestedFilename() === '応募者_合否_太郎_2026-10-10_採用.html' || dl30.suggestedFilename() === 'download') && html30b.includes('data-filename="応募者_合否_太郎_2026-10-10_採用.html"'),
+    'E30 押印を保存したファイル名は 基本名_採用.html: ' + dl30.suggestedFilename());
+  const dec30b = rec30b.decision || {};
+  expect(dec30b.result === 'hire' && dec30b.label === '採用' && dec30b.date === '2026.10.10' && typeof dec30b.at === 'string' && !!dec30b.at &&
+    JSON.stringify(dec30b.by) === JSON.stringify({ name: '笹川 晴央', short: '笹川', title: '副支配人' }) &&
+    rec30b.management.final && rec30b.management.final.name === '笹川 晴央' && rec30b.management.interviewer.name === '笹川 晴央' && rec30b.schemaVersion === 2,
+    'E30 再出力ファイルの埋め込みデータに decision（採用・笹川・2026.10.10）と最終確認の押印: ' + JSON.stringify(dec30b));
+  // 8. 再出力ファイルを開く
+  await rp30.goto('file://' + file30b);
+  await rp30.waitForTimeout(300);
+  const re30 = await rp30.evaluate(() => { const s = document.querySelector('#decision select'); return { report: document.body.classList.contains('view-report'), full: document.body.classList.contains('view-full'),
+    show: document.getElementById('mgmtSave').classList.contains('show'), sel: s && s.selectedOptions[0] ? s.selectedOptions[0].textContent : '' }; });
+  expect(re30.report && !re30.full && !!(await rp30.$('#clPaper .cl-decision svg.verdict-stamp')) && !!(await rp30.$('#mgmt .stamp-box[data-field-id="final"] svg.hanko')) && !re30.show && re30.sel.includes('笹川 晴央'),
+    'E30 再出力ファイルは報告書表示で開き、合否・押印が残る（担当者は最終確認の人を初期選択）: ' + JSON.stringify(re30));
+  // 9. 面接チェックリスト報告の印刷（A4 1〜2 枚）
+  await rp30.evaluate(() => window.__prepareChecklistSheet(true));
+  await rp30.emulateMedia({ media: 'print' });
+  const vis30 = await rp30.$$eval('.page > *', els => els.filter(el => getComputedStyle(el).display !== 'none').map(el => el.id || el.dataset.sec || el.className));
+  const pr30 = await rp30.evaluate(() => { const sv = document.querySelector('#clSheet .cl-decision svg.verdict-stamp'); return { svg: sv ? getComputedStyle(sv).display : 'missing', panel: getComputedStyle(document.getElementById('decision')).display }; });
+  const pdf30 = path.join(OUT, 'checklist-report-decision.pdf');
+  await rp30.pdf({ path: pdf30, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const n30 = pdfPages30(pdf30);
+  const t30 = pdfText30(pdf30);
+  expect(vis30.join(',') === 'clSheet,mgmt' && pr30.svg !== 'none' && pr30.svg !== 'missing' && pr30.panel === 'none' && (n30 === -1 || (n30 >= 1 && n30 <= 2)) && (t30 === null || (t30.includes('最終合否') && t30.includes('笹川晴央'))),
+    'E30 面接チェックリスト報告の印刷（A4 1〜2 枚）に合否スタンプ・パネルは出さない: ' + JSON.stringify({ vis: vis30.join(','), svg: pr30.svg, panel: pr30.panel, pages: n30 }));
+  // media を 'screen' に固定すると page.pdf も screen で描く（印刷用 CSS が効かない）ため、エミュレートを解除して戻す
+  await rp30.emulateMedia({ media: null });
+  await rp30.evaluate(() => window.__prepareChecklistSheet(false));
+  // 10. 報告書表示のまま印刷（Ctrl+P 相当。page.pdf が beforeprint / afterprint を発火する）
+  const pdf30v = path.join(OUT, 'report-view-print.pdf');
+  await rp30.pdf({ path: pdf30v, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  await rp30.waitForTimeout(100);
+  const n30v = pdfPages30(pdf30v);
+  const t30v = pdfText30(pdf30v);
+  const after30 = await rp30.evaluate(() => ({ pc: document.body.classList.contains('print-checklist'), report: document.body.classList.contains('view-report') }));
+  expect((n30v === -1 || (n30v >= 1 && n30v <= 2)) && (t30v === null || t30v.includes('面接チェックリスト報告')) && !after30.pc && after30.report,
+    'E30 報告書表示のまま印刷すると面接チェックリスト報告（A4 1〜2 枚）・印刷後は報告書表示に戻る: ' + JSON.stringify({ pages: n30v, after: after30 }));
+  // 11. アプリの「読み込み」で引き継ぐ
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', file30b);
+  await wait(500);
+  const s30 = await st(() => { const s = window.RecruitApp.state; return { step: s.step, d: s.decision, final: (s.management.final || {}).name }; });
+  expect(s30.step === 4 && s30.d && s30.d.result === 'hire' && s30.d.by.name === '笹川 晴央' && s30.final === '笹川 晴央' &&
+    (await txtIn(page, '#decisionCard')).includes('採用・笹川') && !!(await page.$('#decisionCard svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('採用・笹川'),
+    'E30 アプリの「読み込み」で Step4 の最終合否カードと右サマリーに「採用・笹川」');
+  // 12. 再判定しても消えない
+  await navStep(3);
+  await judge();
+  expect(await step() === 4 && await st(() => (window.RecruitApp.state.decision || {}).result) === 'hire', 'E30 再判定しても最終合否は消えない');
+  // 13. 再保存
+  const saved30c = await saveRecord('saved-decision-resave.html');
+  const dc30 = saved30c.rec.decision || {};
+  expect(dc30.result === 'hire' && (dc30.by || {}).name === '笹川 晴央' && dc30.date === '2026.10.10' && saved30c.html.includes('data-filename="応募者_合否_太郎_2026-10-10_採用.html"'),
+    'E30 アプリで再保存しても decision が残り、ファイル名に _採用');
+  await shot('36-step4-decision.png', true);
+  expect(rp30Err.length === 0, 'E30 レポートのページエラー・console error なし: ' + (rp30Err.join(' / ') || 'none'));
+  await rp30.close();
+
+  // =====================================================================
+  // E31 不採用・取消・チェックリスト無しの報告書表示・詳細の全体印刷・ダーク・画面幅・アプリ・設定（docs/SPEC-report.md 8-3）
+  // =====================================================================
+  console.log('\n== E31 不採用・取消・表示 ==');
+  const rp31Err = [];
+  const rp31 = await newReportPage(rp31Err);
+  await rp31.goto('file://' + file30b);
+  await rp31.waitForTimeout(300);
+  const hanko31 = (await rp31.$$('#mgmt svg.hanko')).length;
+  await rp31.selectOption('#decision select', { label: SASA });
+  await rp31.click('#decision [data-act="decide"][data-value="reject"]');
+  await rp31.waitForTimeout(200);
+  const r31 = await rp31.evaluate(() => {
+    const pv = document.querySelector('#clPaper .cl-decision'), sv = pv && pv.querySelector('svg.verdict-stamp');
+    return { txt: pv ? pv.textContent : '', aria: sv ? sv.getAttribute('aria-label') : '', stroke: sv && sv.querySelector('rect') ? sv.querySelector('rect').getAttribute('stroke') : '',
+      fn: document.body.getAttribute('data-filename'), pressed: document.querySelector('#decision [data-act="decide"][data-value="reject"]').getAttribute('aria-pressed') };
+  });
+  expect(r31.txt.includes('不採用') && r31.aria.indexOf('不採用') === 0 && r31.stroke === '#1f4e8c' && (await rp31.$$('#mgmt svg.hanko')).length === hanko31 && r31.fn === '応募者_合否_太郎_2026-10-10_不採用.html' && r31.pressed === 'true',
+    'E31 「不採用」に切り替え（藍のスタンプ・最終確認の印は増えない・ファイル名の接尾辞を置き換え）: ' + JSON.stringify(r31));
+  const note31 = (await shownIn(rp31, '#decision .dec-note')) && (await txtIn(rp31, '#decision .dec-note')).trim().length > 0;
+  expect(note31 === (j30.result === 'recommend'), 'E31 判定（' + j30.result + '）と食い違う合否には注記を出す（止めない）: ' + note31);
+  await rp31.click('#decision [data-act="undecide"]');
+  await rp31.waitForTimeout(200);
+  const u31 = await rp31.evaluate(() => {
+    const q = (s) => document.querySelector(s);
+    return { paperSvg: !!q('#clPaper .cl-decision svg'), paperTxt: (q('#clPaper .cl-decision') || {}).textContent || '', sheetSvg: !!q('#clSheet .cl-decision svg'), panelSvg: !!q('#decision svg'),
+      head: q('#rhDecision').innerHTML, undo: getComputedStyle(q('#decision [data-act="undecide"]')).display, fn: document.body.getAttribute('data-filename'), show: q('#mgmtSave').classList.contains('show') };
+  });
+  expect(!u31.paperSvg && u31.paperTxt.includes('未押印') && !u31.sheetSvg && !u31.panelSvg && u31.head === '' && u31.undo === 'none' && (await rp31.$$('#mgmt svg.hanko')).length === hanko31 && u31.fn === '応募者_合否_太郎_2026-10-10.html' && u31.show,
+    'E31 「取消」で未押印に戻る（最終確認の印は残る・ファイル名の接尾辞も外れる）: ' + JSON.stringify(u31));
+  const [dl31] = await Promise.all([rp31.waitForEvent('download'), rp31.click('#mgmtSaveBtn')]);
+  const file31 = path.join(OUT, 'saved-decision-undone.html');
+  await dl31.saveAs(file31);
+  const html31 = fs.readFileSync(file31, 'utf8');
+  const rec31 = parseRecord(html31);
+  expect(rec31.decision === null && rec31.management.final && rec31.management.final.name === '笹川 晴央' && html31.includes('data-filename="応募者_合否_太郎_2026-10-10.html"'),
+    'E31 取消して保存すると decision は null・最終確認の印は残る');
+  // チェックリスト無しの記録（E22 の Step2 保存）
+  await rp31.goto('file://' + savedE22.file);
+  await rp31.waitForTimeout(300);
+  const nc31 = await rp31.evaluate(() => ({ report: document.body.classList.contains('view-report'), hasCl: document.body.classList.contains('has-cl'),
+    secs: Array.from(document.querySelectorAll('section.sec')).filter(el => getComputedStyle(el).display !== 'none').map(el => el.dataset.sec).join(','),
+    dash: getComputedStyle(document.querySelector('.dash')).display, paper: !!document.getElementById('clPaper') }));
+  expect(nc31.report && !nc31.hasCl && (nc31.secs === 'pre,comment,handoff,interview,mgmt' || nc31.secs === 'pre,handoff,interview,mgmt') && nc31.dash === 'none' && !nc31.paper && await shownIn(rp31, '.rh') && await shownIn(rp31, '#decision'),
+    'E31 チェックリスト無しの記録の報告書表示は申し送りシート相当（応募時・コメント・留意点・面接で確認・押印＋最終合否）: ' + JSON.stringify(nc31));
+  await rp31.click('#rtViewFull');
+  await rp31.waitForTimeout(150);
+  const secsFull31 = await rp31.$$eval('section.sec', els => els.filter(el => getComputedStyle(el).display !== 'none').map(el => el.dataset.sec));
+  expect(secsFull31.includes('contrib') && secsFull31.includes('judgment') && await shownIn(rp31, '.dash'), 'E31 チェックリスト無しの記録も「詳細」で全節: ' + secsFull31.join(','));
+  // 「詳細」表示から全体印刷（E23 の保存ファイル）
+  await rp31.goto('file://' + savedE23.file);
+  await rp31.waitForTimeout(300);
+  await rp31.click('#rtViewFull');
+  await rp31.waitForTimeout(150);
+  await rp31.emulateMedia({ media: 'print' });
+  const pdf31 = path.join(OUT, 'full-report-detail-view.pdf');
+  await rp31.pdf({ path: pdf31, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const n31 = pdfPages30(pdf31);
+  const full31 = { sheet: await dispIn(rp31, '#clSheet'), cl: await dispIn(rp31, 'section.sec[data-sec="checklist"]') };
+  expect((n31 === -1 || (n31 >= 3 && n31 <= 6)) && full31.sheet === 'none' && full31.cl !== 'none', 'E31 「詳細」表示の印刷は全体レポート（3〜6 ページ・#clSheet なし）: ' + JSON.stringify(Object.assign({ pages: n31 }, full31)));
+  await rp31.emulateMedia({ media: 'screen' });
+  // ダークモードでも紙は白地
+  await rp31.emulateMedia({ colorScheme: 'dark' });
+  await rp31.goto('file://' + file30b);
+  await rp31.waitForTimeout(300);
+  const dk31 = await rp31.evaluate(() => ({ bg: getComputedStyle(document.getElementById('clPaper')).backgroundColor, color: getComputedStyle(document.querySelector('#clPaper .cl-sheet')).color }));
+  expect(dk31.bg === 'rgb(255, 255, 255)' && dk31.color === 'rgb(17, 17, 17)' && await shownIn(rp31, '#clPaper .cl-decision svg.verdict-stamp'), 'E31 ダークモードでも紙プレビューは白地・黒字: ' + JSON.stringify(dk31));
+  await rp31.screenshot({ path: path.join(OUT, '34-report-view-dark.png'), fullPage: true });
+  await rp31.emulateMedia({ colorScheme: 'light' });
+  // 画面幅
+  for (const w of [1280, 1440]) {
+    await rp31.setViewportSize({ width: w, height: 900 });
+    await rp31.waitForTimeout(150);
+    const fit = await rp31.evaluate(() => { const r = document.getElementById('clPaper').getBoundingClientRect(); return { ov: document.documentElement.scrollWidth - window.innerWidth, left: r.left, right: r.right, iw: window.innerWidth }; });
+    expect(fit.ov <= 1 && fit.left >= 0 && fit.right <= fit.iw, 'E31 ' + w + 'px 幅で紙プレビューが画面内に収まる: ' + JSON.stringify(fit));
+  }
+  await rp31.setViewportSize({ width: 390, height: 900 });
+  await rp31.waitForTimeout(200);
+  const nw31 = await rp31.evaluate(() => { const w = document.querySelector('.paper-wrap'); return { ov: document.documentElement.scrollWidth - window.innerWidth, sw: w.scrollWidth, cw: w.clientWidth, ox: getComputedStyle(w).overflowX }; });
+  expect(nw31.ov <= 1 && nw31.sw > nw31.cw && nw31.ox === 'auto', 'E31 390px 幅では紙プレビューだけ横スクロール（ページ全体は横スクロールしない）: ' + JSON.stringify(nw31));
+  await rp31.screenshot({ path: path.join(OUT, '37-report-view-narrow.png'), fullPage: true });
+  expect(rp31Err.length === 0, 'E31 レポートのページエラー・console error なし: ' + (rp31Err.join(' / ') || 'none'));
+  await rp31.close();
+  // アプリ Step4（E30 の再保存の後: 採用・最終確認は押印済み）
+  await page.click('#decisionCard [data-action="undecide"]');
+  await wait(150);
+  expect(await st(() => window.RecruitApp.state.decision) === null && (await txtIn(page, '#decisionCard')).includes('未押印') && !(await page.$('#sumDecision')), 'E31 アプリの「取消」で未押印に戻る');
+  await page.click('#mgmtCard .stamp-box[data-field-id="final"] [data-action="unstamp"]');
+  await wait(150);
+  await page.selectOption('#decisionManager', { label: SASA });
+  await page.click('#decisionCard [data-action="decide"][data-value="reject"]');
+  await wait(200);
+  const a31 = await st(() => { const s = window.RecruitApp.state; return { d: s.decision, final: s.management.final || null, dirty: s.dirty }; });
+  expect(a31.d && a31.d.result === 'reject' && a31.d.label === '不採用' && a31.d.by.name === '笹川 晴央' && a31.final && a31.final.name === '笹川 晴央' && a31.final.date === '2026.10.10' && a31.dirty === true &&
+    !!(await page.$('#decisionCard svg.verdict-stamp')) && !!(await page.$('#mgmtCard .stamp-box[data-field-id="final"] svg.hanko')) && (await txtIn(page, '#sumDecision')).includes('不採用・笹川'),
+    'E31 アプリ Step4 で「不採用」→ 未押印の最終確認欄にも自動で押印・右サマリーに「不採用・笹川」');
+  // 設定
+  await toView('settings');
+  const set31 = await st(() => { const q = (p) => document.querySelector('[data-bind="management.decision.' + p + '"]'); return q('enabled') && {
+    enabled: q('enabled').checked, label: q('label').value, hire: q('hireLabel').value, reject: q('rejectLabel').value, field: q('stampField').value, auto: q('autoStampFinal').checked, suffix: q('filenameSuffix').checked }; });
+  expect(!!set31 && set31.enabled && set31.label === '最終合否' && set31.hire === '採用' && set31.reject === '不採用' && set31.field === 'final' && set31.auto && set31.suffix,
+    'E31 設定「応募者の管理」に最終合否（有効・表示名・採用／不採用・押印欄と連動・ファイル名）: ' + JSON.stringify(set31));
+  await page.click('label:has([data-bind="management.decision.enabled"])');
+  await wait(100);
+  await saveSettings();
+  await toView('judge');
+  expect(await step() === 4 && !(await page.$('#decisionCard')) && !(await page.$('#sumDecision')) && await st(() => (window.RecruitApp.state.decision || {}).result) === 'reject',
+    'E31 最終合否を OFF にすると Step4 のカード・サマリーを出さない（記録は保持）');
+  await toView('settings');
+  await page.click('label:has([data-bind="management.decision.enabled"])');
+  await wait(100);
+  await saveSettings();
+  await toView('judge');
+  expect(!!(await page.$('#decisionCard svg.verdict-stamp')), 'E31 ON に戻すと Step4 のカードが戻る');
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');

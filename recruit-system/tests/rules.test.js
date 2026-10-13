@@ -2193,5 +2193,166 @@ test('66 保存レコード（checklist・checklistDef・旧 scores の互換）
   assert.ok(html5.indexOf('面接チェックリストは未入力です。') > 0 && html5.indexOf('data-sec="scores"') < 0 && html5.indexOf('id="rtPrintChecklist"') < 0);
 });
 
+// ======================================================================
+// 報告書表示・最終合否スタンプ（docs/SPEC-report.md 8-1。#67〜#71）
+const DEC_DEFAULT = { enabled: true, label: '最終合否', hireLabel: '採用', rejectLabel: '不採用', hireColor: '#c8232c', rejectColor: '#1f4e8c',
+  stampField: 'final', autoStampFinal: true, filenameSuffix: true, hint: '最終確認者が合否を決めて押します' };
+const DEC_HIRE = { result: 'hire', label: '採用', date: '2026.10.10', at: '2026-10-10T00:00:00.000Z', by: { name: '笹川 晴央', short: '笹川', title: '副支配人' } };
+const DEC_REJECT = { result: 'reject', label: '不採用', date: '2026.10.10', at: '2026-10-10T00:00:00.000Z', by: { name: '笹川 晴央', short: '笹川', title: '副支配人' } };
+// #66 と同じ state（回答あり・判定あり）
+function decisionState(over) {
+  const p = P();
+  const a = strongApplicant({ name: '山田 花子' });
+  const h = R.buildHandoff(a, p, OPTS);
+  const cl = clAll('good');
+  cl.header.date = '2026-10-10';
+  const j = R.evaluateHiring(a, {}, p, h, allChecks(h), Object.assign({}, OPTS, { checklist: cl }));
+  return Object.assign({ step: 4, applicant: a, profile: p, handoff: h, handoffChecks: allChecks(h), handoffNote: '', scores: {}, checklist: cl,
+    interviewNotes: '受け答えが丁寧', judgment: j, history: [] }, over || {});
+}
+
+test('67 最終合否スタンプ（verdictSvg・decisionSheetHtml・source）', function () {
+  const ST = ctx.RecruitStamp;
+  const v = ST.verdict({ label: '採用', date: '2026.10.10', color: '#c8232c', size: 120, id: 'vt1' });
+  assert.ok(v.indexOf('<svg class="verdict-stamp"') === 0, v.slice(0, 60));
+  ['role="img"', 'aria-label="採用 2026.10.10"', '>採用</text>', '>2026.10.10</text>', 'stroke="#c8232c"', 'feTurbulence', 'id="vt1"', 'url(#vt1)', 'rotate(-3 ', 'width="120"', 'height="76"']
+    .forEach(function (t) { assert.ok(v.indexOf(t) > 0, 'verdict に ' + t); });
+  assert.ok(v.indexOf('class="hanko"') < 0, 'hanko クラスを含まない');
+  const vr = ST.verdict({ label: '不採用', date: '2026.10.10', color: '#1f4e8c' });
+  assert.ok(vr.indexOf('>不採用</text>') > 0 && vr.indexOf('stroke="#1f4e8c"') > 0 && vr.indexOf('width="120"') > 0, '不採用・藍・既定サイズ');
+  const vs = ST.verdict({ label: '採用', date: '2026.10.10', sub: '新宿' });
+  assert.ok(vs.indexOf('aria-label="採用 2026.10.10 新宿"') > 0 && vs.indexOf('>2026.10.10 新宿</text>') > 0, 'sub');
+  const ve = ST.verdict({ label: '<b>', date: '"x' });
+  assert.ok(ve.indexOf('&lt;b&gt;') > 0 && ve.indexOf('<b>') < 0, 'escape');
+  assert.ok(ST.verdict({ label: 'アルバイト採用決定' }).indexOf('textLength="88"') > 0, '長いラベルは詰める');
+  assert.ok(ST.verdict({ label: '採用', date: '2026.10.10' }).indexOf('textLength="88"') < 0 && ST.verdict({ label: '採用' }).indexOf('textLength') < 0, '2 文字は詰めない');
+  const none = ST.decisionSheet(null, { id: 'clDecision' });
+  assert.ok(none.indexOf('class="cl-decision is-none"') >= 0 && none.indexOf('id="clDecision"') > 0 && none.indexOf('未押印') > 0 && none.indexOf('verdict-stamp') < 0, none);
+  const hire = ST.decisionSheet({ result: 'hire', label: '採用', date: '2026.10.10', at: '', by: { name: '笹川 晴央', short: '笹川', title: '副支配人' } }, { id: 'x', hireColor: '#c8232c' });
+  ['is-hire', 'data-result="hire"', 'verdict-stamp', '笹川 晴央（副支配人）', '2026.10.10', 'style="color:#c8232c"'].forEach(function (t) { assert.ok(hire.indexOf(t) > 0, 'decisionSheet に ' + t); });
+  const src = ST.source();
+  ['function verdictSvg(', 'function decisionSheetHtml(', 'function decisionFilename(', 'function stampSvg(', 'function shortName('].forEach(function (t) { assert.ok(src.indexOf(t) >= 0, 'source に ' + t); });
+  assert.ok(src.indexOf('</' + 'script') < 0 && src.indexOf('<!--') < 0, 'source に閉じタグ・コメント開始が無い');
+  // 外部参照なし（空の vm で動く）
+  const out = vm.runInNewContext(ST.source() + '\n;[verdictSvg({label:"採用",date:"2026.10.10"}).indexOf("<svg class=\\"verdict-stamp\\""), decisionSheetHtml({result:"reject",label:"不採用",date:"2026.10.10",by:{name:"笹川 晴央",title:""}},{}).indexOf("is-reject") > 0, decisionFilename("a.html",{result:"hire",label:"採用"},{})]', {});
+  assert.deepStrictEqual(plain(out), [0, true, 'a_採用.html']);
+});
+
+test('68 decisionFilename（_採用 / _不採用 の付け外し・冪等）', function () {
+  const F = ctx.RecruitStamp.decisionFilename;
+  const cases = [
+    ['応募者_A_2026-10-10.html', { result: 'hire', label: '採用' }, { filenameSuffix: true }, '応募者_A_2026-10-10_採用.html'],
+    ['応募者_A_2026-10-10_採用.html', { result: 'reject', label: '不採用' }, {}, '応募者_A_2026-10-10_不採用.html'],
+    ['応募者_A_2026-10-10_不採用.html', null, {}, '応募者_A_2026-10-10.html'],
+    ['応募者_A_2026-10-10_採用.html', { result: 'hire', label: '採用' }, { filenameSuffix: false }, '応募者_A_2026-10-10.html'],
+    ['x_OK.html', { result: 'hire', label: '合格 A' }, { hireLabel: 'OK', rejectLabel: 'NG' }, 'x_合格_A.html']
+  ];
+  cases.forEach(function (c) {
+    const r1 = F(c[0], c[1], c[2]);
+    assert.strictEqual(r1, c[3], c[0]);
+    assert.strictEqual(F(r1, c[1], c[2]), r1, '冪等: ' + c[0]);
+  });
+});
+
+test('69 normalizeProfile（management.decision）・validateProfile', function () {
+  assert.deepStrictEqual(plain(P().management.decision), DEC_DEFAULT);
+  const raw = P(); delete raw.management.decision;
+  assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.decision), DEC_DEFAULT);
+  const oldP = S.parseProfileJSON(fs.readFileSync(path.join(FIX, 'v1-profile-other.json'), 'utf8'));
+  assert.ok(oldP.management.decision.enabled === true && oldP.management.decision.hireLabel === '採用', JSON.stringify(plain(oldP.management.decision)));
+  const bad = P();
+  bad.management.decision = { enabled: 'x', label: '  ', hireLabel: '', rejectLabel: 5, hireColor: 'red', rejectColor: '#1F4E8C', stampField: 'nope', autoStampFinal: false, filenameSuffix: 0, hint: null };
+  const nb = S.normalizeProfile(bad).management.decision;
+  assert.deepStrictEqual(plain(nb), { enabled: true, label: '最終合否', hireLabel: '採用', rejectLabel: '不採用', hireColor: '#c8232c', rejectColor: '#1F4E8C',
+    stampField: 'final', autoStampFinal: false, filenameSuffix: true, hint: '最終確認者が合否を決めて押します' });
+  const nf = P(); nf.management.fields = [{ id: 'a', label: 'A' }]; nf.management.decision = Object.assign({}, DEC_DEFAULT, { enabled: false, stampField: 'final' });
+  const nfd = S.normalizeProfile(nf).management.decision;
+  assert.ok(nfd.stampField === '' && nfd.enabled === false, JSON.stringify(plain(nfd)));
+  [bad, nf, raw].forEach(function (x, i) {
+    const once = S.normalizeProfile(x);
+    assert.deepStrictEqual(plain(S.normalizeProfile(once).management.decision), plain(once.management.decision), '冪等 ' + i);
+  });
+  assert.strictEqual(S.decisionConfig(P()).sub, '新宿');
+  const v1 = P(); v1.management.decision.hireLabel = '';
+  assert.ok(S.validateProfile(v1).errors.indexOf('最終合否の「採用」「不採用」の表示名を入力してください。') >= 0, JSON.stringify(plain(S.validateProfile(v1).errors)));
+  const v2 = P(); v2.management.decision.hireLabel = '採用'; v2.management.decision.rejectLabel = '採用';
+  assert.ok(S.validateProfile(v2).errors.indexOf('最終合否の「採用」と「不採用」の表示名が同じです。') >= 0);
+  assert.ok(!S.validateProfile(P()).errors.some(function (e) { return e.indexOf('最終合否') >= 0; }), '既定は最終合否のエラーなし');
+});
+
+test('70 record.decision の正規化と往復（buildRecord・parseRecordFromHTML）', function () {
+  [null, {}, 'hire', { result: 'maybe', by: { name: 'x' } }, { result: 'hire' }, { result: 'hire', by: { name: '  ' } }].forEach(function (x) {
+    assert.strictEqual(S.normalizeDecision(x), null, JSON.stringify(x));
+  });
+  assert.deepStrictEqual(plain(S.normalizeDecision({ result: 'hire', label: '', date: '2026/10/10', at: 5, by: { name: ' 笹川 晴央 ', title: '副支配人', x: 1 }, extra: 1 })),
+    { result: 'hire', label: '採用', date: '', at: '', by: { name: '笹川 晴央', short: '笹川', title: '副支配人' } });
+  const st = decisionState({ decision: DEC_HIRE });
+  const rec = S.buildRecord(st);
+  assert.deepStrictEqual(plain(rec.decision), DEC_HIRE);
+  assert.strictEqual(rec.schemaVersion, 2);
+  assert.strictEqual(S.buildRecord(decisionState()).decision, null);
+  // parseRecordFromHTML（vm には DOMParser が無いので、このテストの中だけスタブを置く）
+  ctx.DOMParser = function () {};
+  ctx.DOMParser.prototype.parseFromString = function (h) {
+    const m = h.match(/<script type="application\/json" id="recruit-record">([\s\S]*?)<\/script>/);
+    return { querySelector: function () { return m ? { textContent: m[1] } : null; } };
+  };
+  try {
+    const p = st.profile;
+    assert.deepStrictEqual(plain(S.parseRecordFromHTML(S.generateReportHTML(rec, p)).decision), DEC_HIRE);
+    const old = plain(rec); delete old.decision;
+    assert.strictEqual(S.parseRecordFromHTML(S.generateReportHTML(old, p)).decision, null, '旧レコード');
+    const badRec = plain(rec); badRec.decision = { result: 'x' };
+    assert.strictEqual(S.parseRecordFromHTML(S.generateReportHTML(badRec, p)).decision, null, '不正値');
+    const evil = plain(rec); evil.decision.by.name = 'Y<!--<script>';
+    const htmlEvil = S.generateReportHTML(evil, p);
+    const block = htmlEvil.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1];
+    assert.ok(!/[<>&]/.test(block), '#recruit-record に生の < > & が無い');
+    assert.strictEqual(S.parseRecordFromHTML(htmlEvil).decision.by.name, 'Y<!--<script>');
+  } finally {
+    delete ctx.DOMParser;
+  }
+});
+
+test('71 保存レポートの報告書表示・最終合否（generateReportHTML・checklistSheetHtml）', function () {
+  const noScript = function (h) { return h.replace(/<script>[\s\S]*?<\/script>/g, ''); };
+  const st = decisionState();
+  const p = st.profile;
+  assert.strictEqual(st.judgment.result, 'recommend', 'state の判定は採用推奨');
+  const rec = S.buildRecord(st);
+  const recH = Object.assign({}, rec, { decision: DEC_HIRE });
+  const htmlH = S.generateReportHTML(recH, p);
+  assert.ok(htmlH.indexOf('<body class="view-report has-cl" data-filename="応募者_山田_花子_') > 0 && htmlH.indexOf('_採用.html">') > 0, 'body の class と合否付きファイル名');
+  ['id="rtViewReport"', 'id="rtViewFull"', 'id="reportPaper"', 'id="clPaper"', 'id="clPaperDecision"', 'id="clDecision"', 'id="decision"', 'id="rhDecision"']
+    .forEach(function (t) { assert.ok(htmlH.indexOf(t) > 0, t); });
+  assert.ok(htmlH.indexOf('id="clPaper"') < htmlH.indexOf('<header class="rh">'), '紙プレビューはヘッダーの前');
+  assert.ok(htmlH.indexOf('<h2>応募者の管理</h2>') < htmlH.indexOf('id="decision"') && htmlH.indexOf('id="decision"') < htmlH.indexOf('id="mgmt"'), 'パネルは「応募者の管理」の見出しと #mgmt の間');
+  assert.strictEqual((noScript(htmlH).match(/<svg class="verdict-stamp"/g) || []).length, 4, '合否スタンプは紙・印刷用・パネル・ヘッダーの 4 つ');
+  assert.strictEqual((noScript(htmlH).match(/<svg class="hanko"/g) || []).length, 0, 'state の management どおり（押印なし）');
+  const cfg = JSON.parse(htmlH.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
+  assert.ok(cfg.decision.hireLabel === '採用' && cfg.decision.sub === '新宿' && cfg.decision.stampField === 'final', JSON.stringify(cfg.decision));
+  assert.ok(htmlH.indexOf('addEventListener("beforeprint"') > 0 && htmlH.indexOf('__setReportView') > 0 && htmlH.indexOf('function verdictSvg(') > 0);
+  assert.strictEqual((htmlH.match(/<\/script>/g) || []).length, (htmlH.match(/<script[ >]/g) || []).length, 'script 要素の開始・終了の数が同じ');
+  // 食い違い注記（X10）
+  // （埋め込みスクリプトにも同じ文言があるので、script 要素を除いて調べる）
+  assert.ok(noScript(S.generateReportHTML(Object.assign({}, rec, { decision: DEC_REJECT }), p)).indexOf('<div class="dec-note">※ アプリの判定「') > 0, '不採用 × 採用推奨 → 注記');
+  assert.ok(noScript(htmlH).indexOf('アプリの判定「') < 0 && noScript(htmlH).indexOf('<div class="dec-note"></div>') > 0, '採用 × 採用推奨 → 注記なし');
+  // 回答なし（面接前の保存）→ 申し送りシート相当（紙なし・パネルあり）
+  const html0 = S.generateReportHTML(Object.assign({}, rec, { checklist: R.emptyChecklist(), judgment: null, step: 2 }), p);
+  assert.ok(html0.indexOf('<body class="view-report" data-filename=') > 0 && html0.indexOf('id="clPaper"') < 0 && html0.indexOf('id="decision"') > 0 && html0.indexOf('id="rtViewReport"') > 0, '回答なし');
+  // 無効（enabled=false）: 合否の UI を出さない・ファイル名に付けない・データは残す
+  const pOff = P(); pOff.management.decision.enabled = false;
+  const htmlOff = S.generateReportHTML(recH, pOff);
+  assert.ok(htmlOff.indexOf('id="decision"') < 0 && noScript(htmlOff).indexOf('class="cl-decision') < 0 && htmlOff.indexOf('id="rhDecision"') < 0, '無効なら UI なし');
+  assert.strictEqual(JSON.parse(htmlOff.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]).decision, null, '無効なら埋め込み設定の decision は null');
+  assert.ok(htmlOff.match(/data-filename="([^"]*)"/)[1].indexOf('_採用') < 0, '無効ならファイル名に付けない');
+  assert.strictEqual(JSON.parse(htmlOff.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1]).decision.result, 'hire', '無効でも埋め込みデータの decision は残す');
+  // checklistSheetHtml: section には出さない・sheet は未押印の枠
+  assert.ok(S.checklistSheetHtml(recH, p, { mode: 'section' }).indexOf('cl-decision') < 0, 'section に cl-decision なし');
+  const sh = S.checklistSheetHtml(rec, p, { mode: 'sheet' });
+  ['cl-decision is-none', '未押印', 'class="cl-judge"', 'cl-judge-row'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
+  assert.ok(S.reportCss().indexOf('</' + 'script') < 0 && S.checklistSheetCss().indexOf('</' + 'script') < 0);
+});
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
