@@ -245,6 +245,9 @@
       return { id: String(x.id), label: String(x.label || x.id), hint: String(x.hint || '') };
     });
     if (!mg.fields.length) mg.fields = U.deepClone(base.management.fields);
+    // 初期対応者の旧既定の説明（「応募受付・申し送りを行った担当者」）は現在の既定にする（書き換えた説明はそのまま）
+    const initBase = (base.management.fields || []).find(function (x) { return x && x.id === 'initial'; });
+    mg.fields.forEach(function (x) { if (x.id === 'initial' && x.hint === '応募受付・申し送りを行った担当者' && initBase) x.hint = initBase.hint; });
     mg.managers = (Array.isArray(mg.managers) ? mg.managers : []).filter(function (x) { return U.isObj(x) && x.name; }).map(function (x) {
       const name = String(x.name).trim();
       const short = String(x.short || '').trim() || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
@@ -1751,8 +1754,9 @@
         if ((jMust.unknownLabels || []).length) mDet.push('未確認: ' + jMust.unknownLabels.join('、'));
         let adjS = '';
         if (j.adjustments && j.adjustments.length) {
-          const fixed = j.adjustments.some(function (x) { return x.code === 'must_conditions' && x.from === x.to; });
-          adjS = '<div class="adj-head">' + (fixed ? '必須条件の不一致により「' + esc(j.title) + '」に固定' : '総合判断による結果「' + esc(titleOf(j.baseResult)) + '」から「' + esc(j.title) + '」に調整') + '</div>' +
+          // 必須条件の不一致（must_conditions）があれば、総合判断の結果から変わったかどうか（from / to）に関係なく「固定」と書く
+          const fixed = j.adjustments.some(function (x) { return x.code === 'must_conditions'; });
+          adjS = '<div class="adj-head">' + (fixed ? '必須条件の不一致により「' + esc(j.title) + '」に固定' + (jOv.label ? '' : '（総合判断は未入力）') : '総合判断による結果「' + esc(titleOf(j.baseResult)) + '」から「' + esc(j.title) + '」に調整') + '</div>' +
             '<ul class="adj">' + j.adjustments.map(function (x) {
               return '<li><span class="step">' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</span><span>' + esc(x.reason) + '</span></li>';
             }).join('') + '</ul>';

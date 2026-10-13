@@ -260,7 +260,15 @@
     window.addEventListener('afterprint', function () { if (autoClPrint) { autoClPrint = false; prepareChecklistSheet(false); } });
   }
 
+  // 画面名は運用モードで変える（台本モード: ナビ「報告書の作成」・トップバー「面接チェックリスト報告」・サイドバー「手順」／詳細モード: 従来の「応募者判定」「判定ステップ」）
+  function judgeViewTitle() { return isScript() ? '面接チェックリスト報告' : '応募者判定'; }
+  function renderModeLabels() {
+    setText('#navJudgeLabel', isScript() ? '報告書の作成' : '応募者判定');
+    if (state.view === 'judge') setText('#topTitle', judgeViewTitle());
+  }
+
   function renderBrand() {
+    renderModeLabels();   // 設定の保存・初期化・JSON 読み込みで運用モードが変わったときも、設定画面のままナビの画面名を切り替える
     const m = state.profile.meta;
     $('#brandTitle').textContent = m.appTitle || 'リクルート判定システム';
     $('#brandTheater').textContent = m.theaterName || '';
@@ -298,7 +306,7 @@
     $('#stepSection').classList.toggle('hidden', view !== 'judge');
     $('#topActions').classList.toggle('hidden', view !== 'judge');
     $('#applicantChip').classList.toggle('hidden', view !== 'judge');
-    $('#topTitle').textContent = view === 'judge' ? '応募者判定' : view === 'settings' ? '設定（劇場プロファイル）' : '使い方';
+    $('#topTitle').textContent = view === 'judge' ? judgeViewTitle() : view === 'settings' ? '設定（劇場プロファイル）' : '使い方';
 
     if (view === 'judge') {
       renderStepNav(); renderStep(); renderSummary();
@@ -379,6 +387,17 @@
     window.scrollTo({ top: top, behavior: Math.abs(window.scrollY - top) > 1500 ? 'auto' : 'smooth' });
   }
 
+  // 台本モード: 判定が無い（③ を開いていない・判定後に入力が変わった）ときは現在の入力で判定する。
+  // ② から保存・A4 印刷（トップバー 🖨・② の印刷ボタン・Ctrl+P）しても報告書に結果が入るようにする（チェックリストが未入力でも走らせる）。
+  // 副作用は state.judgment（と judgmentStale）だけ。③ を開くと goStep(4) が同じ入力で判定し直すので結果は同じ。詳細モードでは何もしない
+  function ensureScriptJudgment() {
+    if (!isScript()) return false;
+    if (state.judgment && !state.judgmentStale && state.judgment.mode === 'script') return false;
+    state.judgment = evaluateNow();
+    state.judgmentStale = false;
+    return true;
+  }
+
   // 判定後に入力・チェック・面接点・設定が変わったら判定を無効にする。
   // Step4 を開くと再判定し、保存時は保存前に再判定する（古い判定を記録に残さない）
   function invalidateJudgment() {
@@ -416,7 +435,7 @@
   }
 
   function renderStepNav() {
-    setText('#stepSectionTitle', isScript() ? '報告書の作成' : '判定ステップ');
+    setText('#stepSectionTitle', isScript() ? '手順' : '判定ステップ');
     $('#stepNav').innerHTML = steps().map(function (s) {
       const cls = ['step'];
       if (s.n === state.step) cls.push('current');
@@ -2965,7 +2984,8 @@
         ? (ms.mismatch ? '<span class="badge danger">不一致 ' + ms.mismatch + '</span>' : '') + (ms.unknown ? '<span class="badge muted">未確認 ' + ms.unknown + '</span>' : '')
         : '<span class="badge ok">すべて一致</span>';
     const ov = R.OVERALL_POINTS.hasOwnProperty(cl.overall) ? cl.overall : '';
-    const live = R.checklistHasInput(cl) ? R.evaluateScript(a, cl, p) : null;
+    // 判定済み（③・保存・印刷で state.judgment がある）ならそれを、無いときだけ入力中の内容で評価して表示する
+    const live = state.judgment && state.judgment.mode === 'script' ? state.judgment : R.checklistHasInput(cl) ? R.evaluateScript(a, cl, p) : null;
     const mg = p.management || {};
     const fields = Array.isArray(mg.fields) ? mg.fields : [];
     const stamps = fields.map(function (f) {
@@ -3110,7 +3130,7 @@
       state.judgment = evaluateNow();
       state.judgmentStale = false;
       rejudged = true;
-    }
+    } else ensureScriptJudgment();   // 台本モード: ③ を開かずに保存しても判定を記録する
     const rec = S.buildRecord(state);
     const html = S.generateReportHTML(rec, state.profile);
     // 合否ありのときはファイル名の末尾に _採用 / _不採用（設定 management.decision.filenameSuffix）
@@ -3122,7 +3142,7 @@
     renderSummary();
     if (state.step === 4) renderStep();
     // 台本モード: 総合判断が未入力なら警告つき（保存は止めない。docs/SPEC-script-mode.md M5）
-    const ovMissing = isScript() && R.checklistHasInput(state.checklist) && !R.OVERALL_POINTS.hasOwnProperty(state.checklist.overall);
+    const ovMissing = isScript() && !R.OVERALL_POINTS.hasOwnProperty(ensureChecklist().overall);
     toast(a.name + ' さんの情報を保存しました' + (rejudged ? '（判定後に入力・設定が変わったため、現在の内容で再判定しました：' + state.judgment.title + '）' : '') +
       (ovMissing ? '（総合判断が未入力です）' : ''), ovMissing ? 'warn' : 'ok');
   }
@@ -3174,6 +3194,8 @@
     state.handoff.items.forEach(function (i) { state.handoffBase[i.id] = i.text; });
     let target = sj ? 4 : (R.checklistHasInput(state.checklist) || Object.keys(state.scores).length) ? 3 : 2;
     if (isScript() && target === 2) target = 1;   // 台本モードに申し送りのステップは無い
+    // 台本モードの記録で ③ より前に保存したもの（② からの保存・印刷で判定が入る）は、保存したステップから再開する
+    if (isScript() && target === 4 && R.isScriptRecord(rec) && Number(rec.step) >= 1 && Number(rec.step) < 4) target = R.checklistHasInput(state.checklist) ? 3 : 1;
     state.step = target;
     state.maxStepReached = target;
     showView('judge');
@@ -3312,7 +3334,9 @@
         return false;
       }
       injectChecklistSheetCss();
-      // 判定は state.judgment（判定前・判定後に変更があったときは null。判定を勝手に走らせない）
+      // 判定は state.judgment（詳細モードは判定前・判定後に変更があったときは null のまま。判定を勝手に走らせない）。
+      // 台本モードは ③ を開かずに印刷しても結果が入るよう、無ければ現在の入力で判定する
+      if (ensureScriptJudgment() && state.view === 'judge') renderSummary();
       const rec = S.buildRecord(state);
       host.innerHTML = S.checklistSheetHtml(rec, state.profile, { mode: 'sheet', stamps: checklistStampsHtml() });
       document.body.classList.add('print-checklist');

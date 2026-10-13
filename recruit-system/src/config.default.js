@@ -81,7 +81,7 @@
     // 応募者の管理（押印欄）。保存レポートの末尾に 3 つの押印欄を出し、名簿から選んで日付印を押す
     management: {
       fields: [
-        { id: 'initial', label: '初期対応者', hint: '応募受付・申し送りを行った担当者' },
+        { id: 'initial', label: '初期対応者', hint: '応募受付を行った担当者' },
         { id: 'interviewer', label: '面接対応者', hint: '面接を行った担当者' },
         { id: 'final', label: '最終確認', hint: '採用可否を最終確認した上長' }
       ],

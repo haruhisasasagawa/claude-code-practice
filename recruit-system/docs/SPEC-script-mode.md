@@ -867,3 +867,24 @@ const fillScript = async (o) => {
 
 ### 11-3. 未実装・残った点
 - なし（M1〜M13・本書 1〜10 章はすべて実装・テスト済み）。12-5（HANDOFF）の既知の制限を参照
+
+### 11-4. レビュー後の修正（F1〜F10。2026-10-13）
+オーケストレータのレビュー（F1〜F10）を受けて直した点。詳細モードの画面・判定・保存 HTML・印刷は変えていない（F3 の 2 つの文言だけ両モード共通）。
+
+| # | 内容 | 場所 |
+| --- | --- | --- |
+| F1 | ③ を開かずに保存・A4 印刷しても結果が入る。台本モードで `state.judgment` が無い（または `judgmentStale`・`mode !== 'script'`）ときは `R.evaluateScript` を走らせて `state.judgment` に入れてから保存／印刷する（チェックリストが未入力でも走らせる。副作用は `state.judgment`・`judgmentStale` だけ。③ を開くと `goStep(4)` が同じ入力で判定し直すので同じ結果）。印刷はトップバー 🖨・② の「🖨 面接チェックリスト報告（A4）」・③ の「🖨 A4 で印刷」・beforeprint（Ctrl+P）のすべてが `prepareChecklistSheet(true)` を通るので、そこで判定する（詳細モードは従来どおり判定を勝手に走らせない）。帰結として、③ より前に保存した台本モードの記録（判定が入る）は読み込むと保存したステップ（回答があれば ②、無ければ ①）から再開する（従来の「続きから再開」を保つ） | app.js `ensureScriptJudgment()`（新規）・`saveRecord`・`prepareChecklistSheet`・`applyRecord` |
+| F2 | 設定「面接チェックリスト」節（台本モードで常時表示）から詳細モード専用のものを外した。(a) `evaluation.holdOnUnresolvedBlock`・`holdOnHighschoolException` は台本モードでは `#s-advanced` の新しい節 `#s-checklist-full`「採用可否判定の調整（詳細モード）」に描く（詳細モードは従来の位置）。(b) 必須条件・記入欄の「自動表示」（`.auto`）の選択とその設定値（週の日数・繁忙期・初回契約終了）、消極属性の「自動判定」、「朝～12時のみ」の判定の終了時刻、「応募情報から自動表示し、Step3 で上書きできます」は台本モードでは出さない（値は保持。消極属性の見出しは「消極属性（Step① でチェックします）」、行は名前と削除だけ＝styles.css `.s-cl-neg.s-cl-neg-plain`）。(c) 台本モードの帯（報告書の「面接評価（確認点）」の 高・中・低）は `evaluation.thresholds`（`evaluateScript`・`interviewModel`）を使うので、台本モードでは境界の入力 `#clBandInputs`（「面接評価の帯: 高／中」）を同じ節に出し、「2軸判定」の節にはその入力の代わりに `#mxBandNote` を出す（同じ data-bind は 1 回だけ）。説明文は「面接評価の帯（高・中・低）の境界もこの節で設定します。」 | settings.js `checklistHtml(o)`・`clItemHtml`（`draftScript()`）・`clFullJudgeChecksHtml` / `checklistFullHtml`（新規）・`matrixHtml(o)`・`scriptTemplate` |
+| F3 | 初期対応者の説明を「応募受付を行った担当者」に（config.default.js・設定の placeholder。保存済みの設定に旧既定の「応募受付・申し送りを行った担当者」がそのまま残っていれば `normalizeProfile` で置き換える。書き換えた説明はそのまま）。設定の「Step3」「Step4」は `stepRef(n)`（台本モード: Step①②③、詳細モード: Step1〜4）で「説明（Step② に表示）」「Step② の説明文」「Step③ に「採用」「不採用」のボタン」に。書き出し／読み込みの注記は「新しい設定項目が既定値で補われます」（両モード共通） | config.default.js、settings.js `stepRef`・`mgmtHtml`・`decisionSettingsHtml`・`ioHtml`、storage.js `normalizeProfile` |
+| F4 | 台本モードの画面名: ナビ `.nav-item[data-view=judge]` は「報告書の作成」（index.html の文字を `#navJudgeLabel` に）、トップバー `#topTitle` は「面接チェックリスト報告」、サイドバー `#stepSectionTitle` は「手順」（本書 2-1 の「報告書の作成」から変更）。詳細モードは従来の「応募者判定」「判定ステップ」。運用モードを切り替えると設定画面のままナビも変わる（`renderBrand` から `renderModeLabels`） | app.js `judgeViewTitle`・`renderModeLabels`（新規）・`renderBrand`・`showView`・`renderStepNav`、index.html |
+| F5 | ③ の右サマリーの「結果」は `state.judgment` が台本モードの判定ならそれを、無いときだけ入力中の内容で評価（`checklistHasInput` で分岐）。保存時の「（総合判断が未入力です）」はチェックリストの回答の有無に関係なく総合判断が空なら出す（保存は止めない） | app.js `scriptSummaryHtml`・`saveRecord` |
+| F6 | 保存 HTML（台本モード）の「採用可否判定」節の見出し: `adjustments` に `must_conditions` があれば from / to に関係なく「必須条件の不一致により「{title}」に固定」、総合判断が未入力なら「（総合判断は未入力）」を添える（総合判断「採用」＋不一致が「総合判断による結果「採用推奨」から「不採用推奨」に調整」と出ていたのを直した） | storage.js `generateReportHTML`（台本の記録） |
+| F7 | 設定ナビの「詳細モードの設定」は畳み `details#s-advanced` を開いてから移動する（既定のアンカー移動はそのまま） | settings.js `onClick` |
+| F8 | e2e E37 を追加（下記） | tests/e2e.js |
+| F9 | README の印刷の節に制限を 1 行（旧形式〔10 項目×5 点〕の記録・判定画面以外の Ctrl+P は画面全体の印刷） | README.md |
+| F10 | e2e の PDF ページ数・本文の確認は共通の `pdfPagesOf` / `pdfTextOf` に寄せ、pdfinfo / pdftotext が無いときは `SKIP …` を出す（-1 / null の許容は残す）。本環境（/usr/bin/pdfinfo・pdftotext あり）では SKIP は出ない | tests/e2e.js |
+
+テスト（追加のみ。既存の期待値は変えていない。E32 の `#stepSectionTitle` だけ F4 の文言「手順」に合わせた）:
+- 単体 #78: 台本モードの「採用可否判定」節の見出し（採用＋不一致・打ち切り〔総合判断未入力〕・不採用＋不一致・`mustFailResult = review`・総合判断の上限は従来どおり「調整」・調整なし）、初期対応者の説明（既定・旧既定の置き換え・書き換えた説明は残す）
+- e2e: 冒頭（詳細モードの画面名）、E32（台本モードの画面名）、E35（台本モードの「面接チェックリスト」節＝詳細モード専用の設定・自動表示・Step3/Step4・2軸判定の文言なし・帯の境界・data-bind の重複なし・押印／書き出しの文言・初期対応者の説明、「詳細モードの設定」リンクで開いて移動、詳細モードの節は従来どおり、詳細モードの画面名）、E37（② から保存 → 記録に判定・保存 HTML の紙の結果タイル・「詳細」の採用可否判定／ヘッダー／ダッシュに結果〔「未実施」なし〕→ ③ を開いても同じ判定 → 読み込むと ② から再開 → beforeprint / afterprint・トップバー 🖨・② の印刷ボタン〔window.print のスタブで body.print-checklist と A4 報告の結果タイルを確認。いずれも判定が無い状態から〕→ 総合判断未入力で保存すると警告・① だけで保存しても警告）
+- 結果: 単体 `node tests/rules.test.js` 84 passed / 0 failed、`node tests/e2e.js` ALL PASSED（491 件）、`script-report.pdf` 2 ページ・`script-report-app.pdf` 2 ページ（pdfinfo）

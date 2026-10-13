@@ -2600,5 +2600,44 @@ test('77 checklistAuto・scriptApplicantRows・checklistSheetHtml（台本モー
   assert.ok(S.checklistSheetHtml(S.buildRecord(decisionState()), P(), { mode: 'sheet' }).indexOf('<span class="cl-tile-k">シフト貢献度</span>') > 0, '詳細の記録は従来どおり');
 });
 
+test('78 台本モードの「採用可否判定」節の見出し（必須条件の不一致は from / to に関係なく固定）・初期対応者の説明', function () {
+  const head = function (html) { const m = html.match(/<div class="adj-head">([\s\S]*?)<\/div>/g); return m ? m.map(function (x) { return x.replace(/<[^>]+>/g, ''); }) : []; };
+  const mk = function (cl, prof) {
+    prof = prof || PS();
+    const s0 = scriptState();
+    const st = scriptState({ profile: prof, checklist: cl, judgment: R.evaluateScript(s0.applicant, cl, prof, OPTS) });
+    return { j: st.judgment, heads: head(S.generateReportHTML(S.buildRecord(st), prof)) };
+  };
+  // 総合判断「採用」＋必須条件の不一致（採用推奨 → 不採用推奨。from と to が違っても「調整」ではなく「固定」）
+  const cl1 = clAll('good', 'hire', null, PS()); cl1.values.must_weekly = 'mismatch';
+  const r1 = mk(cl1);
+  assert.ok(r1.j.adjustments[0].code === 'must_conditions' && r1.j.adjustments[0].from === 'recommend' && r1.j.adjustments[0].to === 'reject', JSON.stringify(plain(r1.j.adjustments)));
+  assert.deepStrictEqual(r1.heads, ['必須条件の不一致により「不採用推奨」に固定']);
+  // 面接の打ち切り（総合判断は未入力。上長最終判断要 → 不採用推奨）
+  const cl2 = R.emptyChecklist(); cl2.values.must_weekly = 'mismatch';
+  const r2 = mk(cl2);
+  assert.ok(r2.j.adjustments[0].from === 'review' && r2.j.adjustments[0].to === 'reject', JSON.stringify(plain(r2.j.adjustments)));
+  assert.deepStrictEqual(r2.heads, ['必須条件の不一致により「不採用推奨」に固定（総合判断は未入力）']);
+  // 総合判断「不採用」＋不一致（from = to = reject）
+  const cl3 = clAll('good', 'reject', null, PS()); cl3.values.must_weekly = 'mismatch';
+  assert.deepStrictEqual(mk(cl3).heads, ['必須条件の不一致により「不採用推奨」に固定']);
+  // mustFailResult = review（採用推奨 → 上長最終判断要）
+  const p4 = PS(); p4.checklist.mustFailResult = 'review';
+  const r4 = mk(cl1, p4);
+  assert.ok(r4.j.result === 'review' && r4.j.adjustments[0].code === 'must_conditions', JSON.stringify(plain(r4.j.adjustments)));
+  assert.deepStrictEqual(r4.heads, ['必須条件の不一致により「上長最終判断要」に固定']);
+  // 必須条件以外の調整（総合判断の上限）は従来どおり「調整」
+  const p5 = PS(); p5.checklist.overallCaps.hold = 'reject';
+  assert.deepStrictEqual(mk(clAll('good', 'hold', null, p5), p5).heads, ['総合判断による結果「上長最終判断要」から「不採用推奨」に調整']);
+  // 調整なしなら見出しなし
+  assert.deepStrictEqual(mk(clAll('good', 'hire', null, PS())).heads, []);
+  // 初期対応者の説明（台本モードに申し送りは無い）。保存済みの旧既定の文言だけ置き換え、書き換えた説明は残す
+  assert.strictEqual(PS().management.fields[0].hint, '応募受付を行った担当者');
+  const pOld = PS(); pOld.management.fields[0].hint = '応募受付・申し送りを行った担当者';
+  assert.strictEqual(S.normalizeProfile(pOld).management.fields[0].hint, '応募受付を行った担当者');
+  const pCus = PS(); pCus.management.fields[0].hint = '電話で応募を受けた担当者';
+  assert.strictEqual(S.normalizeProfile(pCus).management.fields[0].hint, '電話で応募を受けた担当者');
+});
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

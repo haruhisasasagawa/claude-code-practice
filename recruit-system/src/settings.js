@@ -138,6 +138,8 @@
 
   // 運用モード（docs/SPEC-script-mode.md 4 章）。設定画面の並びは保存前でも選んだモード（draft.mode）で決める
   function draftScript() { return !(draft && draft.mode === 'full'); }
+  // 画面のステップの呼び方（台本モード: Step①②③〔内部キー 1/3/4〕、詳細モード: Step1〜4）。設定画面の並びと同じく draft.mode で決める
+  function stepRef(n) { return 'Step' + (draftScript() ? ({ 1: '①', 3: '②', 4: '③' }[n] || n) : n); }
 
   function modeHtml() {
     const cur = draftScript() ? 'script' : 'full';
@@ -209,7 +211,7 @@
         modeHtml() + metaHtml() + applicantHtml() + checklistHtml(o) + textsScriptHtml() + mgmtHtml() + ioHtml() +
         '<details class="settings-advanced" id="s-advanced"' + (advOpen ? ' open' : '') + '><summary>詳細モードの設定（台本モードでは使いません）</summary>' +
           '<p class="hint">詳細モード（4 ステップ）に切り替えたときに使う設定です。台本モードのままでも編集・保存できます。</p>' +
-          featuresHtml(o) + stagesHtml() + optionsHtml(o) + busyHtml() + paramsHtml() + hsHtml() + rulesSectionHtml() + contribHtml() + matrixHtml() + textsHtml(o) +
+          featuresHtml(o) + stagesHtml() + optionsHtml(o) + busyHtml() + paramsHtml() + hsHtml() + rulesSectionHtml() + checklistFullHtml() + contribHtml() + matrixHtml(o) + textsHtml(o) +
         '</details>' +
       '</div>' +
     '</div>' +
@@ -571,6 +573,7 @@
 
   function clItemHtml(b, ip, i, j, k, len) {
     const it = b.items[k];
+    const scr = draftScript();   // 台本モード: 応募情報からの自動表示（auto）の選択肢を出さない（値は保持。詳細モードに戻すと従来どおり）
     const attrs = 'data-sec="' + i + '" data-block="' + j + '" data-index="' + k + '"';
     const label = b.type === 'question'
       ? '<textarea data-bind="' + esc(ip + '.label') + '" rows="2" aria-label="質問文">' + esc(it.label || '') + '</textarea>'
@@ -580,7 +583,7 @@
       extra = inputTag(ip + '.hint', { aria: '補足', placeholder: '補足（任意。例: 「大丈夫です」のみ連呼は要注意）' });
     } else if (b.type === 'explain') {
       extra = checkTag(ip + '.shortOnly', '※短期求人のみ（応募した求人が短期求人のとき強調）');
-    } else if (b.type === 'must') {
+    } else if (b.type === 'must' && !scr) {
       extra = '<div class="inline">' + selectTag(ip + '.auto', CL_MUST_AUTO, { repaint: true, aria: '応募情報からの見込み' }) + '</div>';
       if (it.auto === 'weeklyCondition') {
         extra += '<div class="inline"><span class="suffix">週</span>' + inputTag(ip + '.autoParams.minDays', { type: 'number', min: 1, max: 7, step: 1, aria: '週の日数' }) +
@@ -595,12 +598,12 @@
       const kind = CL_FIELD_AUTO[it.kind] ? it.kind : 'text';
       const autos = [{ value: '', label: '自動表示なし' }].concat(CL_FIELD_AUTO[kind]);
       extra = '<div class="inline">' + selectTag(ip + '.kind', CL_KINDS, { repaint: true, aria: '入力の種類' }) +
-        (autos.length > 1 ? selectTag(ip + '.auto', autos, { repaint: true, aria: '自動表示' }) : '') + '</div>';
+        (autos.length > 1 && !scr ? selectTag(ip + '.auto', autos, { repaint: true, aria: '自動表示' }) : '') + '</div>';
       if (kind === 'choice') {
         const text = (Array.isArray(it.options) ? it.options : []).map(function (o) { return o.value + '|' + (o.label || ''); }).join('\n');
         extra += '<div class="field s-cl-options"><label>選択肢（1行に「値|表示名」）</label><textarea data-bind="' + esc(ip + '.options') + '" data-type="options" rows="2">' + esc(text) + '</textarea></div>';
       }
-      if (it.auto === 'firstEnd') {
+      if (it.auto === 'firstEnd' && !scr) {
         extra += '<div class="inline"><span class="suffix">契約開始日の</span>' + inputTag(ip + '.autoParams.monthsAfter', { type: 'number', min: 0, max: 12, step: 1, aria: '何か月後' }) + '<span class="suffix">か月後の月末</span></div>';
       }
     }
@@ -688,9 +691,20 @@
       { value: 'morningOnly', label: '朝～12時のみ（勤務の終了がすべて ' + (hd.morningOnlyEnd || '12:00') + ' まで）' }
     ];
     const pOpts = Array.isArray(posting.options) ? posting.options : [];
+    // 面接評価の帯（高・中・低）の境界 evaluation.thresholds。台本モードはこの節に描く（詳細モードは「2軸判定」の節。同じ data-bind を 2 回描かない）
+    const th = (draft.evaluation || {}).thresholds || {};
+    const bMax = clMax();
+    const bandHtml = o.scriptLayout
+      ? '<div class="field-row" id="clBandInputs">' +
+          sInput('evaluation.thresholds.recommendPct', '面接評価の帯: 高', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（現在の満点 ' + bMax + '点では ' + Math.ceil(bMax * n(th.recommendPct, 70) / 100) + '点以上）' }) +
+          sInput('evaluation.thresholds.reviewPct', '面接評価の帯: 中', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（' + Math.ceil(bMax * n(th.reviewPct, 40) / 100) + '点以上。未満は 低）' }) +
+        '</div>' +
+        '<div class="hint" style="margin:-6px 0 8px">報告書の「面接評価（確認点）」に出す 高・中・低 の境界です。台本モードの結果（推奨）は総合判断で決まり、この境界では変わりません。</div>'
+      : '';
 
     return section('s-checklist', '面接チェックリスト',
-      '面接台本のチェックリストです。必須条件（一致／不一致）と確認点（○△×）・総合判断で面接評価を計算します。文言・項目の増減・確認点の有無を編集できます。高・中の境界（%）は「2軸判定」で設定します。',
+      '面接台本のチェックリストです。必須条件（一致／不一致）と確認点（○△×）・総合判断で面接評価を計算します。文言・項目の増減・確認点の有無を編集できます。' +
+        (o.scriptLayout ? '面接評価の帯（高・中・低）の境界もこの節で設定します。' : '高・中の境界（%）は「2軸判定」で設定します。'),
       '<div class="s-cl-max" id="clMaxNote">確認点 <b>' + nRating + '</b> 項目＋総合判断 ＝ 満点 <b>' + clMax() + '</b> 点<span class="hint">（○2・△1・×0、総合判断 採用2・保留1・不採用0）</span></div>' +
 
       '<h3 class="sub">判定</h3>' +
@@ -707,26 +721,26 @@
       '<div class="field-row">' +
         sSelect('checklist.mustFailJumpTo', '不一致のとき案内するセクション', [{ value: '', label: '案内しない' }].concat(secs.map(function (s, i) { return { value: s.id, label: clCirc(i + 1) + ' ' + (s.title || '') }; }))) +
       '</div>' +
-      sCheck('evaluation.holdOnUnresolvedBlock', '「要判断」の留意点が未確認のまま採用推奨になった場合、上長最終判断要に留める', '採用担当の判断が済んでいない状態で「採用推奨」が出るのを防ぎます。法令に関わる要判断は、この設定に関係なく常に留めます。') +
-      sCheck('evaluation.holdOnHighschoolException', '高校生の「原則対象外」「例外条件の未充足・未入力」は、確認済みでも採用推奨にしない', '高校生の方針（基本NG）と判定表示を一致させます。OFFにするとチェックで外せます。') +
+      bandHtml +
+      (o.scriptLayout ? '' : clFullJudgeChecksHtml()) +
 
       '<h3 class="sub">総合判断</h3>' +
-      '<div class="field-row">' + sInput('checklist.overallLabel', '見出し') + sInput('checklist.overallHint', '説明（Step3 に表示）') + '</div>' +
+      '<div class="field-row">' + sInput('checklist.overallLabel', '見出し') + sInput('checklist.overallHint', '説明（' + stepRef(3) + ' に表示）') + '</div>' +
       '<div class="field-row cols-3">' +
         sInput('checklist.overallOptions.hire', '「採用」の表示名') + sInput('checklist.overallOptions.hold', '「保留」の表示名') + sInput('checklist.overallOptions.reject', '「不採用」の表示名') +
       '</div>' +
       '<div class="hint" style="margin:-6px 0 8px">点は 採用 2・保留 1・不採用 0 で固定です。</div>' +
 
       '<h3 class="sub">ヘッダー</h3>' +
-      '<div class="field"><label>消極属性（応募情報から自動表示し、Step3 で上書きできます）</label>' +
+      '<div class="field"><label>' + (o.scriptLayout ? '消極属性（' + stepRef(1) + ' でチェックします）' : '消極属性（応募情報から自動表示し、Step3 で上書きできます）') + '</label>' +
         negs.map(function (ng, i) {
-          return '<div class="s-cl-neg">' + inputTag('checklist.header.negatives[' + i + '].label', { aria: '消極属性の名前' }) +
-            selectTag('checklist.header.negatives[' + i + '].auto', negAuto, { aria: '自動判定' }) +
+          return '<div class="s-cl-neg' + (o.scriptLayout ? ' s-cl-neg-plain' : '') + '">' + inputTag('checklist.header.negatives[' + i + '].label', { aria: '消極属性の名前' }) +
+            (o.scriptLayout ? '' : selectTag('checklist.header.negatives[' + i + '].auto', negAuto, { aria: '自動判定' })) +
             '<button type="button" class="btn ghost danger" data-action="cl-neg-del" data-index="' + i + '">削除</button></div>';
         }).join('') +
         '<div class="actions" style="margin-top:6px"><button type="button" class="btn sm" data-action="cl-neg-add">＋ 消極属性を追加</button></div></div>' +
       '<div class="field-row">' +
-        sInput('checklist.header.morningOnlyEnd', '「朝～12時のみ」の判定の終了時刻', { type: 'time', repaint: true }) +
+        (o.scriptLayout ? '' : sInput('checklist.header.morningOnlyEnd', '「朝～12時のみ」の判定の終了時刻', { type: 'time', repaint: true })) +
         sSelect('checklist.header.interviewerField', '担当と連動する押印欄', [{ value: '', label: '連動しない' }].concat(mfields.map(function (f) { return { value: f.id, label: f.label || f.id }; })),
           '担当が空欄のときは、この押印欄の氏名を報告書の担当に使います（自動で押印はしません）。') +
       '</div>' +
@@ -741,7 +755,7 @@
 
       '<h3 class="sub">台本</h3>' +
       '<div class="field-row">' + sInput('checklist.title', 'タイトル') + sInput('checklist.version', '版（例: 2026-10-08）') + '</div>' +
-      sTextarea('checklist.intro', 'Step3 の説明文', { rows: 2 }) +
+      sTextarea('checklist.intro', stepRef(3) + ' の説明文', { rows: 2 }) +
       '<div class="field-row">' + pages.map(function (pg, k) {
         return '<div>' + sInput('checklist.pages[' + k + '].title', (pg.no || k + 1) + '枚目の見出し') + sTextarea('checklist.pages[' + k + '].lead', (pg.no || k + 1) + '枚目の説明', { rows: 2 }) + '</div>';
       }).join('') + '</div>' +
@@ -752,6 +766,15 @@
       '</div>' +
 
       '<h3 class="sub">旧形式</h3>' + legacyEvalHtml());
+  }
+
+  // 詳細モードの採用可否判定（evaluateHiring）だけで使う設定。詳細モードは「面接チェックリスト」の節、台本モードは「詳細モードの設定」の中に描く
+  function clFullJudgeChecksHtml() {
+    return sCheck('evaluation.holdOnUnresolvedBlock', '「要判断」の留意点が未確認のまま採用推奨になった場合、上長最終判断要に留める', '採用担当の判断が済んでいない状態で「採用推奨」が出るのを防ぎます。法令に関わる要判断は、この設定に関係なく常に留めます。') +
+      sCheck('evaluation.holdOnHighschoolException', '高校生の「原則対象外」「例外条件の未充足・未入力」は、確認済みでも採用推奨にしない', '高校生の方針（基本NG）と判定表示を一致させます。OFFにするとチェックで外せます。');
+  }
+  function checklistFullHtml() {
+    return section('s-checklist-full', '採用可否判定の調整（詳細モード）', '詳細モードの採用可否判定だけで使います（台本モードの結果には影響しません）。', clFullJudgeChecksHtml());
   }
 
   function clNewItem(type) {
@@ -925,7 +948,9 @@
       '</details>');
   }
 
-  function matrixHtml() {
+  // o.scriptLayout: 台本モードの並び（面接評価の境界は「面接チェックリスト」の節に描くので出さない）
+  function matrixHtml(o) {
+    o = o || {};
     const ev = draft.evaluation || {};
     const th = ev.thresholds || {};
     const co = draft.contribution || {};
@@ -963,10 +988,10 @@
     return section('s-matrix', '2軸判定（面接評価 × シフト貢献度）', '面接評価とシフト貢献度をそれぞれ 高／中／低 の帯に分け、組み合わせ（マス）ごとに判定を決めます。境界値ちょうどは上の帯に含めます。',
       offNotice(f.contribution !== false, '「シフト貢献度と2軸判定」がOFFのため、面接評価の境界（採用推奨／上長最終判断要）だけが使われます。') +
       '<h3 class="sub">帯の境界</h3>' +
-      '<div class="field-row">' +
+      (o.scriptLayout ? '<div class="hint" id="mxBandNote" style="margin-bottom:8px">面接評価の境界（高 ' + recPct + '%・中 ' + revPct + '%）は「面接チェックリスト」の節で設定します。</div>' : '<div class="field-row">' +
         sInput('evaluation.thresholds.recommendPct', '面接評価: 高（採用推奨の目安）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（現在の満点 ' + max + '点では ' + recPts + '点以上）' }) +
         sInput('evaluation.thresholds.reviewPct', '面接評価: 中（上長最終判断要の目安）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（' + revPts + '点以上。未満は 低）' }) +
-      '</div>' +
+      '</div>') +
       '<div class="field-row">' +
         sInput('contribution.bands.highPct', 'シフト貢献度: 高', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上' }) +
         sInput('contribution.bands.midPct', 'シフト貢献度: 中', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（未満は 低）' }) +
@@ -1026,7 +1051,7 @@
       '<div class="field-row">' +
         '<div>' + fields.map(function (fl, i) {
           return sInput('management.fields[' + i + '].label', '押印欄 ' + (i + 1) + '（' + esc(fl.id) + '）') +
-            sInput('management.fields[' + i + '].hint', '　説明（任意）', { placeholder: '例：応募受付・申し送りを行った担当者' });
+            sInput('management.fields[' + i + '].hint', '　説明（任意）', { placeholder: '例：応募受付を行った担当者' });
         }).join('') + '</div>' +
         '<div><div class="field"><label>ハンコのプレビュー</label><div class="stamp-preview">' + preview + '</div><div class="hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div></div>' +
       '</div>' +
@@ -1045,7 +1070,7 @@
         St.verdict({ label: dc.rejectLabel, date: today, color: dc.rejectColor, size: 96, id: 'stVdReject', sub: dc.sub })
       : '';
     return '<h3 class="sub">最終合否（採用／不採用のスタンプ）</h3>' +
-      sCheck('management.decision.enabled', '最終合否のスタンプを使う', '保存ファイル（HTML）と Step4 に「採用」「不採用」のボタンを出します。アプリの判定（推奨）とは別の、最終確認者の決定として記録します。') +
+      sCheck('management.decision.enabled', '最終合否のスタンプを使う', '保存ファイル（HTML）と ' + stepRef(4) + ' に「採用」「不採用」のボタンを出します。アプリの判定（推奨）とは別の、最終確認者の決定として記録します。') +
       '<div class="field-row">' +
         '<div>' + sInput('management.decision.label', '表示名') +
           sInput('management.decision.hireLabel', '「採用」の表示名', { repaint: true }) +
@@ -1067,7 +1092,7 @@
         '<button type="button" class="btn" data-action="import">⬆ JSONを読み込む</button>' +
         '<button type="button" class="btn danger" data-action="reset">初期設定（新宿既定）に戻す</button>' +
       '</div>' +
-      '<div class="hint" style="margin-top:10px">設定はこのブラウザ（端末）内に保存されます。別の端末で使う場合は JSON を書き出して持ち運んでください。古い形式の JSON を読み込んだ場合は、新しい項目（高校生の扱い・繁忙期・オールナイト・2軸判定）が既定値で補われます。</div>');
+      '<div class="hint" style="margin-top:10px">設定はこのブラウザ（端末）内に保存されます。別の端末で使う場合は JSON を書き出して持ち運んでください。古い形式の JSON を読み込んだ場合は、新しい設定項目が既定値で補われます。</div>');
   }
 
   // ---------- イベント ----------
@@ -1166,6 +1191,13 @@
   }
 
   function onClick(e) {
+    // 設定ナビの「詳細モードの設定」: 畳んだ <details> を開いてから移動する（既定の移動はそのまま）
+    const advLink = e.target.closest('a[href="#s-advanced"]');
+    if (advLink) {
+      const adv = root.querySelector('#s-advanced');
+      if (adv) { adv.open = true; advOpen = true; }
+      return;
+    }
     const b = e.target.closest('[data-action]');
     if (!b) return;
     const act = b.dataset.action;

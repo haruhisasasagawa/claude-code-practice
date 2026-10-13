@@ -1069,6 +1069,7 @@ p.handoff-comment { font-size: 13.5px; }
 .s-cl-add { margin-top: 8px; align-items: center; }
 .s-cl-add select { width: auto; }
 .s-cl-neg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+.s-cl-neg.s-cl-neg-plain { grid-template-columns: minmax(0, 1fr) auto; }   /* 台本モード: 自動判定の選択が無い（名前と削除だけ） */
 .s-cl-legacy-list { margin: 0 0 6px; padding-left: 1.6em; font-size: 13px; }
 @media (max-width: 720px) {
   .s-cl-sec-row, .s-cl-block-head, .s-cl-block[data-block-type="note"] .s-cl-block-head, .s-cl-neg { grid-template-columns: minmax(0, 1fr); }
