@@ -2,7 +2,7 @@
  * 設定画面（劇場プロファイル編集）
  * ----------------------------------------------------------------------
  * data-bind="path.to.value" を持つ入力をプロファイルの下書き（draft）に双方向バインドする。
- * 構造が変わる操作（評価項目・繁忙期の追加・削除・並べ替え）は draft を変更してから再描画する。
+ * 構造が変わる操作（面接チェックリストの項目・繁忙期の追加・削除・並べ替え）は draft を変更してから再描画する。
  * data-repaint を持つ入力は change で再描画する（合計点・境界値の表示更新用）。
  * 「設定を保存」で RecruitStorage.validateProfile を通し、エラーが無ければ app 側の onSave に draft を渡す。
  */
@@ -142,7 +142,7 @@
       '<nav class="settings-nav">' +
         '<a href="#s-meta">劇場情報</a><a href="#s-features">入力項目のON/OFF</a><a href="#s-stages">面接前／面接時</a><a href="#s-options">選択肢</a>' +
         '<a href="#s-busy">繁忙期・オールナイト</a><a href="#s-params">判定パラメータ</a><a href="#s-hs">高校生の扱い</a>' +
-        '<a href="#s-rules">申し送りルール</a><a href="#s-eval">面接評価</a><a href="#s-contrib">シフト貢献度</a>' +
+        '<a href="#s-rules">申し送りルール</a><a href="#s-checklist">面接チェックリスト</a><a href="#s-contrib">シフト貢献度</a>' +
         '<a href="#s-matrix">2軸判定</a><a href="#s-texts">結果文言</a><a href="#s-mgmt">応募者の管理（押印）</a><a href="#s-io">書き出し／読み込み</a>' +
       '</nav>' +
       '<div class="settings-body">' +
@@ -153,7 +153,7 @@
           '<div class="legend"><span class="badge danger">要判断</span>採用担当が面接実施・採用の可否を判断　<span class="badge warn">要確認</span>面接時に確認　<span class="badge info">共有</span>面接者へ共有　<span class="badge danger">法令（OFF不可）</span>労働基準法に関わるため OFF・重要度変更不可（文言は編集可）</div>' +
           '<div class="hint" style="margin-bottom:10px">文言で使える変数: <code>' + esc(VARS_HINT) + '</code></div>' +
           rulesHtml()) +
-        evalHtml() + contribHtml() + matrixHtml() + textsHtml() + mgmtHtml() + ioHtml() +
+        checklistHtml() + contribHtml() + matrixHtml() + textsHtml() + mgmtHtml() + ioHtml() +
       '</div>' +
     '</div>' +
     '<div class="save-bar"><span class="note">変更は「設定を保存」で反映されます。</span>' +
@@ -399,7 +399,7 @@
       '<h3 class="sub">深夜帯・オールナイト</h3>' +
       sCheck('highschoolPolicy.nightRestricted', '18歳以上でも高校在学中は深夜帯・オールナイト不可として扱う', '18歳以上の高3も卒業まで深夜帯・オールナイト不可として扱います（18歳未満は法令により常に不可）。') +
       sTextarea('highschoolPolicy.notice', '入力画面に表示する方針の説明', { rows: 3 }) +
-      '<div class="hint">関連する留意点の文言は「申し送りルール」の「高校生」「法令」で編集できます。採用推奨に留めない設定は「面接評価」にあります。</div>');
+      '<div class="hint">関連する留意点の文言は「申し送りルール」の「高校生」「法令」で編集できます。採用推奨に留めない設定は「面接チェックリスト」の「判定」にあります。</div>');
   }
 
   function rulesHtml() {
@@ -438,31 +438,366 @@
     }).join('');
   }
 
-  function evalHtml() {
-    const items = draft.evaluation.items || [];
-    return section('s-eval', '面接評価項目', '面接後の採用可否判定の中核です。項目を増減すると満点が変わるため、境界は割合（%）で管理します（境界値は「2軸判定」で設定）。',
-      '<h3 class="sub">評価項目（上から順に表示）</h3>' +
-      items.map(function (it, i) {
-        return '<div class="item-row"><span class="idx">' + (i + 1) + '</span>' +
-          '<input type="text" data-bind="evaluation.items[' + i + '].label" value="' + esc(it.label) + '">' +
-          '<div class="row-actions">' +
-            '<button type="button" class="btn ghost" data-action="item-up" data-index="' + i + '" title="上へ"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
-            '<button type="button" class="btn ghost" data-action="item-down" data-index="' + i + '" title="下へ"' + (i === items.length - 1 ? ' disabled' : '') + '>↓</button>' +
-            '<button type="button" class="btn ghost danger" data-action="item-del" data-index="' + i + '" title="削除"' + (items.length <= 1 ? ' disabled' : '') + '>削除</button>' +
-          '</div></div>';
-      }).join('') +
-      '<div class="actions" style="margin-top:8px"><button type="button" class="btn sm" data-action="item-add">＋ 評価項目を追加</button></div>' +
-      '<h3 class="sub">採点・判定</h3>' +
-      '<div class="field-row cols-3">' +
-        sInput('evaluation.scaleMax', '1項目の満点', { type: 'number', min: 2, max: 10, suffix: '点', repaint: true }) +
-        sSelect('evaluation.overallItemId', '「総合判断」として扱う項目', items.map(function (it) { return { value: it.id, label: it.label }; }), '低評価のとき警告を出す項目です。') +
-        sInput('evaluation.overallWarnBelow', '総合判断の警告しきい値', { type: 'number', min: 1, max: 10, suffix: '点未満で警告' }) +
+  // ---------- 面接チェックリスト（面接台本。docs/SPEC-checklist.md 5 章） ----------
+  const CL_TYPE_NAMES = { must: '必須条件', fields: '記入欄', explain: '説明', question: '質問', rating: '確認点（○△×）', notify: '合否連絡', note: '注記' };
+  const CL_NEW_TITLE = { must: '必須条件', fields: '', explain: '説明', question: '質問', rating: '確認点', notify: '合否連絡', note: '' };
+  const CL_MUST_AUTO = [
+    { value: '', label: '自動表示なし' },
+    { value: 'weeklyCondition', label: '週の日数・時間・土日（応募情報から見込み）' },
+    { value: 'busyAll', label: '繁忙期すべて可（応募情報から見込み）' }
+  ];
+  const CL_FIELD_AUTO = {   // 記入欄の自動表示（入力の種類ごとに選べるもの）
+    text: [{ value: 'busyNg', label: '出勤不可な繁忙期（繁忙期が × の期間）' }, { value: 'openLate', label: 'OPEN／深夜帯の可否（希望シフト・深夜帯）' }],
+    choice: [{ value: 'weekend', label: '土日勤務可否（値 one / both）' }, { value: 'term', label: '短期／長期の希望（値 short / long。勤務期間から）' }],
+    month: [{ value: 'firstEnd', label: '初回契約終了（契約開始日から月末締め）' }],
+    date: []
+  };
+  const CL_KINDS = [{ value: 'text', label: '文字' }, { value: 'date', label: '日付' }, { value: 'month', label: '年月' }, { value: 'choice', label: '選択式' }];
+  let clOpen = {};   // 台本のセクション（<details>）の開閉。再描画で閉じないように覚える
+
+  function clR() { return R(); }
+  function clCirc(n) { const f = clR().circled; return f ? f(n) : '(' + n + ')'; }
+  function clDraft() {
+    if (!U.isObj(draft.checklist) || !Array.isArray(draft.checklist.sections)) {
+      draft.checklist = U.deepClone(global.RECRUIT_DEFAULT_PROFILE.checklist);
+    }
+    return draft.checklist;
+  }
+  // 満点（確認点 n＋総合判断）= 2(n+1)。設定画面の 2 軸判定の境界の表示にも使う
+  function clMax() {
+    const Rr = clR();
+    if (Rr.interviewModel && Rr.emptyChecklist) return Rr.interviewModel(draft, {}, Rr.emptyChecklist()).max;
+    const ev = draft.evaluation || {};
+    return (ev.items || []).length * n(ev.scaleMax, 5);
+  }
+  function clRatingCount() {
+    const Rr = clR();
+    return Rr.checklistItems ? Rr.checklistItems(clDraft(), 'rating').length : 0;
+  }
+  function rowBtns(prefix, attrs, idx, len, opts) {
+    opts = opts || {};
+    return '<div class="row-actions">' +
+      '<button type="button" class="btn ghost" data-action="' + prefix + '-up" ' + attrs + ' title="上へ"' + (idx === 0 ? ' disabled' : '') + '>↑</button>' +
+      '<button type="button" class="btn ghost" data-action="' + prefix + '-down" ' + attrs + ' title="下へ"' + (idx === len - 1 ? ' disabled' : '') + '>↓</button>' +
+      '<button type="button" class="btn ghost danger" data-action="' + prefix + '-del" ' + attrs + ' title="削除"' + (opts.noDelete ? ' disabled' : '') + '>削除</button>' +
+    '</div>';
+  }
+  function checkTag(path, label, opts) {
+    opts = opts || {};
+    return '<label class="s-cl-check"><input type="checkbox" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + (opts.repaint ? ' data-repaint' : '') + '><span>' + esc(label) + '</span></label>';
+  }
+
+  function clItemHtml(b, ip, i, j, k, len) {
+    const it = b.items[k];
+    const attrs = 'data-sec="' + i + '" data-block="' + j + '" data-index="' + k + '"';
+    const label = b.type === 'question'
+      ? '<textarea data-bind="' + esc(ip + '.label') + '" rows="2" aria-label="質問文">' + esc(it.label || '') + '</textarea>'
+      : inputTag(ip + '.label', { aria: b.type === 'fields' ? '欄の名前' : '文言' });
+    let extra = '';
+    if (b.type === 'rating') {
+      extra = inputTag(ip + '.hint', { aria: '補足', placeholder: '補足（任意。例: 「大丈夫です」のみ連呼は要注意）' });
+    } else if (b.type === 'explain') {
+      extra = checkTag(ip + '.shortOnly', '※短期求人のみ（応募した求人が短期求人のとき強調）');
+    } else if (b.type === 'must') {
+      extra = '<div class="inline">' + selectTag(ip + '.auto', CL_MUST_AUTO, { repaint: true, aria: '応募情報からの見込み' }) + '</div>';
+      if (it.auto === 'weeklyCondition') {
+        extra += '<div class="inline"><span class="suffix">週</span>' + inputTag(ip + '.autoParams.minDays', { type: 'number', min: 1, max: 7, step: 1, aria: '週の日数' }) +
+          '<span class="suffix">日以上・1回</span>' + inputTag(ip + '.autoParams.minHours', { type: 'number', min: 1, max: 12, step: 0.5, aria: '1回の時間' }) + '<span class="suffix">時間以上</span></div>';
+      } else if (it.auto === 'busyAll') {
+        const ps = (U.isObj(it.autoParams) && Array.isArray(it.autoParams.periods)) ? it.autoParams.periods : [];
+        extra += '<div class="s-cl-periods">' + (draft.options.vacationItems || []).map(function (v) {
+          return '<label class="s-cl-check"><input type="checkbox" data-action="cl-period" ' + attrs + ' data-period="' + esc(v.id) + '"' + (ps.indexOf(v.id) >= 0 ? ' checked' : '') + '><span>' + esc(v.label || v.id) + '</span></label>';
+        }).join('') + '</div>';
+      }
+    } else if (b.type === 'fields') {
+      const kind = CL_FIELD_AUTO[it.kind] ? it.kind : 'text';
+      const autos = [{ value: '', label: '自動表示なし' }].concat(CL_FIELD_AUTO[kind]);
+      extra = '<div class="inline">' + selectTag(ip + '.kind', CL_KINDS, { repaint: true, aria: '入力の種類' }) +
+        (autos.length > 1 ? selectTag(ip + '.auto', autos, { repaint: true, aria: '自動表示' }) : '') + '</div>';
+      if (kind === 'choice') {
+        const text = (Array.isArray(it.options) ? it.options : []).map(function (o) { return o.value + '|' + (o.label || ''); }).join('\n');
+        extra += '<div class="field s-cl-options"><label>選択肢（1行に「値|表示名」）</label><textarea data-bind="' + esc(ip + '.options') + '" data-type="options" rows="2">' + esc(text) + '</textarea></div>';
+      }
+      if (it.auto === 'firstEnd') {
+        extra += '<div class="inline"><span class="suffix">契約開始日の</span>' + inputTag(ip + '.autoParams.monthsAfter', { type: 'number', min: 0, max: 12, step: 1, aria: '何か月後' }) + '<span class="suffix">か月後の月末</span></div>';
+      }
+    }
+    return '<div class="s-cl-item" data-item-id="' + esc(it.id) + '"><span class="idx">' + (k + 1) + '</span>' +
+      '<div class="s-cl-item-main">' + label + (extra ? '<div class="s-cl-item-extra">' + extra + '</div>' : '') + '</div>' +
+      rowBtns('cl-item', attrs, k, len) + '</div>';
+  }
+
+  function clBlockHtml(b, bp, i, j, len) {
+    const attrs = 'data-sec="' + i + '" data-block="' + j + '"';
+    const items = Array.isArray(b.items) ? b.items : (b.items = []);
+    const memoable = b.type === 'question' || b.type === 'explain';
+    return '<div class="s-cl-block" data-block-type="' + esc(b.type) + '">' +
+      '<div class="s-cl-block-head"><span class="badge info">' + esc(CL_TYPE_NAMES[b.type] || b.type) + '</span>' +
+        (b.type === 'note' ? '' : inputTag(bp + '.title', { aria: '見出し', placeholder: '見出し（【】は自動で付きます）' })) +
+        inputTag(bp + '.note', { aria: b.type === 'note' ? '注記の本文' : '注記', placeholder: b.type === 'note' ? '注記の本文（例: 条件一致：2へ）' : '注記（任意）' }) +
+        rowBtns('cl-block', attrs, j, len) +
+      '</div>' +
+      (memoable ? '<div class="s-cl-memo">' + checkTag(bp + '.memo', 'メモ欄を出す', { repaint: true }) +
+        (b.memo ? inputTag(bp + '.memoLabel', { aria: 'メモ欄の名前', placeholder: 'メモ' }) : '') + '</div>' : '') +
+      (b.type === 'note' ? '' : items.map(function (it, k) { return clItemHtml(b, bp + '.items[' + k + ']', i, j, k, items.length); }).join('') +
+        '<div class="actions s-cl-item-add"><button type="button" class="btn sm ghost" data-action="cl-item-add" ' + attrs + '>＋ 項目を追加</button></div>') +
+    '</div>';
+  }
+
+  function clSectionHtml(sec, i, len, pageOpts) {
+    const sp = 'checklist.sections[' + i + ']';
+    const blocks = Array.isArray(sec.blocks) ? sec.blocks : (sec.blocks = []);
+    const counts = {};
+    blocks.forEach(function (b) { counts[b.type] = (counts[b.type] || 0) + (Array.isArray(b.items) ? b.items.length : 0); });
+    const sumText = ['must', 'rating'].filter(function (t) { return counts[t]; }).map(function (t) { return (t === 'must' ? '必須条件 ' : '確認点 ') + counts[t]; }).join('・');
+    const open = Object.prototype.hasOwnProperty.call(clOpen, sec.id) ? clOpen[sec.id] : i === 0;
+    return '<details class="s-details s-cl-sec" data-sec-id="' + esc(sec.id) + '"' + (open ? ' open' : '') + '>' +
+      '<summary><span class="s-cl-no">' + clCirc(i + 1) + '</span> ' + esc(sec.title || '（名前なし）') +
+        (sec.minutes ? ' <span class="hint">' + (sec.minutesMax ? '最大' : '') + sec.minutes + '分</span>' : '') +
+        (sumText ? ' <span class="hint">' + esc(sumText) + '</span>' : '') + '</summary>' +
+      '<div class="s-cl-sec-row">' +
+        '<div class="field"><label>セクション名</label>' + inputTag(sp + '.title', { aria: 'セクション名' }) + '</div>' +
+        '<div class="field"><label>目安時間</label><div class="inline">' + inputTag(sp + '.minutes', { type: 'number', min: 0, max: 60, step: 1, aria: '目安時間' }) + '<span class="suffix">分</span>' +
+          checkTag(sp + '.minutesMax', '最大') + '</div></div>' +
+        '<div class="field"><label>ページ（印刷）</label>' + selectTag(sp + '.page', pageOpts, { repaint: true, aria: 'ページ' }) + '</div>' +
+        '<div class="field"><label>並び・削除</label>' + rowBtns('cl-sec', 'data-sec="' + i + '"', i, len, { noDelete: len <= 1 }) + '</div>' +
+      '</div>' +
+      sTextarea(sp + '.lead', 'セクションの説明（任意）', { rows: 1 }) +
+      blocks.map(function (b, j) { return clBlockHtml(b, sp + '.blocks[' + j + ']', i, j, blocks.length); }).join('') +
+      '<div class="actions s-cl-add"><select data-cl-newtype aria-label="追加するブロックの種類">' +
+        Object.keys(CL_TYPE_NAMES).map(function (t) { return '<option value="' + t + '"' + (t === 'rating' ? ' selected' : '') + '>' + esc(CL_TYPE_NAMES[t]) + '</option>'; }).join('') +
+        '</select><button type="button" class="btn sm" data-action="cl-block-add" data-sec="' + i + '">＋ ブロックを追加</button></div>' +
+    '</details>';
+  }
+
+  function legacyEvalHtml() {
+    const ev = draft.evaluation || {};
+    const items = ev.items || [];
+    const ov = items.find(function (it) { return it.id === ev.overallItemId; });
+    return '<details class="s-details s-cl-legacy"><summary>旧形式の面接評価（' + items.length + '項目×' + n(ev.scaleMax, 5) + '点）— 2026-10 以前の保存データの表示・再判定にだけ使います</summary>' +
+      '<ol class="s-cl-legacy-list">' + items.map(function (it) { return '<li>' + esc(it.label) + '</li>'; }).join('') + '</ol>' +
+      '<div class="hint">1項目の満点 ' + n(ev.scaleMax, 5) + '点／総合判断の項目: ' + esc(ov ? ov.label : '—') + '（' + n(ev.overallWarnBelow, 3) + '点未満で警告' +
+        (n(ev.overallRejectAtOrBelow, 0) > 0 ? '・' + n(ev.overallRejectAtOrBelow, 0) + '点以下で不採用推奨' : '') + '）。読み取り専用です（新しい面接は上の面接チェックリストで評価します）。</div>' +
+    '</details>';
+  }
+
+  function checklistHtml() {
+    const cl = clDraft();
+    const secs = cl.sections;
+    const pages = Array.isArray(cl.pages) ? cl.pages : (cl.pages = []);
+    const oo = U.isObj(cl.overallOptions) ? cl.overallOptions : (cl.overallOptions = {});
+    const hd = U.isObj(cl.header) ? cl.header : (cl.header = {});
+    const negs = Array.isArray(hd.negatives) ? hd.negatives : (hd.negatives = []);
+    const posting = U.isObj(hd.posting) ? hd.posting : (hd.posting = { label: '', options: [] });
+    const nRating = clRatingCount();
+    const capOpts = [{ value: 'none', label: '調整しない' }, { value: 'review', label: resultTitle('review') + 'まで' }, { value: 'reject', label: resultTitle('reject') }];
+    const maxPage = Math.max(pages.length, secs.reduce(function (m, s) { return Math.max(m, n(s.page, 1)); }, 1), 1);
+    const pageOpts = [];
+    for (let k = 1; k <= maxPage; k++) {
+      const pg = pages.find(function (x) { return U.isObj(x) && Number(x.no) === k; });
+      pageOpts.push({ value: k, label: k + '枚目' + (pg && pg.title ? '（' + pg.title + '）' : '') });
+    }
+    const mfields = ((draft.management || {}).fields || []).filter(function (f) { return f && f.id; });
+    const negAuto = [
+      { value: '', label: '自動判定なし' },
+      { value: 'shortTerm', label: '短期希望（勤務期間・短期／長期の希望が短期）' },
+      { value: 'morningOnly', label: '朝～12時のみ（勤務の終了がすべて ' + (hd.morningOnlyEnd || '12:00') + ' まで）' }
+    ];
+    const pOpts = Array.isArray(posting.options) ? posting.options : [];
+
+    return section('s-checklist', '面接チェックリスト',
+      '面接台本のチェックリストです。必須条件（一致／不一致）と確認点（○△×）・総合判断で面接評価を計算します。文言・項目の増減・確認点の有無を編集できます。高・中の境界（%）は「2軸判定」で設定します。',
+      '<div class="s-cl-max" id="clMaxNote">確認点 <b>' + nRating + '</b> 項目＋総合判断 ＝ 満点 <b>' + clMax() + '</b> 点<span class="hint">（○2・△1・×0、総合判断 採用2・保留1・不採用0）</span></div>' +
+
+      '<h3 class="sub">判定</h3>' +
+      '<div class="field-row">' +
+        sSelect('checklist.mustFailResult', '必須条件に不一致があるとき', [{ value: 'reject', label: resultTitle('reject') }, { value: 'review', label: resultTitle('review') }],
+          '台本どおりなら「' + resultTitle('reject') + '」。不一致のときは確認点・総合判断が未入力でも判定に進めます（' + resultTitle('review') + 'のときは入力が必要）。') +
+        sSelect('checklist.mustUnknownResult', '必須条件に未確認が残るとき', [{ value: 'none', label: '警告のみ（判定は変えない）' }, { value: 'review', label: '採用推奨に留めない（' + resultTitle('review') + 'まで）' }]) +
       '</div>' +
       '<div class="field-row">' +
-        sInput('evaluation.overallRejectAtOrBelow', '総合判断の足切り', { type: 'number', min: 0, max: 10, suffix: '点以下で不採用推奨', hint: '0 = 使わない。' }) +
+        sSelect('checklist.overallCaps.hold', '総合判断「' + (oo.hold || '保留') + '」のとき', capOpts) +
+        sSelect('checklist.overallCaps.reject', '総合判断「' + (oo.reject || '不採用') + '」のとき', capOpts) +
+      '</div>' +
+      '<div class="field-row">' +
+        sSelect('checklist.mustFailJumpTo', '不一致のとき案内するセクション', [{ value: '', label: '案内しない' }].concat(secs.map(function (s, i) { return { value: s.id, label: clCirc(i + 1) + ' ' + (s.title || '') }; }))) +
       '</div>' +
       sCheck('evaluation.holdOnUnresolvedBlock', '「要判断」の留意点が未確認のまま採用推奨になった場合、上長最終判断要に留める', '採用担当の判断が済んでいない状態で「採用推奨」が出るのを防ぎます。法令に関わる要判断は、この設定に関係なく常に留めます。') +
-      sCheck('evaluation.holdOnHighschoolException', '高校生の「原則対象外」「例外条件の未充足・未入力」は、確認済みでも採用推奨にしない', '高校生の方針（基本NG）と判定表示を一致させます。OFFにするとチェックで外せます。'));
+      sCheck('evaluation.holdOnHighschoolException', '高校生の「原則対象外」「例外条件の未充足・未入力」は、確認済みでも採用推奨にしない', '高校生の方針（基本NG）と判定表示を一致させます。OFFにするとチェックで外せます。') +
+
+      '<h3 class="sub">総合判断</h3>' +
+      '<div class="field-row">' + sInput('checklist.overallLabel', '見出し') + sInput('checklist.overallHint', '説明（Step3 に表示）') + '</div>' +
+      '<div class="field-row cols-3">' +
+        sInput('checklist.overallOptions.hire', '「採用」の表示名') + sInput('checklist.overallOptions.hold', '「保留」の表示名') + sInput('checklist.overallOptions.reject', '「不採用」の表示名') +
+      '</div>' +
+      '<div class="hint" style="margin:-6px 0 8px">点は 採用 2・保留 1・不採用 0 で固定です。</div>' +
+
+      '<h3 class="sub">ヘッダー</h3>' +
+      '<div class="field"><label>消極属性（応募情報から自動表示し、Step3 で上書きできます）</label>' +
+        negs.map(function (ng, i) {
+          return '<div class="s-cl-neg">' + inputTag('checklist.header.negatives[' + i + '].label', { aria: '消極属性の名前' }) +
+            selectTag('checklist.header.negatives[' + i + '].auto', negAuto, { aria: '自動判定' }) +
+            '<button type="button" class="btn ghost danger" data-action="cl-neg-del" data-index="' + i + '">削除</button></div>';
+        }).join('') +
+        '<div class="actions" style="margin-top:6px"><button type="button" class="btn sm" data-action="cl-neg-add">＋ 消極属性を追加</button></div></div>' +
+      '<div class="field-row">' +
+        sInput('checklist.header.morningOnlyEnd', '「朝～12時のみ」の判定の終了時刻', { type: 'time', repaint: true }) +
+        sSelect('checklist.header.interviewerField', '担当と連動する押印欄', [{ value: '', label: '連動しない' }].concat(mfields.map(function (f) { return { value: f.id, label: f.label || f.id }; })),
+          '担当が空欄のときは、この押印欄の氏名を報告書の担当に使います（自動で押印はしません）。') +
+      '</div>' +
+      '<div class="field-row">' + sInput('checklist.header.posting.label', '「応募した求人」の見出し') +
+        '<div class="field"><label>選択肢の表示名</label><div class="inline">' + pOpts.map(function (o, m) {
+          return inputTag('checklist.header.posting.options[' + m + '].label', { aria: '表示名（値: ' + o.value + '）' });
+        }).join('') + '</div><div class="hint">値 short（短期求人）のとき「※短期求人のみ」の説明を強調します。</div></div>' +
+      '</div>' +
+
+      '<h3 class="sub">印刷</h3>' +
+      sCheck('checklist.print.showQuestions', 'A4 報告・保存レポートに質問文も載せる', 'OFF にするとメモだけになり、報告書が短くなります。') +
+
+      '<h3 class="sub">台本</h3>' +
+      '<div class="field-row">' + sInput('checklist.title', 'タイトル') + sInput('checklist.version', '版（例: 2026-10-08）') + '</div>' +
+      sTextarea('checklist.intro', 'Step3 の説明文', { rows: 2 }) +
+      '<div class="field-row">' + pages.map(function (pg, k) {
+        return '<div>' + sInput('checklist.pages[' + k + '].title', (pg.no || k + 1) + '枚目の見出し') + sTextarea('checklist.pages[' + k + '].lead', (pg.no || k + 1) + '枚目の説明', { rows: 2 }) + '</div>';
+      }).join('') + '</div>' +
+      '<div class="s-cl-secs">' + secs.map(function (sec, i) { return clSectionHtml(sec, i, secs.length, pageOpts); }).join('') + '</div>' +
+      '<div class="actions" style="margin-top:10px">' +
+        '<button type="button" class="btn sm" data-action="cl-sec-add">＋ セクションを追加</button>' +
+        '<button type="button" class="btn sm ghost" data-action="cl-default">既定の台本（2026-10-08 版）に戻す</button>' +
+      '</div>' +
+
+      '<h3 class="sub">旧形式</h3>' + legacyEvalHtml());
+  }
+
+  function clNewItem(type) {
+    if (type === 'fields') return { id: U.uid('cl'), label: '新しい欄', kind: 'text' };
+    return { id: U.uid('cl'), label: type === 'rating' ? '新しい確認点' : '新しい項目' };
+  }
+  function clNewBlock(type) {
+    return {
+      id: U.uid('blk'), type: type, title: CL_NEW_TITLE[type] || '', note: type === 'note' ? '新しい注記' : '',
+      memo: type === 'question', memoLabel: type === 'question' ? 'メモ' : '',
+      items: type === 'note' ? [] : [clNewItem(type)]
+    };
+  }
+  function clDelConfirm(what) {
+    return window.confirm('この' + what + 'を削除します。保存済みの応募者データのこの回答は表示・判定に使われなくなります（データは残ります）。よろしいですか？');
+  }
+
+  // 台本の構造の変更（追加・削除・並べ替え）。処理したら true
+  function clOnClick(act, b, y) {
+    if (act.indexOf('cl-') !== 0) return false;
+    const cl = clDraft();
+    const secs = cl.sections;
+    const si = Number(b.dataset.sec), bi = Number(b.dataset.block), ki = Number(b.dataset.index);
+    const sec = secs[si];
+    const blocks = sec && Array.isArray(sec.blocks) ? sec.blocks : null;
+    const blk = blocks ? blocks[bi] : null;
+    const items = blk && Array.isArray(blk.items) ? blk.items : null;
+    switch (act) {
+      case 'cl-sec-add': {
+        const lastPage = secs.reduce(function (m, s) { return Math.max(m, n(s.page, 1)); }, 1);
+        const id = U.uid('sec');
+        secs.push({ id: id, title: '新しいセクション', minutes: 0, minutesMax: false, page: lastPage, lead: '', blocks: [clNewBlock('rating')] });
+        clOpen[id] = true;
+        break;
+      }
+      case 'cl-sec-del':
+        if (!sec || secs.length <= 1 || !clDelConfirm('セクション')) return true;
+        if (cl.mustFailJumpTo === sec.id) cl.mustFailJumpTo = '';
+        secs.splice(si, 1);
+        break;
+      case 'cl-sec-up': if (!swap(secs, si - 1, si)) return true; break;
+      case 'cl-sec-down': if (!swap(secs, si, si + 1)) return true; break;
+      case 'cl-block-add': {
+        if (!sec) return true;
+        const box = b.closest('.s-cl-add');
+        const sel = box && box.querySelector('select[data-cl-newtype]');
+        const type = sel && CL_TYPE_NAMES[sel.value] ? sel.value : 'rating';
+        if (!Array.isArray(sec.blocks)) sec.blocks = [];
+        sec.blocks.push(clNewBlock(type));
+        clOpen[sec.id] = true;
+        break;
+      }
+      case 'cl-block-del':
+        if (!blk || !clDelConfirm('ブロック')) return true;
+        blocks.splice(bi, 1);
+        break;
+      case 'cl-block-up': if (!blocks || !swap(blocks, bi - 1, bi)) return true; break;
+      case 'cl-block-down': if (!blocks || !swap(blocks, bi, bi + 1)) return true; break;
+      case 'cl-item-add':
+        if (!blk) return true;
+        if (!Array.isArray(blk.items)) blk.items = [];
+        blk.items.push(clNewItem(blk.type));
+        break;
+      case 'cl-item-del':
+        if (!items || !items[ki] || !clDelConfirm('項目')) return true;
+        items.splice(ki, 1);
+        break;
+      case 'cl-item-up': if (!items || !swap(items, ki - 1, ki)) return true; break;
+      case 'cl-item-down': if (!items || !swap(items, ki, ki + 1)) return true; break;
+      case 'cl-period': {
+        // チェックボックスの見た目はそのまま（再描画しない）
+        const it = items && items[ki];
+        if (!it) return true;
+        if (!U.isObj(it.autoParams)) it.autoParams = {};
+        const ps = Array.isArray(it.autoParams.periods) ? it.autoParams.periods.slice() : [];
+        const pid = b.dataset.period;
+        const at = ps.indexOf(pid);
+        if (b.checked && at < 0) ps.push(pid);
+        if (!b.checked && at >= 0) ps.splice(at, 1);
+        // 繁忙期の並び順に揃える
+        const order = (draft.options.vacationItems || []).map(function (v) { return v.id; });
+        it.autoParams.periods = ps.sort(function (x, z) { return order.indexOf(x) - order.indexOf(z); });
+        return true;
+      }
+      case 'cl-neg-add':
+        if (!U.isObj(cl.header)) cl.header = {};
+        if (!Array.isArray(cl.header.negatives)) cl.header.negatives = [];
+        cl.header.negatives.push({ id: U.uid('neg'), label: '新しい消極属性', auto: '' });
+        break;
+      case 'cl-neg-del': {
+        const ng = ((cl.header || {}).negatives || []);
+        const i2 = Number(b.dataset.index);
+        if (!ng[i2] || !window.confirm('消極属性「' + (ng[i2].label || ng[i2].id) + '」を削除します。よろしいですか？')) return true;
+        ng.splice(i2, 1);
+        break;
+      }
+      case 'cl-default':
+        if (!window.confirm('面接チェックリストを既定の台本（2026-10-08 版）に戻します。編集した文言・項目は失われます。保存済みの応募者ファイルのレポートは保存時点の台本で表示されます。よろしいですか？')) return true;
+        draft.checklist = U.deepClone(global.RECRUIT_DEFAULT_PROFILE.checklist);
+        clOpen = {};
+        break;
+      default:
+        return false;
+    }
+    paint(y);
+    return true;
+  }
+
+  // 自動表示・入力の種類を変えたときの既定値（自動表示の設定値・選択肢）
+  function clOnBindChange(path, value) {
+    const m = /^checklist\.sections\[(\d+)\]\.blocks\[(\d+)\]\.items\[(\d+)\]\.(auto|kind)$/.exec(path);
+    if (!m) return;
+    const sec = clDraft().sections[Number(m[1])];
+    const blk = sec && sec.blocks && sec.blocks[Number(m[2])];
+    const it = blk && blk.items && blk.items[Number(m[3])];
+    if (!it) return;
+    if (m[4] === 'auto') {
+      if (!value) { delete it.auto; delete it.autoParams; return; }
+      const ap = U.isObj(it.autoParams) ? it.autoParams : {};
+      if (value === 'weeklyCondition') it.autoParams = { minDays: n(ap.minDays, 3), minHours: n(ap.minHours, 5) };
+      else if (value === 'busyAll') it.autoParams = { periods: Array.isArray(ap.periods) ? ap.periods : (draft.options.vacationItems || []).map(function (v) { return v.id; }) };
+      else if (value === 'firstEnd') it.autoParams = { monthsAfter: n(ap.monthsAfter, 1) };
+      else delete it.autoParams;
+      if (value === 'weekend' && !(it.options || []).length) it.options = [{ value: 'one', label: 'いずれか' }, { value: 'both', label: '両日' }];
+      if (value === 'term' && !(it.options || []).length) it.options = [{ value: 'short', label: '短期希望' }, { value: 'long', label: '長期希望' }];
+    } else {
+      // 入力の種類に合わない自動表示は外す。選択式にしたら選択肢の見本を入れる
+      const ok = (CL_FIELD_AUTO[value] || []).some(function (o) { return o.value === it.auto; });
+      if (!ok) { delete it.auto; delete it.autoParams; }
+      if (value === 'choice' && !(Array.isArray(it.options) && it.options.length >= 2)) it.options = [{ value: 'a', label: '選択肢1' }, { value: 'b', label: '選択肢2' }];
+    }
   }
 
   function contribHtml() {
@@ -510,7 +845,7 @@
     const th = ev.thresholds || {};
     const co = draft.contribution || {};
     const bands = co.bands || {};
-    const max = (ev.items || []).length * n(ev.scaleMax, 5);
+    const max = clMax();   // 面接チェックリストの満点（確認点＋総合判断）× 2
     const recPct = n(th.recommendPct, 70), revPct = n(th.reviewPct, 40);
     const hi = n(bands.highPct, 60), mid = n(bands.midPct, 35);
     const recPts = Math.ceil(max * recPct / 100);
@@ -571,6 +906,7 @@
       sInput('texts.matrix.review', '上長最終判断要（2軸）') +
       sInput('texts.matrix.reject', '不採用推奨（2軸）') +
       sInput('texts.adjusted', '調整で結果が下がったときの本文', { hint: '変数: {name} {scoreSummary} {baseTitle} {resultTitle}。このときマスの注記は表示しません。' }) +
+      sInput('texts.mustGate', '必須条件の不一致で不採用推奨に固定したときの本文', { hint: '変数: {name} {mustLabels} {scoreSummary} {resultTitle}。このときマスの注記は表示しません。' }) +
       '<div class="field-row cols-3">' +
         sInput('texts.bandLabels.high', '帯の表示: 高') + sInput('texts.bandLabels.mid', '帯の表示: 中') + sInput('texts.bandLabels.low', '帯の表示: 低') +
       '</div>' +
@@ -636,6 +972,13 @@
         return m;
       }).filter(function (m) { return m.name; });
     }
+    if (dt === 'options') {
+      // 面接チェックリストの選択肢: 1 行に「値|表示名」（全角の「｜」も可。表示名を省略すると値）
+      return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
+        const parts = line.split(/[|｜]/).map(function (x) { return x.trim(); });
+        return { value: parts[0], label: parts[1] || parts[0] };
+      }).filter(function (o) { return o.value; });
+    }
     if (dt === 'categories') {
       return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {
         const parts = line.split('|');
@@ -648,7 +991,9 @@
   function onEdit(e) {
     const t = e.target.closest('[data-bind]');
     if (!t) return;
-    U.setPath(draft, t.dataset.bind, coerce(t));
+    const v = coerce(t);
+    U.setPath(draft, t.dataset.bind, v);
+    clOnBindChange(t.dataset.bind, v);
     const row = t.closest('.rule-row, .s-contrib-row');
     if (row && t.type === 'checkbox') row.classList.toggle('off', !t.checked);
     if (e.type === 'change' && t.hasAttribute('data-repaint')) requestRepaint();
@@ -711,9 +1056,9 @@
     if (!b) return;
     const act = b.dataset.action;
     const i = Number(b.dataset.index);
-    const items = draft.evaluation.items;
     const busy = draft.options.vacationItems = draft.options.vacationItems || [];
     const y = window.scrollY;
+    if (clOnClick(act, b, y)) return;
 
     switch (act) {
       case 'save':
@@ -733,22 +1078,6 @@
         break;
       case 'reset':
         if (window.confirm('すべての設定を初期状態（新宿の既定値）に戻します。よろしいですか？')) { issues = null; handlers.onReset(); }
-        break;
-      case 'item-add':
-        items.push({ id: U.uid('item'), label: '新しい評価項目' });
-        paint(y);
-        break;
-      case 'item-del':
-        if (items.length <= 1) return;
-        if (draft.evaluation.overallItemId === items[i].id) draft.evaluation.overallItemId = items[items.length - 1 === i ? 0 : items.length - 1].id;
-        items.splice(i, 1);
-        paint(y);
-        break;
-      case 'item-up':
-        if (swap(items, i - 1, i)) paint(y);
-        break;
-      case 'item-down':
-        if (swap(items, i, i + 1)) paint(y);
         break;
       case 'busy-add':
         busy.push({ id: U.uid('busy'), label: '新しい期間', periodNote: '', unit: 'total', maxDays: 7, refDays: 3, weight: 1, critical: false });
@@ -789,6 +1118,8 @@
 
   function paint(scrollY) {
     repaintPending = false;
+    // 面接チェックリストのセクション（<details>）の開閉を覚えておく
+    if (root) Array.prototype.forEach.call(root.querySelectorAll('details.s-cl-sec[data-sec-id]'), function (d) { clOpen[d.getAttribute('data-sec-id')] = d.open; });
     root.innerHTML = template();
     root.oninput = onEdit;
     root.onchange = onEdit;
@@ -801,6 +1132,7 @@
     handlers = h;
     draft = U.deepClone(profile);
     issues = null;
+    clOpen = {};
     bindPointer();
     paint();
   }

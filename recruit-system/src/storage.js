@@ -213,6 +213,239 @@
     merged.stageOptions = {};
     Object.keys(base.stageOptions).forEach(function (k) { merged.stageOptions[k] = typeof so[k] === 'boolean' ? so[k] : base.stageOptions[k]; });
   }
+  // ---------- 面接チェックリスト（docs/SPEC-checklist.md 6-1） ----------
+  const CL_ID_RE = /^[A-Za-z][\w-]{0,40}$/;
+  const CL_AUTO_PARAM_RULES = {   // autoParams の検査（不正値は既定の項目なら既定値、そうでなければ削除）
+    minDays: function (v) { return isNum(v) && Number(v) % 1 === 0 && Number(v) >= 1 && Number(v) <= 7; },
+    minHours: function (v) { return isNum(v) && Number(v) >= 1 && Number(v) <= 12; },
+    monthsAfter: function (v) { return isNum(v) && Number(v) % 1 === 0 && Number(v) >= 0 && Number(v) <= 12; },
+    periods: function (v) { return Array.isArray(v) && v.every(function (x) { return typeof x === 'string' && x !== ''; }); }
+  };
+  function clRules() { return global.RecruitRules || {}; }
+  function isHHMM(v) { return /^\d{1,2}:\d{2}$/.test(String(v || '')) && Number(String(v).split(':')[0]) < 24 && Number(String(v).split(':')[1]) < 60; }
+  function strOr(v, def) { return typeof v === 'string' ? v : def; }
+  function asStr(v) { return v == null ? '' : String(v); }
+  function intIn(v, lo, hi) { return isNum(v) && Number(v) % 1 === 0 && Number(v) >= lo && (hi == null || Number(v) <= hi); }
+  function clHasSections(def) {
+    return U.isObj(def) && Array.isArray(def.sections) && def.sections.some(function (s) { return U.isObj(s); });
+  }
+
+  // 台本の正規化（決定的・冪等。未知のキーは残す）。baseDef は既定の台本
+  function normalizeChecklistDef(def, baseDef) {
+    const R = clRules();
+    const base = U.isObj(baseDef) ? baseDef : defaults().checklist;
+    if (!clHasSections(def)) return U.deepClone(base);
+    const out = U.deepClone(def);
+    const types = R.CHECKLIST_BLOCK_TYPES || ['must', 'fields', 'explain', 'question', 'rating', 'notify', 'note'];
+    const kinds = R.CHECKLIST_FIELD_KINDS || ['text', 'date', 'month', 'choice'];
+    const autos = R.CHECKLIST_AUTO || { must: [], fields: [], negatives: [] };
+
+    ['title', 'version', 'intro', 'overallLabel', 'overallHint'].forEach(function (k) { out[k] = strOr(out[k], base[k]); });
+    const bo = base.overallOptions || {};
+    if (!U.isObj(out.overallOptions)) out.overallOptions = U.deepClone(bo);
+    ['hire', 'hold', 'reject'].forEach(function (k) { out.overallOptions[k] = strOr(out.overallOptions[k], bo[k]); });
+    out.pages = Array.isArray(out.pages)
+      ? out.pages.filter(function (pg) { return U.isObj(pg); }).map(function (pg, i) {
+        pg.no = intIn(pg.no, 1) ? Number(pg.no) : i + 1;
+        pg.title = asStr(pg.title);
+        pg.lead = asStr(pg.lead);
+        return pg;
+      })
+      : U.deepClone(base.pages);
+    out.mustFailResult = ['reject', 'review'].indexOf(out.mustFailResult) >= 0 ? out.mustFailResult : base.mustFailResult;
+    out.mustUnknownResult = ['none', 'review'].indexOf(out.mustUnknownResult) >= 0 ? out.mustUnknownResult : base.mustUnknownResult;
+    const bc = base.overallCaps || {};
+    if (!U.isObj(out.overallCaps)) out.overallCaps = U.deepClone(bc);
+    ['hold', 'reject'].forEach(function (k) {
+      if (['none', 'review', 'reject'].indexOf(out.overallCaps[k]) < 0) out.overallCaps[k] = bc[k];
+    });
+    if (!U.isObj(out.print)) out.print = U.deepClone(base.print);
+    if (typeof out.print.showQuestions !== 'boolean') out.print.showQuestions = base.print.showQuestions;
+
+    // ヘッダー
+    const bh = base.header;
+    if (!U.isObj(out.header)) out.header = U.deepClone(bh);
+    const h = out.header;
+    h.negatives = Array.isArray(h.negatives)
+      ? h.negatives.filter(function (n) { return U.isObj(n); }).map(function (n, i) {
+        if (typeof n.id !== 'string' || !CL_ID_RE.test(n.id)) n.id = 'neg' + (i + 1);
+        n.label = asStr(n.label);
+        if ((autos.negatives || []).indexOf(n.auto) < 0) n.auto = '';
+        return n;
+      })
+      : U.deepClone(bh.negatives);
+    const negSeen = {};
+    h.negatives.forEach(function (n) {
+      if (negSeen[n.id]) { let k = 2; while (negSeen[n.id + '_' + k]) k++; n.id = n.id + '_' + k; }
+      negSeen[n.id] = true;
+    });
+    if (!isHHMM(h.morningOnlyEnd)) h.morningOnlyEnd = bh.morningOnlyEnd;
+    if (!U.isObj(h.posting)) h.posting = U.deepClone(bh.posting);
+    h.posting.label = strOr(h.posting.label, bh.posting.label);
+    const popts = Array.isArray(h.posting.options)
+      ? h.posting.options.filter(function (x) { return U.isObj(x) && typeof x.value === 'string' && x.value !== ''; }) : [];
+    h.posting.options = popts.length ? popts.map(function (x) { x.label = asStr(x.label); return x; }) : U.deepClone(bh.posting.options);
+    h.interviewerField = strOr(h.interviewerField, bh.interviewerField);
+
+    // 既定の項目（autoParams の補完用）
+    const baseItems = {};
+    (base.sections || []).forEach(function (s) { (s.blocks || []).forEach(function (b) { (b.items || []).forEach(function (it) { baseItems[it.id] = it; }); }); });
+
+    // セクション → ブロック → 項目
+    const seen = {};
+    const uniq = function (id) {
+      let x = id;
+      if (seen[x]) { let k = 2; while (seen[id + '_' + k]) k++; x = id + '_' + k; }
+      seen[x] = true;
+      return x;
+    };
+    out.sections = out.sections.filter(function (s) { return U.isObj(s); }).map(function (sec, i) {
+      sec.id = uniq(typeof sec.id === 'string' && CL_ID_RE.test(sec.id) ? sec.id : 'sec' + (i + 1));
+      sec.title = asStr(sec.title);
+      sec.lead = asStr(sec.lead);
+      sec.minutes = intIn(sec.minutes, 0, 60) ? Number(sec.minutes) : 0;
+      sec.minutesMax = sec.minutesMax === true;
+      sec.page = intIn(sec.page, 1) ? Number(sec.page) : 1;
+      sec.blocks = (Array.isArray(sec.blocks) ? sec.blocks : []).filter(function (b) {
+        return U.isObj(b) && types.indexOf(b.type) >= 0;
+      }).map(function (b, j) {
+        b.id = uniq(typeof b.id === 'string' && CL_ID_RE.test(b.id) ? b.id : sec.id + '_b' + (j + 1));
+        b.title = asStr(b.title);
+        b.note = asStr(b.note);
+        b.memoLabel = asStr(b.memoLabel);
+        if (typeof b.memo !== 'boolean') b.memo = b.type === 'question';
+        b.items = (Array.isArray(b.items) ? b.items : []).filter(function (it) { return U.isObj(it); }).map(function (it, k) {
+          it.id = uniq(typeof it.id === 'string' && CL_ID_RE.test(it.id) ? it.id : b.id + '_' + (k + 1));
+          if (it.label === undefined && it.text !== undefined) { it.label = it.text; delete it.text; }
+          it.label = asStr(it.label);
+          if (it.hint !== undefined) it.hint = asStr(it.hint);
+          if (b.type === 'fields') {
+            if (kinds.indexOf(it.kind) < 0) it.kind = 'text';
+            if (it.options !== undefined) {
+              it.options = (Array.isArray(it.options) ? it.options : []).filter(function (o) {
+                return U.isObj(o) && o.value != null && String(o.value) !== '';
+              }).map(function (o) { return { value: String(o.value), label: asStr(o.label) }; });
+            }
+            if (it.kind === 'choice') {
+              const vs = (it.options || []).map(function (o) { return o.value; });
+              const dup = vs.some(function (v, x) { return vs.indexOf(v) !== x; });
+              if (vs.length < 2 || dup) it.kind = 'text';
+            }
+          }
+          if (b.type === 'explain') { if (it.shortOnly !== undefined) it.shortOnly = it.shortOnly === true; }
+          else delete it.shortOnly;
+          const allowed = autos[b.type] || [];
+          if (it.auto !== undefined && allowed.indexOf(it.auto) < 0) delete it.auto;
+          if (it.auto === undefined) delete it.autoParams;
+          else if (it.autoParams !== undefined) {
+            const bi = baseItems[it.id];
+            const bap = bi && bi.auto === it.auto && U.isObj(bi.autoParams) ? bi.autoParams : null;
+            if (!U.isObj(it.autoParams)) {
+              if (bap) it.autoParams = U.deepClone(bap); else delete it.autoParams;
+            } else {
+              Object.keys(CL_AUTO_PARAM_RULES).forEach(function (key) {
+                if (it.autoParams[key] === undefined || CL_AUTO_PARAM_RULES[key](it.autoParams[key])) return;
+                if (bap && bap[key] !== undefined) it.autoParams[key] = U.deepClone(bap[key]); else delete it.autoParams[key];
+              });
+              ['minDays', 'minHours', 'monthsAfter'].forEach(function (key) {
+                if (it.autoParams[key] !== undefined) it.autoParams[key] = Number(it.autoParams[key]);
+              });
+            }
+          }
+          return it;
+        });
+        return b;
+      });
+      return sec;
+    });
+    if (typeof out.mustFailJumpTo !== 'string' || !out.sections.some(function (s) { return s.id === out.mustFailJumpTo; })) out.mustFailJumpTo = '';
+    return out;
+  }
+
+  // normalizeProfile から呼ぶ（fillStages の後・毎回・冪等）。旧プロファイル（checklist なし）には既定の台本を補う
+  function fillChecklist(merged, base, raw, report) {
+    const rc = raw.checklist;
+    if (!U.isObj(rc) || !clHasSections(rc)) {
+      merged.checklist = U.deepClone(base.checklist);
+      if (rc === undefined || rc === null) { if (report) report.checklistAdded = true; }
+      return;
+    }
+    merged.checklist = normalizeChecklistDef(merged.checklist, base.checklist);
+  }
+
+  // 保存前チェック（validateProfile から呼ぶ。SPEC-checklist 5-4）
+  function validateChecklist(p, errors, warnings) {
+    const cl = p.checklist;
+    if (!U.isObj(cl)) return;
+    const R = clRules();
+    const types = R.CHECKLIST_BLOCK_TYPES || [];
+    const kinds = R.CHECKLIST_FIELD_KINDS || [];
+    const autos = R.CHECKLIST_AUTO || {};
+    const circ = R.circled || function (n) { return '(' + n + ')'; };
+    const TYPE_NAMES = { must: '必須条件', fields: '記入欄', explain: '説明', question: '質問', rating: '確認点', notify: '合否連絡', note: '注記' };
+    const P0 = '面接チェックリスト';
+    const secs = Array.isArray(cl.sections) ? cl.sections.filter(function (s) { return U.isObj(s); }) : [];
+    if (!secs.length) errors.push(P0 + 'のセクションがありません。');
+    const seen = {};
+    const idCheck = function (id, where) {
+      if (typeof id !== 'string' || !CL_ID_RE.test(id)) { errors.push(P0 + ' ' + where + 'の id「' + asStr(id) + '」が正しくありません（英字で始まる英数字・_・-）。'); return; }
+      if (seen[id]) errors.push(P0 + ' ' + where + 'の id「' + id + '」が重複しています。');
+      seen[id] = true;
+    };
+    let mustN = 0, ratingN = 0;
+    secs.forEach(function (sec, i) {
+      const sn = circ(i + 1) + ' ' + (asStr(sec.title).trim() || '（名前なし）');
+      if (!asStr(sec.title).trim()) errors.push(P0 + 'の' + circ(i + 1) + 'のセクション名が空です。');
+      if (!intIn(sec.minutes, 0, 60)) errors.push(P0 + ' ' + sn + 'の目安時間は0〜60分の整数にしてください。');
+      if (!intIn(sec.page, 1)) errors.push(P0 + ' ' + sn + 'のページは1以上の整数にしてください。');
+      idCheck(sec.id, sn);
+      (Array.isArray(sec.blocks) ? sec.blocks : []).forEach(function (b, j) {
+        if (!U.isObj(b) || types.indexOf(b.type) < 0) { errors.push(P0 + ' ' + sn + 'の' + (j + 1) + '番目のブロックの種類が正しくありません。'); return; }
+        const bn = sn + '【' + (asStr(b.title).trim() || TYPE_NAMES[b.type]) + '】';
+        idCheck(b.id, bn);
+        (Array.isArray(b.items) ? b.items : []).forEach(function (it, k) {
+          if (!U.isObj(it)) { errors.push(P0 + ' ' + bn + 'の' + (k + 1) + '行目が正しくありません。'); return; }
+          idCheck(it.id, bn + 'の' + (k + 1) + '行目');
+          if (b.type !== 'note' && !asStr(it.label).trim()) errors.push(P0 + ' ' + bn + 'の' + (k + 1) + '行目が空です。');
+          if (b.type === 'must') mustN++;
+          if (b.type === 'rating') ratingN++;
+          if (b.type === 'fields') {
+            if (kinds.indexOf(it.kind) < 0) errors.push(P0 + ' ' + bn + 'の' + (k + 1) + '行目の入力の種類が正しくありません。');
+            if (it.kind === 'choice') {
+              const vs = (Array.isArray(it.options) ? it.options : []).map(function (o) { return U.isObj(o) ? asStr(o.value) : ''; });
+              if (vs.filter(function (v) { return v !== ''; }).length < 2) errors.push(P0 + ' ' + bn + 'の「' + asStr(it.label) + '」の選択肢は2件以上にしてください。');
+              else if (vs.some(function (v, x) { return vs.indexOf(v) !== x; })) errors.push(P0 + ' ' + bn + 'の「' + asStr(it.label) + '」の選択肢の値が重複しています。');
+            }
+          }
+          if (it.auto !== undefined && it.auto !== '' && (autos[b.type] || []).indexOf(it.auto) < 0) errors.push(P0 + ' ' + bn + 'の' + (k + 1) + '行目の自動表示の種類が正しくありません。');
+          const ap = U.isObj(it.autoParams) ? it.autoParams : {};
+          Object.keys(CL_AUTO_PARAM_RULES).forEach(function (key) {
+            if (ap[key] !== undefined && !CL_AUTO_PARAM_RULES[key](ap[key])) {
+              errors.push(P0 + ' ' + bn + 'の' + (k + 1) + '行目の自動表示の設定（' + key + '）が範囲外です。');
+            }
+          });
+        });
+      });
+    });
+    if (!asStr(cl.overallLabel).trim()) errors.push(P0 + 'の総合判断の見出しが空です。');
+    const oo = U.isObj(cl.overallOptions) ? cl.overallOptions : {};
+    ['hire', 'hold', 'reject'].forEach(function (k) {
+      if (!asStr(oo[k]).trim()) errors.push(P0 + 'の総合判断の表示名（' + { hire: '採用', hold: '保留', reject: '不採用' }[k] + '）が空です。');
+    });
+    if (['reject', 'review'].indexOf(cl.mustFailResult) < 0) errors.push(P0 + 'の「必須条件に不一致があるとき」の設定が正しくありません。');
+    if (['none', 'review'].indexOf(cl.mustUnknownResult) < 0) errors.push(P0 + 'の「必須条件に未確認が残るとき」の設定が正しくありません。');
+    const caps = U.isObj(cl.overallCaps) ? cl.overallCaps : {};
+    ['hold', 'reject'].forEach(function (k) {
+      if (['none', 'review', 'reject'].indexOf(caps[k]) < 0) errors.push(P0 + 'の総合判断「' + asStr(oo[k] || k) + '」のときの設定が正しくありません。');
+    });
+    const hd = U.isObj(cl.header) ? cl.header : {};
+    if (!isHHMM(hd.morningOnlyEnd)) errors.push(P0 + 'の「朝～12時のみ」の終了時刻は HH:MM で入力してください。');
+    if (!ratingN) warnings.push('確認点がありません。面接評価は総合判断だけで決まります。');
+    if (!mustN) warnings.push('必須条件がないため、不一致による不採用推奨は働きません。');
+    const mfields = (((p.management || {}).fields) || []).map(function (f) { return f && f.id; });
+    if (hd.interviewerField && mfields.indexOf(hd.interviewerField) < 0) warnings.push('担当と連動する押印欄が見つかりません。');
+  }
+
   // v2 内での既定文言の変更。旧既定と完全一致するものだけ新既定へ（編集済みの文言は維持）
   const V2_TEXT_UPGRADES = {
     rules: {
@@ -263,6 +496,7 @@
     }
     fillArrays(merged, base);
     fillStages(merged, base);
+    fillChecklist(merged, base, raw, report);
     upgradeTexts(merged, base);
     enforceLocked(merged);
     merged.schemaVersion = 2;
@@ -339,6 +573,7 @@
     ((p.highschoolPolicy || {}).exceptionCategories || []).forEach(function (c) {
       if (cats.indexOf(c) < 0) warnings.push('高校生の例外区分「' + c + '」は区分の選択肢にありません。');
     });
+    validateChecklist(p, errors, warnings);
     return { errors: errors, warnings: warnings };
   }
 
@@ -431,7 +666,11 @@
         checks: U.deepClone(state.handoffChecks || {}),
         note: state.handoffNote || ''
       },
+      // 旧形式（10項目×5点）の面接評価。新しい面接では {}（面接はチェックリストで評価する）
       scores: U.deepClone(state.scores || {}),
+      // 面接チェックリストの回答（SPEC-checklist 1-4）と保存時点の台本（レポートの文言・並び用。読込では使わない）
+      checklist: U.deepClone(U.isObj(state.checklist) ? state.checklist : R.emptyChecklist()),
+      checklistDef: state.profile.checklist ? U.deepClone(state.profile.checklist) : null,
       interviewNotes: state.interviewNotes || '',
       // 応募者の管理（押印）: { initial: { name, short, title, date, at }, ... }
       management: U.deepClone(state.management || {}),
@@ -567,6 +806,7 @@
       '.result-title{font-size:24px;font-weight:800;margin:2px 0 6px}',
       '.result.recommend .result-title{color:var(--ok)}.result.review .result-title{color:var(--warn)}.result.reject .result-title{color:var(--danger)}',
       '.result-body{font-size:14.5px}',
+      '.result-must{margin-top:8px;font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:4px}',
       '.result-note{margin-top:10px;padding:9px 12px;background:rgba(255,255,255,.75);border:1px solid var(--border);border-radius:8px;font-size:13.5px}',
       '.axes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px}',
       '.axis{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-width:0}',
@@ -636,6 +876,339 @@
       '.stamp-row{gap:8px}.stamp-box{padding:8px}.stamp-area{height:80px}.hanko{width:70px;height:70px}.stamp-empty{width:66px;height:66px}.foot{margin-top:12px}',
       '.dash,.tile,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line,.axes,.stamp-row,.adj li{break-inside:avoid}.sec h2,.sec h3,.result-kicker,.result-title,.result-body,.hgroup-head{break-after:avoid}',
       '.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+    ].join('\n');
+  }
+
+  // ---------- 面接チェックリスト（報告書の描画。アプリの A4 報告・保存レポートで共用。docs/SPEC-checklist.md 4-2） ----------
+  //   DOM 非依存の HTML 文字列を返す。o = { mode: 'section' | 'sheet', stamps: html文字列 | '' }
+  //   'section' = 保存レポートの「面接チェックリスト」節、'sheet' = A4「面接チェックリスト報告」（ヘッダー・判定サマリー・押印欄つき）
+  const CL_SHEET_PAGE_PX = 1040;   // A4 の印字可能高さ（297mm − 上下余白 16mm ≒ 1062px）の安全側。1 ページ目がこれを超えたら .cl-fit
+  const CL_TONE_CLASS = { ok: 't-ok', warn: 't-warn', danger: 't-danger', info: 't-info', muted: 't-muted' };
+  function clFmtDate(v) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asStr(v)); return m ? m[1] + '/' + m[2] + '/' + m[3] : asStr(v); }
+  function clFmtMonth(v) { const m = /^(\d{4})-(\d{2})$/.exec(asStr(v)); return m ? m[1] + '年' + Number(m[2]) + '月' : asStr(v); }
+
+  function checklistSheetHtml(record, profile, o) {
+    const R = global.RecruitRules;
+    const esc = U.esc;
+    o = o || {};
+    record = record || {};
+    profile = profile || defaults();
+    const mode = o.mode === 'sheet' ? 'sheet' : 'section';
+    const a = record.applicant || {};
+    const cl = U.isObj(record.checklist) ? record.checklist : R.emptyChecklist();
+    const def = normalizeChecklistDef(record.checklistDef || profile.checklist, defaults().checklist);
+    const prof = Object.assign({}, profile, { checklist: def });
+    const sum = R.checklistSummary(a, cl, prof, { scores: record.scores, management: record.management });
+    const showQ = !(U.isObj(def.print) && def.print.showQuestions === false);
+    const tone = function (t) { return CL_TONE_CLASS[t] || ''; };
+    const dash = '<span class="cl-blank">—</span>';
+    const txt = function (v) { const s = asStr(v).trim(); return s ? esc(s) : dash; };
+    const mustCountsText = function (m) {
+      return '一致 ' + m.match + '・不一致 ' + m.mismatch + '・未確認 ' + m.unknown;
+    };
+    const sc = sum.score;
+    const cnt = sc.counts || { good: 0, fair: 0, poor: 0, blank: 0 };
+    const scoreText = sc.total + ' / ' + sc.max + '点（' + sc.pct + '%' + (sc.bandLabel ? '・' + sc.bandLabel : '') + '）';
+    const markCounts = '○' + cnt.good + ' △' + cnt.fair + ' ×' + cnt.poor + (cnt.blank ? ' 未入力' + cnt.blank : '');
+
+    // ---- ブロック ----
+    const blockTitle = function (b, fallback) {
+      const t = b.title || fallback || '';
+      return (t || b.note) ? '<div class="cl-bt">' + (t ? '【' + esc(t) + '】' : '') + (b.note ? '<small>' + esc(b.note) + '</small>' : '') + '</div>' : '';
+    };
+    const blockHtml = function (b) {
+      if (b.type === 'must') {
+        return '<div class="cl-b cl-b-must">' + blockTitle(b, '必須条件') + '<table class="cl-must"><tbody>' + b.items.map(function (it) {
+          return '<tr class="' + tone(it.tone) + '"><td class="cl-lbl">' + esc(it.label) + '</td><td class="cl-val">' + esc(it.mark + it.valueLabel) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      }
+      if (b.type === 'fields') {
+        return '<div class="cl-b cl-b-fields">' + blockTitle(b) + '<dl class="cl-fields">' + b.items.map(function (it) {
+          let v = it.effectiveLabel != null ? it.effectiveLabel : asStr(it.effective);
+          if (it.kind === 'date') v = clFmtDate(v);
+          else if (it.kind === 'month') v = clFmtMonth(v);
+          const suffix = it.fromAuto ? (it.auto === 'firstEnd' ? '（自動）' : '（応募情報より）') : '';
+          return '<div><dt>' + esc(it.label) + '</dt><dd>' + (asStr(v).trim() ? esc(v) + (suffix ? '<small>' + suffix + '</small>' : '') : dash) + '</dd></div>';
+        }).join('') + '</dl></div>';
+      }
+      if (b.type === 'explain' || b.type === 'notify') {
+        return '<div class="cl-b cl-b-' + b.type + '">' + blockTitle(b, b.type === 'notify' ? '合否連絡' : '説明') + '<ul class="cl-checks">' + b.items.map(function (it) {
+          return '<li class="' + (it.value ? 'on' : 'off') + (it.dim ? ' dim' : '') + '"><span class="cl-box">' + (it.value ? '☑' : '☐') + '</span><span>' +
+            (it.shortOnly ? '※' : '') + esc(it.label) + '</span></li>';
+        }).join('') + '</ul>' + (b.memo ? '<div class="cl-memo"><b>' + esc(b.memoLabel || 'メモ') + '：</b><span class="cl-memo-t">' + txt(b.memoText) + '</span></div>' : '') + '</div>';
+      }
+      if (b.type === 'question') {
+        const qs = showQ && b.items.length ? '<ol class="cl-qs">' + b.items.map(function (it) { return '<li>' + esc(it.label) + '</li>'; }).join('') + '</ol>' : '';
+        const memo = b.memo ? '<div class="cl-memo"><b>' + esc(b.memoLabel || 'メモ') + '：</b><span class="cl-memo-t">' + txt(b.memoText) + '</span></div>' : '';
+        if (!qs && !memo) return '';
+        return '<div class="cl-b cl-b-question">' + (showQ ? blockTitle(b) : '') + qs + memo + '</div>';
+      }
+      if (b.type === 'rating') {
+        return '<div class="cl-b cl-b-rating">' + blockTitle(b, '確認点') + '<table class="cl-rate"><tbody>' + b.items.map(function (it) {
+          return '<tr class="' + (it.value ? tone(it.tone) : 't-blank') + '" data-cl-item="' + esc(it.id) + '"><td class="cl-lbl">' + esc(it.label) +
+            (it.hint && (mode === 'section' || showQ) ? '<small class="cl-hint">' + esc(it.hint) + '</small>' : '') + '</td>' +
+            '<td class="cl-mk">' + (it.value ? esc(it.mark) : '<small>未入力</small>') + '</td>' +
+            '<td class="cl-pt">' + (it.points == null ? '' : esc(it.points) + '点') + '</td>' +
+            '<td class="cl-nt">' + (asStr(it.note).trim() ? esc(it.note) : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      }
+      if (b.type === 'note') return b.note ? '<p class="cl-sflow">→ ' + esc(b.note) + '</p>' : '';
+      return '';
+    };
+
+    // 「面接で確認した勤務条件」（① の直後・sheet のみ）: 応募情報のうち面接時に確認する段階の行
+    let confirmedHtml = '';
+    if (mode === 'sheet') {
+      const stages = record.inputStages || profile.inputStages || {};
+      let rows = [];
+      try {
+        rows = R.describeApplicant(a, profile).filter(function (r) { return r.section !== 'notes' && R.stageOf({ inputStages: stages }, r.section) === 'interview'; });
+      } catch (e) { rows = []; }
+      if (rows.length) {
+        confirmedHtml = '<div class="cl-confirmed"><div class="cl-bt">【面接で確認した勤務条件】</div><dl class="cl-fields cl-kv">' +
+          rows.map(function (r) { return '<div><dt>' + esc(r.label) + '</dt><dd>' + esc(r.value) + '</dd></div>'; }).join('') + '</dl></div>';
+      }
+    }
+
+    // ---- セクション ----
+    const secHtml = function (s, isFirst) {
+      const must = s.blocks.filter(function (b) { return b.type === 'must'; });
+      let mm = 0, mu = 0, mo = 0, rg = 0, rf = 0, rp = 0, rb = 0;
+      must.forEach(function (b) { b.items.forEach(function (it) { if (it.value === 'match') mo++; else if (it.value === 'mismatch') mm++; else mu++; }); });
+      s.blocks.forEach(function (b) {
+        if (b.type !== 'rating') return;
+        b.items.forEach(function (it) { if (it.value === 'good') rg++; else if (it.value === 'fair') rf++; else if (it.value === 'poor') rp++; else rb++; });
+      });
+      const sumParts = [];
+      if (rg + rf + rp + rb) sumParts.push('確認点 ○' + rg + ' △' + rf + ' ×' + rp + (rb ? ' 未入力' + rb : ''));
+      if (mo + mm + mu) sumParts.push('必須 一致' + mo + (mm ? ' 不一致' + mm : '') + (mu ? ' 未確認' + mu : ''));
+      const twoCol = s.blocks.some(function (b) { return b.type === 'must' || b.type === 'fields'; });
+      let body;
+      if (twoCol) {
+        const left = s.blocks.filter(function (b) { return b.type === 'must' || b.type === 'fields'; }).map(blockHtml).join('');
+        const right = s.blocks.filter(function (b) { return b.type === 'explain' || b.type === 'question' || b.type === 'notify'; }).map(blockHtml).join('');
+        const rest = s.blocks.filter(function (b) { return b.type === 'rating' || b.type === 'note'; }).map(blockHtml).join('');
+        body = '<div class="cl-2col"><div class="cl-col">' + left + '</div><div class="cl-col">' + right + '</div></div>' + rest;
+      } else {
+        body = s.blocks.map(blockHtml).join('');
+      }
+      return '<section class="cl-s' + (mm ? ' cl-s-ng' : '') + '" data-cl-sec="' + esc(s.id) + '">' +
+        '<h3 class="cl-s-h"><span class="cl-s-no">' + esc(s.noMark) + '</span><span class="cl-s-title">' + esc(s.title) + '</span>' +
+        (s.minutesText ? '<small class="cl-s-min">' + esc(s.minutesText) + '</small>' : '') +
+        (sumParts.length ? '<span class="cl-s-sum">' + esc(sumParts.join(' ／ ')) + '</span>' : '') + '</h3>' +
+        (s.lead ? '<p class="cl-s-lead">' + esc(s.lead) + '</p>' : '') +
+        '<div class="cl-s-body">' + body + '</div></section>' +
+        (isFirst ? confirmedHtml : '');
+    };
+
+    // ---- ページ（台本の 1 枚目・2 枚目）。section.page の出現順にまとめる ----
+    const pageNos = [];
+    sum.sections.forEach(function (s) { if (pageNos.indexOf(s.page) < 0) pageNos.push(s.page); });
+    const confirmAfter = (sum.sections.find(function (s) { return s.blocks.some(function (b) { return b.type === 'must' || b.type === 'fields'; }); }) || sum.sections[0] || {}).id;
+    const nameDate = esc(a.name || '応募者') + 'さん' + (sum.header.date ? '　面接日 ' + esc(clFmtDate(sum.header.date)) : '');
+    const pagesHtml = pageNos.map(function (no, pi) {
+      const pg = (sum.pages || []).find(function (x) { return U.isObj(x) && Number(x.no) === no; }) || {};
+      // 台本の各ページの題名・前書き（例: 必須条件一致・継続性／人物確認・逆質問）。保存レポートの節（section）にも出す
+      const head = (mode === 'sheet' || pg.title || pg.lead)
+        ? '<div class="cl-page-h"><span class="cl-page-no">' + (mode === 'sheet' ? '' : '台本') + esc(no) + '枚目</span><span class="cl-page-t">' + esc(pg.title || '') + '</span>' +
+          (mode === 'sheet' && pi > 0 ? '<span class="cl-page-who">' + nameDate + '</span>' : '') +
+          (pg.lead ? '<span class="cl-page-lead">' + esc(pg.lead) + '</span>' : '') + '</div>'
+        : '';
+      return '<div class="cl-page" data-page="' + esc(no) + '">' + head +
+        sum.sections.filter(function (s) { return s.page === no; }).map(function (s) { return secHtml(s, s.id === confirmAfter); }).join('') + '</div>';
+    }).join('');
+
+    // ---- 総合判断・面接評価・必須条件・面接所見 ----
+    const m = sum.must;
+    const mustDetail = [];
+    if (m.mismatchLabels.length) mustDetail.push('不一致: ' + m.mismatchLabels.join('、'));
+    if (m.unknownLabels.length) mustDetail.push('未確認: ' + m.unknownLabels.join('、'));
+    const overallHtml = '<div class="cl-overall">' +
+      '<div class="cl-ov-row"><span class="cl-ov-k">' + esc(def.overallLabel || '面接者の総合判断') + '</span><span class="cl-ov-v ' + tone(sum.overall.tone) + '">' + (sum.overall.value ? esc(sum.overall.label) : '未入力') + '</span></div>' +
+      '<div class="cl-ov-row"><span class="cl-ov-k">面接評価</span><span class="cl-ov-v">' + esc(scoreText) + '　<small>' + esc(markCounts) + '</small></span></div>' +
+      (m.total ? '<div class="cl-ov-row"><span class="cl-ov-k">必須条件</span><span class="cl-ov-v ' + (m.mismatch ? 't-danger' : m.unknown ? 't-muted' : 't-ok') + '">' + esc(mustCountsText(m)) +
+        (mustDetail.length ? '<small>（' + esc(mustDetail.join('／')) + '）</small>' : '') + '</span></div>' : '') +
+      '<div class="cl-ov-row cl-ov-notes"><span class="cl-ov-k">面接所見</span><span class="cl-ov-v cl-memo-t">' + txt(record.interviewNotes) + '</span></div>' +
+      '</div>';
+
+    // ---- 台本ヘッダー（面接日・担当・タクシー可否・料金・消極属性・応募した求人）。section / sheet 共通 ----
+    const hd = sum.header;
+    const negOn = hd.negatives.filter(function (n) { return n.on; });
+    const chips = [];
+    chips.push('<span class="cl-hchip ' + tone(hd.taxi.tone) + '"><b>タクシー可否・料金</b>' + txt(hd.taxi.text) + (hd.taxi.auto ? '' : '<small>（手入力）</small>') + '</span>');
+    chips.push('<span class="cl-hchip' + (negOn.length ? ' t-danger' : '') + '"><b>消極属性</b>' +
+      (negOn.length ? negOn.map(function (n) { return esc(n.label) + (n.auto ? '<small>（自動）</small>' : ''); }).join('・') : 'なし') + '</span>');
+    chips.push('<span class="cl-hchip"><b>' + esc(((def.header || {}).posting || {}).label || '応募した求人') + '</b>' + txt(hd.postingLabel) + '</span>');
+    const kvHtml = '<dl class="cl-sh-kv"><div><dt>面接日</dt><dd>' + (hd.date ? esc(clFmtDate(hd.date)) : dash) + '</dd></div>' +
+      '<div><dt>担当</dt><dd>' + txt(hd.interviewer) + (hd.interviewerFromStamp ? '<small>（押印より）</small>' : '') + '</dd></div>' +
+      '<div><dt>目安</dt><dd>' + esc(sum.minutesTotal) + '分</dd></div></dl>';
+
+    if (mode === 'section') {
+      const secHead = '<div class="cl-sheet-head cl-sec-head">' + kvHtml + '<div class="cl-sh-chips">' + chips.join('') + '</div></div>';
+      return '<div class="cl-sheet cl-mode-section">' + secHead + pagesHtml + overallHtml + '</div>';
+    }
+
+    // ---- sheet: ヘッダー ----
+    const meta = profile.meta || {};
+    const opts = profile.options || {};
+    let shiftsLine = '';
+    try { shiftsLine = R.describeShifts(a, profile).join('、'); } catch (e) { shiftsLine = ''; }
+    const who = [a.category, a.age ? a.age + '歳' : ''].filter(Boolean).join('・');
+    if (a.workPeriod) chips.push('<span class="cl-hchip"><b>勤務期間</b>' + esc(R.labelOf(opts.workPeriods, a.workPeriod)) + '</span>');
+    if (a.daysMin || a.daysMax) chips.push('<span class="cl-hchip"><b>週</b>' + esc((a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日') + '</span>');
+    if (shiftsLine) chips.push('<span class="cl-hchip cl-hchip-wide"><b>希望シフト</b>' + esc(shiftsLine) + '</span>');
+    const created = U.fmtDate(record.savedAt ? new Date(record.savedAt) : new Date());
+    const headHtml = '<div class="cl-sheet-head">' +
+      '<div class="cl-sh-top"><span class="cl-sh-theater">' + esc(meta.theaterName || '') + '</span>' +
+      '<span class="cl-sh-title">面接チェックリスト報告<small>（' + esc(def.title || '') + (def.version ? ' ' + esc(def.version) + ' 版' : '') + '）</small></span>' +
+      '<span class="cl-sh-date">作成 ' + esc(clFmtDate(created)) + '</span></div>' +
+      '<div class="cl-sh-main"><div class="cl-sh-name">' + esc(a.name || '応募者') + '<small>さん</small>' + (who ? '<span class="cl-sh-who">' + esc(who) + '</span>' : '') + '</div>' +
+      kvHtml + '</div>' +
+      '<div class="cl-sh-chips">' + chips.join('') + '</div></div>';
+
+    // ---- sheet: 判定サマリー（判定を勝手に走らせない。未実施ならその旨） ----
+    const j = record.judgment;
+    const texts = profile.texts || {};
+    const titleOf = function (r) { return ((texts[r] || {}).title) || r; };
+    const resTone = { recommend: 't-ok', review: 't-warn', reject: 't-danger' };
+    const bandTone = { high: 't-ok', mid: 't-warn', low: 't-danger' };
+    let judgeHtml;
+    if (j && j.result) {
+      const iv = j.interview || { total: j.total, max: j.max, pct: j.pct, band: '', bandLabel: '' };
+      const jc = j.contribution || {};
+      const contribTile = j.mode === 'incomplete'
+        ? '<div class="cl-tile"><span class="cl-tile-k">シフト貢献度</span><span class="cl-tile-v">未確定</span><span class="cl-tile-s">面接評価のみで判定</span></div>'
+        : j.mode === 'interviewOnly' || !j.interview
+          ? '<div class="cl-tile"><span class="cl-tile-k">シフト貢献度</span><span class="cl-tile-v">OFF</span><span class="cl-tile-s">面接評価のみで判定</span></div>'
+          : '<div class="cl-tile ' + (bandTone[jc.band] || '') + '"><span class="cl-tile-k">シフト貢献度</span><span class="cl-tile-v">' + esc(jc.total == null ? '-' : jc.total) + '<small> / ' + esc(jc.max == null ? '-' : jc.max) + '点</small></span><span class="cl-tile-s">' + esc((jc.pct == null ? '-' : jc.pct) + '%' + (jc.bandLabel ? '・' + jc.bandLabel : '')) + '</span></div>';
+      judgeHtml = '<div class="cl-judge"><div class="cl-bt">【判定サマリー】</div><div class="cl-tiles">' +
+        '<div class="cl-tile ' + (bandTone[iv.band] || '') + '"><span class="cl-tile-k">面接評価</span><span class="cl-tile-v">' + esc(iv.total) + '<small> / ' + esc(iv.max) + '点</small></span><span class="cl-tile-s">' + esc(iv.pct + '%' + (iv.bandLabel ? '・' + iv.bandLabel : '')) + '</span></div>' +
+        contribTile +
+        (m.total ? '<div class="cl-tile ' + (m.mismatch ? 't-danger' : m.unknown ? 't-muted' : 't-ok') + '"><span class="cl-tile-k">必須条件</span><span class="cl-tile-v">' + (m.mismatch ? '不一致 ' + m.mismatch : m.unknown ? '未確認 ' + m.unknown : 'すべて一致') + '</span><span class="cl-tile-s">' + esc(mustCountsText(m)) + '</span></div>' : '') +
+        '<div class="cl-tile cl-tile-res ' + (resTone[j.result] || '') + '"><span class="cl-tile-k">結果</span><span class="cl-tile-v">' + esc(j.title || titleOf(j.result)) + '</span><span class="cl-tile-s">' + esc(j.evaluatedAt ? '判定 ' + U.fmtDateTime(j.evaluatedAt) : '') + '</span></div>' +
+        '</div>' +
+        ((j.adjustments || []).length ? '<ul class="cl-adj">' + j.adjustments.map(function (x) {
+          return '<li><b>' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</b>：' + esc(x.reason) + '</li>';
+        }).join('') + '</ul>' : '') +
+        '</div>';
+    } else {
+      judgeHtml = '<div class="cl-judge cl-judge-none"><div class="cl-bt">【判定サマリー】</div><p>採用可否判定は未実施（面接評価 ' + esc(sc.total + '/' + sc.max + '・' + sc.pct + '%') + ' の時点）</p></div>';
+    }
+    const stampsHtml = o.stamps ? '<div class="cl-stamps"><div class="cl-bt">【押印】</div>' + o.stamps + '</div>' : '';
+    return '<div class="cl-sheet cl-mode-sheet">' + headHtml + pagesHtml + overallHtml + judgeHtml + stampsHtml + '</div>';
+  }
+
+  // 報告書のスタイル（.cl-sheet 以下＋ A4 印刷の規則）。アプリは起動時に 1 回 <style> に入れ、保存レポートは reportCss の後ろに足す。
+  //   色はライト固定（アプリのダークテーマでも印刷は白地）。'sheet' の寸法は画面でも同じにして、1 ページ目の高さを画面で計測できるようにする
+  function checklistSheetCss() {
+    return [
+      // 共通（保存レポートの節＝画面向けの大きさ）
+      '.cl-sheet{color:#1a2233;font-size:13px;line-height:1.5}',
+      '.cl-sheet *{box-sizing:border-box}',
+      '.cl-sheet .cl-s{border:1px solid #c9d2dd;border-radius:8px;margin:0 0 10px;overflow:hidden;background:#fff;break-inside:auto}',
+      '.cl-sheet .cl-s-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0;padding:5px 12px;background:#24324a;color:#fff;font-size:14px;font-weight:700;break-after:avoid}',
+      '.cl-sheet .cl-s.cl-s-ng .cl-s-h{background:#9b1c1c}',
+      '.cl-sheet .cl-s-no{font-size:1.15em}.cl-sheet .cl-s-min{font-size:.85em;font-weight:600;opacity:.85;padding:0 6px;border:1px solid rgba(255,255,255,.55);border-radius:999px}',
+      '.cl-sheet .cl-s-sum{margin-left:auto;font-size:.85em;font-weight:600}',
+      '.cl-sheet .cl-s-lead{margin:0;padding:4px 12px 0;color:#5b6675;font-size:.92em}',
+      '.cl-sheet .cl-s-body{padding:6px 12px 8px}',
+      '.cl-sheet .cl-2col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 16px}',
+      '.cl-sheet .cl-b{margin:0 0 6px}.cl-sheet .cl-b:last-child{margin-bottom:0}',
+      '.cl-sheet .cl-bt{font-weight:700;font-size:.92em;margin:2px 0 3px;break-after:avoid}.cl-sheet .cl-bt small{font-weight:500;color:#5b6675;margin-left:6px}',
+      '.cl-sheet table{width:100%;border-collapse:collapse}',
+      '.cl-sheet table td{padding:3px 6px;border-bottom:1px solid #e3e8ee;vertical-align:top}',
+      '.cl-sheet table tr{break-inside:avoid}',
+      '.cl-sheet .cl-must .cl-val{width:6em;white-space:nowrap;font-weight:700;text-align:center}',
+      '.cl-sheet .cl-rate .cl-lbl{font-weight:600;width:40%}.cl-sheet .cl-rate .cl-mk{width:4.5em;text-align:center;font-weight:800;font-size:1.15em;white-space:nowrap}.cl-sheet .cl-rate .cl-mk small{font-size:.75em;font-weight:600;color:#8a94a3}',
+      '.cl-sheet .cl-rate .cl-pt{width:3em;text-align:right;white-space:nowrap;color:#5b6675}.cl-sheet .cl-rate .cl-nt{white-space:pre-wrap;overflow-wrap:anywhere}',
+      '.cl-sheet tr.t-ok .cl-val,.cl-sheet tr.t-ok .cl-mk{color:#0b7a55;background:#e3f6ee}.cl-sheet tr.t-warn .cl-mk{color:#9a5b00;background:#fdf1dc}',
+      '.cl-sheet tr.t-danger .cl-val,.cl-sheet tr.t-danger .cl-mk{color:#b42318;background:#fde8e8}.cl-sheet tr.t-muted .cl-val{color:#5b6675;background:#eef2f6}',
+      '.cl-sheet dl.cl-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 12px;margin:0}',
+      '.cl-sheet dl.cl-fields>div{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:4px;border-bottom:1px solid #e3e8ee;padding:2px 0;break-inside:avoid}',
+      '.cl-sheet dl.cl-fields dt{color:#5b6675;font-weight:600}.cl-sheet dl.cl-fields dd{margin:0;overflow-wrap:anywhere}.cl-sheet dl.cl-fields dd small{color:#5b6675;margin-left:3px}',
+      '.cl-sheet .cl-col dl.cl-fields{grid-template-columns:minmax(0,1fr)}.cl-sheet .cl-col dl.cl-fields>div{grid-template-columns:10em minmax(0,1fr)}',
+      '.cl-sheet ul.cl-checks{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px 12px}',
+      '.cl-sheet .cl-col ul.cl-checks,.cl-sheet .cl-b-notify ul.cl-checks{grid-template-columns:minmax(0,1fr)}',
+      '.cl-sheet ul.cl-checks li{display:grid;grid-template-columns:1.2em minmax(0,1fr);gap:3px;break-inside:avoid}.cl-sheet ul.cl-checks li.off{color:#5b6675}.cl-sheet ul.cl-checks li.dim{opacity:.6}',
+      '.cl-sheet .cl-box{font-size:1.1em;line-height:1.3}.cl-sheet li.on .cl-box{color:#0b7a55}',
+      '.cl-sheet ol.cl-qs{margin:0 0 3px;padding-left:1.5em;color:#3a4556}.cl-sheet ol.cl-qs li{break-inside:avoid}',
+      '.cl-sheet .cl-memo{display:flex;gap:4px;padding:3px 8px;background:#f8fafc;border:1px solid #e3e8ee;border-left:3px solid #1f5fbf;border-radius:4px;break-inside:avoid}.cl-sheet .cl-memo b{flex:none}',
+      '.cl-sheet .cl-memo-t{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}',
+      '.cl-sheet .cl-blank{color:#8a94a3}',
+      '.cl-sheet .cl-hint{display:block;font-weight:500;font-size:.85em;color:#5b6675;line-height:1.35}',
+      // section（保存レポートの節）: 台本ヘッダーとページ題名
+      '.cl-mode-section .cl-sheet-head{border:1px solid #c9d2dd;border-radius:8px;padding:6px 12px;margin:0 0 10px;background:#f8fafc;break-inside:avoid}',
+      '.cl-mode-section dl.cl-sh-kv{display:flex;flex-wrap:wrap;gap:2px 20px;margin:0 0 4px}.cl-mode-section dl.cl-sh-kv>div{display:flex;gap:6px;align-items:baseline}',
+      '.cl-mode-section dl.cl-sh-kv dt{color:#5b6675;font-weight:600}.cl-mode-section dl.cl-sh-kv dd{margin:0;font-weight:700}.cl-mode-section dl.cl-sh-kv dd small{font-weight:500;color:#5b6675;margin-left:3px}',
+      '.cl-mode-section .cl-sh-chips{display:flex;flex-wrap:wrap;gap:4px}',
+      '.cl-mode-section .cl-hchip{display:inline-flex;gap:6px;align-items:baseline;padding:1px 8px;border:1px solid #c9d2dd;border-radius:5px;font-size:12px;background:#fff}.cl-mode-section .cl-hchip b{color:#5b6675;font-weight:700}.cl-mode-section .cl-hchip small{color:#5b6675}',
+      '.cl-mode-section .cl-hchip.t-ok{border-color:#9fd8bf;background:#e3f6ee}.cl-mode-section .cl-hchip.t-warn{border-color:#f3cf8a;background:#fdf1dc}.cl-mode-section .cl-hchip.t-danger{border-color:#f5b5b5;background:#fde8e8;color:#b42318}.cl-mode-section .cl-hchip.t-info{border-color:#b9cdf7;background:#e5edff}',
+      '.cl-mode-section .cl-page-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:4px 0 6px;padding-bottom:3px;border-bottom:2px solid #24324a;break-after:avoid}',
+      '.cl-mode-section .cl-page-no{font-size:11.5px;font-weight:800;color:#fff;background:#24324a;padding:0 7px;border-radius:4px}.cl-mode-section .cl-page-t{font-weight:800;font-size:14px}',
+      '.cl-mode-section .cl-page-lead{flex-basis:100%;font-size:12px;color:#3a4556}',
+      '.cl-sheet .cl-sflow{margin:5px 0 0;font-size:.92em;font-weight:600;color:#3a4556}',
+      '.cl-sheet .cl-confirmed{border:1px dashed #c9d2dd;border-radius:8px;padding:5px 12px;margin:0 0 10px;break-inside:auto}',
+      '.cl-sheet .cl-overall{border:2px solid #24324a;border-radius:8px;padding:6px 12px;margin:0 0 10px;break-inside:avoid}',
+      '.cl-sheet .cl-ov-row{display:grid;grid-template-columns:9em minmax(0,1fr);gap:8px;padding:2px 0;border-bottom:1px solid #e3e8ee}.cl-sheet .cl-ov-row:last-child{border-bottom:none}',
+      '.cl-sheet .cl-ov-k{font-weight:700;color:#3a4556}.cl-sheet .cl-ov-v{font-weight:700}.cl-sheet .cl-ov-v small{font-weight:600;color:#5b6675;margin-left:4px}.cl-sheet .cl-ov-notes .cl-ov-v{font-weight:400}',
+      '.cl-sheet .cl-ov-v.t-ok{color:#0b7a55}.cl-sheet .cl-ov-v.t-warn{color:#9a5b00}.cl-sheet .cl-ov-v.t-danger{color:#b42318}.cl-sheet .cl-ov-v.t-muted{color:#5b6675}',
+      // sheet（A4 報告）: 9.5px の詰めた寸法。画面でも同じ寸法にして計測する
+      '.cl-sheet.cl-mode-sheet{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:9.5px;line-height:1.35;background:#fff;color:#111}',
+      '.cl-mode-sheet .cl-sheet-head{border-bottom:2px solid #24324a;padding:0 0 3px;margin:0 0 4px}',
+      '.cl-mode-sheet .cl-sh-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:9px;color:#3a4556}',
+      '.cl-mode-sheet .cl-sh-title{font-size:13px;font-weight:800;color:#24324a}.cl-mode-sheet .cl-sh-title small{font-size:9px;font-weight:600;color:#5b6675;margin-left:4px}',
+      '.cl-mode-sheet .cl-sh-main{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:1px}',
+      '.cl-mode-sheet .cl-sh-name{font-size:16px;font-weight:800}.cl-mode-sheet .cl-sh-name small{font-size:10px;font-weight:600;margin-left:2px}.cl-mode-sheet .cl-sh-who{font-size:10px;font-weight:600;color:#3a4556;margin-left:10px}',
+      '.cl-mode-sheet dl.cl-sh-kv{display:flex;gap:12px;margin:0;font-size:10px}.cl-mode-sheet dl.cl-sh-kv>div{display:flex;gap:4px;align-items:baseline}.cl-mode-sheet dl.cl-sh-kv dt{color:#5b6675;font-weight:600}.cl-mode-sheet dl.cl-sh-kv dd{margin:0;font-weight:700;min-width:5em;border-bottom:1px solid #8a94a3}.cl-mode-sheet dl.cl-sh-kv dd small{font-weight:500;color:#5b6675}',
+      '.cl-mode-sheet .cl-sh-chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}',
+      '.cl-mode-sheet .cl-hchip{display:inline-flex;gap:4px;align-items:baseline;padding:0 6px;border:1px solid #c9d2dd;border-radius:4px;font-size:9px;background:#f8fafc}.cl-mode-sheet .cl-hchip b{color:#5b6675;font-weight:700}.cl-mode-sheet .cl-hchip small{color:#5b6675}',
+      '.cl-mode-sheet .cl-hchip.t-ok{border-color:#9fd8bf;background:#e3f6ee}.cl-mode-sheet .cl-hchip.t-warn{border-color:#f3cf8a;background:#fdf1dc}.cl-mode-sheet .cl-hchip.t-danger{border-color:#f5b5b5;background:#fde8e8;color:#b42318}.cl-mode-sheet .cl-hchip.t-info{border-color:#b9cdf7;background:#e5edff}',
+      '.cl-mode-sheet .cl-page-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:0 0 3px;padding:1px 0;border-bottom:1px solid #24324a}',
+      '.cl-mode-sheet .cl-page-no{font-weight:800;color:#fff;background:#24324a;padding:0 6px;border-radius:3px}.cl-mode-sheet .cl-page-t{font-weight:800;font-size:10.5px}',
+      '.cl-mode-sheet .cl-page-who{margin-left:auto;font-size:9px;color:#3a4556}.cl-mode-sheet .cl-page-lead{flex-basis:100%;font-size:8.5px;color:#3a4556}',
+      '.cl-mode-sheet .cl-s{border-radius:4px;margin:0 0 4px}.cl-mode-sheet .cl-s-h{padding:1px 8px;font-size:11px;gap:6px}.cl-mode-sheet .cl-s-sum{font-size:9px}',
+      '.cl-mode-sheet .cl-s-lead{padding:2px 8px 0;font-size:9px}.cl-mode-sheet .cl-s-body{padding:3px 8px 4px}',
+      '.cl-mode-sheet .cl-2col{gap:2px 10px}.cl-mode-sheet .cl-b{margin:0 0 3px}.cl-mode-sheet .cl-bt{margin:1px 0 1px;font-size:9.5px}',
+      '.cl-mode-sheet table td{padding:1px 4px}.cl-mode-sheet .cl-rate .cl-mk{font-size:11px}',
+      '.cl-mode-sheet dl.cl-fields{gap:0 10px}.cl-mode-sheet dl.cl-fields>div{grid-template-columns:7em minmax(0,1fr);padding:1px 0}.cl-mode-sheet .cl-col dl.cl-fields>div{grid-template-columns:12em minmax(0,1fr)}',
+      '.cl-mode-sheet ul.cl-checks{gap:0 10px}.cl-mode-sheet ol.cl-qs{margin:0 0 2px;padding-left:1.4em}',
+      '.cl-mode-sheet .cl-memo{padding:1px 6px}.cl-mode-sheet .cl-sflow{margin:3px 0 0;font-size:9px}',
+      '.cl-mode-sheet .cl-confirmed{padding:2px 8px;margin:0 0 4px;border-radius:4px}.cl-mode-sheet .cl-confirmed dl.cl-fields{grid-template-columns:repeat(2,minmax(0,1fr))}',
+      '.cl-mode-sheet .cl-overall{padding:2px 8px;margin:0 0 4px;border-radius:4px}.cl-mode-sheet .cl-ov-row{grid-template-columns:8.5em minmax(0,1fr);padding:1px 0}',
+      '.cl-mode-sheet .cl-judge{border:1px solid #c9d2dd;border-radius:4px;padding:2px 8px 4px;margin:0 0 4px;break-inside:avoid}',
+      '.cl-mode-sheet .cl-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}',
+      '.cl-mode-sheet .cl-tile{display:flex;flex-direction:column;border:1px solid #c9d2dd;border-radius:4px;padding:2px 6px;background:#f8fafc;min-width:0}',
+      '.cl-mode-sheet .cl-tile-k{font-size:8.5px;font-weight:700;color:#5b6675}.cl-mode-sheet .cl-tile-v{font-size:13px;font-weight:800;line-height:1.25}.cl-mode-sheet .cl-tile-v small{font-size:9px;font-weight:600;color:#5b6675}.cl-mode-sheet .cl-tile-s{font-size:8.5px;color:#3a4556}',
+      '.cl-mode-sheet .cl-tile.t-ok{border-color:#9fd8bf;background:#e3f6ee}.cl-mode-sheet .cl-tile.t-ok .cl-tile-v{color:#0b7a55}.cl-mode-sheet .cl-tile.t-warn{border-color:#f3cf8a;background:#fdf1dc}.cl-mode-sheet .cl-tile.t-warn .cl-tile-v{color:#9a5b00}',
+      '.cl-mode-sheet .cl-tile.t-danger{border-color:#f5b5b5;background:#fde8e8}.cl-mode-sheet .cl-tile.t-danger .cl-tile-v{color:#b42318}.cl-mode-sheet .cl-tile.t-muted .cl-tile-v{color:#5b6675}',
+      '.cl-mode-sheet .cl-tile-res{border-width:2px}',
+      '.cl-mode-sheet .cl-adj{margin:3px 0 0;padding-left:1.3em;font-size:9px}.cl-mode-sheet .cl-adj li{break-inside:avoid}.cl-mode-sheet .cl-judge-none p{margin:0;font-weight:700;color:#5b6675}',
+      '.cl-mode-sheet .cl-stamps{margin:0;break-inside:avoid}',
+      '.cl-sheet .stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;break-inside:avoid}',
+      '.cl-sheet .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px;border:1px solid #c9d2dd;border-radius:4px;background:#fff;min-width:0}',
+      '.cl-sheet .stamp-label{font-size:9.5px;font-weight:700;min-width:5em;color:#1a2233}.cl-sheet .stamp-area{height:auto;display:grid;place-items:center}',
+      '.cl-sheet .hanko{width:46px;height:46px;filter:none}.cl-sheet .stamp-empty{width:44px;height:44px;font-size:8.5px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;color:#5b6675;background:#fff}',
+      '.cl-sheet .stamp-meta{font-size:8.5px;min-height:0;line-height:1.3;color:#3a4556}',
+      // 1 ページ目があふれるとき（.cl-fit）は 2 ページ目の強制改ページを外す
+      '.cl-mode-sheet .cl-page+.cl-page{break-before:page}.cl-mode-sheet.cl-fit .cl-page+.cl-page{break-before:auto}',
+      // 印刷ホスト（アプリ #clSheet.cl-sheet-host／レポート #clSheet.cl-sheet-print）。画面では隠し、計測時は画面外に 190mm 幅で置く
+      '.cl-sheet-host,.cl-sheet-print{display:none}',
+      'body.print-checklist .cl-sheet-host,body.print-checklist .cl-sheet-print{display:block;position:absolute;left:-10000px;top:0;width:190mm}',
+      '@page clsheet{size:A4;margin:8mm 10mm}',
+      '@media print{',
+      'body.print-checklist{page:clsheet;background:#fff}',
+      'body.print-checklist .cl-sheet-host,body.print-checklist .cl-sheet-print{position:static;left:auto;width:auto}',
+      'body:not(.print-checklist) .cl-sheet-host,body:not(.print-checklist) .cl-sheet-print{display:none !important}',
+      'body.print-checklist .page{padding:0;max-width:none}',
+      'body.print-checklist .page>:not(#clSheet):not(section[data-sec="mgmt"]){display:none !important}',
+      'body.print-checklist section.sec[data-sec="mgmt"]{margin-top:0;padding:2px 8px 4px;border-radius:4px;box-shadow:none;break-inside:avoid}',
+      'body.print-checklist section.sec[data-sec="mgmt"] h2{font-size:9.5px;padding-bottom:1px;margin-bottom:3px;border-bottom:none}body.print-checklist section.sec[data-sec="mgmt"] h2::before{display:none}',
+      'body.print-checklist .stamp-hint,body.print-checklist .stamp-ctl,body.print-checklist .mgmt-save,body.print-checklist .mgmt-note{display:none !important}',
+      'body.print-checklist .stamp-row{gap:6px}body.print-checklist .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px}body.print-checklist .stamp-label{font-size:9.5px;min-width:5em}body.print-checklist .stamp-area{height:auto}body.print-checklist .hanko{width:46px;height:46px}body.print-checklist .stamp-empty{width:44px;height:44px;font-size:8.5px}body.print-checklist .stamp-meta{font-size:8.5px;min-height:0;line-height:1.3}',
+      '.cl-sheet .cl-s-h,.cl-sheet tr,.cl-sheet .cl-tile,.cl-sheet .cl-hchip,.cl-sheet .cl-page-no,.cl-sheet .cl-memo,.cl-sheet .hanko,.cl-sheet .stamp-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}',
+      // 全体印刷（レポートの「面接チェックリスト」節）: 余白を詰める
+      '.cl-mode-section .cl-s{break-inside:auto}.cl-mode-section table td{padding:2px 5px}',
+      '}'
     ].join('\n');
   }
 
@@ -789,14 +1362,28 @@
       }
     }
 
-    // ---- 面接評価 ----
+    // ---- 面接チェックリスト（SPEC-checklist 4-3）。保存時点の台本（checklistDef）の文言で出す ----
+    const clRec = U.isObj(record.checklist) ? record.checklist : R.emptyChecklist();
+    const clHas = R.checklistHasInput(clRec);
+    const clProf = Object.assign({}, profile, { checklist: normalizeChecklistDef(record.checklistDef || profile.checklist, defaults().checklist) });
+    const ivModel = R.interviewModel(clProf, record.scores || {}, clRec);
+    const clMust = R.mustSummary(clProf.checklist, clRec);
+
+    // ---- 面接評価（旧形式・10項目×5点。旧レコードの scores があるときだけ） ----
     const ev = profile.evaluation || {};
     const scale = Number(ev.scaleMax) || 5;
-    const evItems = ev.items || [];
-    const hasScores = Object.keys(record.scores || {}).length > 0;
+    const scoresObj = U.isObj(record.scores) ? record.scores : {};
+    const hasScores = Object.keys(scoresObj).some(function (k) { return isNum(scoresObj[k]); });
+    // ラベルは現在の旧評価項目 → 保存時の判定の内訳 → id の順に補う
+    const bdLabels = {};
+    ((j && j.interviewMode !== 'checklist' && j.breakdown) || []).forEach(function (b) { if (b && b.id) bdLabels[b.id] = b.label; });
+    let evItems = (ev.items || []).slice();
+    Object.keys(scoresObj).forEach(function (k) {
+      if (!evItems.some(function (it) { return it.id === k; })) evItems.push({ id: k, label: bdLabels[k] || k });
+    });
     let scoreSum = 0;
     const scoreRows = evItems.map(function (it) {
-      const s = record.scores[it.id];
+      const s = scoresObj[it.id];
       const has = !(s == null || s === '');
       const n = has ? Number(s) : 0;
       if (has && !isNaN(n)) scoreSum += n;
@@ -806,11 +1393,13 @@
         '<div class="b-track"><span class="' + (has ? pctCls(pct) : '') + '" style="width:' + pct + '%"></span></div>' +
         '<div class="b-val">' + (has ? esc(s) + '<small> / ' + scale + '</small>' : '<small>-</small>') + '</div></div>';
     }).join('');
-    const scoreMax = evItems.length * scale;
-    const scorePct = j && j.interview ? j.interview.pct : (scoreMax ? Math.round(scoreSum / scoreMax * 1000) / 10 : 0);
-    const scoreTotal = j && j.interview ? j.interview.total : scoreSum;
-    const scoreBand = j && j.interview ? j.interview.band : '';
-    const scoreBandTxt = j && j.interview ? (j.interview.bandLabel || bandName(j.interview.band)) : '';
+    const scoreMax = (ev.items || []).length ? (ev.items || []).length * scale : evItems.length * scale;
+    // 判定が旧方式なら判定の値（帯つき）、チェックリスト方式の判定がある（参考表示）なら点数から計算
+    const legacyJ = j && j.interview && j.interviewMode !== 'checklist';
+    const scorePct = legacyJ ? j.interview.pct : (scoreMax ? Math.round(scoreSum / scoreMax * 1000) / 10 : 0);
+    const scoreTotal = legacyJ ? j.interview.total : scoreSum;
+    const scoreBand = legacyJ ? j.interview.band : '';
+    const scoreBandTxt = legacyJ ? (j.interview.bandLabel || bandName(j.interview.band)) : '';
     const interviewTotal = hasScores
       ? '<div class="total-line">合計 <b>' + esc(scoreTotal) + '</b><span class="muted">/ ' + esc(scoreMax) + '点</span>' +
         '<span class="right">得点率 ' + esc(scorePct) + '%' + (scoreBandTxt ? '<span class="badge ' + bandTone(scoreBand) + '">' + esc(scoreBandTxt) + '</span>' : '') + '</span></div>'
@@ -855,8 +1444,11 @@
         }
         if (j.matrix && j.matrix.note) note = '<div class="result-note">' + esc(j.matrix.note) + '</div>';
         if (j.adjustments && j.adjustments.length) {
-          adj = '<div class="adj-head">' + (j.mode === 'matrix' ? 'マトリクスの結果' : '面接評価の結果') + '「' + esc(titleOf(j.baseResult)) + '」から「' + esc(titleOf(j.result)) + '」に調整</div>' +
-            '<ul class="adj">' + j.adjustments.map(function (x) { return '<li><span class="step">' + esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to)) + '</span><span>' + esc(x.reason) + '</span></li>'; }).join('') + '</ul>';
+          adj = '<div class="adj-head">' + (j.mode === 'matrix' ? 'マトリクスの結果' : '面接評価の結果') + '「' + esc(titleOf(j.baseResult)) + '」' +
+            (j.result === j.baseResult ? '。必須条件の不一致により「' + esc(titleOf(j.result)) + '」に固定' : 'から「' + esc(titleOf(j.result)) + '」に調整') + '</div>' +
+            '<ul class="adj">' + j.adjustments.map(function (x) {
+              return '<li><span class="step">' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</span><span>' + esc(x.reason) + '</span></li>';
+            }).join('') + '</ul>';
         }
       } else {
         axesSummary = '面接評価 ' + j.pct + '%';
@@ -867,7 +1459,11 @@
       judgmentHtml = '<div class="result ' + esc(j.result) + '">' +
         '<div class="result-kicker">採用可否判定</div>' +
         '<div class="result-title">' + esc(j.title) + '</div>' +
-        '<div class="result-body">' + esc(j.body) + '</div>' + note + axes +
+        '<div class="result-body">' + esc(j.body) + '</div>' +
+        (j.checklist && j.checklist.must && j.checklist.must.total ? '<div class="result-must"><b>必須条件:</b> 一致 ' + esc(j.checklist.must.match) + '・不一致 ' + esc(j.checklist.must.mismatch) + '・未確認 ' + esc(j.checklist.must.unknown) +
+          ((j.checklist.must.mismatchLabels || []).length ? '<span class="tag danger">不一致: ' + esc(j.checklist.must.mismatchLabels.join('、')) + '</span>' : '') +
+          ((j.checklist.must.unknownLabels || []).length ? '<span class="tag">未確認: ' + esc(j.checklist.must.unknownLabels.join('、')) + '</span>' : '') + '</div>' : '') +
+        note + axes +
         (j.interview ? '' : '<div class="result-mode">面接評価 合計 ' + esc(j.total) + ' / ' + esc(j.max) + '点（' + esc(j.pct) + '%）　採用推奨 ' + esc(j.thresholds.recommendPts) + '点以上／上長判断 ' + esc(j.thresholds.reviewPts) + '点以上</div>') +
         mx + adj +
         (warns.length ? '<ul class="warn-list">' + warns.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') +
@@ -876,7 +1472,7 @@
     }
 
     // ---- ヘッダー・サマリー ----
-    const stepLabel = { 1: '応募情報の入力中', 2: '面接者への申し送り', 3: '面接評価の入力中', 4: '採用可否判定まで完了' }[Number(record.step)] || '';
+    const stepLabel = { 1: '応募情報の入力中', 2: '面接者への申し送り', 3: '面接チェックリストの入力中', 4: '採用可否判定まで完了' }[Number(record.step)] || '';
     const chips = [];
     if (a.category) chips.push(a.category);
     if (a.age) chips.push(a.age + '歳');
@@ -887,15 +1483,17 @@
     const chipsHtml = chips.map(function (ch) { return '<span class="chip">' + esc(ch) + '</span>'; }).join('') + hsChip;
     const verdictHtml = j
       ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title) + '</span><span class="v-sub">' + esc(axesSummary) + '</span></div>'
-      : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">' + (beforeIv ? '面接前' : '未実施') + '</span><span class="v-sub">' + esc(beforeIv ? '申し送り段階で保存' : '面接評価の入力後に判定') + '</span></div>';
+      : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">' + (beforeIv ? '面接前' : '未実施') + '</span><span class="v-sub">' + esc(beforeIv ? '申し送り段階で保存' : '面接チェックリストの入力後に判定') + '</span></div>';
     const headerHtml = '<header class="rh"><div class="rh-top">' +
       '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
       '<div class="rh-meta">保存日時 ' + esc(savedAt) + (stepLabel ? '<br>進捗: ' + esc(stepLabel) : '') + '</div></div>' +
       '<div class="rh-main"><div><div class="sheet-title print-only">面接者への申し送りシート</div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' + verdictHtml + '</div></header>\n';
 
-    const tileInterview = hasScores
-      ? '<div class="tile"><div class="t-label">面接評価</div><div class="t-val">' + esc(scoreTotal) + '<small>/ ' + esc(scoreMax) + '点</small></div><div class="meter"><span class="' + (scoreBand ? bandCls(scoreBand) : pctCls(scorePct)) + '" style="width:' + clamp(scorePct) + '%"></span></div><div class="t-sub">得点率 ' + esc(scorePct) + '%' + (scoreBandTxt ? '・' + esc(scoreBandTxt) : '') + '</div></div>'
-      : '<div class="tile"><div class="t-label">面接評価</div><div class="t-val txt muted">未入力</div><div class="t-sub">面接後に採点します</div></div>';
+    // 面接評価: チェックリスト方式は ○△× ＋総合判断、旧レコードは旧 10 項目（interviewModel が方式を決める）
+    const tileMustNg = ivModel.mode === 'checklist' && clMust.mismatch ? '<span style="color:var(--danger);font-weight:700">・必須 不一致' + clMust.mismatch + '</span>' : '';
+    const tileInterview = ivModel.rated > 0
+      ? '<div class="tile"><div class="t-label">面接評価' + (ivModel.mode === 'legacy' ? '（旧形式）' : '') + '</div><div class="t-val">' + esc(ivModel.total) + '<small>/ ' + esc(ivModel.max) + '点</small></div><div class="meter"><span class="' + (ivModel.band ? bandCls(ivModel.band) : pctCls(ivModel.pct)) + '" style="width:' + clamp(ivModel.pct) + '%"></span></div><div class="t-sub">得点率 ' + esc(ivModel.pct) + '%' + (ivModel.bandLabel ? '・' + esc(ivModel.bandLabel) : '') + tileMustNg + '</div></div>'
+      : '<div class="tile"><div class="t-label">面接評価</div><div class="t-val txt muted">未入力</div><div class="t-sub">' + (clMust.mismatch ? '<span style="color:var(--danger);font-weight:700">必須 不一致' + clMust.mismatch + '</span>' : '面接チェックリストで評価します') + '</div></div>';
     const tileContrib = c && Array.isArray(c.parts)
       ? (cPending
         ? '<div class="tile"><div class="t-label">シフト貢献度</div><div class="t-val txt">未確定</div><div class="t-sub">面接で確認後に確定（' + esc((c.missing || []).length) + '項目）</div></div>'
@@ -910,6 +1508,14 @@
     const dashHtml = '<div class="dash">' + tileInterview + tileContrib + tileHandoff + tileVerdict + '</div>\n';
 
     const sec = function (title, body, key) { return '<section class="sec"' + (key ? ' data-sec="' + key + '"' : '') + '><h2>' + title + '</h2>\n' + body + '</section>\n'; };
+    // 「面接チェックリスト」節と「面接評価（旧形式）」節（SPEC-checklist 4-3 の表）
+    const notesHtml = record.interviewNotes ? '<h3>面接所見</h3><div class="note">' + esc(record.interviewNotes) + '</div>' : '';
+    const checklistSecHtml = clHas
+      ? sec('面接チェックリスト', checklistSheetHtml(record, profile, { mode: 'section' }), 'checklist')
+      : !hasScores ? sec('面接チェックリスト', '<p class="empty">面接チェックリストは未入力です。</p>' + notesHtml, 'checklist') : '';
+    const legacySecHtml = hasScores
+      ? sec(clHas ? '面接評価（旧形式・10項目×5点・参考）' : '面接評価（旧形式・10項目×5点）', '<div class="bars">' + scoreRows + '</div>' + interviewTotal + (clHas ? '' : notesHtml), 'scores')
+      : '';
     const json = jsonForScript(record);
     const SCRIPT_END = '</scr' + 'ipt>';
 
@@ -981,8 +1587,11 @@
     return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
-      '<style>\n' + reportCss() + '\n</style>\n</head>\n<body data-filename="' + esc(filename) + '">\n<div class="page">\n' +
-      '<div class="rtool no-print"><span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button><button type="button" id="rtPrintAll">レポート全体</button><span class="rtool-hint">申し送りシートは応募情報・留意点・面接で確認する項目・押印欄だけを 1 枚にまとめます。</span></div>\n' +
+      '<style>\n' + reportCss() + '\n' + checklistSheetCss() + '\n</style>\n</head>\n<body data-filename="' + esc(filename) + '">\n<div class="page">\n' +
+      '<div class="rtool no-print"><span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button>' +
+        (clHas ? '<button type="button" id="rtPrintChecklist">面接チェックリスト報告（A4）</button>' : '') +
+        '<button type="button" id="rtPrintAll">レポート全体</button><span class="rtool-hint">申し送りシートは応募情報・留意点・面接で確認する項目・押印欄だけを 1 枚にまとめます。' +
+        (clHas ? '面接チェックリスト報告は台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2 枚にまとめます。' : '') + '</span></div>\n' +
       headerHtml + dashHtml +
       sec('応募時の情報', (preRows ? '<table class="kv">' + preRows + '</table>\n' : '<p class="empty">応募時の情報はありません。</p>\n') + hsHtml, 'pre') +
       (a.reviewerNotes ? sec('面接者への申し送りコメント', '<div class="note">' + esc(a.reviewerNotes) + '</div>', 'comment') : '') +
@@ -996,9 +1605,9 @@
             : '<p class="empty">面接で確認した項目の入力はありません。</p>\n') +
         (unconfirmed ? '<div class="callout"><span>⚠</span><div>保存時点で未入力: ' + esc(unconfirmed) + '</div></div>\n' : ''), 'interview') +
       sec('シフト貢献度', contribHtml, 'contrib') +
-      sec('面接評価', (hasScores ? '<div class="bars">' + scoreRows + '</div>' + interviewTotal : '<p class="empty">面接評価は未入力です。</p>') +
-        (record.interviewNotes ? '<h3>面接所見</h3><div class="note">' + esc(record.interviewNotes) + '</div>' : ''), 'scores') +
+      checklistSecHtml + legacySecHtml +
       sec('採用可否判定', judgmentHtml, 'judgment') +
+      (clHas ? '<div id="clSheet" class="cl-sheet-print">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '' }) + '</div>\n' : '') +
       sec('応募者の管理', mgmtHtml, 'mgmt') +
       '<div class="foot"><span>' + esc(meta.footer) + '</span><span>このファイルはアプリの「読み込み」から再度開けます。埋め込みデータを編集しないでください。</span></div>\n' +
       '</div>\n' +
@@ -1007,7 +1616,13 @@
       'function prep(on){var h=document.querySelector(\'section.sec[data-sec="handoff"]\');if(h){h.classList.toggle("sheet-2col",!!on&&h.querySelectorAll("li.h").length>=9);}document.body.classList.toggle("print-handoff",!!on);}\n' +
       'window.__prepareHandoffSheet=prep;\n' +
       'b.addEventListener("click",function(){prep(true);var done=function(){prep(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});\n' +
-      'if(a)a.addEventListener("click",function(){window.print();});\n})();\n' + SCRIPT_END + '\n' +
+      'if(a)a.addEventListener("click",function(){window.print();});\n' +
+      // 面接チェックリスト報告（A4）: body.print-checklist の付け外しと、1 ページ目があふれるときの強制改ページ解除（アプリと同じ規則）
+      'var c=document.getElementById("rtPrintChecklist"),host=document.getElementById("clSheet");\n' +
+      'function prepCl(on){if(!host)return false;var sh=host.querySelector(".cl-sheet");document.body.classList.toggle("print-checklist",!!on);if(sh){sh.classList.remove("cl-fit");if(on){var p1=sh.querySelector(\'.cl-page[data-page="1"]\')||sh.querySelector(".cl-page");if(p1){var t0=sh.getBoundingClientRect().top,h1=p1.getBoundingClientRect().bottom-t0,ht=sh.getBoundingClientRect().bottom-t0;if(h1>' + CL_SHEET_PAGE_PX + '||(ht-h1>' + CL_SHEET_PAGE_PX + '&&ht<=' + (CL_SHEET_PAGE_PX * 2) + '))sh.classList.add("cl-fit");}}}return true;}\n' +
+      'window.__prepareChecklistSheet=prepCl;\n' +
+      'if(c)c.addEventListener("click",function(){prepCl(true);var done=function(){prepCl(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});\n' +
+      '})();\n' + SCRIPT_END + '\n' +
       reportScript +
       '</body>\n</html>\n';
   }
@@ -1017,6 +1632,9 @@
     defaults: defaults,
     normalizeProfile: normalizeProfile,
     validateProfile: validateProfile,
+    normalizeChecklistDef: normalizeChecklistDef,
+    checklistSheetHtml: checklistSheetHtml,
+    checklistSheetCss: checklistSheetCss,
     V1_DEFAULT_TEXTS: V1_DEFAULT_TEXTS,
     loadProfile: loadProfile,
     saveProfile: saveProfile,

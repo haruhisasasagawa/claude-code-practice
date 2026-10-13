@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>リクルート判定システム</title>
-  <meta name="description" content="アルバイト採用の基準統一を支援する判定アプリ。応募情報から面接者への留意点を自動生成し、面接評価から採用可否を判定します。">
+  <meta name="description" content="アルバイト採用の基準統一を支援する判定アプリ。応募情報から面接者への留意点を自動生成し、面接チェックリスト（面接台本）の評価とシフト貢献度から採用可否を判定します。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -61,6 +61,8 @@
       <section class="view hidden" id="view-help"></section>
     </main>
   </div>
+  <!-- 面接チェックリスト報告（A4）の印刷用ホスト。印刷の直前だけ描画する（画面では非表示） -->
+  <div id="clSheet" class="cl-sheet-host" aria-hidden="true"></div>
 
   <input type="file" id="fileInput" accept=".html,.htm,.json" hidden>
   <input type="file" id="profileFileInput" accept=".json" hidden>

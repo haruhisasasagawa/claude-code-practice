@@ -24,6 +24,13 @@
  *   E19 保存 → 読込（応募時の情報／面接で確認した情報・inputStages のスナップショット・段階情報の無い旧 v2 レコード）
  *   E20 面接で確認する項目の表示（外国籍「該当しない」・#preFill の summary・strict の #deferredItems・他劇場の旧プロファイル）
  *   E21 Step3 で入力した内容から出た留意点（GW× → vacation_ng 等）を Step3 でチェックし、Step2 に戻らずに 2軸判定
+ *   E22 応募者の管理（押印） E23 申し送りシート（A4 1枚） E24 全体印刷の改ページ
+ * 面接チェックリスト（docs/SPEC-checklist.md 7-2）
+ *   E25 Step3 でチェックリストを入力 → 判定 → Step4 の内訳 → 保存 → 読込 → レポートの節
+ *   E26 必須条件ゲート（不一致 → 不採用推奨・設定で上長最終判断要・面接の打ち切り）
+ *   E27 A4「面接チェックリスト報告」（アプリ・レポート。PDF 1〜2 ページ・重いサンプル・質問文 OFF）
+ *   E28 設定で台本を変更（文言・項目の追加・確認点の削除で満点が変わる・既定に戻す・壊れた設定）
+ *   E29 旧データ（v1・checklist なし v2）・他劇場の旧プロファイル・390px・ダークモード
  */
 const { chromium } = (function(){ try { return require('playwright'); } catch (e) { return require('/opt/node-tools/node_modules/playwright'); } })();
 const path = require('path');
@@ -111,9 +118,19 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
     const items = await st(() => window.RecruitRules.busyItems(window.RecruitApp.state.profile).map(v => [v.id, v.refDays]));
     for (const [id, d] of items) await page.fill('[data-field="vacationDays.' + id + '"]', String(d));
   };
-  const scoreAll = async (v) => {
-    const ids = await st(() => window.RecruitApp.state.profile.evaluation.items.map(i => i.id));
-    for (const id of ids) await page.click('[data-action="score"][data-item="' + id + '"][data-value="' + v + '"]');
+  // 面接チェックリスト（docs/SPEC-checklist.md 7-2）。既に同じ値なら押さない（再押下で解除されるため）
+  const setCl = async (path, v) => {
+    const cur = await st(p => window.RecruitUtil.getPath(window.RecruitApp.state.checklist, p) || '', path);
+    if (cur !== v) await page.click(`[data-action="cl-set"][data-cl="${path}"][data-value="${v}"]`);
+  };
+  // 必須条件すべて一致（o.must=false で触らない）・確認点すべて level・総合判断 o.overall（既定 hire）
+  const rateAll = async (level = 'good', o = {}) => {
+    const ids = await st(() => { const d = window.RecruitApp.state.profile.checklist, R = window.RecruitRules;
+      return { must: R.checklistItems(d, 'must').map(x => x.item.id), rate: R.checklistItems(d, 'rating').map(x => x.item.id) }; });
+    if (o.must !== false) for (const id of ids.must) await setCl('values.' + id, 'match');
+    for (const id of ids.rate) await setCl('values.' + id, level);
+    await setCl('overall', o.overall || 'hire');
+    await wait(100);
   };
   // スムーズスクロール中のクリック取りこぼしを防ぐため、check()（状態を検証する）で入れ、最後に全件を確認する
   const checkAll = async () => {
@@ -254,12 +271,14 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect((await page.textContent('#shiftConfirm h2')).includes('面接で確認する項目'), 'E1 Step3 のカード見出し「面接で確認する項目」');
   expect(await page.inputValue('#shiftConfirm [data-field="vacationDays.gw"]') === '5', 'E1 Step1 で先に入力した値（GW 5日）を Step3 に表示');
   await judge();
-  expect(await step() === 3, 'E1 採点未入力では判定に進まない');
-  await scoreAll(4);
-  for (const [k, v] of Object.entries({ greeting: 5, eye_contact: 3, appearance: 5, explanation: 3, self_analysis: 3 })) await page.click(`[data-action="score"][data-item="${k}"][data-value="${v}"]`);
+  expect(await step() === 3, 'E1 確認点未入力では判定に進まない');
+  expect((await toastText()).includes('未入力の確認点') && (await page.$$('.cl-rate-row.missing')).length === 7 && !!(await page.$('#clOverall.missing')), 'E1 未入力の確認点 7 件と総合判断に .missing・toast「未入力の確認点」');
+  // ○4 △3＋採用（13/16 = 81.3%・高）
+  await rateAll('good');
+  for (const id of ['rt_manner', 'rt_turnover', 'rt_team']) await setCl('values.' + id, 'fair');
   await page.fill('textarea[data-note="interview"]', '笑顔が良く、受け答えも明瞭。');
   await wait(200);
-  await shot('05-step3-scored.png', true);
+  await shot('05-step3-checklist.png', true);
   await judge();
   expect(await step() === 3, 'E1 シフト条件が未確定なら判定に進まない（step 3 のまま）');
   const t1 = await toastText();
@@ -296,13 +315,13 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   let j = await judgment();
   console.log('JUDGMENT: ' + JSON.stringify(j));
   expect(await step() === 4, 'E1 判定に進む');
-  expect(j.total === 39 && j.max === 50 && j.pct === 78, 'E1 面接 39/50（78%）');
+  expect(j.total === 13 && j.max === 16 && j.pct === 81.3, 'E1 面接チェックリスト 13/16（81.3%）');
   expect(j.contribution === 65.4 && j.cellKey === 'high_high' && j.baseResult === 'recommend', 'E1 マトリクス high_high = 採用推奨');
   expect(j.result === 'review' && j.adjustments.includes('unresolved_block'), 'E1 要判断未確認で上長最終判断要（unresolved_block）');
   expect(!(await handoffIds()).includes('shift_unanswered'), 'E1 Step3 で確定後、handoff に shift_unanswered が残らない（stale 再生成）');
   const judgedUnresolved = await st(() => window.RecruitApp.state.judgment.unresolved.length);
   expect(liveCount === judgedUnresolved, 'E1 Step3 上部の未確認件数は入力に追従し、判定時と一致: ' + staleCount + ' → ' + liveCount + '（判定 ' + judgedUnresolved + '）');
-  expect(await page.$eval('.result-card [data-axis="interview"]', el => el.textContent.includes('39')) && await page.$eval('.result-card [data-axis="contribution"]', el => el.textContent.includes('65.4')), 'E1 Step4 に両軸の点数');
+  expect(await page.$eval('.result-card [data-axis="interview"]', el => el.textContent.includes('13')) && await page.$eval('.result-card [data-axis="contribution"]', el => el.textContent.includes('65.4')), 'E1 Step4 に両軸の点数');
   expect(await page.$eval('table.matrix td.current', el => el.dataset.cell) === 'high_high', 'E1 Step4 マトリクスの該当セル high_high');
   expect((await page.textContent('.adjust-box')).includes('マトリクス: 採用推奨 → 最終: 上長最終判断要'), 'E1 調整の経緯を表示');
   expect((await page.$$('.bars.contrib .bar-row[data-part]')).length === 8, 'E1 シフト貢献度の内訳 8 項目');
@@ -337,9 +356,9 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect(await st(() => window.RecruitApp.state.applicant.name) === '', '新規で応募者がクリアされる');
   await page.setInputFiles('#fileInput', savedPath);
   await wait(500);
-  const loaded = await st(() => { const s = window.RecruitApp.state; const a = s.applicant; return { name: a.name, step: s.step, scores: Object.keys(s.scores).length, note: s.handoffNote, vd: a.vacationDays, vac: a.vacation, holiday: a.holidayWork, wf: a.weekendFreq, an: a.allNight, legacy: s.legacyRecord }; });
+  const loaded = await st(() => { const s = window.RecruitApp.state; const a = s.applicant; return { name: a.name, step: s.step, scores: Object.keys(s.scores).length, ratings: window.RecruitRules.checklistItems(s.profile.checklist, 'rating').filter(x => s.checklist.values[x.item.id]).length, overall: s.checklist.overall, note: s.handoffNote, vd: a.vacationDays, vac: a.vacation, holiday: a.holidayWork, wf: a.weekendFreq, an: a.allNight, legacy: s.legacyRecord }; });
   console.log('LOADED: ' + JSON.stringify(loaded));
-  expect(loaded.name === '佐藤 花子' && loaded.step === 4 && loaded.scores === 10 && loaded.note === '土曜は月2回程度なら可能とのこと。', '読込で氏名・ステップ・採点・追記が復元');
+  expect(loaded.name === '佐藤 花子' && loaded.step === 4 && loaded.ratings === 7 && loaded.overall === 'hire' && loaded.scores === 0 && loaded.note === '土曜は月2回程度なら可能とのこと。', '読込で氏名・ステップ・採点・追記が復元');
   expect(loaded.vd.gw === '5' && loaded.vd.threeday === '2' && loaded.vac.silver === 'ng' && loaded.vac.obon === 'consult', '読込で繁忙期の可否・日数が復元');
   expect(loaded.holiday === 'ok' && loaded.wf === 'every_one' && loaded.an.availability === 'consult' && loaded.an.frequency === 'monthly', '読込で祝日・土日頻度・オールナイトが復元');
   expect(loaded.legacy === null && !(await page.$('.legacy-banner')), '新形式のファイルでは旧形式バナーを出さない');
@@ -356,9 +375,13 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect(await page.textContent('#brandTheater') === 'TOHOシネマズ テスト', '設定保存で劇場名が反映');
   const sp = await storedProfile();
   expect(!!sp && sp.schemaVersion === 2, 'プロファイルが localStorage に schemaVersion 2 で保存');
-  await page.click('[data-action="item-add"]');
+  // 面接チェックリスト ③ の説明に項目を追加できる
+  await page.click('details.s-cl-sec[data-sec-id="job"] > summary');
   await wait(100);
-  expect(await st(() => document.querySelectorAll('.item-row').length) === 11, '評価項目を追加できる（11 件）');
+  const clItemsBefore = await st(() => document.querySelectorAll('details.s-cl-sec[data-sec-id="job"] .s-cl-item').length);
+  await page.click('details.s-cl-sec[data-sec-id="job"] [data-action="cl-item-add"][data-block="0"]');
+  await wait(100);
+  expect(await st(() => document.querySelectorAll('details.s-cl-sec[data-sec-id="job"] .s-cl-item').length) === clItemsBefore + 1, '面接チェックリスト ③ の説明に項目を追加できる（.s-cl-item が 1 件増える）');
   const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="export"]')]);
   console.log('profile export:', dl2.suggestedFilename());
   await page.click('[data-action="reset"]');
@@ -396,7 +419,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await checkAll();
   await page.click('[data-action="to-step"][data-step="3"]');
   await wait(300);
-  await scoreAll(5);
+  await rateAll('good');
   await judge();
   j = await judgment();
   console.log('JUDGMENT B: ' + JSON.stringify(j));
@@ -544,7 +567,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await checkAll();
   await page.click('[data-action="to-step"][data-step="3"]');
   await wait(300);
-  await scoreAll(5);
+  await rateAll('good');
   await judge();
   j = await judgment();
   console.log('JUDGMENT E2: ' + JSON.stringify(j));
@@ -726,6 +749,13 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect(await preFillOpen() === true && await page.inputValue('#preFill [data-field="sideJobDetail"]') === 'カフェ 週1日', 'E7 面接時の項目に値があるので Step1 の #preFill は自動で開く');
   const v1Saved = await saveRecord('saved-v1-resaved.html');
   expect(v1Saved.html.includes('<h2>応募時の情報</h2>') && v1Saved.html.includes('<h2>面接で確認した情報</h2>') && v1Saved.rec.inputStages.busy === 'interview', 'E7 旧ファイルを読み込んで保存すると新しいレポート構成・inputStages 付き');
+  // 旧形式の面接評価（10項目×5点）は旧方式のまま再判定し、レポートも旧形式の表（SPEC-checklist 6-2）
+  const j7 = await st(() => { const x = window.RecruitApp.state.judgment; return x && { mode: x.interviewMode, max: x.max, total: x.total }; });
+  expect(!!j7 && j7.mode === 'legacy' && j7.max === 50 && j7.total === 39, 'E7 旧ファイルの判定は旧方式（39 / 50）: ' + JSON.stringify(j7));
+  await navStep(3);
+  expect(await visible('#legacyScores') && (await page.textContent('#legacyScores')).includes('39 / 50'), 'E7 Step3 に旧形式の面接評価（39 / 50）');
+  expect(v1Saved.html.includes('data-sec="scores"') && v1Saved.html.includes('面接評価（旧形式・10項目×5点）') && !v1Saved.html.includes('data-sec="checklist"') && !v1Saved.html.includes('id="rtPrintChecklist"') && !v1Saved.html.includes('id="clSheet"'),
+    'E7 旧ファイルを保存し直したレポートは旧形式の面接評価の節だけ（チェックリスト節・A4 報告なし）');
 
   // =====================================================================
   // E13 高校3年・17歳・例外条件を Step1 では未入力 → 面接で確認して Step3 で入力
@@ -750,7 +780,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   const stE13 = await page.textContent('#shiftConfirmStatus');
   expect(stE13.includes('高3例外') && stE13.includes('進路決定の有無') && stE13.includes('未入力'), 'E13 #shiftConfirmStatus に「高3例外: …が未入力」: ' + stE13);
   expect((await page.textContent('#unresolvedAlert')).trim() === '', 'E13 全チェック済みなら上部の未確認アラートなし');
-  await scoreAll(5);
+  await rateAll('good');
   await judge();
   j = await judgment();
   expect(await step() === 4 && j.result === 'review' && j.adjustments.includes('highschool_hold'), 'E13 未入力のまま判定すると上長最終判断要（止めない・highschool_hold）: ' + j.result);
@@ -868,7 +898,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   const cfMiss = [];
   for (const f of ['sideJob', 'lateNight.returnMethod', 'weekendFreq', 'allNight.availability']) if (!(await page.$('#shiftConfirm [data-field="' + f + '"]'))) cfMiss.push(f);
   expect(cfMiss.length === 0, 'E15 Step3「面接で確認する項目」に面接時の欄（かけもち・帰宅手段・土日頻度・オールナイト）: 不足 ' + (cfMiss.join(',') || 'なし'));
-  await scoreAll(5);
+  await rateAll('good');
   await judge();
   expect(await step() === 3 && (await toastText()).includes('シフト条件を確定'), 'E15 面接時の項目が未入力なら判定に進まない');
   await busyAllFull();
@@ -1040,7 +1070,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   await pick('allNight.availability', 'ng');
   await pick('lateNight.availability', 'ng');
   await pick('sideJob', 'no');
-  await scoreAll(5);
+  await rateAll('good');
   await judge();
   j = await judgment();
   expect(await step() === 4 && j.result === 'review' && j.adjustments.includes('unresolved_block'), 'E18 未入力・未チェックのまま判定すると上長最終判断要（unresolved_block）: ' + j.result);
@@ -1210,7 +1240,7 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   expect((await page.textContent('#interviewNewItems')).includes('面接で入力した内容から出た留意点'), 'E21 見出し「面接で入力した内容から出た留意点」');
   const alertE21 = await page.textContent('#unresolvedAlert');
   expect(/うち \d+ 件は下の『面接で確認する項目』/.test(alertE21) && !alertE21.includes('申し送りを確認する'), 'E21 上部の件数は「下で確認」に含め、Step2 へ戻るボタンは出さない: ' + alertE21);
-  await scoreAll(5);
+  await rateAll('good');
   // 未チェックのまま判定すると要判断（vacation_ng）が残り上長最終判断要
   await judge();
   j = await judgment();
@@ -1411,9 +1441,452 @@ const expect = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); i
   const pdfFullRep = path.join(OUT, 'full-report.pdf');
   await rp24.pdf({ path: pdfFullRep, format: 'A4', preferCSSPageSize: true, printBackground: true });
   const pFullRep = pdfPages(pdfFullRep);
-  expect(pFullRep === -1 || pFullRep <= 5, 'E24 レポートの全体印刷は 5 ページ以内（旧 6 ページ）: ' + (pFullRep === -1 ? 'pdfinfo なし' : pFullRep));
+  expect(pFullRep === -1 || pFullRep <= 6, 'E24 レポートの全体印刷は 6 ページ以内（「面接チェックリスト」節が増えた分 +1）: ' + (pFullRep === -1 ? 'pdfinfo なし' : pFullRep));
+  expect(await rp24.$eval('#clSheet', el => getComputedStyle(el).display) === 'none' && await rp24.$eval('section.sec[data-sec="checklist"]', el => getComputedStyle(el).display) !== 'none', 'E24 全体印刷では A4 報告（#clSheet）を出さず、本文の「面接チェックリスト」節を出す');
   expect(await rp24.$eval('section.sec[data-sec="judgment"] .result', el => getComputedStyle(el).breakInside) === 'auto', 'E24 判定カードは途中で改ページ可（丸ごと次ページへ送らない）');
   await rp24.close();
+
+  // =====================================================================
+  // E25 面接チェックリスト: Step3 で入力 → 判定 → Step4 → 保存 → 読込 → レポート（docs/SPEC-checklist.md 7-2）
+  // =====================================================================
+  console.log('\n== E25 面接チェックリスト ==');
+  const sortedJson = (x) => JSON.stringify(x, (k, v) => (v && typeof v === 'object' && !Array.isArray(v)) ? Object.keys(v).sort().reduce((o, kk) => { o[kk] = v[kk]; return o; }, {}) : v);
+  const clModeNow = () => st(() => { const s = window.RecruitApp.state; return window.RecruitRules.interviewModel(s.profile, s.scores, s.checklist).mode; });
+  const MEMO25 = '長期希望。土日は毎週どちらか可。</script><!--x';
+  await fresh();
+  await fillBasic({ name: '面接 花子', age: 20, category: '大学2年生', graduationDate: '2029-03', shifts: [['sat', '10:00', '18:00'], ['sun', '10:00', '18:00']], daysMin: 2, daysMax: 3, workPeriod: 'long', preFill: false });
+  await toHandoff();
+  await page.click('[data-action="to-step"][data-step="3"]');
+  await wait(300);
+  const order25 = await st(() => {
+    const ids = ['clHeader', 'clNav', 'cl-conditions', 'shiftConfirm', 'cl-continuity', 'cl-job', 'cl-teamwork', 'cl-reverse', 'clOverall'];
+    const els = ids.map(id => document.getElementById(id));
+    if (els.some(e => !e)) return 'missing: ' + ids.filter((id, i) => !els[i]).join(',');
+    for (let i = 1; i < els.length; i++) if (!(els[i - 1].compareDocumentPosition(els[i]) & Node.DOCUMENT_POSITION_FOLLOWING)) return 'order: ' + ids[i - 1] + ' > ' + ids[i];
+    return 'ok';
+  });
+  expect(order25 === 'ok', 'E25 Step3 の並び（ヘッダー → 目次 → ① → 面接で確認する項目 → ② → ③ → ④ → ⑤ → 総合判断）: ' + order25);
+  const heads25 = await st(() => ({
+    pages: document.querySelectorAll('.cl-page-head').length,
+    c1: document.querySelector('#cl-conditions .card-head').textContent,
+    c5: document.querySelector('#cl-reverse .card-head').textContent,
+    total: (document.getElementById('clMinutesTotal') || {}).textContent || '',
+    q: (document.querySelector('#cl-conditions .cl-questions') || {}).textContent || ''
+  }));
+  expect(heads25.pages === 2 && heads25.c1.includes('①') && heads25.c1.includes('勤務条件') && heads25.c1.includes('10分') && heads25.c5.includes('最大10分') && heads25.total.includes('合計 41分') && heads25.q.includes('歌舞伎町ですので'),
+    'E25 ページ見出し 2・「① 勤務条件 10分」「最大10分」「合計 41分」・質問文を表示: ' + JSON.stringify({ pages: heads25.pages, total: heads25.total }));
+  expect(await page.inputValue('#clDate') === '2026-10-10', 'E25 面接日は今日（2026-10-10）が自動で入る');
+  expect(await st(() => Array.from(document.querySelectorAll('#clManagers option')).some(o => o.value === '笹川 晴央')), 'E25 担当の候補（datalist）に名簿の「笹川 晴央」');
+  // 「面接で確認する項目」を入力（深夜帯○・タクシー 2,500円）→ ヘッダーのタクシーが自動で追従
+  await busyAllFull();
+  await page.selectOption('#shiftConfirm [data-field="weekendFreq"]', 'every_both');
+  await pick('holidayWork', 'ok');
+  await pick('allNight.availability', 'ng');
+  await pick('lateNight.availability', 'ok');
+  await wait(150);
+  await page.selectOption('#shiftConfirm [data-field="lateNight.returnMethod"]', 'taxi');
+  await page.fill('#shiftConfirm [data-field="lateNight.taxiFare"]', '2500');
+  await pick('sideJob', 'no');
+  await pick('continueAfterGraduation', 'undecided');
+  await wait(200);
+  expect((await page.textContent('#clTaxiAuto')).includes('可・2,500円'), 'E25 タクシー可否・料金を応募情報から自動表示: ' + await page.textContent('#clTaxiAuto'));
+  // 消極属性「短期希望」: 面接での回答（短期）で自動該当 → 「該当しない」で外す
+  await setCl('values.term', 'short');
+  await wait(150);
+  expect((await page.textContent('#clNeg-short')).includes('該当（自動）'), 'E25 短期希望と答えると消極属性「短期希望」が自動で該当: ' + await page.textContent('#clNeg-short'));
+  expect((await page.textContent('.cl-field[data-item="term"] .cl-auto-hint')).includes('異なります'), 'E25 短期／長期の希望が応募情報（長期）と食い違うと hint');
+  await setCl('header.negatives.short', 'off');
+  await wait(150);
+  expect((await page.textContent('#clNeg-short')).includes('該当しない'), 'E25 「該当しない」で手動で外せる');
+  await setCl('header.negatives.short', '');
+  await setCl('values.term', 'long');
+  // 必須条件「週3日」一致・指定繁忙期は未確認のまま・① の説明 2 件・② の説明 3 件・契約開始日・メモ・○4 △3 ＋採用
+  await setCl('values.must_weekly', 'match');
+  await page.click('label.cl-check[data-item="ex_fare"]');
+  await page.click('label.cl-check[data-item="ex_hours"]');
+  // 台本 PPTX どおり、シフト提出・電話連絡・欠勤連絡は ② 継続性・報連相の【説明】（必須条件ではない）
+  expect(await st(() => ['ex_submit', 'ex_phone', 'ex_absence'].every(id => !!document.querySelector('#cl-continuity label.cl-check[data-item="' + id + '"]')) && document.querySelectorAll('#cl-conditions .cl-must-row').length === 2),
+    'E25 ① の必須条件は 2 件・② に【説明】（提出・電話・欠勤）');
+  for (const id of ['ex_submit', 'ex_phone', 'ex_absence']) await page.click('label.cl-check[data-item="' + id + '"]');
+  await page.fill('[data-cl="values.start_date"]', '2026-11-01');
+  await wait(150);
+  expect((await page.textContent('[data-auto-field="first_end"]')).includes('2026-12'), 'E25 契約開始日 2026-11-01 → 初回契約終了の自動表示 2026-12: ' + await page.textContent('[data-auto-field="first_end"]'));
+  await page.fill('textarea[data-cl="notes.conditions_q"]', MEMO25);
+  await page.fill('textarea[data-cl="notes.continuity_q"]', '前職は飲食で2年。退職理由は引っ越し。');
+  await page.fill('input[data-cl="notes.rt_concrete"]', '曜日と時間を具体的に回答');
+  await rateAll('good', { must: false });
+  for (const id of ['rt_manner', 'rt_turnover', 'rt_team']) await setCl('values.' + id, 'fair');
+  await page.fill('textarea[data-note="interview"]', '受け答えが丁寧。');
+  await wait(200);
+  const sc25 = await st(() => ({ t: document.getElementById('clScoreTotal').textContent, p: document.getElementById('clScorePct').textContent, n: document.getElementById('clNavScore').textContent }));
+  expect(sc25.t === '13' && sc25.p === '81.3%' && sc25.n.includes('13/16'), 'E25 ○4 △3 ＋採用 → 13 / 16点・81.3%・目次の「13/16」: ' + JSON.stringify(sc25));
+  expect((await page.textContent('#clState-conditions')).includes('入力中'), 'E25 ① は必須条件が未確認のあいだ「入力中」');
+  await shot('28-step3-checklist.png', true);
+  await navStep(2);
+  await checkAll();
+  await page.click('[data-action="to-step"][data-step="3"]');
+  await wait(300);
+  await judge();
+  const t25 = await toastText();
+  j = await judgment();
+  expect(await step() === 4 && t25.includes('必須条件に未確認が 1 件'), 'E25 必須条件の未確認は警告して判定に進む: ' + t25);
+  expect(j.total === 13 && j.max === 16 && j.pct === 81.3, 'E25 判定の面接評価 13/16（81.3%）');
+  expect((await page.textContent('#judgeWarnings')).includes('必須条件に未確認が1件'), 'E25 判定の確認事項に必須条件の未確認');
+  const bd25 = await st(() => ({ must: document.querySelectorAll('#clBreakdown .cl-must-table tr').length, unk: document.querySelectorAll('#clBreakdown .cl-must-table tr.must-unknown').length,
+    rate: document.querySelectorAll('#clBreakdown .cl-rate-table tbody tr[data-item]').length, text: document.getElementById('clBreakdown').textContent }));
+  expect(bd25.must === 2 && bd25.unk === 1 && bd25.rate === 8 && bd25.text.includes('13/16'), 'E25 Step4「面接チェックリストの結果」: 必須条件 2 行（未確認 1）・確認点 7 行＋総合判断・合計 13/16: ' + JSON.stringify({ must: bd25.must, unk: bd25.unk, rate: bd25.rate }));
+  expect((await page.textContent('#sumMust')).includes('未確認 1'), 'E25 右サマリーの必須条件「未確認 1」');
+  await navStep(3);
+  await setCl('values.must_busy', 'match');
+  await judge();
+  j = await judgment();
+  expect(await step() === 4 && (await page.textContent('#sumMust')).includes('すべて一致'), 'E25 必須条件をすべて一致にして再判定 → 「すべて一致」');
+  expect((await page.textContent('#judgeStrengths')).includes('面接での強み（○ の確認点）') && (await page.textContent('#judgeStrengths')).includes('報連相できるか'), 'E25 強みに ○ の確認点');
+  await shot('30-step4-checklist.png', true);
+  const saved25 = await saveRecord('saved-checklist.html');
+  const r25 = saved25.rec;
+  expect(r25.checklist.values.rt_team === 'fair' && r25.checklistDef && r25.checklistDef.version === '2026-10-08' && Object.keys(r25.scores).length === 0, 'E25 保存レコードに checklist（rt_team=fair）・checklistDef（2026-10-08）・scores は空');
+  expect(r25.checklist.notes.conditions_q === MEMO25, 'E25 閉じタグ・コメント開始を含むメモも埋め込みデータで一致');
+  expect(saved25.html.includes('data-sec="checklist"') && saved25.html.includes('cl-s-no">①</span><span class="cl-s-title">勤務条件') && saved25.html.includes('前職は飲食で2年') && !saved25.html.includes('面接評価（旧形式') && saved25.html.includes('id="rtPrintChecklist"'),
+    'E25 レポートに「面接チェックリスト」節（① 勤務条件・メモ）と A4 報告のボタン・旧形式の節なし');
+  // 節（画面表示部分。印刷専用の #clSheet を除く）にも台本ヘッダー（面接日・担当・タクシー・消極属性・応募した求人）とページ題名・確認点の補足が出る
+  const sec25 = await (async () => {
+    const pg = await browser.newPage();
+    await pg.setContent(saved25.html, { waitUntil: 'load' });
+    const t = await pg.$eval('section.sec[data-sec="checklist"]', el => el.textContent);
+    await pg.close();
+    return t;
+  })();
+  expect(['面接日', '2026/10/10', '担当', 'タクシー可否・料金', '可・2,500円', '消極属性', '応募した求人', '必須条件一致・継続性', '人物確認・逆質問', '「大丈夫です」のみ連呼は特に要注意。'].every(k => sec25.includes(k)),
+    'E25 レポートの節に面接日・担当・タクシー・消極属性・応募した求人・ページ題名・確認点の補足: ' + ['面接日', '2026/10/10', '担当', 'タクシー可否・料金', '可・2,500円', '消極属性', '応募した求人', '必須条件一致・継続性', '人物確認・逆質問', '「大丈夫です」のみ連呼は特に要注意。'].filter(k => !sec25.includes(k)).join('・'));
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', saved25.file);
+  await wait(500);
+  const l25 = await st(() => window.RecruitApp.state.checklist);
+  expect(sortedJson(l25) === sortedJson(r25.checklist), 'E25 読込で state.checklist が保存時と一致');
+  j = await judgment();
+  expect(j.result === r25.judgment.result && j.total === r25.judgment.total && j.cellKey === r25.judgment.matrix.cellKey, 'E25 読込後の再判定が保存時と一致: ' + j.result);
+  await navStep(3);
+  expect(await page.$eval('[data-action="cl-set"][data-cl="values.rt_team"][data-value="fair"]', el => el.classList.contains('active')) && await page.inputValue('[data-cl="values.start_date"]') === '2026-11-01' && await page.inputValue('textarea[data-cl="notes.conditions_q"]') === MEMO25,
+    'E25 読込で Step3 のボタン・契約開始日・メモが復元');
+
+  // =====================================================================
+  // E26 必須条件ゲート（不一致 → 不採用推奨。台本の「5へ」）
+  // =====================================================================
+  console.log('\n== E26 必須条件ゲート ==');
+  await setCl('values.must_busy', 'mismatch');
+  await wait(150);
+  expect((await page.textContent('#clMustAlertText')).includes('⑤ 逆質問へ進み') && await visible('#clMustAlert [data-action="cl-jump"]'), 'E26 不採用推奨の設定では「⑤ 逆質問へ進み…終了」と案内');
+  expect(await visible('#clMustAlert') && (await page.textContent('#clState-conditions')).includes('不一致あり'), 'E26 不一致で #clMustAlert と「不一致あり」');
+  expect(await st(() => ['continuity', 'job', 'teamwork'].every(id => document.getElementById('cl-' + id).classList.contains('cl-skippable')) && !document.getElementById('cl-reverse').classList.contains('cl-skippable')), 'E26 ②〜④ に「省略可」（⑤ は対象外）');
+  await page.click('#clMustAlert [data-action="cl-jump"]');
+  await wait(900);
+  expect(await st(() => { const r = document.getElementById('cl-reverse').getBoundingClientRect(); return r.top < window.innerHeight && r.bottom > 0; }), 'E26 「⑤ 逆質問へ」で ⑤ へ移動');
+  await shot('29-step3-must-ng.png');
+  await judge();
+  j = await judgment();
+  expect(await step() === 4 && j.result === 'reject' && j.adjustments[0] === 'must_conditions', 'E26 必須条件の不一致で不採用推奨（must_conditions）: ' + j.result + '/' + j.adjustments.join(','));
+  expect((await page.textContent('.result-body')).includes('必須条件（' + '指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）' + '）が一致しないため') && !(await page.textContent('.result-body')).includes('点数上は') && (await page.textContent('.adjust-box')).includes('→ 最終: 不採用推奨'), 'E26 本文は必須条件の不一致を理由にし、調整の経緯を出す');
+  expect((await page.textContent('#sumMust')).includes('不一致 1') && (await page.textContent('.result-card .result-must')).includes('不一致 1'), 'E26 右サマリーと結果カードに「不一致 1」');
+  // 設定で「上長最終判断要」に → 確認点・総合判断は必須のまま → 入力すれば review
+  await toView('settings');
+  await page.selectOption('[data-bind="checklist.mustFailResult"]', 'review');
+  await saveSettings();
+  await toView('judge');
+  await navStep(3);
+  // review では ②〜④ も評価が必要: 「省略可」「⑤へ進み終了」の案内を出さない
+  const rv26 = await st(() => ({ text: document.getElementById('clMustAlertText').textContent, skip: document.querySelectorAll('.cl-sec.cl-skippable').length,
+    jump: !document.querySelector('#clMustAlert [data-action="cl-jump"]').classList.contains('hidden') }));
+  expect(rv26.text.includes('確認点も評価') && rv26.text.includes('上長最終判断要以下') && !rv26.text.includes('終了してください') && rv26.skip === 0 && !rv26.jump, 'E26 mustFailResult=review の案内（省略可・⑤へ を出さない）: ' + JSON.stringify(rv26));
+  await page.click('[data-action="cl-set"][data-cl="values.rt_team"][data-value="fair"]');   // 押下中を再度押すと未入力に戻る
+  await wait(100);
+  await judge();
+  expect(await step() === 3 && (await toastText()).includes('未入力の確認点'), 'E26 mustFailResult=review では確認点の未入力で止まる');
+  await setCl('values.rt_team', 'fair');
+  await judge();
+  j = await judgment();
+  expect(await step() === 4 && j.result === 'review' && j.adjustments.includes('must_conditions'), 'E26 mustFailResult=review → 上長最終判断要: ' + j.result);
+  await toView('settings');
+  await page.selectOption('[data-bind="checklist.mustFailResult"]', 'reject');
+  await saveSettings();
+  await toView('judge');
+  // 新しい応募者（シフト条件は未確定のまま）: 必須条件 1 件不一致なら確認点・総合判断・シフト条件が空でも判定へ進める
+  await page.click('#btnNew');
+  await wait(200);
+  await fillBasic({ name: '打切 次郎', age: 22, category: 'フリーター', shifts: [['mon', '10:00', '15:00']], daysMin: 1, daysMax: 2, workPeriod: 'long', preFill: false });
+  await toHandoff();
+  await page.click('[data-action="to-step"][data-step="3"]');
+  await wait(300);
+  await setCl('values.must_weekly', 'mismatch');
+  await judge();
+  j = await judgment();
+  const w26 = await st(() => (window.RecruitApp.state.judgment.warnings || []).join(' / '));
+  // 確認点が空（0 点）なので点数上も不採用推奨。それでも結論の理由は必須条件（adjustments・本文・A4 の判定サマリー。SPEC-checklist 3-3）
+  expect(await step() === 4 && j.result === 'reject' && j.adjustments[0] === 'must_conditions' && w26.indexOf('必須条件が一致しないため（土日を含む週3日以上') === 0 && !w26.includes('未入力の確認点'), 'E26 不一致なら確認点・総合判断・シフト条件が未入力でも判定へ進み不採用推奨（理由は先頭）: ' + (j && j.result) + ' / ' + w26);
+  const b26 = await st(() => ({ body: document.querySelector('.result-body').textContent, adj: (document.querySelector('.adjust-box') || {}).textContent || '', note: (document.querySelector('.result-card .result-note') || {}).textContent || '' }));
+  expect(b26.body.includes('必須条件（土日を含む週3日以上、5時間以上）が一致しないため') && !b26.body.includes('0%') && b26.adj.includes('不採用推奨（固定）') && !b26.note, 'E26 打ち切りでも本文・調整欄の理由は必須条件（面接評価 0% を理由にしない）: ' + JSON.stringify(b26));
+  await st(() => window.RecruitApp.prepareChecklistSheet(true));
+  const adj26 = await st(() => (document.querySelector('#clSheet .cl-adj') || {}).textContent || '');
+  await st(() => window.RecruitApp.prepareChecklistSheet(false));
+  expect(adj26.includes('必須条件が一致しないため'), 'E26 A4 の判定サマリーにも必須条件の理由: ' + adj26);
+
+  // =====================================================================
+  // E27 A4「面接チェックリスト報告」（アプリ・レポート）
+  // =====================================================================
+  console.log('\n== E27 面接チェックリスト報告（A4） ==');
+  const pdfPages27 = (f) => { try { return Number((require('child_process').execSync('pdfinfo "' + f + '"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().match(/Pages:\s+(\d+)/) || [])[1]); } catch (e) { return -1; } };
+  const pagesOk = (n) => n === -1 || (n >= 1 && n <= 2);
+  const pagesTxt = (n) => n === -1 ? 'pdfinfo なし（省略）' : n + ' ページ';
+  const pdfText27 = (f) => { try { return require('child_process').execSync('pdftotext -layout "' + f + '" -', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().replace(/\s+/g, ''); } catch (e) { return null; } };
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', saved25.file);
+  await wait(500);
+  expect(await visible('.result-card') && !!(await page.$('#stepContent [data-action="print-checklist"]')), 'E27 Step4 に「面接チェックリスト報告（A4）」');
+  await navStep(3);
+  expect(await visible('#clPrintBtn'), 'E27 Step3 に「面接チェックリスト報告（A4）」');
+  expect(await st(() => getComputedStyle(document.getElementById('clSheet')).display) === 'none' && !!(await st(() => document.getElementById('clSheetCss'))), 'E27 画面では #clSheet は非表示・CSS は 1 回だけ注入');
+  // 標準のサンプル（E25）
+  await st(() => window.RecruitApp.prepareChecklistSheet(true));
+  await page.emulateMedia({ media: 'print' });
+  const p27 = await st(() => ({
+    app: getComputedStyle(document.querySelector('.app')).display, sheet: getComputedStyle(document.querySelector('#clSheet .cl-sheet')).display,
+    pages: document.querySelectorAll('#clSheet .cl-page').length, judge: (document.querySelector('#clSheet .cl-judge') || {}).textContent || '',
+    stamps: document.querySelectorAll('#clSheet .cl-stamps .stamp-box').length, head: (document.querySelector('#clSheet .cl-sheet-head') || {}).textContent || ''
+  }));
+  expect(p27.app === 'none' && p27.sheet === 'block' && p27.pages === 2 && p27.stamps === 3, 'E27 印刷時はアプリを隠し、報告（2 ページ構成・押印 3 枠）を出す: ' + JSON.stringify({ app: p27.app, sheet: p27.sheet, pages: p27.pages, stamps: p27.stamps }));
+  expect(p27.judge.includes(r25.judgment.title) && p27.head.includes('面接 花子') && p27.head.includes('2026/10/10') && p27.head.includes('可・2,500円'), 'E27 ヘッダー（応募者・面接日・タクシー）と判定サマリーの結果');
+  // ヘッダーのチップ（タクシー可否・料金／消極属性…）は印刷でも見える（Step3 の目次 .cl-chip の印刷規則に巻き込まれない）
+  const chips27 = await st(() => Array.from(document.querySelectorAll('#clSheet .cl-sh-chips > *')).map(el => getComputedStyle(el).display));
+  expect(chips27.length >= 3 && chips27.every(d => d !== 'none'), 'E27 印刷時もヘッダーのチップ（タクシー・消極属性）を表示: ' + chips27.join(','));
+  const pdf27a = path.join(OUT, 'checklist-app.pdf');
+  await page.pdf({ path: pdf27a, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const n27a = pdfPages27(pdf27a);
+  expect(pagesOk(n27a), 'E27 アプリの面接チェックリスト報告は A4 1〜2 枚: ' + pagesTxt(n27a));
+  const txt27a = pdfText27(pdf27a);
+  expect(txt27a === null || (txt27a.includes('タクシー可否') && txt27a.includes('消極属性')), 'E27 アプリの報告 PDF にタクシー可否・消極属性: ' + (txt27a === null ? 'pdftotext なし（省略）' : 'ok'));
+  await page.emulateMedia({ media: 'screen' });
+  await st(() => window.RecruitApp.prepareChecklistSheet(false));
+  expect(await st(() => !document.body.classList.contains('print-checklist') && document.getElementById('clSheet').innerHTML === ''), 'E27 印刷後に通常表示へ戻る（#clSheet は空）');
+  // 重いサンプル: 全メモ 150 字・確認点メモ 40 字・説明すべて☑・面接所見 200 字・総合判断「保留」
+  const L = (n) => 'あいうえおかきくけこさしすせそ'.repeat(Math.ceil(n / 15)).slice(0, n);
+  for (const sel of await page.$$eval('#stepContent textarea[data-cl]', els => els.map(e => e.getAttribute('data-cl')))) await page.fill('textarea[data-cl="' + sel + '"]', L(150));
+  for (const sel of await page.$$eval('#stepContent input.cl-note[data-cl]', els => els.map(e => e.getAttribute('data-cl')))) await page.fill('input[data-cl="' + sel + '"]', L(40));
+  for (const lb of await page.$$('#stepContent label.cl-check')) if (!(await lb.evaluate(el => el.querySelector('input').checked))) await lb.click();
+  await page.fill('textarea[data-note="interview"]', L(200));
+  await setCl('overall', 'hold');
+  await judge();
+  j = await judgment();
+  expect(await step() === 4 && j.adjustments.includes('overall_hold'), 'E27 重いサンプル（総合判断 保留 → 調整あり）で判定: ' + j.result);
+  await st(() => window.RecruitApp.prepareChecklistSheet(true));
+  await page.emulateMedia({ media: 'print' });
+  const pdf27b = path.join(OUT, 'checklist-app-heavy.pdf');
+  await page.pdf({ path: pdf27b, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const n27b = pdfPages27(pdf27b);
+  expect(pagesOk(n27b), 'E27 重いサンプルでもアプリの報告は A4 1〜2 枚: ' + pagesTxt(n27b));
+  await page.emulateMedia({ media: 'screen' });
+  await st(() => window.RecruitApp.prepareChecklistSheet(false));
+  // レポート側（重いサンプル）
+  const saved27 = await saveRecord('saved-checklist-heavy.html');
+  const rp27 = await ctx.newPage();
+  const rp27Err = [];
+  rp27.on('pageerror', e => rp27Err.push(e.message));
+  rp27.on('dialog', d => d.accept());
+  await rp27.goto('file://' + saved27.file);
+  await wait(300);
+  expect(!!(await rp27.$('#rtPrintChecklist')) && await rp27.$eval('#clSheet', el => getComputedStyle(el).display) === 'none', 'E27 レポート: ツールバーに「面接チェックリスト報告（A4）」・画面では #clSheet 非表示');
+  await rp27.selectOption('#mgmt .stamp-box[data-field-id="interviewer"] select', { label: '笹川 晴央（副支配人）' });
+  await rp27.click('#mgmt .stamp-box[data-field-id="interviewer"] [data-act="stamp"]');
+  await wait(150);
+  await rp27.evaluate(() => window.__prepareChecklistSheet(true));
+  await rp27.emulateMedia({ media: 'print' });
+  const vis27 = await rp27.$$eval('.page > *', els => els.filter(el => getComputedStyle(el).display !== 'none').map(el => el.id || el.dataset.sec || el.className));
+  expect(vis27.join(',') === 'clSheet,mgmt', 'E27 レポートの報告印刷で見えるのは #clSheet と押印の節だけ: ' + vis27.join(','));
+  expect(await rp27.$eval('.rtool', el => getComputedStyle(el).display) === 'none' && await rp27.$eval('.dash', el => getComputedStyle(el).display) === 'none' && (await rp27.$$('section[data-sec="mgmt"] svg.hanko')).length === 1 && await rp27.$eval('section[data-sec="mgmt"] svg.hanko', el => getComputedStyle(el).display) !== 'none', 'E27 ツールバー・ダッシュボードは隠し、レポート上で押した印は出す');
+  const pdf27c = path.join(OUT, 'checklist-report-heavy.pdf');
+  await rp27.pdf({ path: pdf27c, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const n27c = pdfPages27(pdf27c);
+  expect(pagesOk(n27c), 'E27 重いサンプルでもレポートの報告は A4 1〜2 枚: ' + pagesTxt(n27c));
+  await rp27.emulateMedia({ media: 'screen' });
+  await rp27.evaluate(() => window.__prepareChecklistSheet(false));
+  expect(await rp27.evaluate(() => !document.body.classList.contains('print-checklist')), 'E27 レポート側も印刷後に通常表示へ戻る');
+  // 申し送りシートの印刷には #clSheet を混ぜない
+  await rp27.evaluate(() => window.__prepareHandoffSheet(true));
+  await rp27.emulateMedia({ media: 'print' });
+  const vis27h = await rp27.$$eval('section.sec', els => els.filter(el => getComputedStyle(el).display !== 'none').map(el => el.dataset.sec));
+  const hs27 = vis27h.join(',');
+  expect(await rp27.$eval('#clSheet', el => getComputedStyle(el).display) === 'none' && (hs27 === 'pre,comment,handoff,interview,mgmt' || hs27 === 'pre,handoff,interview,mgmt'), 'E27 申し送りシートの印刷に #clSheet・チェックリスト節は出さない: ' + hs27);
+  await rp27.emulateMedia({ media: 'screen' });
+  await rp27.evaluate(() => window.__prepareHandoffSheet(false));
+  // 標準のサンプル（E25 の保存ファイル）もレポートで 1〜2 枚
+  await rp27.goto('file://' + saved25.file);
+  await wait(300);
+  await rp27.evaluate(() => window.__prepareChecklistSheet(true));
+  await rp27.emulateMedia({ media: 'print' });
+  const pdf27d = path.join(OUT, 'checklist-report.pdf');
+  await rp27.pdf({ path: pdf27d, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const n27d = pdfPages27(pdf27d);
+  expect(pagesOk(n27d), 'E27 レポートの報告（標準のサンプル）は A4 1〜2 枚: ' + pagesTxt(n27d));
+  expect(rp27Err.length === 0, 'E27 レポートのページエラーなし: ' + (rp27Err.join(' / ') || 'none'));
+  await rp27.close();
+  // 2 ページ目（③〜⑤・所見・判定・押印）だけが重いサンプル: 全体で 2 枚に収まるなら 2 枚目の強制改ページを外す
+  await navStep(3);
+  for (const sel of await page.$$eval('#stepContent textarea[data-cl]', els => els.map(e => e.getAttribute('data-cl')))) await page.fill('textarea[data-cl="' + sel + '"]', L(40));
+  await page.fill('textarea[data-cl="notes.teamwork_q"]', L(800));
+  await page.fill('textarea[data-note="interview"]', L(1200));
+  await wait(150);
+  await st(() => window.RecruitApp.prepareChecklistSheet(true));
+  await page.emulateMedia({ media: 'print' });
+  const fit27 = await st(() => document.querySelector('#clSheet .cl-sheet').classList.contains('cl-fit'));
+  const pdf27e = path.join(OUT, 'checklist-app-page2-heavy.pdf');
+  await page.pdf({ path: pdf27e, format: 'A4', preferCSSPageSize: true, printBackground: true });
+  const n27e = pdfPages27(pdf27e);
+  expect(fit27 && pagesOk(n27e), 'E27 2 ページ目が重いサンプル（④ 回答 800 字・所見 1,200 字）も A4 1〜2 枚（.cl-fit）: ' + pagesTxt(n27e) + ' fit=' + fit27);
+  await page.emulateMedia({ media: 'screen' });
+  await st(() => window.RecruitApp.prepareChecklistSheet(false));
+  // 設定「質問文も載せる」を OFF にすると報告に質問文を出さない
+  await toView('settings');
+  await page.click('label:has([data-bind="checklist.print.showQuestions"])');
+  await wait(100);
+  await saveSettings();
+  await toView('judge');
+  await st(() => window.RecruitApp.prepareChecklistSheet(true));
+  const q27 = await st(() => ({ qs: document.querySelectorAll('#clSheet .cl-qs').length, memo: document.querySelectorAll('#clSheet .cl-memo').length }));
+  await st(() => window.RecruitApp.prepareChecklistSheet(false));
+  expect(q27.qs === 0 && q27.memo > 0, 'E27 print.showQuestions=OFF で質問文を出さない（メモは出す）: ' + JSON.stringify(q27));
+  await toView('settings');
+  await page.click('label:has([data-bind="checklist.print.showQuestions"])');
+  await wait(100);
+  await saveSettings();
+  await toView('judge');
+
+  // =====================================================================
+  // E28 設定で台本を変更（文言・項目の追加・確認点の削除・既定に戻す・壊れた設定）
+  // =====================================================================
+  console.log('\n== E28 設定で台本を変更 ==');
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', saved25.file);
+  await wait(500);
+  await toView('settings');
+  await page.locator('#s-checklist').scrollIntoViewIfNeeded();
+  await shot('31-settings-checklist.png');
+  await page.fill('[data-bind="checklist.sections[0].blocks[0].items[1].label"]', '指定繁忙期間すべて出勤可（年末年始・GW・お盆）');
+  await wait(100);
+  await page.click('details.s-cl-sec[data-sec-id="job"] > summary');
+  await wait(100);
+  await page.click('details.s-cl-sec[data-sec-id="job"] [data-action="cl-item-add"][data-block="0"]');
+  await wait(100);
+  await saveSettings();
+  expect((await storedProfile()).checklist.sections[0].blocks[0].items[1].label === '指定繁忙期間すべて出勤可（年末年始・GW・お盆）', 'E28 文言を変えて保存');
+  await toView('judge');
+  await navStep(3);
+  expect((await page.textContent('.cl-must-row[data-item="must_busy"] .cl-label')) === '指定繁忙期間すべて出勤可（年末年始・GW・お盆）' && (await page.$$('#cl-job label.cl-check')).length === 5, 'E28 Step3 に新しい文言と追加した説明の行');
+  await setCl('values.must_busy', 'mismatch');
+  await judge();
+  expect(await st(() => (window.RecruitApp.state.judgment.adjustments[0] || {}).reason || '').then(r => r.includes('すべて出勤可')), 'E28 判定の理由文に新しい文言');
+  await navStep(3);
+  await setCl('values.must_busy', 'match');
+  // ① の確認点「最低限の話し方、敬語が可能か」を削除 → 満点 14
+  await toView('settings');
+  await page.click('.s-cl-item[data-item-id="rt_manner"] [data-action="cl-item-del"]');
+  await wait(150);
+  await saveSettings();
+  expect((await page.textContent('#s-checklist')).includes('満点 14 点') || (await page.textContent('#s-checklist')).includes('満点 14点'), 'E28 設定の満点表示 14 点');
+  expect((await page.textContent('#view-settings')).includes('現在の満点 14点'), 'E28 2軸判定の節「現在の満点 14点」');
+  await toView('judge');
+  expect((await page.textContent('#sumInterview')).includes('/ 14点'), 'E28 右サマリーの満点 14 点');
+  // ④ に確認点を追加 → 満点 16
+  await toView('settings');
+  await page.click('details.s-cl-sec[data-sec-id="teamwork"] > summary');
+  await wait(100);
+  await page.click('details.s-cl-sec[data-sec-id="teamwork"] [data-action="cl-item-add"][data-block="2"]');
+  await wait(100);
+  await saveSettings();
+  await toView('judge');
+  expect((await page.textContent('#sumInterview')).includes('/ 16点'), 'E28 ④ に確認点を追加すると満点 16 点');
+  // 保存時と確認点が違うファイルを読むと toast で知らせる。保存済みレポートは保存時の文言のまま
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', saved25.file);
+  await wait(500);
+  expect((await toastText()).includes('確認点が異なります（追加 1・削除 1）'), 'E28 読込 toast「確認点が異なります（追加 1・削除 1）」: ' + await toastText());
+  expect(saved25.html.includes('指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）') && !saved25.html.includes('すべて出勤可'), 'E28 保存済みレポートは保存時の文言のまま');
+  // 空の文言は保存できない
+  await toView('settings');
+  await page.fill('[data-bind="checklist.sections[0].blocks[0].items[0].label"]', '');
+  await wait(100);
+  await saveSettings();
+  const t28 = await st(() => { const el = document.getElementById('toast'); return el.className + '|' + el.textContent; });
+  expect(/\berror\b/.test(t28) && (await storedProfile()).checklist.sections[0].blocks[0].items[0].label === '土日を含む週3日以上、5時間以上', 'E28 空の文言は検証エラーで保存されない: ' + t28);
+  await page.click('#view-settings [data-action="discard"]');
+  await wait(200);
+  // 既定の台本に戻す
+  await page.click('#view-settings [data-action="cl-default"]');
+  await wait(150);
+  await saveSettings();
+  const sp28 = await storedProfile();
+  expect(sp28.checklist.sections[0].blocks[0].items[1].label === '指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）' && await st(() => { const s = window.RecruitApp.state; return window.RecruitRules.interviewModel(s.profile, {}, window.RecruitRules.emptyChecklist()).max; }) === 16, 'E28 「既定の台本に戻す」で既定の文言・満点 16');
+  await toView('judge');
+  // 壊れた checklist を持つプロファイル → 既定の台本で動く
+  const errs28 = errors.length;
+  await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('recruit.profile.v1')); p.checklist.sections = 'x'; p.checklist.mustFailResult = 'xxx'; localStorage.setItem('recruit.profile.v1', JSON.stringify(p)); });
+  await page.reload();
+  await wait(300);
+  const c28 = await st(() => { const c = window.RecruitApp.state.profile.checklist; return { n: c.sections.length, m: c.mustFailResult }; });
+  expect(c28.n === 5 && c28.m === 'reject' && errors.length === errs28, 'E28 壊れた checklist（sections:"x"・mustFailResult:"xxx"）は既定の台本・reject に戻る: ' + JSON.stringify(c28));
+
+  // =====================================================================
+  // E29 旧データ・他劇場・狭い画面・ダークモード
+  // =====================================================================
+  console.log('\n== E29 旧データ・他劇場・狭い画面 ==');
+  await fresh();
+  await page.setInputFiles('#fileInput', path.join(FIX, 'v1-record.html'));
+  await wait(500);
+  const j29 = await st(() => { const x = window.RecruitApp.state.judgment; return { mode: x.interviewMode, total: x.total, max: x.max }; });
+  expect(j29.mode === 'legacy' && j29.total === 39 && j29.max === 50, 'E29 v1 ファイルは旧方式で再判定（39/50）: ' + JSON.stringify(j29));
+  await navStep(3);
+  expect(await visible('#legacyScores') && (await page.textContent('#legacyScores')).includes('39 / 50') && (await page.textContent('#legacyScoresMsg')).includes('判定はこの点数で行います') && !(await visible('#clPrintBtn')), 'E29 Step3 に旧形式の点数（39 / 50）・旧形式では報告ボタンを出さない');
+  await setCl('values.rt_concrete', 'good');
+  await wait(150);
+  expect(await clModeNow() === 'checklist' && (await page.textContent('#legacyScoresMsg')).includes('切り替わりました') && await visible('#clPrintBtn'), 'E29 確認点を 1 つ入れるとチェックリスト方式に切り替わる（報告ボタンも出る）');
+  // チェックリスト導入前の v2 レコード（checklist キーなし）
+  const oldRec29 = JSON.parse(JSON.stringify(r25));
+  delete oldRec29.checklist;
+  delete oldRec29.checklistDef;
+  const oldHtml29 = saved25.html.replace(/(<script type="application\/json" id="recruit-record">)[\s\S]*?(<\/script>)/, (m, a, b) => a + JSON.stringify(oldRec29).replace(/[<>&]/g, c => '\\u' + ('000' + c.charCodeAt(0).toString(16)).slice(-4)) + b);
+  const oldFile29 = path.join(OUT, 'saved-v2-nochecklist.html');
+  fs.writeFileSync(oldFile29, oldHtml29);
+  await page.click('#btnNew');
+  await wait(200);
+  const errs29 = errors.length;
+  await page.setInputFiles('#fileInput', oldFile29);
+  await wait(500);
+  expect(errors.length === errs29 && await st(() => window.RecruitApp.state.applicant.name) === '面接 花子' && await st(() => Object.keys(window.RecruitApp.state.checklist.values).length) === 0, 'E29 checklist の無い旧 v2 レコードもエラーなく読める（回答は空）');
+  // 他劇場の旧プロファイル → 既定の台本を補って toast
+  await toView('settings');
+  await page.setInputFiles('#profileFileInput', path.join(FIX, 'v1-profile-other.json'));
+  await wait(400);
+  expect((await toastText()).includes('面接チェックリスト（新宿の台本 2026-10-08 版）を既定で追加'), 'E29 他劇場の旧プロファイルには既定の台本を補い toast で知らせる');
+  await saveSettings();
+  await toView('judge');
+  await page.setInputFiles('#fileInput', saved25.file);
+  await wait(500);
+  await navStep(3);
+  expect(!!(await page.$('#cl-conditions')) && !!(await page.$('#cl-reverse')), 'E29 他劇場でも Step3 に既定の台本');
+  // 390px 幅の Step3 で横スクロールなし
+  await page.setViewportSize({ width: 390, height: 900 });
+  await wait(300);
+  const ov29 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(ov29 <= 1, 'E29 390px 幅の Step3（面接チェックリスト）で横スクロールなし: ' + ov29);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await wait(200);
+  await page.click('#btnTheme');
+  await wait(200);
+  await shot('32-step3-checklist-dark.png');
+  await page.click('#btnTheme');
+  await wait(100);
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');

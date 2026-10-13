@@ -1447,5 +1447,751 @@ test('53 押印（ハンコSVG・名簿の正規化・レコードとレポー�
   assert.ok(noScript(html2).indexOf('__free') < 0 && html2.indexOf('担当者を選択') > 0);
 });
 
+// ======================================================================
+// 面接チェックリスト（docs/SPEC-checklist.md 7-1。#54〜#66）
+// mark: 'good'|'fair'|'poor'（全確認点）、overall: 既定 'hire'（総合判断の上限を混ぜない）
+function clAll(mark, overall, over, p) {
+  const def = (p || P()).checklist, cl = R.emptyChecklist();
+  R.checklistItems(def, 'must').forEach(function (x) { cl.values[x.item.id] = 'match'; });
+  R.checklistItems(def, 'rating').forEach(function (x) { cl.values[x.item.id] = mark; });
+  cl.overall = overall || 'hire';
+  return merge(cl, over || {});
+}
+// 確認点を台本順に marks（'good'|'fair'|'poor'|''）で入れる
+function clMarks(marks, overall, p) {
+  const cl = clAll('good', overall, null, p);
+  R.checklistItems((p || P()).checklist, 'rating').forEach(function (x, i) {
+    if (marks[i]) cl.values[x.item.id] = marks[i]; else delete cl.values[x.item.id];
+  });
+  return cl;
+}
+function judgeCL(a, cl, p, checksFn) {
+  p = p || P();
+  const h = HO(a, p);
+  const checks = checksFn ? checksFn(h) : allChecks(h);
+  return R.evaluateHiring(a, {}, p, h, checks, Object.assign({}, OPTS, { checklist: cl }));
+}
+const CL_ID = /^[A-Za-z][\w-]{0,40}$/;
+function clAllIds(def) {
+  const out = [];
+  def.sections.forEach(function (s) { out.push(s.id); s.blocks.forEach(function (b) { out.push(b.id); b.items.forEach(function (it) { out.push(it.id); }); }); });
+  return out;
+}
+function hasWarn(j, s) { return j.warnings.some(function (w) { return w.indexOf(s) >= 0; }); }
+
+test('54 既定の台本（面接チェックリスト 2026-10-08 版）', function () {
+  const def = P().checklist;
+  assert.strictEqual(def.version, '2026-10-08');
+  assert.deepStrictEqual(plain(def.sections.map(function (s) { return s.id; })), ['conditions', 'continuity', 'job', 'teamwork', 'reverse']);
+  assert.deepStrictEqual(plain(def.sections.map(function (s) { return s.minutes; })), [10, 3, 10, 8, 10]);
+  assert.deepStrictEqual(plain(def.sections.map(function (s) { return s.minutesMax; })), [false, false, false, false, true]);
+  assert.deepStrictEqual(plain(def.sections.map(function (s) { return s.page; })), [1, 1, 2, 2, 2]);
+  const cnt = {};
+  R.CHECKLIST_BLOCK_TYPES.forEach(function (t) { cnt[t] = R.checklistItems(def, t).length; });
+  assert.deepStrictEqual(plain(cnt), { must: 2, fields: 6, explain: 14, question: 13, rating: 7, notify: 2, note: 0 });
+  // 台本 PPTX の配置どおり: ① の必須条件は左列の 2 件、② の【説明】に提出・連絡・欠勤の 3 件、③④⑤ は各列の中身
+  const blockIds = function (sid) { return plain(def.sections.find(function (s) { return s.id === sid; }).blocks.map(function (b) { return b.id; })); };
+  assert.deepStrictEqual(plain(R.checklistItems(def, 'must').map(function (x) { return x.item.id; })), ['must_weekly', 'must_busy']);
+  assert.deepStrictEqual(blockIds('continuity'), ['continuity_explain', 'continuity_q', 'continuity_rate']);
+  assert.deepStrictEqual(blockIds('job'), ['job_explain', 'job_q', 'job_rate']);
+  assert.deepStrictEqual(blockIds('teamwork'), ['teamwork_explain', 'teamwork_q', 'teamwork_rate']);
+  assert.deepStrictEqual(blockIds('reverse'), ['reverse_q', 'reverse_notify', 'reverse_rate']);
+  const qOf = function (sid) { return plain(R.checklistItems(def, 'question').filter(function (x) { return x.section.id === sid; }).map(function (x) { return x.item.id; })); };
+  assert.deepStrictEqual(qOf('job'), ['q_value', 'q_failure', 'q_unsure']);
+  assert.deepStrictEqual(qOf('teamwork'), ['q_feedback', 'q_unknown', 'q_busy_mind']);
+  assert.deepStrictEqual(qOf('reverse'), ['q_concerns']);
+  const ids = clAllIds(def);
+  ids.forEach(function (id) { assert.ok(CL_ID.test(id), id); });
+  assert.strictEqual(ids.length, new Set(ids).size, '一意');
+  assert.strictEqual(R.interviewModel(P(), {}, R.emptyChecklist()).max, 16);
+  assert.strictEqual(R.circled(1), '①');
+  assert.strictEqual(R.circled(5), '⑤');
+  const x = R.checklistItems(def, 'rating')[6];
+  assert.strictEqual(x.item.id, 'rt_mismatch');
+  assert.strictEqual(x.no, 5);
+  assert.strictEqual(x.noMark, '⑤');
+  // 台本の文言が入っている
+  assert.ok(R.checklistItems(def, 'question').some(function (q) { return q.item.label.indexOf('歌舞伎町ですので') >= 0; }));
+  // 旧 10 項目は旧データ用に残る
+  assert.strictEqual(P().evaluation.items.length, 10);
+});
+
+test('55 得点率と帯（○△×＋総合判断）', function () {
+  const a = strongApplicant();
+  const cases = [
+    [clAll('good'), 16, 100, 'high'],
+    [clMarks(['good', 'good', 'good', 'good', 'good', 'fair', 'fair']), 14, 87.5, 'high'],
+    [clMarks(['good', 'fair', 'good', 'fair', 'good', 'fair', 'good']), 13, 81.3, 'high'],
+    [clMarks(['good', 'good', 'good', 'good', 'fair', 'fair', 'poor']), 12, 75, 'high'],
+    [clMarks(['good', 'good', 'good', 'fair', 'fair', 'fair', 'poor']), 11, 68.8, 'mid'],
+    [clAll('fair'), 9, 56.3, 'mid'],
+    [clMarks(['good', 'fair', 'fair', 'fair', 'poor', 'poor', 'poor'], 'hold'), 6, 37.5, 'low'],
+    [clAll('poor'), 2, 12.5, 'low']
+  ];
+  cases.forEach(function (c, i) {
+    const j = judgeCL(a, c[0]);
+    assert.strictEqual(j.total, c[1], 'case ' + i);
+    assert.strictEqual(j.max, 16, 'case ' + i);
+    assert.strictEqual(j.pct, c[2], 'case ' + i);
+    assert.strictEqual(j.interview.band, c[3], 'case ' + i);
+    assert.strictEqual(j.interviewMode, 'checklist');
+    assert.strictEqual(j.scaleMax, 2);
+    const m = R.interviewModel(P(), {}, c[0]);
+    assert.strictEqual(m.total, c[1]); assert.strictEqual(m.pct, c[2]); assert.strictEqual(m.band, c[3]);
+  });
+  const j = judgeCL(a, clAll('good'));
+  assert.strictEqual(j.thresholds.recommendPts, 12);
+  assert.strictEqual(j.thresholds.reviewPts, 7);
+  assert.strictEqual(j.breakdown.length, 8);
+  const last = j.breakdown[7];
+  assert.ok(last.isOverall && last.id === '__overall' && last.mark === 'hire' && last.markLabel === '採用' && last.label === '面接者の総合判断');
+  assert.strictEqual(j.breakdown[0].mark, 'good');
+  assert.strictEqual(j.breakdown[0].markLabel, '○');
+  assert.strictEqual(j.breakdown[0].sectionNo, 1);
+  assert.strictEqual(j.breakdown[0].sectionId, 'conditions');
+  assert.deepStrictEqual(plain(j.checklist.counts), { good: 7, fair: 0, poor: 0, blank: 0 });
+  assert.strictEqual(j.checklist.version, '2026-10-08');
+  assert.deepStrictEqual(plain(j.checklist.overall), { value: 'hire', label: '採用', points: 2 });
+  assert.strictEqual(j.result, 'recommend');
+  // 確認点 1 件未入力 → 2 点減・警告
+  const cl1 = clAll('good'); delete cl1.values.rt_team;
+  const j1 = judgeCL(a, cl1);
+  assert.strictEqual(j1.total, 14);
+  assert.ok(hasWarn(j1, '未入力の確認点が1件あります（0点として集計）'), j1.warnings.join('\n'));
+  assert.ok(!hasWarn(j1, '未入力の評価項目'));
+  assert.strictEqual(j1.checklist.counts.blank, 1);
+  // 総合判断が未入力
+  const cl2 = clAll('good'); cl2.overall = '';
+  const j2 = judgeCL(a, cl2);
+  assert.strictEqual(j2.total, 14);
+  assert.ok(hasWarn(j2, '面接者の総合判断が未入力です（0点として集計）'), j2.warnings.join('\n'));
+  // 不正な値は未入力扱い
+  const cl3 = clAll('good'); cl3.values.rt_team = 'excellent'; cl3.overall = 'maybe';
+  assert.strictEqual(judgeCL(a, cl3).total, 12);
+});
+
+test('56 interviewMode（旧方式との切り替え）', function () {
+  const a = strongApplicant();
+  // opts.checklist なし → legacy（既存の呼び出し）
+  const j0 = judge(a, scoresAll(5));
+  assert.strictEqual(j0.interviewMode, 'legacy');
+  assert.strictEqual(j0.scaleMax, 5);
+  assert.strictEqual(j0.checklist, null);
+  assert.strictEqual(j0.max, 50);
+  // v1 fixture の scores × 空のチェックリスト → 旧方式で従来どおり
+  const html = fs.readFileSync(path.join(FIX, 'v1-record.html'), 'utf8');
+  const rec = JSON.parse(html.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1]);
+  const p = P();
+  const jOld = judge(rec.applicant, rec.scores, p);
+  const h = HO(rec.applicant, p);
+  const jL = R.evaluateHiring(rec.applicant, rec.scores, p, h, allChecks(h), Object.assign({}, OPTS, { checklist: R.emptyChecklist() }));
+  assert.strictEqual(jL.interviewMode, 'legacy');
+  assert.strictEqual(jL.total, 39); assert.strictEqual(jL.max, 50); assert.strictEqual(jL.pct, 78); assert.strictEqual(jL.scaleMax, 5);
+  assert.strictEqual(jL.result, jOld.result);
+  assert.strictEqual(jL.baseResult, jOld.baseResult);
+  assert.deepStrictEqual(plain(jL.breakdown), plain(jOld.breakdown));
+  assert.deepStrictEqual(plain(jL.warnings), plain(jOld.warnings));
+  // チェックリストに 1 つでも入力 → checklist
+  const cl = R.emptyChecklist(); cl.values.rt_team = 'good';
+  const jC = R.evaluateHiring(rec.applicant, rec.scores, p, h, allChecks(h), Object.assign({}, OPTS, { checklist: cl }));
+  assert.strictEqual(jC.interviewMode, 'checklist');
+  assert.strictEqual(jC.max, 16);
+  assert.strictEqual(jC.total, 2);
+  // checklist 空・scores 空 → checklist（満点 16）
+  const m = R.interviewModel(p, {}, R.emptyChecklist());
+  assert.strictEqual(m.mode, 'checklist'); assert.strictEqual(m.max, 16); assert.strictEqual(m.rated, 0); assert.strictEqual(m.band, null);
+  // header だけでは入力ありにしない
+  const ch = R.emptyChecklist(); ch.header.date = '2026-10-10'; ch.header.interviewer = '笹川 晴央';
+  assert.strictEqual(R.checklistHasInput(ch), false);
+  assert.strictEqual(R.interviewModel(p, rec.scores, ch).mode, 'legacy');
+  assert.strictEqual(R.checklistHasInput({ values: { ex_fare: false, busy_ng: '' }, notes: { conditions_q: '  ' }, overall: '' }), false);
+  assert.strictEqual(R.checklistHasInput({ values: { ex_fare: true } }), true);
+  assert.strictEqual(R.checklistHasInput({ notes: { conditions_q: 'メモ' } }), true);
+  assert.strictEqual(R.checklistHasInput({ overall: 'hold' }), true);
+  assert.strictEqual(R.checklistHasInput(null), false);
+  assert.strictEqual(R.hasNumericScore({ a: '' }), false);
+  assert.strictEqual(R.hasNumericScore({ a: '3' }), true);
+});
+
+test('57 必須条件ゲート（不一致 → 不採用推奨）', function () {
+  const a = strongApplicant();
+  assert.strictEqual(judgeCL(a, clAll('good')).result, 'recommend');
+  const WL = '土日を含む週3日以上、5時間以上';
+  const GATE_REASON = '必須条件が一致しないため（' + WL + '）、不採用推奨とします。';
+  const isGateBody = function (j) { return j.body.indexOf('必須条件（' + WL + '）が一致しないため') >= 0 && j.body.indexOf('にかかわらず不採用推奨とします') >= 0; };
+  const cl = clAll('good'); cl.values.must_weekly = 'mismatch';
+  const j = judgeCL(a, cl);
+  assert.strictEqual(j.result, 'reject');
+  assert.strictEqual(j.baseResult, 'recommend');
+  assert.strictEqual(j.adjustments[0].code, 'must_conditions');
+  assert.strictEqual(j.adjustments[0].from, 'recommend');
+  assert.ok(isGateBody(j), j.body);
+  assert.strictEqual(j.adjustments[0].reason, GATE_REASON);
+  assert.strictEqual(j.warnings[0], GATE_REASON, '理由は warnings の先頭');
+  assert.strictEqual(j.matrix.note, '');
+  assert.strictEqual(j.checklist.must.mismatch, 1);
+  assert.strictEqual(j.checklist.must.match, 1);
+  assert.deepStrictEqual(plain(j.checklist.must.mismatchLabels), [WL]);
+  // mustFailResult = review
+  const p2 = P(); p2.checklist.mustFailResult = 'review';
+  const j2 = judgeCL(a, cl, p2);
+  assert.strictEqual(j2.result, 'review');
+  assert.strictEqual(j2.adjustments[0].code, 'must_conditions');
+  assert.ok(j2.adjustments[0].reason.indexOf('上長最終判断要として扱います') >= 0);
+  assert.ok(!isGateBody(j2) && j2.body.indexOf('点数上は採用推奨') >= 0, j2.body);
+  // 貢献度が未確定（incomplete）でも不採用推奨
+  const aI = strongApplicant({ vacation: { spring: '' } });
+  const jI = judgeCL(aI, cl);
+  assert.strictEqual(jI.mode, 'incomplete');
+  assert.strictEqual(jI.result, 'reject');
+  assert.ok(isGateBody(jI) && jI.warnings[0] === GATE_REASON, jI.body + '\n' + jI.warnings.join('\n'));
+  // 台本どおりの打ち切り（②〜④・総合判断が未入力 → 面接評価 0% で点数上も不採用推奨）でも、結論の理由は必須条件
+  const clCut = R.emptyChecklist(); clCut.values.must_weekly = 'mismatch'; clCut.values.must_busy = 'match';
+  const jC = judgeCL(a, clCut);
+  assert.strictEqual(jC.result, 'reject');
+  assert.strictEqual(jC.baseResult, 'reject');
+  assert.strictEqual(jC.matrix.cellKey, 'low_high');
+  assert.strictEqual(jC.adjustments.length, 1);
+  assert.deepStrictEqual(plain(jC.adjustments[0]), { code: 'must_conditions', from: 'reject', to: 'reject', reason: GATE_REASON });
+  assert.ok(isGateBody(jC) && jC.body.indexOf('0%') < 0, jC.body);
+  assert.strictEqual(jC.matrix.note, '', 'マスの注記（面接評価が基準に達していません）を出さない');
+  assert.ok(jC.matrix.cellNote !== '', 'マスの注記自体は cellNote に残る');
+  assert.strictEqual(jC.warnings[0], GATE_REASON);
+  // 不一致で確認点・総合判断が全部未入力でも「未入力の確認点」警告は出さない（打ち切り）
+  assert.ok(!hasWarn(jC, '未入力の確認点') && !hasWarn(jC, '総合判断が未入力'), jC.warnings.join('\n'));
+  // review 設定では未入力の警告を出す（固定しないので通常の本文）
+  const jCr = judgeCL(a, clCut, p2);
+  assert.ok(hasWarn(jCr, '未入力の確認点が7件'), jCr.warnings.join('\n'));
+  assert.ok(!isGateBody(jCr), jCr.body);
+  // マトリクスが既に不採用推奨でも must_conditions を記録し（from = to）、専用の本文にする
+  const clB = clAll('poor'); clB.values.must_weekly = 'mismatch';
+  const jB = judgeCL(exampleB(), clB);
+  assert.strictEqual(jB.baseResult, 'reject');
+  assert.strictEqual(jB.result, 'reject');
+  const mB = jB.adjustments.find(function (x) { return x.code === 'must_conditions'; });
+  assert.ok(mB && mB.from === 'reject' && mB.to === 'reject', JSON.stringify(jB.adjustments));
+  assert.ok(isGateBody(jB) && jB.body.indexOf('例Bさんは必須条件') === 0, jB.body);
+  assert.ok(hasWarn(jB, GATE_REASON), jB.warnings.join('\n'));
+  // 文言は texts.mustGate で差し替えられる
+  const p4 = P(); p4.texts.mustGate = '{name}：必須NG（{mustLabels}）→{resultTitle}';
+  assert.strictEqual(judgeCL(a, cl, p4).body, '応募者：必須NG（' + WL + '）→不採用推奨');
+  // 旧方式（legacy）では必須条件を見ない
+  const jL = R.evaluateHiring(a, scoresAll(5), P(), HO(a), allChecks(HO(a)), OPTS);
+  assert.strictEqual(jL.result, 'recommend');
+  // 不正な mustFailResult は既定（reject）扱い
+  const p3 = P(); p3.checklist.mustFailResult = 'xxx';
+  assert.strictEqual(judgeCL(a, cl, p3).result, 'reject');
+});
+
+test('58 必須条件の未確認・応募情報との食い違い', function () {
+  const a = strongApplicant();
+  const cl = clAll('good'); cl.values.must_busy = '';
+  const j = judgeCL(a, cl);
+  assert.strictEqual(j.result, 'recommend');
+  assert.ok(hasWarn(j, '必須条件に未確認が1件あります（指定繁忙期間すべて可'), j.warnings.join('\n'));
+  assert.strictEqual(j.checklist.must.unknown, 1);
+  const p = P(); p.checklist.mustUnknownResult = 'review';
+  const j2 = judgeCL(a, cl, p);
+  assert.strictEqual(j2.result, 'review');
+  assert.strictEqual(j2.adjustments[0].code, 'must_unconfirmed');
+  assert.ok(j2.adjustments[0].reason.indexOf('Step3 の ① で一致／不一致を入力してください') >= 0);
+  // 土日なしの応募者で must_weekly を一致 → 食い違いの警告（結果は変えない）
+  const aNoWe = strongApplicant({ sh: { mon: ['10:00', '18:00'], tue: ['10:00', '18:00'], wed: ['10:00', '18:00'] } });
+  aNoWe.workDays = ['mon', 'tue', 'wed'];
+  aNoWe.shifts.sat = { start: '', end: '', nextDay: false }; aNoWe.shifts.sun = { start: '', end: '', nextDay: false };
+  aNoWe.shifts.fri = { start: '', end: '', nextDay: false };
+  const jN = judgeCL(aNoWe, clAll('good'));
+  assert.ok(hasWarn(jN, '必須条件「土日を含む週3日以上、5時間以上」は一致としましたが、応募情報と食い違いがあります'), jN.warnings.join('\n'));
+  assert.ok(!jN.adjustments.some(function (x) { return /^must_/.test(x.code); }));
+});
+
+test('59 総合判断の上限（保留 → 上長最終判断要・不採用 → 不採用推奨）', function () {
+  const a = strongApplicant();
+  const jH = judgeCL(a, clAll('good', 'hold'));
+  assert.strictEqual(jH.total, 15); assert.strictEqual(jH.pct, 93.8); assert.strictEqual(jH.interview.band, 'high');
+  assert.strictEqual(jH.result, 'review');
+  assert.strictEqual(jH.adjustments[0].code, 'overall_hold');
+  assert.strictEqual(jH.adjustments[0].reason, '面接者の総合判断が「保留」のため、採用推奨ではなく上長最終判断要として扱います。');
+  const jR = judgeCL(a, clAll('good', 'reject'));
+  assert.strictEqual(jR.total, 14);
+  assert.strictEqual(jR.result, 'reject');
+  assert.strictEqual(jR.adjustments[0].code, 'overall_cutoff');
+  assert.strictEqual(jR.adjustments[0].reason, '面接者の総合判断が「不採用」のため、不採用推奨とします。');
+  const p = P(); p.checklist.overallCaps = { hold: 'none', reject: 'none' };
+  const jN1 = judgeCL(a, clAll('good', 'hold'), p);
+  assert.strictEqual(jN1.result, 'recommend');
+  assert.ok(hasWarn(jN1, '面接者の総合判断が「保留」です。上長と確認してください。'));
+  const jN2 = judgeCL(a, clAll('good', 'reject'), p);
+  assert.strictEqual(jN2.result, 'recommend');
+  assert.ok(hasWarn(jN2, '面接者の総合判断が「不採用」です。採用可否は慎重に判断してください。'));
+  // hold → reject の上限
+  const p2 = P(); p2.checklist.overallCaps.hold = 'reject';
+  const jHr = judgeCL(a, clAll('good', 'hold'), p2);
+  assert.strictEqual(jHr.result, 'reject');
+  assert.ok(jHr.adjustments[0].reason.indexOf('不採用推奨とします。') > 0);
+  // 表示名は設定から
+  const p3 = P(); p3.checklist.overallOptions.hold = '検討';
+  assert.ok(judgeCL(a, clAll('good', 'hold'), p3).adjustments[0].reason.indexOf('「検討」') > 0);
+  // 旧 overallRejectAtOrBelow はチェックリスト方式では無視
+  const p4 = P(); p4.evaluation.overallRejectAtOrBelow = 2;
+  assert.strictEqual(judgeCL(a, clAll('good'), p4).result, 'recommend');
+  // 旧方式の総合判断の警告は出さない
+  assert.ok(!hasWarn(judgeCL(a, clAll('good', 'hold')), '点と低評価'));
+});
+
+test('60 マトリクス等価（○△× と旧 5/3/1 点で同じセル）', function () {
+  const p = P();
+  const contribs = {
+    high: strongApplicant(),
+    mid: strongApplicant({ allNight: { availability: 'ng' }, holidayWork: 'ng', weekendFreq: 'monthly',
+      vacation: { gw: 'ng', summer: 'ng', obon: 'ng', yearend: 'consult' } }),
+    low: exampleB()
+  };
+  const pairs = { high: ['good', 5], mid: ['fair', 3], low: ['poor', 1] };
+  Object.keys(pairs).forEach(function (ib) {
+    Object.keys(contribs).forEach(function (cb) {
+      const a = contribs[cb];
+      const jC = judgeCL(a, clAll(pairs[ib][0]), p);
+      const jL = judge(a, scoresAll(pairs[ib][1]), p);
+      assert.strictEqual(jC.matrix.cellKey, ib + '_' + cb);
+      assert.strictEqual(jC.matrix.cellKey, jL.matrix.cellKey);
+      assert.strictEqual(jC.baseResult, jL.baseResult, ib + '_' + cb);
+      assert.strictEqual(jC.result, jL.result, ib + '_' + cb + ' ' + jC.adjustments.map(function (x) { return x.code; }));
+    });
+  });
+});
+
+test('61 強み・懸念（○ = 強み、× = 懸念）', function () {
+  const a = strongApplicant();
+  const cl = clMarks(['good', 'fair', 'poor', 'good', 'fair', 'poor', 'good']);
+  cl.notes.rt_concrete = '曜日・時間を具体的に回答';
+  const j = judgeCL(a, cl);
+  // 台本順: rt_concrete ○ / rt_manner △ / rt_hourensou × / rt_turnover ○ / rt_understand △ / rt_team × / rt_mismatch ○
+  assert.deepStrictEqual(plain(j.strengths), ['勤務条件の一致に「具体性」があるか（曜日・時間を具体的に回答）', '離職要因はないか', '採用後のミスマッチを低減']);
+  assert.deepStrictEqual(plain(j.concerns), ['報連相できるか', '自己判断せずチームで動けるか']);
+  assert.ok(j.strengths.indexOf('面接者の総合判断') < 0);
+  const bd = j.breakdown.find(function (b) { return b.id === 'rt_concrete'; });
+  assert.strictEqual(bd.note, '曜日・時間を具体的に回答');
+  // 旧方式は従来どおり（4 点以上／2 点以下）
+  const s = scoresAll(3); s.greeting = 4; s.appearance = 2; s.overall_judgment = 5;
+  const jL = judge(a, s);
+  assert.deepStrictEqual(plain(jL.strengths), ['挨拶はできていたか']);
+  assert.deepStrictEqual(plain(jL.concerns), ['服装、身だしなみはきちんとしていたか']);
+});
+
+test('62 checklistAuto・firstContractEnd', function () {
+  const p = P();
+  const cl = R.emptyChecklist();
+  const must = function (a, id) { return R.checklistAuto(a, cl, p).must[id]; };
+  // weeklyCondition
+  const noWe = A({ sh: { mon: ['10:00', '16:00'], tue: ['10:00', '16:00'], wed: ['10:00', '16:00'] }, daysMin: '3', daysMax: '3' });
+  assert.strictEqual(must(noWe, 'must_weekly').ok, false);
+  assert.ok(must(noWe, 'must_weekly').text.indexOf('土日を含まない') >= 0);
+  const range = A({ sh: { sat: ['09:00', '15:00'], sun: ['09:00', '15:00'] }, daysMin: '2', daysMax: '4' });
+  assert.strictEqual(must(range, 'must_weekly').ok, null);
+  assert.strictEqual(must(range, 'must_weekly').tone, 'warn');
+  const okA = A({ sh: { fri: ['17:00', '23:00'], sat: ['08:00', '13:00'] }, daysMin: '3', daysMax: '4' });
+  const w = must(okA, 'must_weekly');
+  assert.strictEqual(w.ok, true, w.text);
+  assert.strictEqual(w.text, '応募情報: 土日を含む（土）／週3〜4日／最短 5時間 → 満たす見込み');
+  const shortA = A({ sh: { sat: ['08:00', '12:00'] }, daysMin: '3', daysMax: '4' });
+  assert.strictEqual(must(shortA, 'must_weekly').ok, false);
+  assert.strictEqual(must(A(), 'must_weekly').ok, null);
+  // busyAll
+  const busyNg = A({ vacation: { gw: 'ng', yearend: 'ok', spring: 'ok', obon: 'ok' } });
+  const b = must(busyNg, 'must_busy');
+  assert.strictEqual(b.ok, false);
+  assert.ok(b.text.indexOf('GW×') >= 0, b.text);
+  assert.ok(b.text.indexOf('応募情報: 年末年始○ 春休み期間○ GW× お盆○') === 0, b.text);
+  assert.strictEqual(must(A({ vacation: { gw: 'ok', yearend: 'ok', spring: 'ok', obon: 'ok' } }), 'must_busy').ok, true);
+  const bu = must(A({ vacation: { gw: 'ok', yearend: 'ok', spring: 'consult' } }), 'must_busy');
+  assert.strictEqual(bu.ok, null);
+  assert.ok(bu.text.indexOf('お盆 未確認') >= 0 && bu.text.indexOf('春休み期間△') >= 0, bu.text);
+  // fields
+  const fl = function (a, id, c) { return R.checklistAuto(a, c || cl, p).fields[id]; };
+  assert.strictEqual(fl(A({ weekendFreq: 'every_both' }), 'weekend').value, 'both');
+  assert.strictEqual(fl(A({ weekendFreq: 'every_both' }), 'weekend').text, '応募情報: 両日');
+  assert.strictEqual(fl(A({ sh: { sat: ['09:00', '15:00'] } }), 'weekend').value, 'one');
+  assert.strictEqual(fl(A({ sh: { mon: ['09:00', '15:00'] } }), 'weekend').value, '');
+  assert.strictEqual(fl(A({ vacation: { silver: 'ng', spring: 'ng', gw: 'ok' } }), 'busy_ng').value, 'シルバーウィーク・春休み期間');
+  assert.strictEqual(fl(A({ workPeriod: 'mid' }), 'term').value, 'long');
+  assert.strictEqual(fl(A({ workPeriod: 'short' }), 'term').value, 'short');
+  assert.strictEqual(fl(A({ workPeriod: 'long' }), 'term').text, '応募情報: 長期（1年以上）');
+  const clD = R.emptyChecklist(); clD.values.start_date = '2026-11-01';
+  assert.strictEqual(fl(A(), 'first_end', clD).value, '2026-12');
+  assert.strictEqual(fl(A(), 'first_end', clD).text, '2026-12（契約開始日の翌月末）');
+  assert.strictEqual(fl(A(), 'first_end').value, '');
+  const ol = fl(A({ sh: { sat: ['07:30', '15:00'] }, lateNight: { availability: 'ok', returnMethod: 'taxi', taxiFare: '2500' } }), 'open_late');
+  assert.strictEqual(ol.value, 'OPEN 可（週1日）／25時まで 可（22時以降○・タクシー帰宅）');
+  // 終電で帰宅する人は 22時以降○でも 25時は不可（台本「25時(タク〇のみ)」）
+  const olT = fl(A({ sh: { sat: ['17:00', '23:00'] }, lateNight: { availability: 'ok', returnMethod: 'train', lastTrain: '23:30' } }), 'open_late');
+  assert.ok(/^OPEN なし／25時まで 不可（22時以降○・.+ 23:30）$/.test(olT.value), olT.value);
+  assert.strictEqual(fl(A({ sh: { sat: ['17:00', '23:00'] }, lateNight: { availability: 'ng' } }), 'open_late').value, 'OPEN なし／25時まで 不可（22時以降×）');
+  assert.strictEqual(fl(A({ sh: { sat: ['17:00', '23:00'] } }), 'open_late').value, 'OPEN なし／25時まで 未確認（22時以降 未確認）');
+  // firstContractEnd
+  assert.strictEqual(R.firstContractEnd('2026-11-01', 1), '2026-12');
+  assert.strictEqual(R.firstContractEnd('2026-12-15', 1), '2027-01');
+  assert.strictEqual(R.firstContractEnd('2026-12-15', 0), '2026-12');
+  assert.strictEqual(R.firstContractEnd('2026-11-30', 13), '2027-12');
+  assert.strictEqual(R.firstContractEnd('', 1), '');
+  assert.strictEqual(R.firstContractEnd('2026/11/01', 1), '');
+  // taxi
+  const tx = function (a, prof) { return R.checklistAuto(a, cl, prof || p).taxi; };
+  const t1 = tx(A({ lateNight: { availability: 'ok', returnMethod: 'taxi', taxiFare: '2500' } }));
+  assert.strictEqual(t1.text, '可・2,500円（規定3,000円以内）'); assert.strictEqual(t1.tone, 'ok');
+  const t2 = tx(A({ lateNight: { availability: 'ok', returnMethod: 'taxi', taxiFare: '3800' } }));
+  assert.strictEqual(t2.text, '要確認・3,800円（規定3,000円超）'); assert.strictEqual(t2.tone, 'warn');
+  assert.strictEqual(tx(A({ lateNight: { availability: 'ok', returnMethod: 'taxi' } })).text, '可・料金未確認');
+  const t3 = tx(A({ lateNight: { availability: 'ok', returnMethod: 'train', lastTrain: '0:35' } }));
+  assert.strictEqual(t3.text, '否（終電で帰宅 0:35）'); assert.strictEqual(t3.tone, 'info');
+  assert.strictEqual(tx(A({ lateNight: { availability: 'ng' } })).text, '深夜帯×（タクシー対象外）');
+  const pOff = P(); pOff.features.lateNight = false;
+  assert.strictEqual(tx(A({ lateNight: { availability: 'ok', returnMethod: 'taxi' } }), pOff).text, '—');
+  assert.strictEqual(tx(A()).text, '未確認');
+  // morningOnly
+  const neg = function (a, c) { return R.checklistAuto(a, c || cl, p).negatives; };
+  assert.strictEqual(neg(A({ sh: { sat: ['09:00', '12:00'], sun: ['09:00', '12:00'] } })).morningOnly.on, true);
+  assert.strictEqual(neg(A({ sh: { sat: ['09:00', '12:00'], sun: ['09:00', '13:00'] } })).morningOnly.on, false);
+  assert.strictEqual(neg(A()).morningOnly.on, false);
+  assert.strictEqual(neg(A({ sh: { sat: ['09:00', '12:00'] } })).morningOnly.text, '朝～12時のみ（自動）');
+  // shortTerm: values.term が workPeriod より優先・手動上書き
+  assert.strictEqual(neg(A({ workPeriod: 'short' })).short.on, true);
+  const clT = R.emptyChecklist(); clT.values.term = 'long';
+  assert.strictEqual(neg(A({ workPeriod: 'short' }), clT).short.on, false);
+  clT.values.term = 'short';
+  assert.strictEqual(neg(A({ workPeriod: 'long' }), clT).short.on, true);
+  clT.header.negatives.short = 'off';
+  const n2 = neg(A({ workPeriod: 'long' }), clT).short;
+  assert.ok(n2.on === false && n2.overridden === true && n2.autoOn === true);
+  clT.header.negatives.short = 'on'; clT.values.term = 'long';
+  assert.strictEqual(neg(A(), clT).short.text, '短期希望');
+});
+
+test('63 checklistSummary（ビューモデル）', function () {
+  const p = P();
+  const a = strongApplicant({ workPeriod: 'long' });
+  const cl = R.emptyChecklist();
+  const s0 = R.checklistSummary(a, cl, p, {});
+  assert.strictEqual(s0.sections.length, 5);
+  assert.strictEqual(s0.ratings.length, 7);
+  assert.strictEqual(s0.must.items.length, 2);
+  assert.strictEqual(s0.must.unknown, 2);
+  assert.strictEqual(s0.minutesTotal, 41);
+  assert.strictEqual(s0.mode, 'checklist');
+  assert.strictEqual(s0.hasInput, false);
+  assert.strictEqual(s0.score.max, 16);
+  assert.strictEqual(s0.sections[0].noMark, '①');
+  assert.strictEqual(s0.sections[4].minutesText, '最大10分');
+  assert.strictEqual(s0.sections[0].minutesText, '10分');
+  assert.strictEqual(s0.sections[0].done, false);
+  assert.strictEqual(s0.pages.length, 2);
+  // ① の done = 必須条件すべて回答 ＋ 確認点すべて入力
+  R.checklistItems(p.checklist, 'must').forEach(function (x) { cl.values[x.item.id] = 'match'; });
+  cl.values.rt_concrete = 'good';
+  assert.strictEqual(R.checklistSummary(a, cl, p, {}).sections[0].done, false);
+  cl.values.rt_manner = 'fair';
+  cl.values.must_busy = 'mismatch';
+  const s1 = R.checklistSummary(a, cl, p, {});
+  assert.strictEqual(s1.sections[0].done, true);
+  assert.strictEqual(s1.sections[0].mustMismatch, 1);
+  assert.strictEqual(s1.must.mismatch, 1);
+  const mp = s1.must.items.find(function (m) { return m.id === 'must_busy'; });
+  assert.ok(mp.valueLabel === '不一致' && mp.mark === '×' && mp.tone === 'danger');
+  assert.ok(s1.must.items[0].autoText.indexOf('応募情報:') === 0);
+  // effective（記入欄の自動値）・dim（短期求人のみの説明）
+  const f1 = s1.sections[0].blocks.find(function (b) { return b.id === 'conditions_f1'; });
+  const wk = f1.items.find(function (x) { return x.id === 'weekend'; });
+  assert.ok(wk.effective === 'both' && wk.fromAuto === true && wk.value === '' && wk.effectiveLabel === '両日');
+  cl.values.weekend = 'one';
+  const wk2 = R.checklistSummary(a, cl, p, {}).sections[0].blocks[1].items[0];
+  assert.ok(wk2.effective === 'one' && wk2.fromAuto === false);
+  const ex = s1.sections[0].blocks.find(function (b) { return b.type === 'explain'; });
+  assert.deepStrictEqual(plain(ex.items.map(function (x) { return x.dim; })), [false, false, true, true]);
+  cl.header.posting = 'short';
+  const s2 = R.checklistSummary(a, cl, p, {});
+  assert.deepStrictEqual(plain(s2.sections[0].blocks[2].items.map(function (x) { return x.dim; })), [false, false, false, false]);
+  assert.strictEqual(s2.header.postingLabel, '短期求人');
+  // interviewer: 空なら押印「面接対応者」の氏名
+  const s3 = R.checklistSummary(a, cl, p, { management: { interviewer: { name: '笹川 晴央' } } });
+  assert.strictEqual(s3.header.interviewer, '笹川 晴央');
+  assert.strictEqual(s3.header.interviewerFromStamp, true);
+  cl.header.interviewer = '山田 太郎';
+  const s4 = R.checklistSummary(a, cl, p, { management: { interviewer: { name: '笹川 晴央' } } });
+  assert.strictEqual(s4.header.interviewer, '山田 太郎');
+  assert.strictEqual(s4.header.interviewerFromStamp, false);
+  // タクシーの上書き・メモ・総合判断
+  cl.header.taxi = '可・2,000円（本人申告）';
+  cl.notes.conditions_q = '長期希望';
+  cl.overall = 'hold';
+  const s5 = R.checklistSummary(a, cl, p, {});
+  assert.deepStrictEqual(plain(s5.header.taxi), { text: '可・2,000円（本人申告）', tone: 'info', auto: false });
+  assert.strictEqual(s5.sections[0].blocks.find(function (b) { return b.id === 'conditions_q'; }).memoText, '長期希望');
+  assert.deepStrictEqual(plain(s5.overall), { value: 'hold', label: '保留', points: 1, tone: 'warn' });
+  assert.strictEqual(s5.score.total, 2 + 1 + 1);
+  // 旧 scores があり入力がないときは mode legacy（score はチェックリストのまま）
+  const s6 = R.checklistSummary(a, R.emptyChecklist(), p, { scores: scoresAll(4) });
+  assert.strictEqual(s6.mode, 'legacy');
+  assert.strictEqual(s6.score.max, 16);
+  // checklistDiff
+  const d2 = plain(p.checklist);
+  d2.sections[0].blocks[5].items.splice(1, 1);                                 // rt_manner を削除
+  d2.sections[3].blocks[2].items.push({ id: 'rt_new', label: '新しい確認点' });   // ④ に追加
+  assert.deepStrictEqual(plain(R.checklistDiff(p.checklist, d2)), { added: ['rt_new'], removed: ['rt_manner'] });
+  assert.strictEqual(R.interviewModel(merge(P(), { checklist: d2 }), {}, R.emptyChecklist()).max, 16);
+  // 壊れた引数でも落ちない
+  assert.strictEqual(R.checklistSummary({}, null, { checklist: null }, null).sections.length, 0);
+});
+
+test('64 normalize（面接チェックリスト）', function () {
+  const base = plain(P().checklist);
+  // checklist なし（新宿 v2・v1 fixture 2 種）→ 既定の台本・report.checklistAdded
+  const v2 = P(); delete v2.checklist;
+  const rep0 = {};
+  assert.deepStrictEqual(plain(S.normalizeProfile(v2, rep0).checklist), base);
+  assert.strictEqual(rep0.checklistAdded, true);
+  ['v1-profile-shinjuku.json', 'v1-profile-other.json'].forEach(function (f) {
+    const raw = JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8'));
+    const rep = {};
+    const n = S.normalizeProfile(raw, rep);
+    assert.deepStrictEqual(plain(n.checklist), base, f);
+    assert.strictEqual(rep.checklistAdded, true, f);
+    assert.strictEqual(n.evaluation.items.length, 10, f);
+  });
+  // 既定は変わらない・checklistAdded は出ない
+  const rep1 = {};
+  assert.deepStrictEqual(plain(S.normalizeProfile(P(), rep1).checklist), base);
+  assert.strictEqual(rep1.checklistAdded, undefined);
+  // 壊れた checklist → 既定
+  const bad = P(); bad.checklist = { sections: 'x', mustFailResult: 'xxx' };
+  const rb = {};
+  const nb = S.normalizeProfile(bad, rb);
+  assert.deepStrictEqual(plain(nb.checklist), base);
+  assert.strictEqual(nb.checklist.mustFailResult, 'reject');
+  assert.strictEqual(rb.checklistAdded, undefined);
+  const bad2 = P(); bad2.checklist = 'x';
+  assert.deepStrictEqual(plain(S.normalizeProfile(bad2).checklist), base);
+  const bad3 = P(); bad3.checklist.sections = [null, 3];
+  assert.deepStrictEqual(plain(S.normalizeProfile(bad3).checklist), base);
+  // 部分的に壊れた値
+  const p = P();
+  const c = p.checklist;
+  c.sections[0].blocks.splice(1, 0, { id: 'zzz', type: 'video', items: [] });           // 不正な block type → 除去
+  delete c.sections[0].blocks[0].items[1].id;                                           // id 欠落 → conditions_must_2
+  c.sections[1].blocks[2].items[1].id = 'rt_hourensou';                                 // 重複 → rt_hourensou_2
+  c.sections[0].blocks[2].items[0].options = [];                                        // choice の選択肢なし → text
+  c.mustFailResult = 'xxx';
+  c.overallCaps.hold = 'up';
+  c.sections[0].blocks[0].items[0].auto = 'magic';                                      // 未知の auto → 削除
+  c.sections[1].title = 7;
+  c.sections[1].minutes = 99;
+  c.sections[2].page = 0;
+  c.sections[0].blocks[0].items[0].label = '土日を含む週3日以上（各5時間以上）';          // 編集した文言は保持
+  c.sections[2].blocks[0].items.push({ text: '旧キーの説明' });                           // text → label・id 採番
+  c.sections[0].blocks[4].items[2].autoParams = { monthsAfter: 99 };                    // 範囲外 → 既定（splice で 1 つずれている）
+  c.header.negatives.push({ label: '平日のみ', auto: 'weekdayOnly' });
+  c.header.morningOnlyEnd = '25:00';
+  c.print.showQuestions = 'yes';
+  c.myExtension = { keep: true };                                                       // 未知のキーは残す
+  const n = S.normalizeProfile(p).checklist;
+  assert.ok(!n.sections[0].blocks.some(function (b) { return b.type === 'video'; }));
+  assert.strictEqual(n.sections[0].blocks[0].items[1].id, 'conditions_must_2');
+  assert.strictEqual(n.sections[1].blocks[2].items[1].id, 'rt_hourensou_2');
+  assert.strictEqual(n.sections[0].blocks[1].items[0].kind, 'text');
+  assert.strictEqual(n.mustFailResult, 'reject');
+  assert.strictEqual(n.overallCaps.hold, 'review');
+  assert.strictEqual(n.sections[0].blocks[0].items[0].auto, undefined);
+  assert.strictEqual(n.sections[0].blocks[0].items[0].autoParams, undefined);
+  assert.strictEqual(n.sections[1].title, '7');
+  assert.strictEqual(n.sections[1].minutes, 0);
+  assert.strictEqual(n.sections[2].page, 1);
+  assert.strictEqual(n.sections[0].blocks[0].items[0].label, '土日を含む週3日以上（各5時間以上）');
+  const added = n.sections[2].blocks[0].items[4];
+  assert.ok(added.label === '旧キーの説明' && added.text === undefined && added.id === 'job_explain_5', JSON.stringify(added));
+  assert.strictEqual(n.sections[0].blocks[3].items[2].id, 'first_end');
+  assert.strictEqual(n.sections[0].blocks[3].items[2].autoParams.monthsAfter, 1);
+  assert.deepStrictEqual(plain(n.header.negatives[2]), { label: '平日のみ', auto: '', id: 'neg3' });
+  assert.strictEqual(n.header.morningOnlyEnd, '12:00');
+  assert.strictEqual(n.print.showQuestions, true);
+  assert.deepStrictEqual(plain(n.myExtension), { keep: true });
+  // mustFailJumpTo が存在しないセクション → ''
+  const pj = P(); pj.checklist.mustFailJumpTo = 'nowhere';
+  assert.strictEqual(S.normalizeProfile(pj).checklist.mustFailJumpTo, '');
+  const pj2 = P(); pj2.checklist.sections.pop();
+  assert.strictEqual(S.normalizeProfile(pj2).checklist.mustFailJumpTo, '');
+  // 冪等
+  const once = S.normalizeProfile(p);
+  assert.deepStrictEqual(plain(S.normalizeProfile(once)), plain(once));
+  // id は全体で一意・形式どおり
+  const ids2 = clAllIds(n);
+  assert.strictEqual(ids2.length, new Set(ids2).size);
+  ids2.forEach(function (id) { assert.ok(CL_ID.test(id), id); });
+  // evaluation.items は 10 件のまま（checklist から作り直さない）
+  assert.strictEqual(once.evaluation.items.length, 10);
+  // 正規化後の台本で判定できる（編集した文言が理由文に出る）
+  const cl = clAll('good', 'hire', null, once);
+  cl.values.must_weekly = 'mismatch';
+  assert.ok(judgeCL(strongApplicant(), cl, once).adjustments[0].reason.indexOf('土日を含む週3日以上（各5時間以上）') >= 0);
+  // normalizeChecklistDef 単体（レポート用）
+  assert.deepStrictEqual(plain(S.normalizeChecklistDef(null, P().checklist)), base);
+  assert.deepStrictEqual(plain(S.normalizeChecklistDef(P().checklist, P().checklist)), base);
+});
+
+test('65 validateProfile（面接チェックリスト）', function () {
+  assert.deepStrictEqual(plain(S.validateProfile(P())), { errors: [], warnings: [] });
+  const one = function (mut, label) {
+    const px = P(); mut(px.checklist, px);
+    const r = plain(S.validateProfile(px));
+    assert.strictEqual(r.errors.length, 1, label + ': ' + JSON.stringify(r.errors));
+    return r;
+  };
+  const r1 = one(function (c) { c.sections[0].blocks[0].items[1].label = ''; }, 'label 空');
+  assert.strictEqual(r1.errors[0], '面接チェックリスト ① 勤務条件【必須条件】の2行目が空です。');
+  one(function (c) { c.sections[1].blocks[2].items[1].id = 'rt_hourensou'; }, 'id 重複');
+  one(function (c) { c.sections[1].blocks[2].items[1].id = '1abc'; }, 'id 形式');
+  one(function (c) { c.sections[0].blocks[1].items[0].options = [{ value: 'one', label: 'いずれか' }]; }, 'choice 1 件');
+  one(function (c) { c.sections[0].blocks[1].items[0].options = [{ value: 'one', label: 'a' }, { value: 'one', label: 'b' }]; }, 'choice 重複');
+  one(function (c) { c.overallLabel = ''; }, 'overallLabel 空');
+  one(function (c) { c.overallOptions.hold = ' '; }, 'overallOptions 空');
+  one(function (c) { c.sections[0].minutes = 61; }, 'minutes 61');
+  one(function (c) { c.sections[0].page = 0; }, 'page 0');
+  one(function (c) { c.sections[2].title = ''; }, 'セクション名 空');
+  one(function (c) { c.sections[0].blocks[0].type = 'video'; }, 'block type');
+  one(function (c) { c.mustFailResult = 'xxx'; }, 'mustFailResult');
+  one(function (c) { c.mustUnknownResult = 'reject'; }, 'mustUnknownResult');
+  one(function (c) { c.overallCaps.reject = 'up'; }, 'overallCaps');
+  one(function (c) { c.sections[0].blocks[0].items[0].autoParams.minDays = 8; }, 'minDays 8');
+  one(function (c) { c.sections[0].blocks[3].items[2].autoParams.monthsAfter = 13; }, 'monthsAfter 13');
+  one(function (c) { c.header.morningOnlyEnd = '12時'; }, 'morningOnlyEnd');
+  const r0 = plain(S.validateProfile((function () { const px = P(); px.checklist.sections = []; return px; })()));
+  assert.ok(r0.errors.some(function (e) { return e.indexOf('セクションがありません') >= 0; }), JSON.stringify(r0));
+  // warnings: 確認点 0・必須条件 0・押印欄なし
+  const pw = P();
+  pw.checklist.sections.forEach(function (s) { s.blocks = s.blocks.filter(function (b) { return b.type !== 'rating' && b.type !== 'must'; }); });
+  pw.checklist.header.interviewerField = 'nobody';
+  const rw = plain(S.validateProfile(pw));
+  assert.strictEqual(rw.errors.length, 0, JSON.stringify(rw.errors));
+  assert.deepStrictEqual(rw.warnings, ['確認点がありません。面接評価は総合判断だけで決まります。', '必須条件がないため、不一致による不採用推奨は働きません。', '担当と連動する押印欄が見つかりません。']);
+  // 確認点 0 件でも判定できる（面接評価は総合判断だけ）
+  assert.strictEqual(R.interviewModel(pw, {}, R.emptyChecklist()).max, 2);
+  const jw = judgeCL(strongApplicant(), { values: {}, notes: {}, overall: 'hire' }, pw);
+  assert.strictEqual(jw.pct, 100);
+});
+
+test('66 保存レコード（checklist・checklistDef・旧 scores の互換）', function () {
+  const p = P();
+  const a = strongApplicant({ name: '山田 花子' });
+  const h = R.buildHandoff(a, p, OPTS);
+  const cl = clAll('good');
+  cl.values.rt_team = 'fair';
+  cl.notes.conditions_q = '長期希望 </script><!--x <script>';
+  cl.header.date = '2026-10-10';
+  const j = R.evaluateHiring(a, {}, p, h, allChecks(h), Object.assign({}, OPTS, { checklist: cl }));
+  const state = { step: 4, applicant: a, profile: p, handoff: h, handoffChecks: allChecks(h), handoffNote: '', scores: {}, checklist: cl,
+    interviewNotes: '受け答えが丁寧', judgment: j, history: [] };
+  const rec = S.buildRecord(state);
+  assert.strictEqual(rec.schemaVersion, 2);
+  assert.deepStrictEqual(plain(rec.checklist), plain(cl));
+  assert.strictEqual(rec.checklistDef.version, '2026-10-08');
+  assert.deepStrictEqual(plain(rec.checklistDef), plain(p.checklist));
+  assert.strictEqual(Object.keys(rec.scores).length, 0);
+  assert.strictEqual(rec.judgment.interviewMode, 'checklist');
+  assert.strictEqual(rec.judgment.total, 15);
+  // state.checklist が無い（旧 state）→ 空の回答
+  const recOld = S.buildRecord(Object.assign({}, state, { checklist: undefined, scores: scoresAll(4) }));
+  assert.deepStrictEqual(plain(recOld.checklist), plain(R.emptyChecklist()));
+  assert.strictEqual(recOld.scores.greeting, 4);
+  // レポートの埋め込み JSON は閉じタグ・コメント開始を含むメモでも同じ値に戻る
+  const html = S.generateReportHTML(rec, p);
+  const block = html.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1];
+  assert.ok(!/[<>&]/.test(block));
+  const back = JSON.parse(block);
+  assert.deepStrictEqual(back.checklist, plain(cl));
+  // 旧レコード（scores のみ・checklist なし）でもレポートが作れ、旧形式の面接評価の節が出る
+  const html2 = S.generateReportHTML(plain(Object.assign({}, recOld, { checklist: undefined, checklistDef: undefined })), p);
+  assert.ok(html2.indexOf('data-sec="scores"') > 0);
+  // 旧プロファイル（checklist なし）で判定しても落ちない（normalize で既定の台本が入る）
+  const pOld = P(); delete pOld.checklist;
+  const jOld = R.evaluateHiring(a, {}, pOld, h, allChecks(h), Object.assign({}, OPTS, { checklist: cl }));
+  assert.strictEqual(jOld.interviewMode, 'checklist');
+  assert.strictEqual(jOld.max, 2);   // 台本が無い profile は確認点 0 ＋総合判断のみ
+  assert.strictEqual(S.normalizeProfile(pOld).checklist.version, '2026-10-08');
+
+  // ---- レポートの「面接チェックリスト」節・A4 報告（SPEC-checklist 4-2〜4-4）----
+  assert.ok(html.indexOf('data-sec="checklist"') > 0 && html.indexOf('data-sec="scores"') < 0, '新形式は checklist 節だけ');
+  ['①', '②', '③', '④', '⑤'].forEach(function (c) { assert.ok(html.indexOf('cl-s-no">' + c + '</span>') > 0, c); });
+  ['勤務条件', '継続性・報連相', '仕事内容の説明', '集団行動特性', '逆質問', '合否連絡'].forEach(function (t) { assert.ok(html.indexOf(t) > 0, t); });
+  assert.ok(html.indexOf('長期希望 &lt;/script&gt;&lt;!--x') > 0, 'メモはエスケープして出す');
+  assert.ok(html.indexOf('○一致') > 0 && html.indexOf('cl-mk">○</td>') > 0 && html.indexOf('cl-mk">△</td>') > 0);
+  assert.ok(html.indexOf('id="clSheet"') > 0 && html.indexOf('id="rtPrintChecklist"') > 0 && html.indexOf('__prepareChecklistSheet') > 0);
+  assert.ok(html.indexOf('cl-mode-sheet') > 0 && html.indexOf('class="cl-judge"') > 0 && html.indexOf('面接チェックリスト報告') > 0);
+  assert.ok(html.indexOf('受け答えが丁寧') > 0);
+  assert.ok(html.indexOf('必須条件:</b> 一致 2・不一致 0・未確認 0') > 0, '判定の結果ボックスに必須条件の行');
+  // 閉じタグ・コメント開始を含むメモでも埋め込みスクリプトが壊れない（script 要素は 4 つ: record・印刷・押印設定・押印）
+  assert.strictEqual((html.match(/<\/script>/g) || []).length, (html.match(/<script[ >]/g) || []).length);
+  assert.strictEqual(S.checklistSheetCss().indexOf('</' + 'script'), -1);
+  // 不一致 → 「×不一致」と結果
+  const clNg = clAll('good'); clNg.values.must_weekly = 'mismatch';
+  const jNg = R.evaluateHiring(a, {}, p, h, allChecks(h), Object.assign({}, OPTS, { checklist: clNg }));
+  const recNg = S.buildRecord(Object.assign({}, state, { checklist: clNg, judgment: jNg }));
+  const sheetNg = S.checklistSheetHtml(recNg, p, { mode: 'sheet', stamps: '' });
+  assert.ok(sheetNg.indexOf('×不一致') > 0 && sheetNg.indexOf('cl-s-ng') > 0 && sheetNg.indexOf('不採用推奨') > 0 && sheetNg.indexOf('不一致 1') > 0);
+  // 必須条件の不一致の理由は A4 の判定サマリー（.cl-adj）にも出る
+  assert.ok(/<ul class="cl-adj"><li><b>[^<]*<\/b>：必須条件が一致しないため（土日を含む週3日以上、5時間以上）、不採用推奨とします。/.test(sheetNg), 'cl-adj に必須条件の理由');
+  // ヘッダーのチップは Step3 の目次（.cl-chip）と別クラス（アプリの印刷規則で消えない）
+  assert.ok(sheetNg.indexOf('class="cl-hchip') > 0 && sheetNg.indexOf('class="cl-chip') < 0 && sheetNg.indexOf('cl-flow') < 0);
+  // 【説明】ブロックのメモ欄を ON にしたときはメモも出力する（レポートの節・A4 とも）
+  const pm = P(); pm.checklist.sections[2].blocks[0].memo = true; pm.checklist.sections[2].blocks[0].memoLabel = '反応';
+  const clM = clAll('good'); clM.notes.job_explain = 'EXPLAIN_MEMO 汚物清掃は難しいと回答';
+  const recM = S.buildRecord(Object.assign({}, state, { checklist: clM, judgment: null }));
+  const recMd = Object.assign({}, recM, { checklistDef: pm.checklist });
+  ['sheet', 'section'].forEach(function (md) {
+    const hm = S.checklistSheetHtml(recMd, pm, { mode: md });
+    assert.ok(hm.indexOf('<b>反応：</b><span class="cl-memo-t">EXPLAIN_MEMO 汚物清掃は難しいと回答</span>') > 0, md);
+  });
+  // 判定前（judgment なし）は未実施と書く（判定を走らせない）
+  const sheetNoJ = S.checklistSheetHtml(Object.assign({}, rec, { judgment: null }), p, { mode: 'sheet', stamps: '<div class="stamp-row">S</div>' });
+  assert.ok(sheetNoJ.indexOf('採用可否判定は未実施（面接評価 15/16・93.8% の時点）') > 0 && sheetNoJ.indexOf('<div class="stamp-row">S</div>') > 0);
+  // 'section' は判定サマリー・押印を含まない。台本ヘッダー（面接日・担当・タクシー・消極属性・応募した求人）とページ題名・前書きは出す
+  const secOnly = S.checklistSheetHtml(rec, p, { mode: 'section' });
+  assert.ok(secOnly.indexOf('cl-mode-section') > 0 && secOnly.indexOf('cl-judge') < 0 && secOnly.indexOf('stamp-row') < 0);
+  assert.ok(secOnly.indexOf('cl-sheet-head cl-sec-head') > 0, 'section に台本ヘッダー');
+  ['<dt>面接日</dt><dd>2026/10/10</dd>', '<dt>担当</dt>', '<b>タクシー可否・料金</b>', '<b>消極属性</b>', '<b>応募した求人</b>'].forEach(function (t) { assert.ok(secOnly.indexOf(t) > 0, 'section ヘッダー: ' + t); });
+  ['必須条件一致・継続性', '人物確認・逆質問', '最低限の話し方、敬語が可能か。必須条件が不一致なら不採用', '行動を確認。採用を検討できる人には不安解消の時間を取る。'].forEach(function (t) { assert.ok(secOnly.indexOf(t) > 0, 'section のページ題名・前書き: ' + t); });
+  assert.ok(secOnly.indexOf('台本1枚目') > 0 && secOnly.indexOf('台本2枚目') > 0 && secOnly.indexOf('cl-page-who') < 0);
+  // 担当は押印（面接対応者）から、タクシーの手入力・消極属性の手動 ON はその旨を出す
+  const clH = plain(cl); clH.header.interviewer = ''; clH.header.taxi = '否（手入力）'; clH.header.negatives = { morningOnly: 'on' };
+  const recH = Object.assign({}, rec, { checklist: clH, management: { interviewer: { name: '笹川 晴央' } } });
+  const secH = S.checklistSheetHtml(recH, p, { mode: 'section' });
+  assert.ok(secH.indexOf('笹川 晴央<small>（押印より）</small>') > 0, 'section の担当（押印より）');
+  assert.ok(secH.indexOf('否（手入力）<small>（手入力）</small>') > 0, 'section のタクシー手入力');
+  assert.ok(/<b>消極属性<\/b>[^]*?朝～12時のみ/.test(secH), 'section の消極属性（朝～12時のみ）');
+  // 確認事項／確認点の補足（hint。台本の「「大丈夫です」のみ連呼は特に要注意。」）はレポートの節と A4（質問文 ON）に出る
+  assert.ok(secOnly.indexOf('<small class="cl-hint">「大丈夫です」のみ連呼は特に要注意。</small>') > 0, 'section に hint');
+  assert.ok(html.indexOf('「大丈夫です」のみ連呼は特に要注意。') > 0);
+  const sheetH = S.checklistSheetHtml(rec, p, { mode: 'sheet' });
+  assert.ok(sheetH.indexOf('<small class="cl-hint">「大丈夫です」のみ連呼は特に要注意。</small>') > 0 && sheetH.indexOf('○＝不安・不明点を解消できた') > 0, 'sheet に hint');
+  // 保存時点の台本（checklistDef）の文言で出す: 現在の profile の文言を変えてもレポートは保存時の文言
+  const p2 = P(); p2.checklist.sections[1].blocks[0].items[1].label = 'シフト連絡は電話のみ（LINE不可）';
+  const html3 = S.generateReportHTML(rec, p2);
+  assert.ok(html3.indexOf('シフト関連の連絡：原則電話のみ') > 0 && html3.indexOf('LINE不可') < 0);
+  // checklistDef が無い（保存前の旧データ）なら現在の台本
+  const html3b = S.generateReportHTML(Object.assign({}, rec, { checklistDef: null }), p2);
+  assert.ok(html3b.indexOf('LINE不可') > 0);
+  // print.showQuestions=false で質問文が出ない（メモは出る）
+  const pq = P(); pq.checklist.print.showQuestions = false;
+  const sheetQ = S.checklistSheetHtml(Object.assign({}, rec, { checklistDef: pq.checklist }), pq, { mode: 'sheet' });
+  assert.ok(sheetQ.indexOf('cl-qs') < 0 && sheetQ.indexOf('歌舞伎町ですので') < 0 && sheetQ.indexOf('長期希望 &lt;/script&gt;') > 0);
+  assert.ok(sheetQ.indexOf('cl-hint') < 0, 'showQuestions=false の A4 は hint も省く');
+  // 旧形式（scores のみ）→ 旧節だけ・チェックリスト節と A4 報告ボタンなし
+  assert.ok(html2.indexOf('data-sec="checklist"') < 0 && html2.indexOf('id="rtPrintChecklist"') < 0 && html2.indexOf('id="clSheet"') < 0);
+  assert.ok(html2.indexOf('面接評価（旧形式・10項目×5点）') > 0);
+  // 旧 scores ＋チェックリスト入力 → 両方（旧は「参考」）
+  const html4 = S.generateReportHTML(Object.assign({}, rec, { scores: scoresAll(4) }), p);
+  assert.ok(html4.indexOf('data-sec="checklist"') > 0 && html4.indexOf('面接評価（旧形式・10項目×5点・参考）') > 0 && html4.indexOf('40</b><span class="muted">/ 50点') > 0);
+  // 入力なし・旧 scores なし（面接前の保存）→ 「未入力です」
+  const html5 = S.generateReportHTML(Object.assign({}, rec, { checklist: R.emptyChecklist(), judgment: null, step: 2 }), p);
+  assert.ok(html5.indexOf('面接チェックリストは未入力です。') > 0 && html5.indexOf('data-sec="scores"') < 0 && html5.indexOf('id="rtPrintChecklist"') < 0);
+});
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

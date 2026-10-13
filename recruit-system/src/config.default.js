@@ -2,7 +2,7 @@
  * 劇場プロファイル既定値（TOHOシネマズ新宿）
  * ----------------------------------------------------------------------
  * 判定ロジック本体（rules.js）は劇場に依存しない。
- * 劇場ごとに変わるもの（名称・選択肢・閾値・留意点の文言・評価項目）は
+ * 劇場ごとに変わるもの（名称・選択肢・閾値・留意点の文言・面接チェックリスト（台本））は
  * すべてこのプロファイルに集約し、アプリ内の設定画面から編集／JSON書き出し／読み込みできる。
  *
  * handoffRules[].id は rules.js 側の条件関数（CONDITIONS）のキーと対応する。
@@ -350,7 +350,10 @@
     ],
 
 
-    // 面接評価（面接後の採用可否判定の中核）
+    // 面接評価
+    //   items / scaleMax / overallItemId / overallWarnBelow / overallRejectAtOrBelow は旧形式（10項目×5点）。
+    //   2026-10 以前の保存データの表示・再判定専用（新しい面接は下の checklist で評価する。docs/SPEC-checklist.md）。
+    //   thresholds / holdOnUnresolvedBlock / holdOnHighschoolException は旧形式・チェックリストの両方で使う。
     evaluation: {
       scaleMax: 5,
       items: [
@@ -375,6 +378,138 @@
       holdOnHighschoolException: true,
       // 総合判断がこの点以下なら不採用推奨（0=無効）
       overallRejectAtOrBelow: 0
+    },
+
+    // 面接チェックリスト（面接台本「スタッフ面接チェックリスト」2026-10-08 版。docs/SPEC-checklist.md 1 章）
+    //   sections（台本の ①〜⑤）→ blocks → items。id はチェックリスト全体で一意（回答 record.checklist のキー）。
+    //   block.type: must=必須条件（一致／不一致） / fields=記入欄 / explain=説明（チェック） / question=質問（文の表示＋メモ）
+    //               rating=確認事項・確認点（○△×） / notify=合否連絡（チェック） / note=流れの注記
+    //   判定に効くのは must・rating・総合判断（overall）だけ。○=2・△=1・×=0、総合判断 採用=2・保留=1・不採用=0 の得点率を
+    //   面接評価として 2 軸判定に使う（境界は evaluation.thresholds）。
+    //   auto: 応募情報からの自動表示（rules.js CHECKLIST_AUTO）。値は保存せず、空欄の表示・見込みのヒントにだけ使う。
+    checklist: {
+      title: 'スタッフ面接チェックリスト',
+      version: '2026-10-08',
+      intro: '台本の順に確認し、その場で入力してください。必須条件が1つでも不一致なら判定は不採用推奨になります（追加質問して解消しなければ「⑤ 逆質問」へ進み、最大10分で終了してください）。',
+      pages: [
+        { no: 1, title: '必須条件一致・継続性', lead: '必須条件と報連相の意識・具体性を確認。最低限の話し方、敬語が可能か。必須条件が不一致なら不採用、逆質問を最大１０分で終了。' },
+        { no: 2, title: '人物確認・逆質問', lead: '行動を確認。採用を検討できる人には不安解消の時間を取る。' }
+      ],
+      mustFailResult: 'reject',     // 必須条件に不一致があるとき: reject=不採用推奨 / review=上長最終判断要
+      mustUnknownResult: 'none',    // 必須条件に未確認が残るとき: none=警告のみ / review=採用推奨に留めない
+      mustFailJumpTo: 'reverse',    // 不一致のとき案内するセクション（'' で案内しない）
+      overallLabel: '面接者の総合判断',
+      overallHint: '①〜⑤の確認を踏まえて選んでください。',
+      overallOptions: { hire: '採用', hold: '保留', reject: '不採用' },   // 表示名（点 2/1/0 は固定）
+      overallCaps: { hold: 'review', reject: 'reject' },                  // 総合判断による結果の上限（none=調整しない）
+      header: {
+        posting: { label: '応募した求人', options: [{ value: 'regular', label: '通常求人' }, { value: 'short', label: '短期求人' }] },
+        negatives: [
+          { id: 'short', label: '短期希望', auto: 'shortTerm' },
+          { id: 'morningOnly', label: '朝～12時のみ', auto: 'morningOnly' }
+        ],
+        morningOnlyEnd: '12:00',
+        interviewerField: 'interviewer'
+      },
+      print: { showQuestions: true },
+      sections: [
+        { id: 'conditions', title: '勤務条件', minutes: 10, minutesMax: false, page: 1, lead: '', blocks: [
+          { id: 'conditions_must', type: 'must', title: '必須条件', note: '1つでも不一致なら不採用（追加質問して解消しなければ「⑤」へ）', memo: false, memoLabel: '', items: [
+            { id: 'must_weekly', label: '土日を含む週3日以上、5時間以上', auto: 'weeklyCondition', autoParams: { minDays: 3, minHours: 5 } },
+            // 「クリスマス」は既定の繁忙期に単独の期間が無いため、年末年始（yearend）に含めて見込みを出す
+            { id: 'must_busy', label: '指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）', auto: 'busyAll', autoParams: { periods: ['yearend', 'spring', 'gw', 'obon'] } }
+          ] },
+          { id: 'conditions_f1', type: 'fields', title: '', note: '', memo: false, memoLabel: '', items: [
+            { id: 'weekend', label: '土日勤務可否', kind: 'choice', options: [{ value: 'one', label: 'いずれか' }, { value: 'both', label: '両日' }], auto: 'weekend' },
+            { id: 'busy_ng', label: '出勤不可な繁忙', kind: 'text', auto: 'busyNg' }
+          ] },
+          { id: 'conditions_explain', type: 'explain', title: '説明', note: '※は短期求人に応募の場合のみご説明ください', memo: false, memoLabel: '', items: [
+            { id: 'ex_fare', label: '交通費（往復500円まで/日）' },
+            { id: 'ex_hours', label: '営業開始・終了時間、タクシー条件の説明' },
+            { id: 'ex_contract', label: '初回契約は2か月間(契約日の翌月末)。', shortOnly: true },
+            { id: 'ex_switch', label: '長期への切り替えあり。本人希望と勤務状況等で判断', shortOnly: true }
+          ] },
+          { id: 'conditions_f2', type: 'fields', title: '質問', note: '', memo: false, memoLabel: '', items: [
+            { id: 'term', label: '短期／長期の希望', kind: 'choice', options: [{ value: 'short', label: '短期希望' }, { value: 'long', label: '長期希望' }], auto: 'term' },
+            { id: 'start_date', label: '契約開始日の希望', kind: 'date' },
+            { id: 'first_end', label: '初回契約終了（月末締）', kind: 'month', auto: 'firstEnd', autoParams: { monthsAfter: 1 } },
+            { id: 'open_late', label: 'OPEN／25時(タク〇のみ)までの可否', kind: 'text', auto: 'openLate' }
+          ] },
+          { id: 'conditions_q', type: 'question', title: '', note: '', memo: true, memoLabel: 'メモ', items: [
+            { id: 'q_term', label: '「いまのところ、短期希望ですか？長期希望ですか？」or「採用となった場合、希望としては、いつ頃まで勤務継続希望でしょうか？」' },
+            { id: 'q_two_months', label: '「最初の2か月で勤務条件が満たせない可能性は？（土日出せない、など）」' },
+            { id: 'q_family', label: '「歌舞伎町ですので、ご家族の反対などあれば遠慮なく辞退お願いします。」' }
+          ] },
+          { id: 'conditions_rate', type: 'rating', title: '確認事項', note: '', memo: false, memoLabel: '', items: [
+            { id: 'rt_concrete', label: '勤務条件の一致に「具体性」があるか', hint: '「大丈夫です」のみ連呼は特に要注意。' },
+            // 台本 1 枚目冒頭の確認目的（台本の【確認事項】には無いが評価に入れる。不要なら設定で削除）
+            { id: 'rt_manner', label: '最低限の話し方、敬語が可能か', hint: '面接全体を通して（台本1枚目の冒頭）' }
+          ] },
+          { id: 'conditions_flow', type: 'note', title: '', note: '条件一致：2へ　／　必須条件不一致：追加質問してみて、解消しなければ「５」へ', memo: false, memoLabel: '', items: [] }
+        ] },
+        { id: 'continuity', title: '継続性・報連相', minutes: 3, minutesMax: false, page: 1, lead: '', blocks: [
+          // 台本 1 枚目の右列（② の【説明】）。① の【必須条件】は左列の 2 件だけ
+          { id: 'continuity_explain', type: 'explain', title: '説明', note: '', memo: false, memoLabel: '', items: [
+            { id: 'ex_submit', label: 'シフト提出は木曜23時、確定は水曜' },
+            { id: 'ex_phone', label: 'シフト関連の連絡：原則電話のみ' },
+            { id: 'ex_absence', label: '欠勤・遅刻は分かった時点で連絡' }
+          ] },
+          { id: 'continuity_q', type: 'question', title: '質問', note: '', memo: true, memoLabel: 'メモ', items: [
+            { id: 'q_prev_job', label: '「前のアルバイトの期間と退職理由は？差し支えなければ退職理由は？」' },
+            { id: 'q_cant_3days', label: '「週3日出せないと事前に分かったら、どうするべきだと思いますか？」' },
+            { id: 'q_sudden_absence', label: '「当日、急に出勤できなくなったら、どうするべきだと思いますか？」' }
+          ] },
+          // 台本の「報連相できるか／離職要因はないか」を 2 行に分けて評価する
+          { id: 'continuity_rate', type: 'rating', title: '確認事項', note: '', memo: false, memoLabel: '', items: [
+            { id: 'rt_hourensou', label: '報連相できるか' },
+            { id: 'rt_turnover', label: '離職要因はないか', hint: '○＝離職要因なし（前のアルバイトの期間・退職理由から）' }
+          ] }
+        ] },
+        // 台本 2 枚目は 3 列（③・④・⑤）。各列の上から順に並べる
+        { id: 'job', title: '仕事内容の説明', minutes: 10, minutesMax: false, page: 2, lead: '', blocks: [
+          { id: 'job_explain', type: 'explain', title: '説明', note: '', memo: false, memoLabel: '', items: [
+            { id: 'ex_start', label: 'コンセorフロア業務からスタート' },
+            { id: 'ex_busy', label: '多忙・立ち仕事・汚物清掃の可否' },
+            { id: 'ex_opinion', label: 'ときにはご意見の対応も' },
+            { id: 'ex_rules', label: '細かなルールや接客指導あり' }
+          ] },
+          { id: 'job_q', type: 'question', title: '質問', note: '', memo: true, memoLabel: '回答', items: [
+            { id: 'q_value', label: '「前職で大切にしていたことは？」' },
+            { id: 'q_failure', label: '「前職での失敗談はありますか？」' },
+            { id: 'q_unsure', label: '「説明した業務で自信がないことや、相談・不明点はありますか？」' }
+          ] },
+          { id: 'job_rate', type: 'rating', title: '確認点', note: '', memo: false, memoLabel: '', items: [
+            { id: 'rt_understand', label: '業務理解と接客の実行可能性' }
+          ] }
+        ] },
+        { id: 'teamwork', title: '集団行動特性', minutes: 8, minutesMax: false, page: 2, lead: '', blocks: [
+          { id: 'teamwork_explain', type: 'explain', title: '説明', note: '', memo: false, memoLabel: '', items: [
+            { id: 'ex_team', label: 'チームで分業（例：清掃、商材補充）' },
+            { id: 'ex_sudden', label: '急な指示も多い（例：SH、無線呼出）' },
+            { id: 'ex_radio', label: '不明点・権限外の対応は無線で確認。' }
+          ] },
+          { id: 'teamwork_q', type: 'question', title: '質問', note: '', memo: true, memoLabel: '回答', items: [
+            { id: 'q_feedback', label: '「指摘を受けて行動を変えた経験はありますか？（仕事・部活動など）」' },
+            { id: 'q_unknown', label: '「お客様に質問されて答えがわからない時、どうしますか？」' },
+            { id: 'q_busy_mind', label: '「忙しいときこそ心掛けたいことは？」' }
+          ] },
+          { id: 'teamwork_rate', type: 'rating', title: '確認点', note: '', memo: false, memoLabel: '', items: [
+            { id: 'rt_team', label: '自己判断せずチームで動けるか' }
+          ] }
+        ] },
+        { id: 'reverse', title: '逆質問', minutes: 10, minutesMax: true, page: 2, lead: 'ミスマッチを解消するための時間', blocks: [
+          { id: 'reverse_q', type: 'question', title: '', note: '※業務の大変な面も率直に伝える。', memo: true, memoLabel: '回答', items: [
+            { id: 'q_concerns', label: '「条件・業務・映画館のことなど、何か気になる点はありますか？」' }
+          ] },
+          { id: 'reverse_notify', type: 'notify', title: '合否連絡', note: '面接の最後に伝えたらチェック', memo: false, memoLabel: '', items: [
+            { id: 'nt_hire', label: '採用時：数日中に電話連絡。ご家族の反対あればご辞退ください。同時に初日出勤日時を調整、もちものなど詳細はメールで送付。' },
+            { id: 'nt_reject', label: '不合格：メール連絡' }
+          ] },
+          { id: 'reverse_rate', type: 'rating', title: '確認点', note: '', memo: false, memoLabel: '', items: [
+            { id: 'rt_mismatch', label: '採用後のミスマッチを低減', hint: '○＝不安・不明点を解消できた' }
+          ] }
+        ] }
+      ]
     },
 
     // シフト貢献度（面接評価とは別軸。得点率で 高/中/低 の帯に分ける）
@@ -433,6 +568,8 @@
       },
       // 調整（高校生の方針・未確認の留意点など）で結果が下がったときの本文。マスの注記はこのとき表示しない
       adjusted: '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。',
+      // 面接チェックリストの必須条件に不一致があり不採用推奨に固定したときの本文（点数・マスの注記は理由にしない）
+      mustGate: '{name}は必須条件（{mustLabels}）が一致しないため、面接評価・シフト貢献度にかかわらず{resultTitle}とします。',
       busyIntro: '新宿は土日祝、特に3連休以上の連休・長期休暇の貢献を重視します。分からない期間は空欄のまま（面接で確認）で構いません。',
       allNightIntro: '終映後〜翌朝までの通し勤務（{allNightShiftStart}〜翌{allNightShiftEnd}目安）です。{lateNightStartHour}時以降の勤務（クローズ）とは別に確認します。',
       contributionIntro: '応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「面接で確認する項目」で入力すると確定します。',

@@ -7,6 +7,7 @@
  * - computeContribution : シフト貢献度スコア（繁忙期・土日祝・オールナイト等。内訳つき）
  * - buildHandoff        : 面接者への申し送り（留意点）と強みを生成
  * - evaluateHiring      : 面接評価 × シフト貢献度 の2軸マトリクスで採用可否を判定
+ * - interviewModel ほか : 面接チェックリスト（面接台本。○△× と総合判断の得点率・必須条件・自動表示。docs/SPEC-checklist.md）
  * - describeApplicant   : 応募情報を表示用のラベル／値ペアに整形
  * - stageOf ほか        : 入力の段階（面接前に入力／面接時に確認。INPUT_SECTIONS）と interviewConfirm（面接で確認する項目）
  *
@@ -71,6 +72,9 @@
   const RESULT_RANK = { reject: 0, review: 1, recommend: 2 };
   // 調整で結果が下がったときの本文（texts.adjusted が無い旧設定用の既定）
   const DEFAULT_ADJUSTED_BODY = '{name}は{scoreSummary}で点数上は{baseTitle}ですが、下記の理由により{resultTitle}とします。';
+  // 必須条件の不一致で不採用推奨に固定したときの本文（texts.mustGate が無い旧設定用の既定）。
+  // 打ち切りで ②〜④ を評価していないことが多いので、点数を結論の理由として書かない
+  const DEFAULT_MUST_GATE_BODY = '{name}は必須条件（{mustLabels}）が一致しないため、面接評価・シフト貢献度にかかわらず{resultTitle}とします。';
   const BANDS = ['high', 'mid', 'low'];
   const CONTINUE_LABELS = { yes: '継続する', undecided: '未定', no: '継続しない' };
 
@@ -271,6 +275,7 @@
       latestEndAbs: null, latestEndText: '',
       earliestStartAbs: null,
       maxEntryMinutes: 0, maxEntryWorkMinutes: 0,
+      minEntryMinutes: null,            // 1 回の拘束時間の最小（分）。シフトなしは null（面接チェックリストの必須条件の見込み）
       weeklyMinutes: 0, weeklyWorkMinutes: 0,
       closeDays: 0, legalCloseDays: 0, openDays: 0,
       dayCount: useAny ? 7 : days.length,
@@ -298,6 +303,7 @@
       if (res.earliestStartAbs == null || e.startAbs < res.earliestStartAbs) res.earliestStartAbs = e.startAbs;
       if (e.minutes > res.maxEntryMinutes) res.maxEntryMinutes = e.minutes;
       if (e.workMinutes > res.maxEntryWorkMinutes) res.maxEntryWorkMinutes = e.workMinutes;
+      if (res.minEntryMinutes == null || e.minutes < res.minEntryMinutes) res.minEntryMinutes = e.minutes;
     });
 
     res.latestEndText = res.latestEndAbs != null ? fmtAbs(res.latestEndAbs) : '';
@@ -1233,20 +1239,504 @@
     return b;
   }
 
+  // ---------- 面接チェックリスト（面接台本。docs/SPEC-checklist.md 1・3 章） ----------
+  // 台本は profile.checklist（ページ → セクション → ブロック → 項目）。回答は record.checklist（= state.checklist）。
+  // 判定に効くのは must（必須条件）・rating（確認事項／確認点）・総合判断だけ。説明・質問・記入欄・合否連絡は記録用。
+  const CHECKLIST_BLOCK_TYPES = ['must', 'fields', 'explain', 'question', 'rating', 'notify', 'note'];
+  const CHECKLIST_FIELD_KINDS = ['text', 'date', 'month', 'choice'];
+  const CHECKLIST_SCALE = 2;                       // ○△× と総合判断の満点（固定）
+  const RATING_MARKS = {                           // 確認事項／確認点
+    good: { mark: '○', label: '○ できている', points: 2, tone: 'ok' },
+    fair: { mark: '△', label: '△ やや不安', points: 1, tone: 'warn' },
+    poor: { mark: '×', label: '× できていない', points: 0, tone: 'danger' }
+  };
+  const OVERALL_POINTS = { hire: 2, hold: 1, reject: 0 };   // 総合判断（表示名は profile.checklist.overallOptions）
+  const OVERALL_TONE = { hire: 'ok', hold: 'warn', reject: 'danger' };
+  const OVERALL_DEFAULT_LABELS = { hire: '採用', hold: '保留', reject: '不採用' };
+  const MUST_VALUES = {                            // 必須条件（'' = 未確認）
+    match: { label: '一致', mark: '○', tone: 'ok' },
+    mismatch: { label: '不一致', mark: '×', tone: 'danger' },
+    '': { label: '未確認', mark: '－', tone: 'muted' }
+  };
+  const CHECKLIST_OVERALL_ID = '__overall';        // breakdown・scores 上の総合判断のキー（項目 id は英字始まりなので衝突しない）
+  const CHECKLIST_AUTO = {                         // profile の auto に書ける値（自動表示の種類）
+    must: ['weeklyCondition', 'busyAll'],
+    fields: ['weekend', 'busyNg', 'term', 'firstEnd', 'openLate'],
+    negatives: ['shortTerm', 'morningOnly']
+  };
+  const MUST_FAIL_RESULTS = ['reject', 'review'];
+  const MUST_UNKNOWN_RESULTS = ['none', 'review'];
+  const OVERALL_CAP_VALUES = ['none', 'review', 'reject'];
+  const OVERALL_CAP_DEFAULTS = { hold: 'review', reject: 'reject' };
+  const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳'];
+  function circled(n) { return CIRCLED[n - 1] || ('(' + n + ')'); }
+
+  function clDef(profile) { return (profile && U.isObj(profile.checklist)) ? profile.checklist : {}; }
+  function clStr(v) { return v == null ? '' : String(v); }
+  function oneOf(v, list, def) { return list.indexOf(v) >= 0 ? v : def; }
+  function yen(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  // 空の回答
+  function emptyChecklist() {
+    return { v: 1, header: { date: '', interviewer: '', posting: '', taxi: '', negatives: {} }, values: {}, notes: {}, overall: '' };
+  }
+
+  // 回答が 1 つでもあるか（header は数えない。面接日は自動で入るため）
+  function checklistHasInput(cl) {
+    if (!U.isObj(cl)) return false;
+    const vals = U.isObj(cl.values) ? cl.values : {};
+    const notes = U.isObj(cl.notes) ? cl.notes : {};
+    if (Object.keys(vals).some(function (k) { const v = vals[k]; return v != null && v !== '' && v !== false; })) return true;
+    if (Object.keys(notes).some(function (k) { return clStr(notes[k]).trim() !== ''; })) return true;
+    return !!cl.overall;
+  }
+
+  // 台本順の項目一覧 [{ item, block, section, sectionIndex, no, noMark }]（type 省略で全項目）
+  function checklistItems(def, type) {
+    const out = [];
+    const secs = def && Array.isArray(def.sections) ? def.sections : [];
+    let n = 0;
+    secs.forEach(function (sec) {
+      if (!U.isObj(sec)) return;
+      const idx = n++;
+      (Array.isArray(sec.blocks) ? sec.blocks : []).forEach(function (b) {
+        if (!U.isObj(b) || (type && b.type !== type)) return;
+        (Array.isArray(b.items) ? b.items : []).forEach(function (it) {
+          if (!U.isObj(it)) return;
+          out.push({ item: it, block: b, section: sec, sectionIndex: idx, no: idx + 1, noMark: circled(idx + 1) });
+        });
+      });
+    });
+    return out;
+  }
+
+  function hasNumericScore(scores) {
+    if (!U.isObj(scores)) return false;
+    return Object.keys(scores).some(function (k) {
+      const v = scores[k];
+      return v !== '' && v != null && typeof v !== 'boolean' && !isNaN(Number(v));
+    });
+  }
+
+  function ratingValue(cl, id) {
+    const v = U.isObj(cl) && U.isObj(cl.values) ? cl.values[id] : '';
+    return RATING_MARKS[v] ? v : '';
+  }
+  function mustValue(cl, id) {
+    const v = U.isObj(cl) && U.isObj(cl.values) ? cl.values[id] : '';
+    return v === 'match' || v === 'mismatch' ? v : '';
+  }
+  function overallValue(cl) {
+    const v = U.isObj(cl) ? cl.overall : '';
+    return OVERALL_POINTS[v] != null ? v : '';
+  }
+  function overallLabelOf(def, v) {
+    const o = U.isObj(def.overallOptions) ? def.overallOptions : {};
+    return v ? (clStr(o[v]) || OVERALL_DEFAULT_LABELS[v]) : '';
+  }
+
+  // 面接評価の項目・点の出どころ。evaluateHiring・Step3・右サマリー・Step4・レポート・設定画面で共用
+  //   mode 'checklist': 確認点（rating）の ○△× ＋ 総合判断（2/1/0）。'legacy': 旧 10 項目×5 点（evaluation.items）
+  //   cl がオブジェクトで、入力がある（または旧採点が無い）ときチェックリスト方式
+  function interviewModel(profile, scores, cl) {
+    profile = profile || {};
+    const ev = profile.evaluation || {};
+    const mode = (U.isObj(cl) && (checklistHasInput(cl) || !hasNumericScore(scores))) ? 'checklist' : 'legacy';
+    let items, scale, sc, overallItemId, marks = {}, notes = {}, counts = null;
+    if (mode === 'checklist') {
+      const def = clDef(profile);
+      const ratings = checklistItems(def, 'rating');
+      const clNotes = U.isObj(cl.notes) ? cl.notes : {};
+      items = ratings.map(function (x) {
+        return {
+          id: x.item.id, label: clStr(x.item.label), hint: clStr(x.item.hint), isOverall: false,
+          sectionId: x.section.id, sectionNo: x.no, sectionTitle: clStr(x.section.title)
+        };
+      });
+      items.push({ id: CHECKLIST_OVERALL_ID, label: clStr(def.overallLabel) || '面接者の総合判断', hint: '', isOverall: true,
+        sectionId: '', sectionNo: null, sectionTitle: '' });
+      scale = CHECKLIST_SCALE;
+      overallItemId = CHECKLIST_OVERALL_ID;
+      sc = {};
+      counts = { good: 0, fair: 0, poor: 0, blank: 0 };
+      ratings.forEach(function (x) {
+        const id = x.item.id, v = ratingValue(cl, id);
+        if (v) { sc[id] = RATING_MARKS[v].points; marks[id] = v; counts[v]++; } else counts.blank++;
+        if (clStr(clNotes[id]).trim()) notes[id] = clStr(clNotes[id]);
+      });
+      const ov = overallValue(cl);
+      if (ov) { sc[CHECKLIST_OVERALL_ID] = OVERALL_POINTS[ov]; marks[CHECKLIST_OVERALL_ID] = ov; }
+    } else {
+      items = (ev.items || []).map(function (it) {
+        return { id: it.id, label: it.label, hint: '', isOverall: it.id === ev.overallItemId, sectionId: '', sectionNo: null, sectionTitle: '' };
+      });
+      scale = Number(ev.scaleMax) || 5;
+      overallItemId = ev.overallItemId;
+      sc = U.isObj(scores) ? scores : {};
+    }
+    let total = 0, rated = 0;
+    const unrated = [];
+    items.forEach(function (it) {
+      const raw = sc[it.id];
+      const s = raw === undefined || raw === null || raw === '' ? null : Number(raw);
+      if (s == null || isNaN(s)) { unrated.push(it.id); return; }
+      total += s; rated++;
+    });
+    const max = items.length * scale;
+    const pct = max ? Math.round((total / max) * 1000) / 10 : 0;
+    const th = ev.thresholds || {};
+    const band = rated ? bandOf(pct, num(th.recommendPct, 70), num(th.reviewPct, 40)) : null;
+    const bl = ((profile.texts || {}).bandLabels) || {};
+    return {
+      mode: mode, items: items, scale: scale, scores: sc, overallItemId: overallItemId,
+      marks: marks, notes: notes, counts: counts,
+      total: total, max: max, pct: pct, rated: rated, ratable: items.length, unrated: unrated,
+      band: band, bandLabel: band ? (bl[band] || { high: '高', mid: '中', low: '低' }[band]) : ''
+    };
+  }
+
+  // 必須条件の集計
+  function mustSummary(def, cl) {
+    const out = { items: [], total: 0, match: 0, mismatch: 0, unknown: 0, mismatchLabels: [], unknownLabels: [] };
+    checklistItems(def || {}, 'must').forEach(function (x) {
+      const v = mustValue(cl, x.item.id), mv = MUST_VALUES[v], label = clStr(x.item.label);
+      out.items.push({ id: x.item.id, label: label, sectionNo: x.no, sectionId: x.section.id, value: v, valueLabel: mv.label, mark: mv.mark, tone: mv.tone });
+      out.total++;
+      if (v === 'match') out.match++;
+      else if (v === 'mismatch') { out.mismatch++; out.mismatchLabels.push(label); }
+      else { out.unknown++; out.unknownLabels.push(label); }
+    });
+    return out;
+  }
+
+  // 契約開始日（YYYY-MM-DD）から monthsAfter か月後の月（月末締め）を 'YYYY-MM' で返す。空・不正は ''
+  function firstContractEnd(ymd, monthsAfter) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(clStr(ymd));
+    if (!m) return '';
+    const mo = Number(m[2]);
+    if (mo < 1 || mo > 12) return '';
+    const n = Math.max(0, Math.floor(num(monthsAfter, 1)));
+    const t = Number(m[1]) * 12 + (mo - 1) + n;
+    return Math.floor(t / 12) + '-' + String(t % 12 + 1).padStart(2, '0');
+  }
+
+  function autoParam(item, key, def) {
+    const ap = U.isObj(item.autoParams) ? item.autoParams : {};
+    return ap[key] == null ? def : ap[key];
+  }
+
+  // 自動表示（回答は自動で埋めない。空欄の記入欄・ヘッダーの既定表示、必須条件の「見込み」ヒントにだけ使う）
+  //   戻り値: { taxi: { text, tone }, negatives: { <id>: { autoOn, on, overridden, text } },
+  //            fields: { <id>: { value, text } }, must: { <id>: { ok, tone, text } } }
+  function checklistAuto(applicant, cl, profile) {
+    const a = applicant || {};
+    profile = profile || {};
+    cl = U.isObj(cl) ? cl : emptyChecklist();
+    const def = clDef(profile);
+    const f = profile.features || {}, o = profile.options || {}, p = profile.params || {};
+    const vals = U.isObj(cl.values) ? cl.values : {};
+    const hdr = U.isObj(cl.header) ? cl.header : {};
+    const sh = analyzeShifts(a, profile);
+    const ln = a.lateNight || {};
+    const out = { taxi: null, negatives: {}, fields: {}, must: {} };
+
+    // タクシー可否・料金
+    if (f.lateNight === false) out.taxi = { text: '—', tone: 'muted' };
+    else if (ln.availability === 'ng') out.taxi = { text: '深夜帯×（タクシー対象外）', tone: 'muted' };
+    else if (ln.returnMethod === 'taxi') {
+      const fare = num(ln.taxiFare, null), limit = num(p.taxiLimitYen, 3000);
+      if (fare == null) out.taxi = { text: '可・料金未確認', tone: 'warn' };
+      else if (fare <= limit) out.taxi = { text: '可・' + yen(fare) + '円（規定' + yen(limit) + '円以内）', tone: 'ok' };
+      else out.taxi = { text: '要確認・' + yen(fare) + '円（規定' + yen(limit) + '円超）', tone: 'warn' };
+    } else if (ln.returnMethod) {
+      out.taxi = { text: '否（' + labelOf(o.returnMethods, ln.returnMethod) + (ln.lastTrain ? ' ' + ln.lastTrain : '') + '）', tone: 'info' };
+    } else out.taxi = { text: '未確認', tone: 'muted' };
+
+    // 記入欄の id（短期／長期の希望・契約開始日）
+    const fieldItems = checklistItems(def, 'fields');
+    const termItem = fieldItems.find(function (x) { return x.item.auto === 'term'; });
+    const termVal = clStr(vals[termItem ? termItem.item.id : 'term']);
+    const dateItem = fieldItems.find(function (x) { return x.item.kind === 'date'; });
+    const startVal = clStr(vals[dateItem ? dateItem.item.id : 'start_date']);
+
+    // 消極属性
+    const hdrNeg = U.isObj(hdr.negatives) ? hdr.negatives : {};
+    const negs = U.isObj(def.header) && Array.isArray(def.header.negatives) ? def.header.negatives : [];
+    const morningEnd = toMinutes(clStr((def.header || {}).morningOnlyEnd)) != null ? toMinutes(def.header.morningOnlyEnd) : 12 * 60;
+    negs.forEach(function (n) {
+      if (!U.isObj(n) || !n.id) return;
+      let autoOn = false;
+      if (n.auto === 'shortTerm') autoOn = termVal ? termVal === 'short' : a.workPeriod === 'short';
+      else if (n.auto === 'morningOnly') autoOn = sh.hasAnyEntry && sh.entries.every(function (e) { return e.endAbs <= morningEnd; });
+      const ov = hdrNeg[n.id];
+      const overridden = ov === 'on' || ov === 'off';
+      const on = overridden ? ov === 'on' : autoOn;
+      out.negatives[n.id] = { autoOn: autoOn, on: on, overridden: overridden, text: on ? clStr(n.label) + (overridden ? '' : '（自動）') : '' };
+    });
+
+    // 記入欄
+    const busy = busyItems(profile);
+    fieldItems.forEach(function (x) {
+      const it = x.item;
+      let value = '', text = '';
+      if (it.auto === 'weekend') {
+        if (a.weekendFreq === 'every_both') value = 'both';
+        else if (a.weekendFreq === 'every_one') value = 'one';
+        else {
+          const wd = a.workDays || [];
+          const sat = a.anyDay || wd.indexOf('sat') >= 0, sun = a.anyDay || wd.indexOf('sun') >= 0;
+          value = sat && sun ? 'both' : (sat || sun) ? 'one' : '';
+        }
+        if (value) text = '応募情報: ' + labelOf(it.options, value);
+      } else if (it.auto === 'busyNg') {
+        value = busy.filter(function (v) { return (a.vacation || {})[v.id] === 'ng'; }).map(function (v) { return v.label; }).join('・');
+        text = value;
+      } else if (it.auto === 'term') {
+        value = a.workPeriod === 'short' ? 'short' : (a.workPeriod === 'long' || a.workPeriod === 'mid') ? 'long' : '';
+        if (a.workPeriod) text = '応募情報: ' + labelOf(o.workPeriods, a.workPeriod);
+      } else if (it.auto === 'firstEnd') {
+        const n = Math.max(0, Math.floor(num(autoParam(it, 'monthsAfter', 1), 1)));
+        value = firstContractEnd(startVal, n);
+        if (value) text = value + '（契約開始日の' + (n === 0 ? '同月末' : n === 1 ? '翌月末' : n + 'か月後の月末') + '）';
+      } else if (it.auto === 'openLate') {
+        const parts = [];
+        if (sh.hasAnyEntry) parts.push(sh.isOpen ? 'OPEN 可（週' + sh.openDays + '日）' : 'OPEN なし');
+        if (f.lateNight !== false) {
+          // 台本の問いは「25時まで（タクシー可の人のみ）」なので、深夜帯の可否と帰宅手段から 25時の可否を出す
+          const lh = num(p.lateNightStartHour, 22);
+          const av = ln.availability;
+          const late = lh + '時以降' + (av ? (TRI_LABELS[av] || av).charAt(0) : ' 未確認');
+          let t;
+          if (!av) t = '25時まで 未確認（' + late + '）';
+          else if (av === 'ng') t = '25時まで 不可（' + late + '）';
+          else if (ln.returnMethod === 'taxi') t = '25時まで ' + (av === 'ok' ? '可' : '要相談') + '（' + late + '・タクシー帰宅）';
+          else if (ln.returnMethod) t = '25時まで 不可（' + late + '・' + labelOf(o.returnMethods, ln.returnMethod) + (ln.lastTrain ? ' ' + ln.lastTrain : '') + '）';
+          else t = '25時まで 未確認（' + late + '・帰宅手段 未確認）';
+          parts.push(t);
+        }
+        value = parts.join('／');
+        text = value;
+      } else return;
+      out.fields[it.id] = { value: value, text: text };
+    });
+
+    // 必須条件の見込み
+    checklistItems(def, 'must').forEach(function (x) {
+      const it = x.item;
+      let ok = null, text = '';
+      if (it.auto === 'weeklyCondition') {
+        const minDays = num(autoParam(it, 'minDays', 3), 3), minHours = num(autoParam(it, 'minHours', 5), 5);
+        const wd = a.workDays || [];
+        const we = DAYS.filter(function (d) { return (d.key === 'sat' || d.key === 'sun') && wd.indexOf(d.key) >= 0; }).map(function (d) { return d.label; });
+        const conds = [], parts = [];
+        if (a.anyDay) { conds.push(true); parts.push('土日を含む（曜日問わず）'); }
+        else if (we.length) { conds.push(true); parts.push('土日を含む（' + we.join('・') + '）'); }
+        else if (wd.length) { conds.push(false); parts.push('土日を含まない'); }
+        else { conds.push(null); parts.push('曜日 未入力'); }
+        const dmin = num(a.daysMin, null), dmax = num(a.daysMax, null);
+        if (dmin == null && dmax == null) { conds.push(null); parts.push('週日数 未入力'); }
+        else {
+          parts.push('週' + (dmin != null ? dmin : '?') + '〜' + (dmax != null ? dmax : '?') + '日');
+          if (dmin != null && dmin >= minDays) conds.push(true);
+          else if (dmax != null && dmax < minDays) conds.push(false);
+          else conds.push(null);
+        }
+        if (sh.minEntryMinutes == null) { conds.push(null); parts.push('時間 未入力'); }
+        else {
+          parts.push('最短 ' + fmtDuration(sh.minEntryMinutes));
+          conds.push(sh.minEntryMinutes >= minHours * 60);
+        }
+        ok = conds.indexOf(false) >= 0 ? false : conds.indexOf(null) >= 0 ? null : true;
+        text = '応募情報: ' + parts.join('／');
+      } else if (it.auto === 'busyAll') {
+        const periods = autoParam(it, 'periods', []);
+        const list = (Array.isArray(periods) ? periods : []).map(function (id) {
+          return busy.find(function (v) { return v.id === id; });
+        }).filter(function (v, i, arr) { return v && arr.indexOf(v) === i; });
+        if (f.vacation === false || !list.length) { ok = null; text = '応募情報: 繁忙期の入力なし'; }
+        else {
+          const vs = list.map(function (v) { return (a.vacation || {})[v.id] || ''; });
+          ok = vs.indexOf('ng') >= 0 ? false : vs.every(function (v) { return v === 'ok'; }) ? true : null;
+          text = '応募情報: ' + list.map(function (v, i) {
+            return v.label + (vs[i] ? (TRI_LABELS[vs[i]] || vs[i]).charAt(0) : ' 未確認');
+          }).join(' ');
+        }
+      } else return;
+      text += ' → ' + (ok === true ? '満たす見込み' : ok === false ? '満たさない見込み' : '要確認');
+      out.must[it.id] = { ok: ok, tone: ok === true ? 'ok' : ok === false ? 'danger' : 'warn', text: text };
+    });
+    return out;
+  }
+
+  // 表示用のビューモデル（Step3・Step4・右サマリー・レポート・A4 報告で共用）。opts = { scores, management }
+  //   mode は opts.scores を含めた方式。score はチェックリストの得点（旧方式のレコードでもチェックリストとして数える）
+  function checklistSummary(applicant, cl, profile, opts) {
+    opts = opts || {};
+    profile = profile || {};
+    cl = U.isObj(cl) ? cl : emptyChecklist();
+    const def = clDef(profile);
+    const vals = U.isObj(cl.values) ? cl.values : {};
+    const notes = U.isObj(cl.notes) ? cl.notes : {};
+    const hdr = U.isObj(cl.header) ? cl.header : {};
+    const dh = U.isObj(def.header) ? def.header : {};
+    const autos = checklistAuto(applicant, cl, profile);
+    const mode = interviewModel(profile, opts.scores, cl).mode;
+    const model = interviewModel(profile, {}, cl);
+
+    // ヘッダー
+    const posting = clStr(hdr.posting);
+    const postingOpt = ((U.isObj(dh.posting) && Array.isArray(dh.posting.options)) ? dh.posting.options : []).find(function (x) { return x && x.value === posting; });
+    const mg = U.isObj(opts.management) ? opts.management : {};
+    const stamp = dh.interviewerField && U.isObj(mg[dh.interviewerField]) ? clStr(mg[dh.interviewerField].name) : '';
+    const ivName = clStr(hdr.interviewer).trim();
+    const taxiOv = clStr(hdr.taxi).trim();
+    const header = {
+      date: clStr(hdr.date), posting: posting, postingLabel: postingOpt ? clStr(postingOpt.label) : '',
+      interviewer: ivName || stamp, interviewerFromStamp: !ivName && !!stamp,
+      taxi: taxiOv ? { text: taxiOv, tone: 'info', auto: false } : { text: autos.taxi.text, tone: autos.taxi.tone, auto: true },
+      negatives: (Array.isArray(dh.negatives) ? dh.negatives : []).filter(function (n) { return U.isObj(n) && n.id; }).map(function (n) {
+        const x = autos.negatives[n.id] || { autoOn: false, on: false, overridden: false, text: '' };
+        return { id: n.id, label: clStr(n.label), on: x.on, auto: !x.overridden, autoOn: x.autoOn, text: x.text };
+      })
+    };
+
+    // 必須条件
+    const must = mustSummary(def, cl);
+    must.items.forEach(function (m) {
+      const au = autos.must[m.id];
+      m.autoText = au ? au.text : '';
+      m.autoTone = au ? au.tone : '';
+    });
+
+    // 確認点・総合判断
+    const ratings = checklistItems(def, 'rating').map(function (x) {
+      const v = ratingValue(cl, x.item.id), rm = RATING_MARKS[v];
+      return {
+        id: x.item.id, label: clStr(x.item.label), hint: clStr(x.item.hint), sectionId: x.section.id, sectionNo: x.no, noMark: x.noMark,
+        value: v, mark: rm ? rm.mark : '', points: rm ? rm.points : null, tone: rm ? rm.tone : 'muted', note: clStr(notes[x.item.id])
+      };
+    });
+    const ov = overallValue(cl);
+    const overall = { value: ov, label: overallLabelOf(def, ov), points: ov ? OVERALL_POINTS[ov] : null, tone: ov ? OVERALL_TONE[ov] : 'muted' };
+
+    // セクション
+    let minutesTotal = 0;
+    const sections = [];
+    (Array.isArray(def.sections) ? def.sections : []).filter(function (s) { return U.isObj(s); }).forEach(function (sec, i) {
+      const minutes = Math.max(0, Math.floor(num(sec.minutes, 0)));
+      minutesTotal += minutes;
+      let mustMismatch = 0, gradable = 0, answered = 0, checkable = 0, checked = 0;
+      const blocks = (Array.isArray(sec.blocks) ? sec.blocks : []).filter(function (b) { return U.isObj(b); }).map(function (b) {
+        const items = (Array.isArray(b.items) ? b.items : []).filter(function (it) { return U.isObj(it); }).map(function (it) {
+          const r = Object.assign({}, it);
+          r.note = clStr(notes[it.id]);
+          r.autoText = '';
+          r.dim = false;
+          r.fromAuto = false;
+          if (b.type === 'must') {
+            const v = mustValue(cl, it.id), mv = MUST_VALUES[v];
+            r.value = v; r.valueLabel = mv.label; r.mark = mv.mark; r.tone = mv.tone;
+            const au = autos.must[it.id];
+            if (au) { r.autoText = au.text; r.autoTone = au.tone; }
+            gradable++; if (v) answered++;
+            if (v === 'mismatch') mustMismatch++;
+            r.effective = mv.label;
+          } else if (b.type === 'rating') {
+            const v = ratingValue(cl, it.id), rm = RATING_MARKS[v];
+            r.value = v; r.mark = rm ? rm.mark : ''; r.points = rm ? rm.points : null; r.tone = rm ? rm.tone : 'muted';
+            gradable++; if (v) answered++;
+            r.effective = r.mark;
+          } else if (b.type === 'explain' || b.type === 'notify') {
+            r.value = vals[it.id] === true;
+            r.dim = b.type === 'explain' && it.shortOnly === true && posting !== 'short';
+            checkable++; if (r.value) checked++;
+            r.effective = r.value;
+          } else if (b.type === 'fields') {
+            const v = clStr(vals[it.id]);
+            const au = autos.fields[it.id];
+            r.value = v;
+            if (au) r.autoText = au.text;
+            r.fromAuto = !v && !!(au && au.value);
+            r.effective = v || (au ? au.value : '');
+            if (it.kind === 'choice') {
+              const opt = (Array.isArray(it.options) ? it.options : []).find(function (x) { return x && x.value === r.effective; });
+              r.effectiveLabel = opt ? clStr(opt.label) : clStr(r.effective);
+            } else r.effectiveLabel = clStr(r.effective);
+          } else {
+            r.value = vals[it.id] == null ? '' : vals[it.id];
+            r.effective = r.value;
+          }
+          return r;
+        });
+        return {
+          id: b.id, type: b.type, title: clStr(b.title), note: clStr(b.note), memo: b.memo === true, memoLabel: clStr(b.memoLabel),
+          memoText: clStr(notes[b.id]), items: items
+        };
+      });
+      const no = i + 1;
+      sections.push({
+        id: sec.id, no: no, noMark: circled(no), title: clStr(sec.title), minutes: minutes, minutesMax: sec.minutesMax === true,
+        minutesText: minutes ? (sec.minutesMax === true ? '最大' : '') + minutes + '分' : '',
+        page: Math.max(1, Math.floor(num(sec.page, 1))), lead: clStr(sec.lead),
+        mustMismatch: mustMismatch,
+        done: gradable ? answered === gradable : (checkable ? checked === checkable : false),
+        answered: answered, gradable: gradable,
+        blocks: blocks
+      });
+    });
+
+    return {
+      def: def, mode: mode, hasInput: checklistHasInput(cl),
+      header: header, autos: autos, must: must, ratings: ratings, overall: overall,
+      score: { total: model.total, max: model.max, pct: model.pct, band: model.band, bandLabel: model.bandLabel,
+        rated: model.rated, ratable: model.ratable, counts: model.counts },
+      sections: sections,
+      pages: Array.isArray(def.pages) ? def.pages : [],
+      minutesTotal: minutesTotal
+    };
+  }
+
+  // 確認点（rating 項目）の差。defA=保存時、defB=現在 → { added: B にだけある id, removed: A にだけある id }
+  function checklistDiff(defA, defB) {
+    const a = checklistItems(defA || {}, 'rating').map(function (x) { return x.item.id; });
+    const b = checklistItems(defB || {}, 'rating').map(function (x) { return x.item.id; });
+    return {
+      added: b.filter(function (id) { return a.indexOf(id) < 0; }),
+      removed: a.filter(function (id) { return b.indexOf(id) < 0; })
+    };
+  }
+
   // ---------- 採用可否判定（面接評価 × シフト貢献度） ----------
+  //   opts.checklist（面接チェックリストの回答）を渡すと、入力がある（または旧採点が無い）ときチェックリスト方式で評価する。
+  //   渡さないとき・旧レコード（旧採点ありでチェックリスト未入力）は旧方式（evaluation.items × scaleMax）。
   function evaluateHiring(applicant, scores, profile, handoff, checks, opts) {
     const ev = profile.evaluation || {};
-    const items = ev.items || [];
-    const scale = Number(ev.scaleMax) || 5;
+    const cl = opts && U.isObj(opts.checklist) ? opts.checklist : null;
+    const model = interviewModel(profile, scores, cl);
+    const items = model.items;
+    const scale = model.scale;
+    const overallItemId = model.overallItemId;
+    scores = model.scores;
+    const isCl = model.mode === 'checklist';
+    const def = clDef(profile);
     const texts = profile.texts || {};
     const co = profile.contribution || {};
-    scores = scores || {};
     checks = checks || {};
 
     const breakdown = items.map(function (it) {
       const raw = scores[it.id];
       const s = raw === undefined || raw === null || raw === '' ? null : Number(raw);
-      return { id: it.id, label: it.label, score: isNaN(s) ? null : s, isOverall: it.id === ev.overallItemId };
+      const b = { id: it.id, label: it.label, score: isNaN(s) ? null : s, isOverall: it.id === overallItemId };
+      if (isCl) {
+        const mk = model.marks[it.id] || '';
+        b.mark = mk;
+        b.markLabel = !mk ? '' : it.isOverall ? overallLabelOf(def, mk) : RATING_MARKS[mk].mark;
+        b.sectionId = it.sectionId;
+        b.sectionNo = it.sectionNo;
+        b.sectionTitle = it.sectionTitle;
+        b.note = model.notes[it.id] || '';
+      }
+      return b;
     });
 
     const unscored = breakdown.filter(function (b) { return b.score == null; });
@@ -1264,12 +1754,33 @@
 
     const warnings = [];
     const overall = breakdown.find(function (b) { return b.isOverall; });
-    const warnBelow = Number(ev.overallWarnBelow) || 3;
-    if (overall && overall.score != null && overall.score < warnBelow) {
-      warnings.push('面接者の総合判断が' + overall.score + '点と低評価です。採用可否は慎重に判断してください。');
+    // 必須条件（チェックリスト方式のみ）
+    const must = isCl ? mustSummary(def, cl) : null;
+    const mustFailResult = oneOf(def.mustFailResult, MUST_FAIL_RESULTS, 'reject');
+    const mustGate = !!must && must.mismatch > 0 && mustFailResult === 'reject';
+    if (!isCl) {
+      const warnBelow = Number(ev.overallWarnBelow) || 3;
+      if (overall && overall.score != null && overall.score < warnBelow) {
+        warnings.push('面接者の総合判断が' + overall.score + '点と低評価です。採用可否は慎重に判断してください。');
+      }
+      if (unscored.length) {
+        warnings.push('未入力の評価項目が' + unscored.length + '件あります（0点として集計）。');
+      }
+    } else if (!mustGate) {
+      // 必須条件の不一致で面接を打ち切ったとき（不採用推奨）は確認点・総合判断の入力は不要
+      const unRated = unscored.filter(function (b) { return !b.isOverall; });
+      if (unRated.length) warnings.push('未入力の確認点が' + unRated.length + '件あります（0点として集計）。');
+      if (overall && overall.score == null) warnings.push('面接者の総合判断が未入力です（0点として集計）。');
     }
-    if (unscored.length) {
-      warnings.push('未入力の評価項目が' + unscored.length + '件あります（0点として集計）。');
+    if (isCl) {
+      // 一致としたのに応募情報の見込みが「満たさない」（結果は変えない）
+      const autos = checklistAuto(applicant, cl, profile);
+      must.items.forEach(function (m) {
+        const au = autos.must[m.id];
+        if (m.value === 'match' && au && au.ok === false) {
+          warnings.push('必須条件「' + m.label + '」は一致としましたが、応募情報と食い違いがあります（' + au.text + '）。応募情報の修正が必要か確認してください。');
+        }
+      });
     }
 
     const unresolved = ((handoff && handoff.items) || []).filter(function (i) { return !checks[i.id]; });
@@ -1319,15 +1830,56 @@
         warnings.push(reason);
       }
     }
+    // (0a) 必須条件の不一致（台本: 不一致なら不採用。設定で上長最終判断要）
+    if (must && must.mismatch > 0) {
+      const ml = must.mismatchLabels.join('、');
+      if (mustGate) {
+        // 台本どおりの不採用。打ち切りで ②〜④ が未評価（0 点）のため点数上も不採用推奨のことが多いが、
+        // 結論の理由は必須条件なので、結果が変わらなくても必ず adjustments と warnings の先頭に記録する
+        const reason = '必須条件が一致しないため（' + ml + '）、不採用推奨とします。';
+        adjustments.push({ code: 'must_conditions', from: result, to: 'reject', reason: reason });
+        result = 'reject';
+        warnings.unshift(reason);
+      } else {
+        down(mustFailResult, 'must_conditions', '必須条件が一致しないため（' + ml + '）、採用推奨ではなく上長最終判断要として扱います。', true);
+      }
+    }
+    // (0b) 必須条件の未確認（既定は警告のみ。設定で採用推奨に留めない）
+    if (must && must.mismatch === 0 && must.unknown > 0) {
+      const ul = must.unknownLabels.join('、');
+      if (oneOf(def.mustUnknownResult, MUST_UNKNOWN_RESULTS, 'none') === 'review') {
+        down('review', 'must_unconfirmed', '必須条件に未確認があるため（' + ul + '）、採用推奨ではなく上長最終判断要として扱います。Step3 の ① で一致／不一致を入力してください。', true);
+      } else {
+        warnings.push('必須条件に未確認が' + must.unknown + '件あります（' + ul + '）。面接で確認してください。');
+      }
+    }
     // (1) シフト条件の未確認
     if (mode === 'incomplete') {
       down('review', 'contribution_incomplete',
         'シフト貢献度の入力が不足しているため（' + contrib.missing.join('・') + '）、面接評価のみで判定し、採用推奨には留めません。', true);
     }
-    // (2) 総合判断の足切り
-    const cutoff = num(ev.overallRejectAtOrBelow, 0);
-    if (cutoff > 0 && overall && overall.score != null && overall.score <= cutoff) {
-      down('reject', 'overall_cutoff', '面接者の総合判断が' + overall.score + '点（' + cutoff + '点以下）のため、不採用推奨とします。');
+    // (2) 総合判断
+    if (!isCl) {
+      // 旧方式: 足切り（5 点尺度の値。チェックリスト方式では使わない）
+      const cutoff = num(ev.overallRejectAtOrBelow, 0);
+      if (cutoff > 0 && overall && overall.score != null && overall.score <= cutoff) {
+        down('reject', 'overall_cutoff', '面接者の総合判断が' + overall.score + '点（' + cutoff + '点以下）のため、不採用推奨とします。');
+      }
+    } else {
+      // チェックリスト方式: 保留 → 上長最終判断要まで・不採用 → 不採用推奨まで（overallCaps。'none' で調整しない）
+      const ov = overallValue(cl);
+      const caps = U.isObj(def.overallCaps) ? def.overallCaps : {};
+      const ovl = overallLabelOf(def, ov);
+      const tail = function (cap) { return cap === 'reject' ? '不採用推奨とします。' : '採用推奨ではなく上長最終判断要として扱います。'; };
+      if (ov === 'reject') {
+        const cap = oneOf(caps.reject, OVERALL_CAP_VALUES, OVERALL_CAP_DEFAULTS.reject);
+        if (cap !== 'none') down(cap, 'overall_cutoff', '面接者の総合判断が「' + ovl + '」のため、' + tail(cap), true);
+        else warnings.push('面接者の総合判断が「' + ovl + '」です。採用可否は慎重に判断してください。');
+      } else if (ov === 'hold') {
+        const cap = oneOf(caps.hold, OVERALL_CAP_VALUES, OVERALL_CAP_DEFAULTS.hold);
+        if (cap !== 'none') down(cap, 'overall_hold', '面接者の総合判断が「' + ovl + '」のため、' + tail(cap), true);
+        else warnings.push('面接者の総合判断が「' + ovl + '」です。上長と確認してください。');
+      }
     }
     // (3) 高校生の採用方針
     const hs = highschoolStatus(applicant, profile);
@@ -1363,28 +1915,35 @@
       warnings.push('シフト貢献度が' + contrib.pct + '%と低めです（主な不足: ' + weak.join('・') + '）。');
     }
 
-    const strengths = breakdown.filter(function (b) { return b.score != null && b.score >= 4 && !b.isOverall; }).map(function (b) { return b.label; });
-    const concerns = breakdown.filter(function (b) { return b.score != null && b.score <= 2 && !b.isOverall; }).map(function (b) { return b.label; });
+    // 強み・懸念: 旧方式は従来どおり 4 点以上／2 点以下。チェックリスト方式は割合（○ = 強み、× = 懸念、△ はどちらでもない）
+    const isStrong = function (b) { return isCl ? b.score / scale >= 0.8 : b.score >= 4; };
+    const isWeak = function (b) { return isCl ? b.score / scale <= 0.4 : b.score <= 2; };
+    const withNote = function (b) { return isCl && b.note ? b.label + '（' + b.note + '）' : b.label; };
+    const strengths = breakdown.filter(function (b) { return b.score != null && isStrong(b) && !b.isOverall; }).map(withNote);
+    const concerns = breakdown.filter(function (b) { return b.score != null && isWeak(b) && !b.isOverall; }).map(withNote);
 
     const t = texts[result] || { title: result, body: '' };
     const name = applicant.name ? applicant.name + 'さん' : '応募者';
     // 調整で結果が下がったときは、点数を結論の理由のように書く本文やマスの注記を出さず、調整後とわかる本文にする
     const lowered = adjustments.length > 0 && result !== baseResult;
     const resultBodyTpl = mode === 'interviewOnly' ? t.body : (((texts.matrix || {})[result]) || t.body);
-    const bodyTpl = lowered ? (texts.adjusted || DEFAULT_ADJUSTED_BODY) : resultBodyTpl;
+    // 必須条件の不一致で固定したときは専用の本文（点数やマスの注記を理由のように見せない）
+    const bodyTpl = mustGate ? (texts.mustGate || DEFAULT_MUST_GATE_BODY)
+      : lowered ? (texts.adjusted || DEFAULT_ADJUSTED_BODY) : resultBodyTpl;
     const contribBand = mode === 'incomplete' ? '未確定' : (bandLabel(contrib.band) || '—');
     const vars = {
       name: name, total: total, max: max, pct: pct,
       interviewPct: pct, interviewBand: bandLabel(iBand),
       contribTotal: contrib.total, contribMax: contrib.max, contribPct: contrib.pct,
       contribBand: contribBand,
+      mustLabels: must ? must.mismatchLabels.join('、') : '',
       resultTitle: t.title, baseTitle: (texts[baseResult] || { title: baseResult }).title,
       scoreSummary: mode === 'interviewOnly'
         ? '面接評価' + total + '/' + max + '点（' + pct + '%）'
         : '面接評価' + pct + '%（' + bandLabel(iBand) + '）・シフト貢献度' + contrib.pct + '%（' + contribBand + '）'
     };
     const cellNote = note;
-    if (lowered) note = '';
+    if (lowered || mustGate) note = '';
 
     const table = {};
     BANDS.forEach(function (ib) { BANDS.forEach(function (cb) { const k = ib + '_' + cb; table[k] = cells[k] != null ? cells[k] : null; }); });
@@ -1421,7 +1980,16 @@
       },
       baseResult: baseResult,
       adjustments: adjustments,
-      highschool: { status: hs.status, reasonsText: hs.reasonsText }
+      highschool: { status: hs.status, reasonsText: hs.reasonsText },
+      // 面接評価の方式（SPEC-checklist 3-4）
+      interviewMode: model.mode,
+      scaleMax: scale,
+      checklist: isCl ? {
+        version: clStr(def.version),
+        counts: model.counts,
+        overall: { value: overallValue(cl), label: overallLabelOf(def, overallValue(cl)), points: overall ? overall.score : null },
+        must: must
+      } : null
     };
   }
 
@@ -1578,6 +2146,30 @@
     evaluateHiring: evaluateHiring,
     describeApplicant: describeApplicant,
     describeShifts: describeShifts,
+    // 面接チェックリスト（SPEC-checklist）
+    CHECKLIST_BLOCK_TYPES: CHECKLIST_BLOCK_TYPES,
+    CHECKLIST_FIELD_KINDS: CHECKLIST_FIELD_KINDS,
+    CHECKLIST_SCALE: CHECKLIST_SCALE,
+    RATING_MARKS: RATING_MARKS,
+    OVERALL_POINTS: OVERALL_POINTS,
+    OVERALL_TONE: OVERALL_TONE,
+    MUST_VALUES: MUST_VALUES,
+    CHECKLIST_OVERALL_ID: CHECKLIST_OVERALL_ID,
+    CHECKLIST_AUTO: CHECKLIST_AUTO,
+    MUST_FAIL_RESULTS: MUST_FAIL_RESULTS,
+    MUST_UNKNOWN_RESULTS: MUST_UNKNOWN_RESULTS,
+    OVERALL_CAP_VALUES: OVERALL_CAP_VALUES,
+    circled: circled,
+    emptyChecklist: emptyChecklist,
+    checklistHasInput: checklistHasInput,
+    checklistItems: checklistItems,
+    hasNumericScore: hasNumericScore,
+    interviewModel: interviewModel,
+    mustSummary: mustSummary,
+    firstContractEnd: firstContractEnd,
+    checklistAuto: checklistAuto,
+    checklistSummary: checklistSummary,
+    checklistDiff: checklistDiff,
     // 入力の段階（SPEC-stages）
     INPUT_STAGES: INPUT_STAGES,
     INPUT_STAGE_LABELS: INPUT_STAGE_LABELS,

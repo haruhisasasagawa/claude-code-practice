@@ -846,3 +846,194 @@ p.handoff-comment { font-size: 13.5px; }
   body.print-handoff #mgmtCard .stamp-empty { width: 44px; height: 44px; font-size: 8.5px; }
   body.print-handoff #mgmtCard .stamp-meta { font-size: 9px; min-height: 0; line-height: 1.3; }
 }
+
+/* ---------- 面接チェックリスト（Step3。docs/SPEC-checklist.md 2 章） ---------- */
+.toast.warn { background: var(--warn); color: #fff; }
+.badge.muted { background: var(--surface-3); color: var(--muted); border-color: var(--border); }
+.seg-btn.wide { width: auto; min-width: 46px; padding: 0 12px; font-size: 13.5px; white-space: nowrap; }
+.seg-btn.cl-mark { width: 48px; height: 40px; font-size: 18px; }
+.seg-btn.active.match, .seg-btn.active.good, .seg-btn.active.hire { background: var(--ok); color: #fff; }
+.seg-btn.active.fair, .seg-btn.active.hold { background: var(--warn); color: #fff; }
+.seg-btn.active.mismatch, .seg-btn.active.poor, .seg-btn.active.reject { background: var(--danger); color: #fff; }
+.seg-btn.is-auto:not(.active) { box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
+.cl-seg.lg .seg-btn { height: 44px; font-size: 15px; padding: 0 18px; }
+.cl-seg { flex: none; max-width: 100%; }
+.field > .cl-seg { align-self: flex-start; }
+.cl-must-row { grid-template-columns: minmax(0, 1fr) auto 4.6em; }
+.cl-unknown.is-off { visibility: hidden; }
+
+.cl-head-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 16px; }
+.cl-head-grid .field { margin-bottom: 8px; }
+.cl-static { font-size: 15px; font-weight: 700; padding: 6px 0; overflow-wrap: anywhere; }
+.cl-static .muted { font-size: 12.5px; font-weight: 600; margin-left: 4px; }
+.cl-total-min { font-weight: 600; }
+.cl-negs { grid-column: span 2; }
+.cl-neg-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.cl-neg-label { font-size: 13px; font-weight: 600; min-width: 7em; }
+.cl-auto { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.cl-auto.tone-ok { color: var(--ok); }
+.cl-auto.tone-warn { color: var(--warn); }
+.cl-auto.tone-danger { color: var(--danger); }
+.cl-auto.tone-info { color: var(--info); }
+.cl-auto.tone-muted { color: var(--muted); }
+.hint.tone-warn { color: var(--warn); font-weight: 600; }
+
+.cl-nav {
+  position: sticky; top: 57px; z-index: 15;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(6px); box-shadow: var(--shadow);
+}
+.cl-nav .spacer { flex: 1; }
+.cl-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.cl-chip:hover { background: var(--surface-3); }
+.cl-chip small { color: var(--muted); font-weight: 600; }
+.cl-chip.done { border-color: color-mix(in srgb, var(--ok) 55%, var(--border)); background: var(--ok-soft); color: var(--ok); }
+.cl-chip.ng { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); background: var(--danger-soft); color: var(--danger); }
+.cl-chip-mark:empty { display: none; }
+.cl-nav-score { font-size: 13px; font-weight: 700; color: var(--text); }
+
+.cl-page-head { padding: 6px 4px 0; border-bottom: 2px solid var(--accent); font-size: 14px; color: var(--accent); }
+.cl-page-head .hint { margin: 2px 0 6px; }
+.cl-sec { scroll-margin-top: 120px; }
+#clOverall { scroll-margin-top: 120px; }
+.cl-no { display: inline-block; margin-right: 6px; color: var(--accent); font-weight: 800; }
+.cl-sec-state:empty { display: none; }
+.cl-skip-note { display: none; font-size: 12px; font-weight: 700; color: var(--danger); align-self: center; }
+.cl-sec.cl-skippable { border-style: dashed; }
+.cl-sec.cl-skippable .cl-skip-note { display: inline; }
+
+.cl-block { margin-top: 14px; }
+.cl-block:first-of-type { margin-top: 0; }
+.cl-block-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13.5px; font-weight: 700; margin-bottom: 8px; }
+.cl-block-note { font-size: 12px; font-weight: 600; color: var(--muted); }
+.cl-block-note.strong { color: var(--warn); }
+.cl-legend { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+.cl-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px 14px; align-items: center;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: 6px;
+}
+.cl-row.missing, #clOverall.missing { outline: 2px solid var(--danger); outline-offset: 1px; }
+.cl-row-main { min-width: 0; }
+.cl-label { font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.cl-label.b { font-weight: 700; }
+.cl-rate-row { grid-template-columns: minmax(0, 1fr) auto minmax(10em, 16em); }
+.cl-note { min-width: 0; }
+.cl-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
+.cl-fields .field { margin-bottom: 8px; }
+.cl-fields input[type="date"], .cl-fields input[type="month"] { width: auto; min-width: 11em; }
+.cl-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
+.cl-checks.one-col { grid-template-columns: 1fr; }
+.cl-check {
+  display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); font-size: 13.5px; line-height: 1.45; cursor: pointer; min-width: 0;
+}
+.cl-check > span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cl-check input { margin-top: 3px; flex: none; }
+.cl-check.on { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.cl-check .tag { flex: none; }
+.cl-check.dim { opacity: .55; }
+.cl-check.emph { border-color: var(--warn); box-shadow: inset 3px 0 0 var(--warn); }
+.cl-questions { margin: 0 0 8px; padding-left: 1.6em; display: flex; flex-direction: column; gap: 6px; }
+.cl-questions li { font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+.cl-memo { margin-bottom: 4px; }
+.cl-memo textarea { min-height: 70px; }
+.cl-notify-note { margin: -4px 0 6px; }
+.cl-flow { margin: 12px 0 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 600; }
+.cl-group-label { margin: 2px 0 -6px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.dim { opacity: .55; }
+
+.cl-overall-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+.cl-overall-row .cl-label { flex: 1; min-width: 10em; }
+.cl-score { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 12px 0 6px; font-size: 14px; font-weight: 600; }
+.cl-score #clScoreTotal { font-size: 26px; }
+.cl-score-pct { font-size: 16px; font-weight: 800; }
+.cl-must-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.cl-must-summary:empty { display: none; }
+.cl-ms-label { font-size: 13px; font-weight: 700; }
+.cl-notes-field { margin-top: 10px; margin-bottom: 0; }
+#overallWarn { margin-top: 6px; }
+#legacyScores { border-color: color-mix(in srgb, var(--info) 45%, var(--border)); background: var(--info-soft); }
+.cl-legacy-table { background: var(--surface); }
+
+/* Step4・右サマリー */
+.result-must { margin: 10px 0 0; padding: 7px 12px; border-radius: var(--radius-sm); font-size: 13.5px; background: var(--surface); border: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.result-must.tone-danger { border-color: var(--danger); color: var(--danger); }
+.result-must.tone-ok { border-color: color-mix(in srgb, var(--ok) 50%, var(--border)); }
+.result-must-detail { font-size: 12.5px; }
+.cl-axis-sub { font-size: 12px; margin-top: 2px; }
+.cl-axis-badges { margin-top: 4px; }
+.cl-must-table td.cl-res { width: 9em; text-align: right; }
+.cl-rate-table td.cl-memo-td { color: var(--muted); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cl-rate-table tr.cl-overall-tr td { background: var(--accent-soft); }
+.cl-rate-table tr.cl-total-tr th, .cl-rate-table tr.cl-total-tr td { border-top: 2px solid var(--border-strong); }
+.cl-contrib-wrap { display: block; }
+#sumMust .sum-val { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+
+@media (max-width: 1100px) { .cl-head-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cl-negs { grid-column: 1 / -1; } }
+@media (max-width: 840px) {
+  .cl-row, .cl-must-row, .cl-rate-row { grid-template-columns: minmax(0, 1fr); }
+  .cl-unknown.is-off { display: none; }
+  .cl-unknown { justify-self: start; }
+  .cl-fields, .cl-checks, .cl-head-grid { grid-template-columns: minmax(0, 1fr); }
+  .cl-negs { grid-column: auto; }
+  .cl-nav { top: 0; position: static; }
+  .cl-legend { margin-left: 0; }
+}
+@media (max-width: 480px) {
+  .seg-btn.wide { padding: 0 8px; font-size: 12.5px; }
+  .cl-seg.lg .seg-btn { padding: 0 10px; }
+  .cl-neg-label { min-width: 0; width: 100%; }
+  .cl-rate-table th:nth-child(4), .cl-rate-table td.cl-memo-td { display: none; }
+}
+
+/* 設定画面: 面接チェックリストの編集（docs/SPEC-checklist.md 5 章） */
+.s-cl-max { font-size: 13.5px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.s-cl-sec { background: var(--surface-2); }
+.s-cl-sec > summary .hint { font-weight: 600; margin-left: 4px; }
+.s-cl-no { color: var(--accent); font-weight: 800; }
+.s-cl-sec-row { display: grid; grid-template-columns: minmax(10em, 2fr) auto auto auto; gap: 10px; align-items: end; }
+.s-cl-sec-row .field { margin-bottom: 8px; }
+.s-cl-sec-row .inline { display: flex; align-items: center; gap: 6px; }
+.s-cl-sec-row input[type="number"] { width: 5.5em; min-width: 0; }
+.s-cl-block { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: var(--surface); }
+.s-cl-block-head { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+.s-cl-block[data-block-type="note"] .s-cl-block-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+.s-cl-memo { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 2px 0 6px; }
+.s-cl-memo input[type="text"] { max-width: 18em; }
+.s-cl-item { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 5px 0; border-top: 1px dashed var(--border); }
+.s-cl-item .idx { color: var(--muted); font-weight: 700; font-size: 13px; text-align: center; padding-top: 8px; }
+.s-cl-item-main { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.s-cl-item-main textarea { min-height: 52px; }
+.s-cl-item-extra { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; min-width: 0; }
+.s-cl-item-extra .inline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.s-cl-item-extra select { width: auto; max-width: 100%; min-width: 0; text-overflow: ellipsis; }
+.s-cl-item-extra input[type="number"] { width: 5em; min-width: 0; }
+.s-cl-item-extra .field { margin: 0; width: 100%; }
+.s-cl-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; min-width: 0; max-width: 100%; }
+.s-cl-check input { flex: none; }
+.s-cl-periods { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.s-cl-item-add { margin-top: 4px; }
+.s-cl-add { margin-top: 8px; align-items: center; }
+.s-cl-add select { width: auto; }
+.s-cl-neg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+.s-cl-legacy-list { margin: 0 0 6px; padding-left: 1.6em; font-size: 13px; }
+@media (max-width: 720px) {
+  .s-cl-sec-row, .s-cl-block-head, .s-cl-block[data-block-type="note"] .s-cl-block-head, .s-cl-neg { grid-template-columns: minmax(0, 1fr); }
+  .s-cl-item { grid-template-columns: 1.6em minmax(0, 1fr); }
+  .s-cl-item .row-actions { grid-column: 2; }
+}
+
+/* ---------- 面接チェックリスト報告（A4）の印刷ホスト（docs/SPEC-checklist.md 4-4。シートの見た目は storage.checklistSheetCss） ---------- */
+.cl-sheet-host { display: none; }
+body.print-checklist .cl-sheet-host { display: block; position: absolute; left: -10000px; top: 0; width: 190mm; }
+@media print {
+  /* Step3 の目次（.cl-nav 内の .cl-chip）だけ隠す。A4 報告のヘッダーは .cl-hchip で別クラス */
+  .cl-nav, .cl-skip-note { display: none !important; }
+  body.print-checklist .app, body.print-checklist .toast { display: none !important; }
+  body.print-checklist .cl-sheet-host { position: static; left: auto; width: auto; }
+  body:not(.print-checklist) .cl-sheet-host { display: none !important; }
+}
