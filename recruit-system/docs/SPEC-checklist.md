@@ -1,6 +1,7 @@
 # 詳細仕様書（確定版）: 面接チェックリスト（面接台本 2026-10-08 版）への置き換えと A4 報告
 
 - 対象: `recruit-system/`（ブランチ `claude/toho-shinjuku-hiring-app-quhjtc`。**commit / push はしない**）
+- **2026-10-13 追記: 消極属性は削除した**（副支配人「消極属性って意味がわからないから削除でいいかも」）。本書の `CHECKLIST_AUTO.negatives`（shortTerm・morningOnly）、`checklist.header.negatives`・`morningOnlyEnd`、`record.checklist.header.negatives`、`checklistAuto` / `checklistSummary` の `negatives`、Step3 ヘッダーの 3 択 seg・`#clNeg-*`、A4 報告・レポートの消極属性のチップ、設定の消極属性の行・`cl-neg-add` / `cl-neg-del`、validate の終了時刻の記述は当時のもの。現行の扱い（旧データは読み飛ばす・台本の正規化で外す）は `docs/SPEC-script-mode.md` 12 章
 - 根拠: 副支配人の要望「印鑑部分以外なんか微妙。添付の面接台本のチェックリスト（採点リスト）を入力して出力・報告できるようにしたほうがいい」と決定 1〜3（下記）。既存決定（単一 HTML 配布・設定画面＋JSON・HTML ファイル保存・PC 利用・面接前は Step1 最小入力＋Step2 申し送り・Step3 で面接時項目・2 軸マトリクス・押印・A4 申し送りシート）は維持する
   - 決定 1: Step3 の面接評価を台本のチェックリストに**置き換える**（10 項目×5 点は廃止）。面接評価の点数は確認事項／確認点の ○△× と面接者の総合判断から算出し、2 軸判定（面接評価 × シフト貢献度）は維持
   - 決定 2: 必須条件が 1 つでも「不一致」なら不採用推奨に固定（設定で「上長最終判断要」に変更可）

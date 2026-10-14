@@ -950,8 +950,9 @@
   }
 
   // =====================================================================
-  // 台本モード Step① 応募者（docs/SPEC-script-mode.md 2-2）
-  //   名前と属性・台本のヘッダー（応募した求人・消極属性・タクシー・面接日・担当）。キーは既存の applicant.* と checklist.header.*
+  // 台本モード Step① 応募者（docs/SPEC-script-mode.md 2-2・12 章）
+  //   1 枚のカード・3 行: ① 氏名*・年齢・性別・区分（学生は卒業予定年月）／② 面接日・面接担当者・応募した求人／③ タクシー可否・料金・メモ
+  //   キーは既存の applicant.* と checklist.header.*（消極属性は 2026-10-13 に削除）
   // =====================================================================
   function scriptApplicantStepHtml() {
     ensureChecklist();
@@ -962,46 +963,39 @@
     const dh = U.isObj(def.header) ? def.header : {};
     const posting = U.isObj(dh.posting) ? dh.posting : {};
     const pOpts = Array.isArray(posting.options) ? posting.options : [];
-    const negs = (Array.isArray(dh.negatives) ? dh.negatives : []).filter(function (n) { return U.isObj(n) && n.id; });
     const mg = p.management || {};
     const managers = Array.isArray(mg.managers) ? mg.managers : [];
     const h = state.checklist.header;
     const iv = String(h.interviewer || '');
     const inRoster = managers.some(function (m) { return m && m.name === iv; });
     const cats = (o.categories || []).filter(function (c) { return c && c.value; }).map(function (c) { return { value: c.value, label: c.value }; });
+    // 求人のボタンは「通常」「短期」（表示名の末尾の「求人」を省く。報告書では表示名のまま）
+    const pBtn = function (x) { const full = String(x.label || x.value); return { value: x.value, label: full.replace(/求人$/, '') || full, title: full, cls: 'wide' }; };
     return '<div class="card" id="scriptApplicantCard">' +
-      '<div class="card-head"><h2>応募者</h2><p>名前と属性、面接台本のヘッダー（応募した求人・消極属性・タクシー・面接日・担当）を入力します。<span class="req">*</span> は必須です。</p></div>' +
-      '<div class="field-row">' +
+      '<div class="card-head"><h2>応募者</h2><p>氏名だけ必須です。あとは分かる範囲で入力してください。</p></div>' +
+      '<div class="field-row sa-row sa-row1">' +
         fInput('name', '氏名', { required: true, placeholder: '例：山田 太郎', autocomplete: 'off' }) +
-        fSelect('gender', '性別', o.genders) +
-      '</div>' +
-      '<div class="field-row cols-3">' +
         fInput('age', '年齢', { type: 'number', min: 15, max: 99, step: 1, suffix: '歳' }) +
+        fSelect('gender', '性別', o.genders, { placeholder: '選択' }) +   // 1 行目は狭いので未選択の文言は短く（「選択してください」は PC 幅で切れる）
         fSelect('category', '区分', cats) +
         (f.graduationDate ? fInput('graduationDate', '卒業予定年月', { type: 'month', id: 'grp-graduation' }) : '') +
       '</div>' +
-      '<h3 class="sub">面接の情報（台本のヘッダー）</h3>' +
-      '<div class="field-row">' +
-        (pOpts.length ? '<div class="field" id="saPosting"><label>' + esc(posting.label || '応募した求人') + '</label>' +
-          clSegHtml('header.posting', pOpts.map(function (x) { return { value: x.value, label: x.label || x.value, cls: 'wide' }; }), { aria: posting.label || '応募した求人' }) + '</div>' : '') +
+      '<div class="field-row cols-3 sa-row sa-row2">' +
+        '<div class="field"><label for="saDate">面接日</label><input type="date" id="saDate" data-cl="header.date" value="' + esc(h.date || '') + '"></div>' +
         '<div class="field"><label for="saInterviewer">面接担当者</label>' +
-          '<select id="saInterviewer" data-cl="header.interviewer"><option value="">選択してください</option>' +
+          '<select id="saInterviewer" data-cl="header.interviewer" title="名簿は設定の「応募者の管理（押印）」で編集します。報告書の押印欄「面接対応者」の初期選択になります。"><option value="">選択してください</option>' +
             managers.filter(function (m) { return m && m.name; }).map(function (m) {
               return '<option value="' + esc(m.name) + '"' + (m.name === iv ? ' selected' : '') + '>' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>';
             }).join('') +
             (iv && !inRoster ? '<option value="' + esc(iv) + '" selected>' + esc(iv) + '（名簿外）</option>' : '') +
-          '</select>' +
-          '<div class="hint">名簿は設定の「応募者の管理（押印）」で編集します。報告書の押印欄「面接対応者」の初期選択になります。</div></div>' +
+          '</select></div>' +
+        (pOpts.length ? '<div class="field" id="saPosting"><label>' + esc(posting.label || '応募した求人') + '</label>' +
+          clSegHtml('header.posting', pOpts.map(pBtn), { aria: posting.label || '応募した求人' }) + '</div>' : '') +
       '</div>' +
-      '<div class="field-row">' +
-        (negs.length ? '<div class="field" id="saNegatives"><label>消極属性</label><div class="chip-group">' + negs.map(function (n) {
-          const on = h.negatives && h.negatives[n.id] === 'on';
-          return '<label class="chip' + (on ? ' on' : '') + '"><input type="checkbox" data-cl="header.negatives.' + esc(n.id) + '" data-cl-on' + (on ? ' checked' : '') + '><span>' + esc(n.label) + '</span></label>';
-        }).join('') + '</div><div class="hint">台本のヘッダーの「消極属性」。該当するものにチェックします。</div></div>' : '') +
-        '<div class="field"><label for="saTaxi">タクシー可否・料金</label><input type="text" id="saTaxi" data-cl="header.taxi" value="' + esc(h.taxi || '') + '" placeholder="例：可・2,500円／否（終電 23:30）"></div>' +
+      '<div class="field-row sa-row sa-row3">' +
+        '<div class="field"><label for="saTaxi">タクシー可否・料金</label><input type="text" id="saTaxi" data-cl="header.taxi" value="' + esc(h.taxi || '') + '" placeholder="例: 可・2,500円" title="深夜帯の帰宅にタクシーを使えるか・料金の目安"></div>' +
+        fTextarea('reviewerNotes', 'メモ（任意）', { rows: 2, placeholder: '例：電話の受け答えが丁寧。' }) +
       '</div>' +
-      '<div class="field-row"><div class="field"><label for="saDate">面接日</label><input type="date" id="saDate" data-cl="header.date" value="' + esc(h.date || '') + '"></div></div>' +
-      fTextarea('reviewerNotes', '備考（面接者メモ）', { rows: 3, placeholder: '例：電話の受け答えが丁寧。家族の介護で急な休みがあり得るとのこと。' }) +
     '</div>' +
     '<div class="actions end"><button type="button" class="btn primary" id="saNext" data-action="script-next">面接チェックリストへ進む →</button></div>';
   }
@@ -1275,12 +1269,9 @@
     if (t.dataset.cl) {
       const path = t.dataset.cl;
       if (t.type === 'checkbox') {
-        // data-cl-on: チェック → 'on'、外す → ''（台本モード Step① の消極属性。checklistAuto は 'on' だけを該当と見る）
-        clSet(path, t.hasAttribute('data-cl-on') ? (t.checked ? 'on' : '') : t.checked);
+        clSet(path, t.checked);
         const lb = t.closest('.cl-check');
         if (lb) lb.classList.toggle('on', t.checked);
-        const chip = t.closest('.chip');
-        if (chip) chip.classList.toggle('on', t.checked);
       } else {
         clSet(path, t.value);
       }
@@ -1339,7 +1330,7 @@
       applyVisibility();
       updateTimeDisplays();
       updateContribMeters();
-      // Step3「面接で確認する項目」の変更でも、チェックリストの自動表示（タクシー・消極属性・必須条件の見込み）を追従させる
+      // Step3「面接で確認する項目」の変更でも、チェックリストの自動表示（タクシー・必須条件の見込み・記入欄）を追従させる
       if (state.step === 3) { refreshUnresolvedAlert(); refreshDeferredItems(); updateChecklistUI(true); }
       renderSummary();
       return;
@@ -1400,6 +1391,21 @@
         const row = b.closest('.cl-row');
         if (row && clGet(path)) row.classList.remove('missing');
         syncClButtons(path);   // Step①（応募した求人）は updateChecklistUI の対象外のため
+        updateChecklistUI();
+        break;
+      }
+      case 'explain-all': {
+        ensureChecklist();
+        const blk = clBlockFind(b.dataset.block);
+        if (!blk || !clAllTargets(blk).length) break;
+        const clear = clAllDone(blk);
+        // 外すときはブロックの全項目（求人が通常のときに付いていた「※短期求人のみ」も）、付けるときは対象だけ
+        (clear ? blk.items : clAllTargets(blk)).forEach(function (it) {
+          if (!U.isObj(it) || !it.id) return;
+          clSet('values.' + it.id, !clear);
+          $$('#stepContent input[type="checkbox"][data-cl]').forEach(function (cb) { if (cb.dataset.cl === 'values.' + it.id) cb.checked = !clear; });
+        });
+        touchChecklist();
         updateChecklistUI();
         break;
       }
@@ -2131,7 +2137,6 @@
     if (!U.isObj(state.checklist)) state.checklist = R.emptyChecklist();
     const cl = state.checklist;
     ['header', 'values', 'notes'].forEach(function (k) { if (!U.isObj(cl[k])) cl[k] = k === 'header' ? R.emptyChecklist().header : {}; });
-    if (!U.isObj(cl.header.negatives)) cl.header.negatives = {};
     return cl;
   }
   function clGet(path) { const v = U.getPath(state.checklist, path); return v == null ? '' : v; }
@@ -2181,25 +2186,25 @@
     });
   }
 
-  // 台本モードの Step② ヘッダー（読み取り専用。Step① の入力から。docs/SPEC-script-mode.md 2-3）
-  function scriptClHeaderHtml(sum) {
-    const def = sum.def;
+  // 台本モードの Step② ヘッダー（読み取り専用・1 行。Step① の入力から。docs/SPEC-script-mode.md 2-3・12 章）
+  //   氏名・区分・年齢・求人・タクシー・面接日・担当 のチップと「応募者を編集」だけ（台本の題名・説明文・目安時間は出さない）
+  const SCRIPT_HEAD_KEYS = ['category', 'age', 'posting', 'taxi', 'date', 'interviewer'];
+  const SCRIPT_HEAD_SHORT = { taxi: 'タクシー', interviewer: '担当' };   // 値だけで分かる区分・年齢・求人・面接日（日付）はラベルを付けない（title に項目名）
+  function scriptClHeaderHtml() {
     const a = state.applicant;
-    const maxNames = sum.sections.filter(function (s) { return s.minutesMax && s.minutes; }).map(function (s) { return s.title; });
-    const rows = R.scriptApplicantRows(a, state.checklist, state.profile, state.management).filter(function (r) { return r.key !== 'name' && r.key !== 'notes'; });
-    return '<div class="card" id="clHeader"><div class="card-head"><h2>' + esc(def.title || '面接チェックリスト') +
-        (def.version ? ' <span class="badge">' + esc(def.version) + ' 版</span>' : '') + '</h2><div class="spacer"></div>' +
-        '<span class="badge accent lg">' + esc(a.name) + ' さん</span>' +
-        (def.intro ? '<p>' + esc(def.intro) + '</p>' : '') +
-        (sum.minutesTotal ? '<p class="cl-total-min" id="clMinutesTotal">目安 合計 ' + sum.minutesTotal + '分' + (maxNames.length ? '（' + esc(maxNames.join('・')) + 'は最大）' : '') + '</p>' : '') +
-      '</div>' +
-      '<div class="cl-head-attrs" id="clHeaderAttrs">' +
-        rows.map(function (r) { return '<span class="cl-attr" data-attr="' + esc(r.key) + '"><small>' + esc(r.label) + '</small>' + esc(r.value) + '</span>'; }).join('') +
-        '<button type="button" class="btn sm ghost" data-action="to-step" data-step="1">応募者を編集</button>' +
+    const rows = R.scriptApplicantRows(a, state.checklist, state.profile, state.management);
+    const chips = SCRIPT_HEAD_KEYS.map(function (k) { return rows.find(function (r) { return r.key === k; }); }).filter(Boolean).map(function (r) {
+      const k = SCRIPT_HEAD_SHORT[r.key];
+      return '<span class="cl-attr" data-attr="' + esc(r.key) + '" title="' + esc(r.label) + '">' + (k ? '<small>' + esc(k) + '</small>' : '') + esc(r.value) + '</span>';
+    });
+    return '<div class="card cl-head-line" id="clHeader"><div class="cl-head-attrs" id="clHeaderAttrs">' +
+        '<span class="cl-attr cl-attr-name" data-attr="name">' + (a.name ? esc(a.name) + '<small>さん</small>' : '<span class="muted">氏名未入力</span>') + '</span>' +
+        chips.join('') +
+        '<button type="button" class="btn sm ghost cl-head-edit" data-action="to-step" data-step="1">応募者を編集</button>' +
       '</div></div>';
   }
 
-  // ヘッダー（応募者・面接日・担当・応募した求人・タクシー・消極属性）
+  // ヘッダー（応募者・面接日・担当・応募した求人・タクシー。消極属性は 2026-10-13 に削除）
   function clHeaderHtml(sum) {
     const def = sum.def;
     const a = state.applicant;
@@ -2211,13 +2216,6 @@
     const pOpts = Array.isArray(posting.options) ? posting.options : [];
     const maxNames = sum.sections.filter(function (s) { return s.minutesMax && s.minutes; }).map(function (s) { return s.title; });
     const ivStamp = sum.header.interviewerFromStamp ? sum.header.interviewer : '';
-    const negs = sum.header.negatives.map(function (n) {
-      return '<div class="cl-neg-row" data-neg="' + esc(n.id) + '"><span class="cl-neg-label">' + esc(n.label) + '</span>' +
-        clSegHtml('header.negatives.' + n.id, [
-          { value: '', label: '自動', cls: 'wide' }, { value: 'on', label: '該当', cls: 'wide' }, { value: 'off', label: '該当しない', cls: 'wide' }
-        ], { aria: n.label }) +
-        '<span class="badge" id="clNeg-' + esc(n.id) + '"></span></div>';
-    }).join('');
     return '<div class="card" id="clHeader"><div class="card-head"><h2>' + esc(def.title || '面接チェックリスト') +
         (def.version ? ' <span class="badge">' + esc(def.version) + ' 版</span>' : '') + '</h2><div class="spacer"></div>' +
         '<span class="badge accent lg">' + esc(a.name) + ' さん</span>' +
@@ -2237,7 +2235,6 @@
         '<div class="field cl-taxi"><label for="clTaxi">タクシー可否・料金</label>' +
           '<div class="cl-auto" id="clTaxiAuto"></div>' +
           '<input type="text" id="clTaxi" data-cl="header.taxi" value="' + esc(h.taxi || '') + '" placeholder="上書き（空欄なら自動）"></div>' +
-        (negs ? '<div class="field cl-negs"><label>消極属性</label>' + negs + '</div>' : '') +
       '</div></div>';
   }
 
@@ -2264,6 +2261,30 @@
     if (!t && !note && !extra) return '';
     return '<div class="cl-block-title">' + (t ? '<span>【' + esc(t) + '】</span>' : '') +
       (note ? '<span class="cl-block-note' + (b.type === 'explain' ? ' strong' : '') + '">' + esc(note) + '</span>' : '') + (extra || '') + '</div>';
+  }
+
+  // 【説明】【合否連絡】の「すべて説明した」（data-action="explain-all"。docs/SPEC-script-mode.md 12 章）
+  //   対象はブロックの全項目。ただし「※短期求人のみ」（shortOnly）の項目は求人が短期のときだけ。対象が全部チェック済みなら「すべて外す」
+  function clBlockFind(id) {
+    let hit = null;
+    (Array.isArray(clDefNow().sections) ? clDefNow().sections : []).forEach(function (s) {
+      (U.isObj(s) && Array.isArray(s.blocks) ? s.blocks : []).forEach(function (b) { if (!hit && U.isObj(b) && b.id === id) hit = b; });
+    });
+    return hit;
+  }
+  function clAllTargets(b) {
+    const short = String(state.checklist.header.posting || '') === 'short';
+    return (Array.isArray(b.items) ? b.items : []).filter(function (it) { return U.isObj(it) && it.id && (!it.shortOnly || short); });
+  }
+  function clAllDone(b) {
+    const t = clAllTargets(b);
+    return t.length > 0 && t.every(function (it) { return clGet('values.' + it.id) === true; });
+  }
+  function clAllBtnHtml(b) {
+    if (!b.items.length) return '';
+    const done = clAllDone(b);
+    return '<button type="button" class="btn sm ghost cl-all-btn' + (clAllTargets(b).length ? '' : ' hidden') + '" data-action="explain-all" data-block="' + esc(b.id) + '" aria-pressed="' + (done ? 'true' : 'false') + '">' +
+      (done ? 'すべて外す' : 'すべて説明した') + '</button>';
   }
 
   function clMustAlertHtml(sum) {
@@ -2304,6 +2325,7 @@
         break;
       case 'explain':
       case 'notify':
+        extraTitle = clAllBtnHtml(b);
         body = (b.type === 'notify' && b.note ? '<div class="hint cl-notify-note">' + esc(b.note) + '</div>' : '') +
           '<div class="cl-checks' + (b.type === 'notify' ? ' one-col' : '') + '">' + b.items.map(function (it) {
             const on = clGet('values.' + it.id) === true;
@@ -2399,7 +2421,7 @@
     html += legacyScoresHtml();
     // 台本モード: 留意点（未確認の申し送り）・「面接で確認する項目」は出さない。ヘッダーは Step① の入力から（読み取り専用）
     if (!script) html += '<div id="unresolvedAlert">' + unresolvedAlertHtml(state.handoff) + '</div>';
-    html += script ? scriptClHeaderHtml(sum) : clHeaderHtml(sum);
+    html += script ? scriptClHeaderHtml() : clHeaderHtml(sum);
     html += clNavHtml(sum);
 
     // 既存の「面接で確認する項目」は、必須条件か記入欄を持つ最初のセクション（既定は ① 勤務条件）の直後に置く
@@ -2441,12 +2463,12 @@
     if (!state.checklist.header.date) state.checklist.header.date = U.fmtDate(new Date());
   }
 
-  // ヘッダーだけ作り直す（応募した求人・消極属性の切り替え）
+  // ヘッダーだけ作り直す（応募した求人の切り替え）
   function rerenderClHeader() {
     const card = $('#clHeader');
     if (!card) return;
     const tmp = document.createElement('div');
-    tmp.innerHTML = isScript() ? scriptClHeaderHtml(clSummary()) : clHeaderHtml(clSummary());
+    tmp.innerHTML = isScript() ? scriptClHeaderHtml() : clHeaderHtml(clSummary());
     card.replaceWith(tmp.firstElementChild);
   }
 
@@ -2470,6 +2492,14 @@
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
     $$('.cl-check', root).forEach(function (l) { const cb = l.querySelector('input'); l.classList.toggle('on', !!(cb && cb.checked)); });
+    // 「すべて説明した」⇔「すべて外す」（求人の切り替え・個別のチェックに追従）
+    $$('[data-action="explain-all"]', root).forEach(function (btn) {
+      const blk = clBlockFind(btn.dataset.block);
+      const done = !!blk && clAllDone(blk);
+      btn.textContent = done ? 'すべて外す' : 'すべて説明した';
+      btn.setAttribute('aria-pressed', done ? 'true' : 'false');
+      show(btn, !!blk && clAllTargets(blk).length > 0);
+    });
 
     // 必須条件：未確認バッジ・応募情報からの見込み
     sum.must.items.forEach(function (m) {
@@ -2587,7 +2617,7 @@
     show('#overallWarn', ov === 'hold' || ov === 'reject');
     if (ov === 'hold' || ov === 'reject') setText('#overallWarnText', '面接者の総合判断が「' + sum.overall.label + '」です。');
 
-    // ヘッダー：タクシー・消極属性・担当
+    // ヘッダー：タクシー・担当
     const tx = $('#clTaxiAuto');
     if (tx) {
       const au = sum.autos.taxi || { text: '未確認', tone: 'muted' };
@@ -2595,12 +2625,6 @@
       tx.className = 'cl-auto tone-' + (ovr ? 'muted' : au.tone);
       tx.textContent = '自動: ' + au.text + (ovr ? '（上書き: ' + ovr + '）' : '');
     }
-    sum.header.negatives.forEach(function (n) {
-      const el = document.getElementById('clNeg-' + n.id);
-      if (!el) return;
-      el.className = 'badge ' + (n.on ? 'warn' : 'muted');
-      el.textContent = n.on ? '該当' + (n.auto ? '（自動）' : '') : n.auto ? '該当なし（自動）' : '該当しない';
-    });
     const iv = $('#clInterviewer');
     if (iv) {
       const stampName = sum.header.interviewerFromStamp ? sum.header.interviewer : '';
@@ -2972,10 +2996,8 @@
     const def = clDefNow();
     const rows = R.scriptApplicantRows(a, cl, p, state.management);
     const rv = function (k) { const r = rows.find(function (x) { return x.key === k; }); return r ? r.value : ''; };
-    const dh = U.isObj(def.header) ? def.header : {};
-    const negOn = (Array.isArray(dh.negatives) ? dh.negatives : []).filter(function (n) { return U.isObj(n) && n.id && (cl.header.negatives || {})[n.id] === 'on'; });
-    const attrs = negOn.map(function (n) { return '<span class="badge warn">' + esc(n.label) + '</span>'; }).join('') +
-      (rv('posting') ? '<span class="badge info">' + esc(rv('posting')) + '</span>' : '');
+    // 「応募者」は 氏名・区分/年齢/性別・面接日・担当 の 4 行。求人は短期のときだけ「短期求人」のチップを区分の行に添える（消極属性は 2026-10-13 に削除）
+    const attrs = cl.header.posting === 'short' && rv('posting') ? '<span class="badge info">' + esc(rv('posting')) + '</span>' : '';
     const model = R.interviewModel(p, {}, cl);
     const c = model.counts || { good: 0, fair: 0, poor: 0, blank: 0 };
     const ms = R.mustSummary(def, cl);
@@ -2995,8 +3017,8 @@
     const row = function (id, label, val) { return '<div class="sum-row" id="' + id + '"><span class="sum-label">' + esc(label) + '</span><span class="sum-val">' + val + '</span></div>'; };
     return '<div class="summary-card" id="sumApplicant"><h4>応募者</h4>' +
         '<div class="sum-name">' + (a.name ? esc(a.name) + ' <span class="muted" style="font-size:13px;font-weight:600">さん</span>' : '<span class="muted">未入力</span>') + '</div>' +
-        '<div class="sum-sub">' + esc([a.category, String(a.age || '').trim() ? String(a.age).trim() + '歳' : '', a.gender].filter(Boolean).join('・') || '区分・年齢未入力') + '</div>' +
-        '<div class="badges" id="sumAttrs" style="margin-top:6px">' + attrs + '</div>' +
+        '<div class="sum-sub">' + esc([a.category, String(a.age || '').trim() ? String(a.age).trim() + '歳' : '', a.gender].filter(Boolean).join('・') || '区分・年齢未入力') +
+          ' <span class="sum-attrs" id="sumAttrs">' + attrs + '</span></div>' +
         row('sumDate', '面接日', esc(rv('date') || '—')) +
         row('sumInterviewer', '担当', esc(rv('interviewer') || '—')) +
       '</div>' +
@@ -3533,7 +3555,7 @@
     const m = state.profile.meta;
     return '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>面接台本（スタッフ面接チェックリスト）のとおりに面接し、その内容をそのまま A4 の報告書にします。応募者の名前と属性を入れたら、あとは台本の順に入力するだけです。</p></div>' +
       '<div class="help-steps">' +
-        '<div class="help-step"><span class="n">1</span><h3>応募者</h3><p>氏名（必須）・年齢・性別・区分（学生は卒業予定年月）と、台本のヘッダー（応募した求人・消極属性・タクシー可否・料金・面接日・面接担当者）を入力します。備考には面接者のメモを書けます。</p></div>' +
+        '<div class="help-step"><span class="n">1</span><h3>応募者</h3><p>1 枚のカードに 3 行だけ。氏名（必須）・年齢・性別・区分（学生は卒業予定年月）、面接日・面接担当者・応募した求人（通常／短期）、タクシー可否・料金とメモを、分かる範囲で入力します。</p></div>' +
         '<div class="help-step"><span class="n">2</span><h3>面接チェックリスト</h3><p>①勤務条件 → ②継続性・報連相 → ③仕事内容の説明 → ④集団行動特性 → ⑤逆質問 の順に、必須条件（一致／不一致）・説明のチェック・質問のメモ・確認点の ○△×・総合判断（採用／保留／不採用）を入力します。必須条件が 1 つでも不一致なら不採用推奨です。</p></div>' +
         '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（初期対応者／面接対応者／最終確認）に電子印を押して「報告書を保存（HTML）」します。「A4 で印刷」で 1〜2 枚に印刷できます。</p></div>' +
       '</div></div>' +

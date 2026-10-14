@@ -421,12 +421,8 @@
       overallOptions: { hire: '採用', hold: '保留', reject: '不採用' },   // 表示名（点 2/1/0 は固定）
       overallCaps: { hold: 'review', reject: 'reject' },                  // 総合判断による結果の上限（none=調整しない）
       header: {
+        // 消極属性（negatives・morningOnlyEnd）は 2026-10-13 に削除（docs/SPEC-script-mode.md 12 章）
         posting: { label: '応募した求人', options: [{ value: 'regular', label: '通常求人' }, { value: 'short', label: '短期求人' }] },
-        negatives: [
-          { id: 'short', label: '短期希望', auto: 'shortTerm' },
-          { id: 'morningOnly', label: '朝～12時のみ', auto: 'morningOnly' }
-        ],
-        morningOnlyEnd: '12:00',
         interviewerField: 'interviewer'
       },
       print: { showQuestions: true },

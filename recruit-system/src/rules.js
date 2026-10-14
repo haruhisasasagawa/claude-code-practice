@@ -1261,8 +1261,7 @@
   const CHECKLIST_OVERALL_ID = '__overall';        // breakdown・scores 上の総合判断のキー（項目 id は英字始まりなので衝突しない）
   const CHECKLIST_AUTO = {                         // profile の auto に書ける値（自動表示の種類）
     must: ['weeklyCondition', 'busyAll'],
-    fields: ['weekend', 'busyNg', 'term', 'firstEnd', 'openLate'],
-    negatives: ['shortTerm', 'morningOnly']
+    fields: ['weekend', 'busyNg', 'term', 'firstEnd', 'openLate']
   };
   const MUST_FAIL_RESULTS = ['reject', 'review'];
   const MUST_UNKNOWN_RESULTS = ['none', 'review'];
@@ -1278,7 +1277,8 @@
 
   // 空の回答
   function emptyChecklist() {
-    return { v: 1, header: { date: '', interviewer: '', posting: '', taxi: '', negatives: {} }, values: {}, notes: {}, overall: '' };
+    // header.negatives（消極属性）は 2026-10-13 に削除。旧レコードに残っていても読み飛ばす（docs/SPEC-script-mode.md 12 章）
+    return { v: 1, header: { date: '', interviewer: '', posting: '', taxi: '' }, values: {}, notes: {}, overall: '' };
   }
 
   // 回答が 1 つでもあるか（header は数えない。面接日は自動で入るため）
@@ -1426,31 +1426,20 @@
   }
 
   // 自動表示（回答は自動で埋めない。空欄の記入欄・ヘッダーの既定表示、必須条件の「見込み」ヒントにだけ使う）
-  //   戻り値: { taxi: { text, tone }, negatives: { <id>: { autoOn, on, overridden, text } },
-  //            fields: { <id>: { value, text } }, must: { <id>: { ok, tone, text } } }
+  //   戻り値: { taxi: { text, tone }, fields: { <id>: { value, text } }, must: { <id>: { ok, tone, text } } }
+  //   （消極属性 negatives は 2026-10-13 に削除。docs/SPEC-script-mode.md 12 章）
   function checklistAuto(applicant, cl, profile) {
     const a = applicant || {};
     profile = profile || {};
     cl = U.isObj(cl) ? cl : emptyChecklist();
     const def = clDef(profile);
-    // 台本モード: 詳細入力が無いので自動の見込み・自動値は出さない（手動のみ）。消極属性は上書き（'on'/'off'）だけ
-    if (isScriptMode(profile)) {
-      const hdr0 = U.isObj(cl.header) ? cl.header : {};
-      const ng0 = U.isObj(hdr0.negatives) ? hdr0.negatives : {};
-      const out0 = { taxi: { text: '', tone: 'muted' }, negatives: {}, fields: {}, must: {} };
-      (U.isObj(def.header) && Array.isArray(def.header.negatives) ? def.header.negatives : []).forEach(function (n) {
-        if (!U.isObj(n) || !n.id) return;
-        const ov = ng0[n.id], overridden = ov === 'on' || ov === 'off', on = ov === 'on';
-        out0.negatives[n.id] = { autoOn: false, on: on, overridden: overridden, text: on ? clStr(n.label) : '' };
-      });
-      return out0;
-    }
+    // 台本モード: 詳細入力が無いので自動の見込み・自動値は出さない（手動のみ）
+    if (isScriptMode(profile)) return { taxi: { text: '', tone: 'muted' }, fields: {}, must: {} };
     const f = profile.features || {}, o = profile.options || {}, p = profile.params || {};
     const vals = U.isObj(cl.values) ? cl.values : {};
-    const hdr = U.isObj(cl.header) ? cl.header : {};
     const sh = analyzeShifts(a, profile);
     const ln = a.lateNight || {};
-    const out = { taxi: null, negatives: {}, fields: {}, must: {} };
+    const out = { taxi: null, fields: {}, must: {} };
 
     // タクシー可否・料金
     if (f.lateNight === false) out.taxi = { text: '—', tone: 'muted' };
@@ -1464,27 +1453,10 @@
       out.taxi = { text: '否（' + labelOf(o.returnMethods, ln.returnMethod) + (ln.lastTrain ? ' ' + ln.lastTrain : '') + '）', tone: 'info' };
     } else out.taxi = { text: '未確認', tone: 'muted' };
 
-    // 記入欄の id（短期／長期の希望・契約開始日）
+    // 記入欄の id（契約開始日）
     const fieldItems = checklistItems(def, 'fields');
-    const termItem = fieldItems.find(function (x) { return x.item.auto === 'term'; });
-    const termVal = clStr(vals[termItem ? termItem.item.id : 'term']);
     const dateItem = fieldItems.find(function (x) { return x.item.kind === 'date'; });
     const startVal = clStr(vals[dateItem ? dateItem.item.id : 'start_date']);
-
-    // 消極属性
-    const hdrNeg = U.isObj(hdr.negatives) ? hdr.negatives : {};
-    const negs = U.isObj(def.header) && Array.isArray(def.header.negatives) ? def.header.negatives : [];
-    const morningEnd = toMinutes(clStr((def.header || {}).morningOnlyEnd)) != null ? toMinutes(def.header.morningOnlyEnd) : 12 * 60;
-    negs.forEach(function (n) {
-      if (!U.isObj(n) || !n.id) return;
-      let autoOn = false;
-      if (n.auto === 'shortTerm') autoOn = termVal ? termVal === 'short' : a.workPeriod === 'short';
-      else if (n.auto === 'morningOnly') autoOn = sh.hasAnyEntry && sh.entries.every(function (e) { return e.endAbs <= morningEnd; });
-      const ov = hdrNeg[n.id];
-      const overridden = ov === 'on' || ov === 'off';
-      const on = overridden ? ov === 'on' : autoOn;
-      out.negatives[n.id] = { autoOn: autoOn, on: on, overridden: overridden, text: on ? clStr(n.label) + (overridden ? '' : '（自動）') : '' };
-    });
 
     // 記入欄
     const busy = busyItems(profile);
@@ -1605,11 +1577,7 @@
     const header = {
       date: clStr(hdr.date), posting: posting, postingLabel: postingOpt ? clStr(postingOpt.label) : '',
       interviewer: ivName || stamp, interviewerFromStamp: !ivName && !!stamp,
-      taxi: taxiOv ? { text: taxiOv, tone: 'info', auto: false } : { text: autos.taxi.text, tone: autos.taxi.tone, auto: true },
-      negatives: (Array.isArray(dh.negatives) ? dh.negatives : []).filter(function (n) { return U.isObj(n) && n.id; }).map(function (n) {
-        const x = autos.negatives[n.id] || { autoOn: false, on: false, overridden: false, text: '' };
-        return { id: n.id, label: clStr(n.label), on: x.on, auto: !x.overridden, autoOn: x.autoOn, text: x.text };
-      })
+      taxi: taxiOv ? { text: taxiOv, tone: 'info', auto: false } : { text: autos.taxi.text, tone: autos.taxi.tone, auto: true }
     };
 
     // 必須条件
@@ -2044,17 +2012,14 @@
     const pv = clStr(h.posting);
     const pOpt = pv ? (Array.isArray(posting.options) ? posting.options : []).find(function (o) { return U.isObj(o) && clStr(o.value) === pv; }) : null;
     add('posting', clStr(posting.label) || '応募した求人', pOpt ? (clStr(pOpt.label) || clStr(pOpt.value)) : '');
-    const ng = U.isObj(h.negatives) ? h.negatives : {};
-    add('negatives', '消極属性', (Array.isArray(dh.negatives) ? dh.negatives : []).filter(function (n) {
-      return U.isObj(n) && n.id && ng[n.id] === 'on';
-    }).map(function (n) { return clStr(n.label); }).join('・'));
+    // 消極属性（header.negatives）は 2026-10-13 に削除。旧レコードに残っていても出さない
     add('taxi', 'タクシー可否・料金', h.taxi);
     const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(clStr(h.date).trim());
     add('date', '面接日', dm ? dm[1] + '/' + dm[2] + '/' + dm[3] : h.date);
     const iv = clStr(h.interviewer).trim();
     const stamp = dh.interviewerField && U.isObj(mg[dh.interviewerField]) ? clStr(mg[dh.interviewerField].name) : '';
     add('interviewer', '面接担当者', iv || stamp);
-    add('notes', '備考（面接者メモ）', a.reviewerNotes);
+    add('notes', 'メモ', a.reviewerNotes);   // Step① の入力欄「メモ（任意）」と同じ呼び名（報告書・保存 HTML の応募者情報も「メモ」）
     return rows;
   }
 

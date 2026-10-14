@@ -1849,23 +1849,13 @@ test('62 checklistAuto・firstContractEnd', function () {
   const pOff = P(); pOff.features.lateNight = false;
   assert.strictEqual(tx(A({ lateNight: { availability: 'ok', returnMethod: 'taxi' } }), pOff).text, '—');
   assert.strictEqual(tx(A()).text, '未確認');
-  // morningOnly
-  const neg = function (a, c) { return R.checklistAuto(a, c || cl, p).negatives; };
-  assert.strictEqual(neg(A({ sh: { sat: ['09:00', '12:00'], sun: ['09:00', '12:00'] } })).morningOnly.on, true);
-  assert.strictEqual(neg(A({ sh: { sat: ['09:00', '12:00'], sun: ['09:00', '13:00'] } })).morningOnly.on, false);
-  assert.strictEqual(neg(A()).morningOnly.on, false);
-  assert.strictEqual(neg(A({ sh: { sat: ['09:00', '12:00'] } })).morningOnly.text, '朝～12時のみ（自動）');
-  // shortTerm: values.term が workPeriod より優先・手動上書き
-  assert.strictEqual(neg(A({ workPeriod: 'short' })).short.on, true);
-  const clT = R.emptyChecklist(); clT.values.term = 'long';
-  assert.strictEqual(neg(A({ workPeriod: 'short' }), clT).short.on, false);
-  clT.values.term = 'short';
-  assert.strictEqual(neg(A({ workPeriod: 'long' }), clT).short.on, true);
-  clT.header.negatives.short = 'off';
-  const n2 = neg(A({ workPeriod: 'long' }), clT).short;
-  assert.ok(n2.on === false && n2.overridden === true && n2.autoOn === true);
-  clT.header.negatives.short = 'on'; clT.values.term = 'long';
-  assert.strictEqual(neg(A(), clT).short.text, '短期希望');
+  // 消極属性（shortTerm・morningOnly）は 2026-10-13 に削除（docs/SPEC-script-mode.md 12 章）: 自動判定しない・旧レコードの header.negatives があっても落ちない
+  assert.strictEqual(R.checklistAuto(A({ workPeriod: 'short', sh: { sat: ['09:00', '12:00'] } }), cl, p).negatives, undefined);
+  assert.ok(!('negatives' in R.CHECKLIST_AUTO), 'CHECKLIST_AUTO に negatives が無い');
+  assert.ok(!('negatives' in R.emptyChecklist().header), 'emptyChecklist の header に negatives が無い');
+  const clT = R.emptyChecklist(); clT.values.term = 'short'; clT.header.negatives = { short: 'on', morningOnly: 'off' };
+  const auT = R.checklistAuto(A({ workPeriod: 'short' }), clT, p);
+  assert.ok(auT.negatives === undefined && auT.taxi.text === '未確認', JSON.stringify(plain(auT)));
 });
 
 test('63 checklistSummary（ビューモデル）', function () {
@@ -1989,7 +1979,7 @@ test('64 normalize（面接チェックリスト）', function () {
   c.sections[0].blocks[0].items[0].label = '土日を含む週3日以上（各5時間以上）';          // 編集した文言は保持
   c.sections[2].blocks[0].items.push({ text: '旧キーの説明' });                           // text → label・id 採番
   c.sections[0].blocks[4].items[2].autoParams = { monthsAfter: 99 };                    // 範囲外 → 既定（splice で 1 つずれている）
-  c.header.negatives.push({ label: '平日のみ', auto: 'weekdayOnly' });
+  c.header.negatives = [{ id: 'short', label: '短期希望', auto: 'shortTerm' }, { label: '平日のみ', auto: 'weekdayOnly' }];   // 旧い設定の消極属性 → 外す
   c.header.morningOnlyEnd = '25:00';
   c.print.showQuestions = 'yes';
   c.myExtension = { keep: true };                                                       // 未知のキーは残す
@@ -2010,8 +2000,8 @@ test('64 normalize（面接チェックリスト）', function () {
   assert.ok(added.label === '旧キーの説明' && added.text === undefined && added.id === 'job_explain_5', JSON.stringify(added));
   assert.strictEqual(n.sections[0].blocks[3].items[2].id, 'first_end');
   assert.strictEqual(n.sections[0].blocks[3].items[2].autoParams.monthsAfter, 1);
-  assert.deepStrictEqual(plain(n.header.negatives[2]), { label: '平日のみ', auto: '', id: 'neg3' });
-  assert.strictEqual(n.header.morningOnlyEnd, '12:00');
+  assert.ok(!('negatives' in n.header) && !('morningOnlyEnd' in n.header), '消極属性（negatives・morningOnlyEnd）は正規化で外す: ' + JSON.stringify(plain(n.header)));
+  assert.deepStrictEqual(Object.keys(n.header).sort(), ['interviewerField', 'posting']);
   assert.strictEqual(n.print.showQuestions, true);
   assert.deepStrictEqual(plain(n.myExtension), { keep: true });
   // mustFailJumpTo が存在しないセクション → ''
@@ -2062,7 +2052,9 @@ test('65 validateProfile（面接チェックリスト）', function () {
   one(function (c) { c.overallCaps.reject = 'up'; }, 'overallCaps');
   one(function (c) { c.sections[0].blocks[0].items[0].autoParams.minDays = 8; }, 'minDays 8');
   one(function (c) { c.sections[0].blocks[3].items[2].autoParams.monthsAfter = 13; }, 'monthsAfter 13');
-  one(function (c) { c.header.morningOnlyEnd = '12時'; }, 'morningOnlyEnd');
+  // 消極属性の「朝～12時のみ」の終了時刻（morningOnlyEnd）は削除したので、旧い値が壊れていてもエラーにしない
+  const pm = P(); pm.checklist.header.morningOnlyEnd = '12時'; pm.checklist.header.negatives = 'x';
+  assert.deepStrictEqual(plain(S.validateProfile(pm)), { errors: [], warnings: [] });
   const r0 = plain(S.validateProfile((function () { const px = P(); px.checklist.sections = []; return px; })()));
   assert.ok(r0.errors.some(function (e) { return e.indexOf('セクションがありません') >= 0; }), JSON.stringify(r0));
   // warnings: 確認点 0・必須条件 0・押印欄なし
@@ -2152,20 +2144,21 @@ test('66 保存レコード（checklist・checklistDef・旧 scores の互換）
   // 判定前（judgment なし）は未実施と書く（判定を走らせない）
   const sheetNoJ = S.checklistSheetHtml(Object.assign({}, rec, { judgment: null }), p, { mode: 'sheet', stamps: '<div class="stamp-row">S</div>' });
   assert.ok(sheetNoJ.indexOf('採用可否判定は未実施（面接評価 15/16・93.8% の時点）') > 0 && sheetNoJ.indexOf('<div class="stamp-row">S</div>') > 0);
-  // 'section' は判定サマリー・押印を含まない。台本ヘッダー（面接日・担当・タクシー・消極属性・応募した求人）とページ題名・前書きは出す
+  // 'section' は判定サマリー・押印を含まない。台本ヘッダー（面接日・担当・タクシー・応募した求人）とページ題名・前書きは出す（消極属性は 2026-10-13 に削除）
   const secOnly = S.checklistSheetHtml(rec, p, { mode: 'section' });
   assert.ok(secOnly.indexOf('cl-mode-section') > 0 && secOnly.indexOf('cl-judge') < 0 && secOnly.indexOf('stamp-row') < 0);
   assert.ok(secOnly.indexOf('cl-sheet-head cl-sec-head') > 0, 'section に台本ヘッダー');
-  ['<dt>面接日</dt><dd>2026/10/10</dd>', '<dt>担当</dt>', '<b>タクシー可否・料金</b>', '<b>消極属性</b>', '<b>応募した求人</b>'].forEach(function (t) { assert.ok(secOnly.indexOf(t) > 0, 'section ヘッダー: ' + t); });
+  ['<dt>面接日</dt><dd>2026/10/10</dd>', '<dt>担当</dt>', '<b>タクシー可否・料金</b>', '<b>応募した求人</b>'].forEach(function (t) { assert.ok(secOnly.indexOf(t) > 0, 'section ヘッダー: ' + t); });
+  assert.ok(secOnly.indexOf('消極属性') < 0 && secOnly.indexOf('朝～12時のみ') < 0, 'section ヘッダーに消極属性なし');
   ['必須条件一致・継続性', '人物確認・逆質問', '最低限の話し方、敬語が可能か。必須条件が不一致なら不採用', '行動を確認。採用を検討できる人には不安解消の時間を取る。'].forEach(function (t) { assert.ok(secOnly.indexOf(t) > 0, 'section のページ題名・前書き: ' + t); });
   assert.ok(secOnly.indexOf('台本1枚目') > 0 && secOnly.indexOf('台本2枚目') > 0 && secOnly.indexOf('cl-page-who') < 0);
-  // 担当は押印（面接対応者）から、タクシーの手入力・消極属性の手動 ON はその旨を出す
+  // 担当は押印（面接対応者）から、タクシーの手入力はその旨を出す。旧レコードの消極属性（header.negatives）は出さない
   const clH = plain(cl); clH.header.interviewer = ''; clH.header.taxi = '否（手入力）'; clH.header.negatives = { morningOnly: 'on' };
   const recH = Object.assign({}, rec, { checklist: clH, management: { interviewer: { name: '笹川 晴央' } } });
   const secH = S.checklistSheetHtml(recH, p, { mode: 'section' });
   assert.ok(secH.indexOf('笹川 晴央<small>（押印より）</small>') > 0, 'section の担当（押印より）');
   assert.ok(secH.indexOf('否（手入力）<small>（手入力）</small>') > 0, 'section のタクシー手入力');
-  assert.ok(/<b>消極属性<\/b>[^]*?朝～12時のみ/.test(secH), 'section の消極属性（朝～12時のみ）');
+  assert.ok(secH.indexOf('消極属性') < 0 && secH.indexOf('朝～12時のみ') < 0, '旧レコードの消極属性（朝～12時のみ）は section に出さない');
   // 確認事項／確認点の補足（hint。台本の「「大丈夫です」のみ連呼は特に要注意。」）はレポートの節と A4（質問文 ON）に出る
   assert.ok(secOnly.indexOf('<small class="cl-hint">「大丈夫です」のみ連呼は特に要注意。</small>') > 0, 'section に hint');
   assert.ok(html.indexOf('「大丈夫です」のみ連呼は特に要注意。') > 0);
@@ -2361,6 +2354,7 @@ function scriptState(over) {
   const p = PS();
   const a = A({ name: '台本 花子', age: '20', gender: '女性', category: '大学2年生', graduationDate: '2029-03', reviewerNotes: '電話の受け答えが丁寧。' }, p);
   const cl = clAll('good', 'hire', null, p);
+  // negatives は旧レコード（消極属性入り）を兼ねる。2026-10-13 に削除したので読み飛ばす（docs/SPEC-script-mode.md 12 章）
   cl.header = { date: '2026-10-10', interviewer: '笹川 晴央', posting: 'short', taxi: '可・2,500円', negatives: { short: 'on' } };
   const j = R.evaluateScript(a, cl, p, OPTS);
   return Object.assign({ step: 4, applicant: a, profile: p, handoff: null, handoffChecks: {}, handoffNote: '', scores: {}, checklist: cl,
@@ -2547,7 +2541,13 @@ test('76 保存レコードと保存 HTML（台本モードの記録／詳細モ
   assert.ok(at('<h2>応募者情報</h2>') < at('<h2>面接チェックリスト</h2>') && at('<h2>面接チェックリスト</h2>') < at('<h2>採用可否判定</h2>') &&
     at('<h2>採用可否判定</h2>') < at('id="clSheet"') && at('id="clSheet"') < at('<h2>応募者の管理</h2>'), '節の並び');
   const appSec = html.slice(at('<h2>応募者情報</h2>'), at('<h2>面接チェックリスト</h2>'));
-  ['2029年3月', '短期求人', '短期希望', '可・2,500円', '2026/10/10', '笹川 晴央', '電話の受け答えが丁寧。'].forEach(function (t) { assert.ok(appSec.indexOf(t) > 0, '応募者情報に ' + t); });
+  ['2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央', '電話の受け答えが丁寧。'].forEach(function (t) { assert.ok(appSec.indexOf(t) > 0, '応募者情報に ' + t); });
+  assert.ok(appSec.indexOf('>メモ<') > 0 && appSec.indexOf('備考') < 0, '応募者情報のメモの見出しは「メモ」（Step① と同じ。「備考」は出さない）');
+  // 消極属性（旧レコードの header.negatives）は応募者情報・ヘッダー・HTML 全体に出さない
+  ['短期希望', '消極属性'].forEach(function (t) { assert.ok(appSec.indexOf(t) < 0, '応募者情報に無い: ' + t); });
+  const rhS = html.slice(html.indexOf('<header class="rh">'), html.indexOf('</header>'));
+  assert.ok(rhS.length > 0 && rhS.indexOf('短期求人') > 0 && rhS.indexOf('短期希望') < 0, 'ヘッダーのチップに短期希望なし');
+  assert.ok(html.indexOf('消極属性') < 0 && html.indexOf('朝～12時のみ') < 0, '保存 HTML に消極属性・朝～12時のみ が無い');
   assert.strictEqual((html.match(/<\/script>/g) || []).length, (html.match(/<script[ >]/g) || []).length, 'script 要素の開始・終了の数が同じ');
   // 埋め込みスクリプト 1 の「#rtPrintSheet が無ければ抜ける」を消した（押印のスクリプトのクリック処理にも if(!b)return; があるため、スクリプト 1 の並びで調べる）
   const S1_EXIT = 'getElementById("rtPrintAll");if(!b)return;';
@@ -2569,12 +2569,13 @@ test('76 保存レコードと保存 HTML（台本モードの記録／詳細モ
 test('77 checklistAuto・scriptApplicantRows・checklistSheetHtml（台本モード）', function () {
   const aD = A({ workPeriod: 'short', sh: { sat: ['08:00', '11:00'] }, lateNight: { availability: 'ok', returnMethod: 'taxi', taxiFare: '2500' } }, PS());
   const au = R.checklistAuto(aD, R.emptyChecklist(), PS());
-  assert.ok(au.taxi.text === '' && Object.keys(au.fields).length === 0 && Object.keys(au.must).length === 0 && au.negatives.short.on === false && au.negatives.morningOnly.on === false,
-    '台本モードは自動なし: ' + JSON.stringify(plain(au)));
+  assert.ok(au.taxi.text === '' && Object.keys(au.fields).length === 0 && Object.keys(au.must).length === 0 && au.negatives === undefined,
+    '台本モードは自動なし（消極属性も無い）: ' + JSON.stringify(plain(au)));
   const auF = R.checklistAuto(aD, R.emptyChecklist(), P());
-  assert.ok(auF.taxi.text === '可・2,500円（規定3,000円以内）' && auF.negatives.short.on === true && Object.keys(auF.must).length === 2, '詳細モードは従来どおり: ' + JSON.stringify(plain(auF.taxi)));
-  const clH = R.emptyChecklist(); clH.header.negatives.short = 'on';
-  assert.deepStrictEqual(plain(R.checklistAuto(aD, clH, PS()).negatives.short), { autoOn: false, on: true, overridden: true, text: '短期希望' });
+  assert.ok(auF.taxi.text === '可・2,500円（規定3,000円以内）' && auF.negatives === undefined && Object.keys(auF.must).length === 2, '詳細モードは従来どおり（消極属性は削除）: ' + JSON.stringify(plain(auF.taxi)));
+  // 旧レコードの header.negatives があっても落ちない（読み飛ばす）
+  const clH = R.emptyChecklist(); clH.header.negatives = { short: 'on' };
+  assert.deepStrictEqual(plain(R.checklistAuto(aD, clH, PS())), { taxi: { text: '', tone: 'muted' }, fields: {}, must: {} });
   // evaluateHiring は台本モードのプロファイルでも自動の見込みと照合する
   const aW = A({ sh: { mon: ['10:00', '12:00'] }, daysMin: '1', daysMax: '1' }, PS());
   const jW = R.evaluateHiring(aW, {}, PS(), HO(aW, PS()), allChecks(HO(aW, PS())), Object.assign({}, OPTS, { checklist: clAll('good', 'hire', null, PS()) }));
@@ -2582,9 +2583,10 @@ test('77 checklistAuto・scriptApplicantRows・checklistSheetHtml（台本モー
   // scriptApplicantRows
   const st = scriptState();
   const rows = R.scriptApplicantRows(st.applicant, st.checklist, PS(), st.management);
-  assert.deepStrictEqual(plain(rows.map(function (r) { return r.key; })), ['name', 'age', 'gender', 'category', 'graduation', 'posting', 'negatives', 'taxi', 'date', 'interviewer', 'notes']);
+  assert.deepStrictEqual(plain(rows.map(function (r) { return r.key; })), ['name', 'age', 'gender', 'category', 'graduation', 'posting', 'taxi', 'date', 'interviewer', 'notes']);
+  assert.strictEqual((rows.find(function (r) { return r.key === 'notes'; }) || {}).label, 'メモ', 'notes の見出しは Step① の入力欄「メモ（任意）」と同じ「メモ」');
   const rv = function (rs, k) { return (rs.find(function (r) { return r.key === k; }) || {}).value; };
-  assert.ok(rv(rows, 'age') === '20歳' && rv(rows, 'graduation') === '2029年3月' && rv(rows, 'posting') === '短期求人' && rv(rows, 'negatives') === '短期希望' && rv(rows, 'date') === '2026/10/10',
+  assert.ok(rv(rows, 'age') === '20歳' && rv(rows, 'graduation') === '2029年3月' && rv(rows, 'posting') === '短期求人' && rv(rows, 'negatives') === undefined && rv(rows, 'date') === '2026/10/10',
     JSON.stringify(plain(rows)));
   const cl2 = plain(st.checklist); cl2.header.interviewer = '';
   assert.strictEqual(rv(R.scriptApplicantRows(st.applicant, cl2, PS(), st.management), 'interviewer'), '笹川 晴央', '担当が空なら押印（面接対応者）から');
@@ -2593,8 +2595,20 @@ test('77 checklistAuto・scriptApplicantRows・checklistSheetHtml（台本モー
   const rec2 = S.buildRecord(scriptState({ applicant: A({ name: '台本 花子', age: '20', category: '大学2年生', workPeriod: 'long', daysMin: '3', daysMax: '4', sh: { sat: ['10:00', '18:00'] }, reviewerNotes: '電話の受け答えが丁寧。' }, PS()) }));
   const sh = S.checklistSheetHtml(rec2, PS(), { mode: 'sheet' });
   ['<span class="cl-tile-k">面接評価（確認点）</span>', '<span class="cl-tile-k">必須条件</span>', '<span class="cl-tile-k">総合判断</span>', '<span class="cl-tile-k">結果</span>', 'class="cl-judge"',
-    '可・2,500円', '短期希望', '短期求人', '<span class="cl-ov-k">備考</span>'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
-  ['シフト貢献度', '（自動）', '（応募情報より）', '（手入力）', '<b>希望シフト</b>', '<b>勤務期間</b>', '面接で確認した勤務条件'].forEach(function (t) { assert.ok(sh.indexOf(t) < 0, 'sheet に無い: ' + t); });
+    '可・2,500円', '短期求人', '<span class="cl-ov-k">メモ</span>'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
+  // Step① の入力欄「メモ（任意）」と報告書の呼び名をそろえる（旧「備考」「備考（面接者メモ）」は出さない）
+  assert.ok(sh.indexOf('備考') < 0, 'sheet に「備考」が無い');
+  ['シフト貢献度', '（自動）', '（応募情報より）', '（手入力）', '<b>希望シフト</b>', '<b>勤務期間</b>', '面接で確認した勤務条件', '消極属性', '朝～12時のみ'].forEach(function (t) { assert.ok(sh.indexOf(t) < 0, 'sheet に無い: ' + t); });
+  // A4 のヘッダー（台本モード）: 氏名・区分・年齢・性別・卒業予定・求人・タクシー・面接日・担当（消極属性・目安は出さない。「短期希望」は台本の質問文にだけ出る）
+  const shHead = sh.slice(sh.indexOf('cl-sheet-head'), sh.indexOf('<div class="cl-page"'));
+  assert.ok(shHead.length > 0 && shHead.indexOf('短期希望') < 0 && shHead.indexOf('<dt>目安</dt>') < 0, 'A4 ヘッダーに短期希望・目安なし');
+  const chipKeys = (shHead.match(/<span class="cl-hchip[^"]*"><b>([^<]+)<\/b>/g) || []).map(function (x) { return x.replace(/.*<b>/, '').replace('</b>', ''); });
+  assert.deepStrictEqual(chipKeys, ['応募した求人', 'タクシー可否・料金'], 'A4 ヘッダーのチップ（卒業予定が無い記録）: ' + chipKeys.join(','));
+  const shG = S.checklistSheetHtml(S.buildRecord(scriptState()), PS(), { mode: 'sheet' });
+  const shGHead = shG.slice(shG.indexOf('cl-sheet-head'), shG.indexOf('<div class="cl-page"'));
+  const chipKeysG = (shGHead.match(/<span class="cl-hchip[^"]*"><b>([^<]+)<\/b>/g) || []).map(function (x) { return x.replace(/.*<b>/, '').replace('</b>', ''); });
+  assert.deepStrictEqual(chipKeysG, ['卒業予定', '応募した求人', 'タクシー可否・料金'], 'A4 ヘッダーのチップの順: ' + chipKeysG.join(','));
+  ['台本 花子', '大学2年生・20歳・女性', '2029年3月', '短期求人', '可・2,500円', '<dt>面接日</dt><dd>2026/10/10</dd>', '<dt>担当</dt><dd>笹川 晴央'].forEach(function (t) { assert.ok(shGHead.indexOf(t) > 0, 'A4 ヘッダーに ' + t); });
   const sec = S.checklistSheetHtml(rec2, PS(), { mode: 'section' });
   assert.ok(sec.indexOf('可・2,500円') > 0 && sec.indexOf('（手入力）') < 0 && sec.indexOf('（自動）') < 0, 'section');
   assert.ok(S.checklistSheetHtml(S.buildRecord(decisionState()), P(), { mode: 'sheet' }).indexOf('<span class="cl-tile-k">シフト貢献度</span>') > 0, '詳細の記録は従来どおり');
@@ -2637,6 +2651,49 @@ test('78 台本モードの「採用可否判定」節の見出し（必須条�
   assert.strictEqual(S.normalizeProfile(pOld).management.fields[0].hint, '応募受付を行った担当者');
   const pCus = PS(); pCus.management.fields[0].hint = '電話で応募を受けた担当者';
   assert.strictEqual(S.normalizeProfile(pCus).management.fields[0].hint, '電話で応募を受けた担当者');
+});
+
+test('79 消極属性の削除（旧設定・旧レコードの互換。docs/SPEC-script-mode.md 12 章）', function () {
+  // 既定の台本に消極属性（negatives・morningOnlyEnd）が無い
+  const def = P().checklist;
+  assert.ok(!('negatives' in def.header) && !('morningOnlyEnd' in def.header), JSON.stringify(plain(def.header)));
+  // 旧い設定（消極属性入り）を正規化すると外れる。冪等
+  const pOld = PS(); pOld.checklist.header.negatives = [{ id: 'short', label: '短期希望', auto: 'shortTerm' }, { id: 'morningOnly', label: '朝～12時のみ', auto: 'morningOnly' }];
+  pOld.checklist.header.morningOnlyEnd = '12:00';
+  const nOld = S.normalizeProfile(pOld);
+  assert.ok(!('negatives' in nOld.checklist.header) && !('morningOnlyEnd' in nOld.checklist.header));
+  assert.deepStrictEqual(plain(S.normalizeProfile(nOld)), plain(nOld));
+  assert.deepStrictEqual(plain(S.validateProfile(pOld)).errors, []);
+  // 旧レコード（checklist.header.negatives・checklistDef.header.negatives 入り）: 保存 HTML の生成・読み込み・判定でエラーにならず、消極属性は出さない
+  const st = scriptState();
+  const rec = S.buildRecord(st);
+  const old = plain(rec);
+  old.checklist.header.negatives = { short: 'on', morningOnly: 'on' };
+  old.checklistDef = plain(pOld.checklist);
+  const html = S.generateReportHTML(old, PS());
+  // 埋め込みの記録（JSON）には旧データがそのまま残る（読み込みの往復用）。表示部分にだけ出さない
+  const shown = html.replace(/<script type="application\/json" id="recruit-record">[\s\S]*?<\/script>/, '');
+  assert.ok(shown.length < html.length, 'JSON ブロックを除いた');
+  ['消極属性', '朝～12時のみ'].forEach(function (t) { assert.ok(shown.indexOf(t) < 0, '保存 HTML（表示部分）に無い: ' + t); });
+  ['<h2>応募者情報</h2>', 'id="clSheet"', '短期求人', '可・2,500円'].forEach(function (t) { assert.ok(html.indexOf(t) > 0, '保存 HTML に ' + t); });
+  const sheet = S.checklistSheetHtml(old, PS(), { mode: 'sheet' });
+  const head = sheet.slice(sheet.indexOf('cl-sheet-head'), sheet.indexOf('<div class="cl-page"'));
+  assert.ok(head.indexOf('短期希望') < 0 && head.indexOf('消極属性') < 0 && head.indexOf('短期求人') > 0, 'A4 ヘッダー');
+  ctx.DOMParser = function () {};
+  ctx.DOMParser.prototype.parseFromString = function (h) {
+    const m = h.match(/<script type="application\/json" id="recruit-record">([\s\S]*?)<\/script>/);
+    return { querySelector: function () { return m ? { textContent: m[1] } : null; } };
+  };
+  try {
+    const back = S.parseRecordFromHTML(html);
+    assert.ok(back && back.checklist && back.checklist.header.posting === 'short', '読み込める');
+    assert.deepStrictEqual(plain(back.checklist.header.negatives), { short: 'on', morningOnly: 'on' }, '旧データは落とさない（読み飛ばすだけ）');
+    const j = R.evaluateScript(back.applicant, back.checklist, PS(), OPTS);
+    assert.strictEqual(j.result, st.judgment.result, '判定は消極属性に左右されない');
+    assert.ok(R.scriptApplicantRows(back.applicant, back.checklist, PS(), back.management).every(function (r) { return r.key !== 'negatives' && r.value.indexOf('短期希望') < 0; }));
+    const sum = R.checklistSummary(back.applicant, back.checklist, PS(), {});
+    assert.ok(!('negatives' in sum.header) && !('negatives' in sum.autos), 'ビューモデルに消極属性なし');
+  } finally { delete ctx.DOMParser; }
 });
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

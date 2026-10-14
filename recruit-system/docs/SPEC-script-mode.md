@@ -4,10 +4,11 @@
 - 根拠: 副支配人「なんかちがくて、応募者の名前と属性入れたらもう渡した面接台本のとおりの報告でいいんだよね。。。今までの一旦忘れて欲しいのに。意図を汲み取って」と、オーケストレータの決定（0-2。変更不可）
 - 前提資料: `docs/reference/interview-script-1008.md`（台本）、`docs/SPEC-checklist.md`（1 章: `profile.checklist`・`record.checklist`、4 章: `checklistSheetHtml`・`body.print-checklist`）、`docs/SPEC-report.md`（3 章 DOM 一覧・4 章 保存 HTML・`#decision`・`#clPaper`）、`docs/HANDOFF.md`（7〜11 章）
 - **実装者は本書だけを見て実装する**。id・class・profile キー・data-bind / data-field / data-cl パス・既定値・文言・テストの expect 文言は本書の値で実装する
+- **2026-10-13 追記**: 副支配人「消極属性って意味がわからないから削除でいいかも。ほか、入力が多いのでもう少し端的にできたらお願い」により、**消極属性を全面削除**し、Step① を 1 枚・3 行に圧縮、Step② に「すべて説明した」を追加した（**12 章**）。1〜11 章の消極属性（`header.negatives`・`#saNegatives`・`data-cl-on`・`.cl-attr[data-attr="negatives"]` など）と Step① の旧レイアウトの記述は当時の記録として残す。現行は 12 章が優先
 
 ## 運用フロー（台本モード＝既定）
 
-1. 面接者がアプリで **① 応募者**（氏名と属性・台本のヘッダー）を入れる
+1. 面接者がアプリで **① 応募者**（氏名と属性・面接日・担当・求人・タクシー・メモ。1 枚・3 行。12 章）を入れる
 2. **② 面接チェックリスト**（面接台本 2026-10-08 版の ①〜⑤ ＋総合判断）を台本の順に入力する
 3. **③ 報告書** を開くと A4「面接チェックリスト報告」のプレビュー（判定サマリー＝面接評価〔確認点〕・必須条件・総合判断・結果）が出る。押印欄「面接対応者」に電子印 →「報告書を保存（HTML）」→ 社内スレッドに添付
 4. 副支配人が HTML を開く（報告書表示）→「最終合否」で採用／不採用（最終確認の印も自動）→「押印を保存」で再出力（`_採用` / `_不採用`）→ スレッドに添付
@@ -174,6 +175,7 @@ export に `isScriptMode, isScriptRecord, OVERALL_RESULT, scriptApplicantRows, e
 - 例（既定の台本・満点 16）: 全○＋採用 → 採用推奨 16/16・100%・高。全○＋保留 → 上長最終判断要。全○＋不採用 → 不採用推奨。全○＋未入力 → 上長最終判断要（14/16）＋警告。必須条件 1 つ不一致（既定 reject）→ 不採用推奨（`must_conditions` を必ず記録）
 
 #### 1-3-3. `checklistAuto(applicant, cl, profile)` の変更（M4・Y3）
+> 2026-10-13: 消極属性の削除により、台本モードは `return { taxi: { text: '', tone: 'muted' }, fields: {}, must: {} };` だけになった（戻り値から `negatives` を削除。12-3）。
 冒頭（`const def = clDef(profile)` の後）に:
 ```js
 // 台本モード: 詳細入力が無いので自動の見込み・自動値は出さない（手動のみ）。消極属性は上書き（'on'/'off'）だけ
@@ -245,6 +247,7 @@ function steps() { return isScript() ? STEPS_SCRIPT : STEPS_FULL; }
   ```
 
 ### 2-2. Step① 応募者（M3）`scriptApplicantStepHtml()`
+> 2026-10-13: 下の DOM は旧版。現行は 1 枚・3 行（`#saNegatives` なし・補足文なし・メモは 2 行）。**12-2** を参照。
 `renderStep` case 1: `if (isScript()) { fillChecklistDefaults(); c.innerHTML = scriptApplicantStepHtml(); applyVisibility(); break; }`（`fillChecklistDefaults` は面接日が空なら今日を入れる既存関数。`applyVisibility` は null 安全なので卒業予定年月の表示切替にそのまま使う）。
 
 ```html
@@ -285,6 +288,7 @@ function steps() { return isScript() ? STEPS_SCRIPT : STEPS_FULL; }
 - 出さないもの（S2）: 通勤・曜日・時間・週日数・勤務期間・かけもち・高校生の例外・外国籍・繁忙期・深夜帯・オールナイト・`#preFill`・`#notesCard`（申し送りコメント）・貢献度メーター・「留意点を生成して申し送りへ」
 
 ### 2-3. Step② 面接チェックリスト（M4。`interviewStepHtml()` の差分）
+> 2026-10-13: `#clHeader`（台本モード）は 1 行に圧縮（題名・説明文・目安時間なし）、【説明】【合否連絡】に「すべて説明した」を追加。**12-4・12-5** を参照。
 `renderStep` case 3: 台本モードは `fillChecklistDefaults(); c.innerHTML = interviewStepHtml(); updateChecklistUI(true);`（`rebuildHandoff`・`applyVisibility`・`updateContribMeters`・`refreshDeferredItems` は呼ばない）。
 
 | 部分 | 詳細モード（変えない） | 台本モード |
@@ -349,6 +353,7 @@ legacyBannerHtml()
 - 押印欄「面接対応者」の初期選択は既存 `managementCardHtml` の規則（`checklist.header.interviewer` が名簿にあればその人）。Step① の担当者がそのまま初期選択になる
 
 ### 2-5. 右サマリー（M7）`renderScriptSummary()`
+> 2026-10-13: 「応募者」カードは 4 行（`#sumAttrs` は区分の行の中の span。求人が短期のときだけ「短期求人」のチップ 1 つ。消極属性は出さない）。**12-6** を参照。
 `renderSummary()` の先頭（`#applicantChip` の更新の後）で `if (isScript()) { $('#summaryPanel').innerHTML = scriptSummaryHtml(); return; }`。詳細モードのサマリーは変えない。
 
 ```
@@ -888,3 +893,94 @@ const fillScript = async (o) => {
 - 単体 #78: 台本モードの「採用可否判定」節の見出し（採用＋不一致・打ち切り〔総合判断未入力〕・不採用＋不一致・`mustFailResult = review`・総合判断の上限は従来どおり「調整」・調整なし）、初期対応者の説明（既定・旧既定の置き換え・書き換えた説明は残す）
 - e2e: 冒頭（詳細モードの画面名）、E32（台本モードの画面名）、E35（台本モードの「面接チェックリスト」節＝詳細モード専用の設定・自動表示・Step3/Step4・2軸判定の文言なし・帯の境界・data-bind の重複なし・押印／書き出しの文言・初期対応者の説明、「詳細モードの設定」リンクで開いて移動、詳細モードの節は従来どおり、詳細モードの画面名）、E37（② から保存 → 記録に判定・保存 HTML の紙の結果タイル・「詳細」の採用可否判定／ヘッダー／ダッシュに結果〔「未実施」なし〕→ ③ を開いても同じ判定 → 読み込むと ② から再開 → beforeprint / afterprint・トップバー 🖨・② の印刷ボタン〔window.print のスタブで body.print-checklist と A4 報告の結果タイルを確認。いずれも判定が無い状態から〕→ 総合判断未入力で保存すると警告・① だけで保存しても警告）
 - 結果: 単体 `node tests/rules.test.js` 84 passed / 0 failed、`node tests/e2e.js` ALL PASSED（491 件）、`script-report.pdf` 2 ページ・`script-report-app.pdf` 2 ページ（pdfinfo）
+
+---
+
+## 12. 入力の簡素化（消極属性の削除）（2026-10-13）
+
+根拠: 副支配人「消極属性って意味がわからないから削除でいいかも。ほか、入力が多いのでもう少し端的にできたらお願い」。意図は、台本モードで面接者が入力する項目と手数を減らし、画面を簡潔にすること。オーケストレータの決定 N1〜N8 を実装した。
+
+### 12-1. 消極属性の全面削除（N1。台本モード・詳細モードとも）
+| 場所 | 変更 |
+| --- | --- |
+| config.default.js | `checklist.header.negatives`（短期希望・朝～12時のみ）と `morningOnlyEnd` を削除。`header` は `posting`・`interviewerField` だけ |
+| rules.js | `CHECKLIST_AUTO.negatives`（`shortTerm`・`morningOnly`）を削除。`emptyChecklist().header` は `{ date, interviewer, posting, taxi }`。`checklistAuto` の戻り値から `negatives` を削除（台本モードは `{ taxi: { text: '', tone: 'muted' }, fields: {}, must: {} }`）。`checklistSummary().header` から `negatives` を削除。`scriptApplicantRows` から `negatives` の行を削除（並びは name・age・gender・category・graduation・posting・taxi・date・interviewer・notes） |
+| storage.js | `normalizeChecklistDef` は `header.negatives`・`header.morningOnlyEnd` を**外す**（旧い設定・記録の台本に残っていても。冪等）。`validateProfile` の「朝～12時のみ」の終了時刻のエラーを削除（使わなくなった `isHHMM` も削除）。`checklistSheetHtml` のヘッダーの消極属性チップ、`generateReportHTML`（台本の記録）の `.rh` のチップの消極属性を削除 |
+| settings.js | s-checklist「ヘッダー」の消極属性の行（名前・自動判定・削除・「＋ 消極属性を追加」）、「朝～12時のみ」の終了時刻、`cl-neg-add` / `cl-neg-del` を削除。「ヘッダー」は「担当と連動する押印欄」と「応募した求人」の見出し・選択肢の表示名だけ |
+| app.js | Step① の `#saNegatives`、`data-cl-on`（チェック → 'on'）の処理、`ensureChecklist` の `header.negatives = {}`、詳細モードの `clHeaderHtml` の「消極属性」（自動／該当／該当しない・`#clNeg-*`）と `updateChecklistUI` のバッジ、右サマリーの消極属性のチップ、使い方の文言 |
+| styles.css | `.cl-negs`・`.cl-neg-row`・`.cl-neg-label`・`.s-cl-neg`・`.s-cl-neg-plain`・`.cl-attr[data-attr="negatives"]` を削除 |
+
+**データ互換**: 旧レコードの `checklist.header.negatives` は読み込んでもエラーにせず**そのまま保持**する（表示・判定・報告には使わない＝読み飛ばす）。旧レコードの `checklistDef.header.negatives` は正規化で外れる。保存 HTML の埋め込み記録（JSON）には旧データが残り得るが、表示部分には出さない。判定（`evaluateScript`・`evaluateHiring`）は従来から消極属性を使っていないので結果は変わらない。
+
+### 12-2. Step① 応募者（N2）`scriptApplicantStepHtml()`
+1 枚のカード・3 行。説明文はカード冒頭の 1 行だけ。各入力の下の補足文（名簿の案内など）は出さず、必要なものは `title` 属性に残す。`<h3 class="sub">面接の情報（台本のヘッダー）</h3>` は削除。
+```html
+<div class="card" id="scriptApplicantCard">
+  <div class="card-head"><h2>応募者</h2><p>氏名だけ必須です。あとは分かる範囲で入力してください。</p></div>
+  <div class="field-row sa-row sa-row1">   <!-- flex。学生の区分のときだけ末尾に卒業予定年月 -->
+    {fInput('name','氏名',{required})}{fInput('age','年齢',{type:'number',suffix:'歳'})}{fSelect('gender','性別',{placeholder:'選択'})}{fSelect('category','区分')}
+    {fInput('graduationDate','卒業予定年月',{type:'month',id:'grp-graduation'})}
+  </div>
+  <div class="field-row cols-3 sa-row sa-row2">
+    <div class="field"><label for="saDate">面接日</label><input type="date" id="saDate" data-cl="header.date"></div>   <!-- 既定は今日 -->
+    <div class="field"><label for="saInterviewer">面接担当者</label><select id="saInterviewer" data-cl="header.interviewer" title="名簿は設定の「応募者の管理（押印）」で編集します。報告書の押印欄「面接対応者」の初期選択になります。">…</select></div>
+    <div class="field" id="saPosting"><label>応募した求人</label>{clSegHtml('header.posting', 「通常」「短期」)}</div>
+  </div>
+  <div class="field-row sa-row sa-row3">
+    <div class="field"><label for="saTaxi">タクシー可否・料金</label><input type="text" id="saTaxi" data-cl="header.taxi" placeholder="例: 可・2,500円"></div>
+    {fTextarea('reviewerNotes','メモ（任意）',{rows:2})}
+  </div>
+</div>
+<div class="actions end"><button … id="saNext" data-action="script-next">面接チェックリストへ進む →</button></div>
+```
+- 求人のボタンの文字は選択肢の表示名から末尾の「求人」を省いたもの（既定「通常」「短期」。`title` に元の表示名）。報告書・右サマリー・② のヘッダーは表示名のまま（「短期求人」）
+- 既存の data-field 名・id（`name`・`age`・`gender`・`category`・`graduationDate`・`reviewerNotes`・`#grp-graduation`・`#saPosting`・`#saTaxi`・`#saDate`・`#saInterviewer`・`#saNext`）とレコードのキーは変えない
+- CSS（styles.css「台本モード」）: 1 行目 `.sa-row1` は flex（氏名 1.3・年齢 .55・性別 .8・区分 1.1・卒業予定 1.25 の比、各 min-width。性別は 116px＝最長の「回答しない」が ▼ と重ならない幅、未選択の文言は「選択」。年齢の増減ボタンは出さない）。狭くて入らないときだけ卒業予定年月が次の行へ回る。840px 以下は 1 列。3 行目は タクシー 1：メモ 1.4
+- 実測（e2e E32）: 1440×900・1280×800 とも `#saNext` の下端 454px（スクロールなし）。1440px では卒業予定年月も 1 行目。390px は 1 列・横スクロールなし
+
+### 12-3. 判定・自動表示
+変更なし（消極属性は判定に使っていなかった）。詳細モードの自動表示はタクシー・記入欄・必須条件の見込みだけになった（`checklistAuto` の `negatives` 削除）。
+
+### 12-4. Step② ヘッダー（N4。台本モード）`scriptClHeaderHtml()`
+1 行に圧縮。台本の題名・版・説明文（intro）・目安時間（`#clMinutesTotal`）は出さない（詳細モードの `clHeaderHtml` は従来どおり）。
+```html
+<div class="card cl-head-line" id="clHeader"><div class="cl-head-attrs" id="clHeaderAttrs">
+  <span class="cl-attr cl-attr-name" data-attr="name">{氏名}<small>さん</small></span>
+  {category・age・posting・taxi・date・interviewer の順: <span class="cl-attr" data-attr="{key}" title="{label}">[<small>タクシー|担当</small>]{value}</span>}
+  <button type="button" class="btn sm ghost cl-head-edit" data-action="to-step" data-step="1">応募者を編集</button>
+</div></div>
+```
+区分・年齢・求人・面接日（日付）は値だけで分かるのでラベルを付けない（`title` に項目名）。「応募者を編集」はリンクの見た目（枠なし・右寄せ）。1440px で 1 行（高さ 46px）。
+本文が狭い幅（`@media screen and (max-width: 1400px)`。1280px で本文 約 640px）ではチップを一段詰め（余白 2px 6px・12px・間隔 3px）、「応募者を編集」はカード上端の枠線上・右（`position: absolute; top: -9px; right: 12px`、背景はカードと同じ）に出してチップの行から外す → 1366px・1280px でもチップは 1 行（高さ 45px）。390px などさらに狭い画面ではチップが折り返す。印刷には影響しない（screen のみ）。
+
+### 12-5. 「すべて説明した」（N3。Step②・台本モード・詳細モード共通）
+- 【説明】（`type: 'explain'`）と【合否連絡】（`type: 'notify'`）の見出し `.cl-block-title` の右に `<button type="button" class="btn sm ghost cl-all-btn" data-action="explain-all" data-block="{blockId}">すべて説明した</button>`
+- 対象 = ブロックの項目のうち、`shortOnly` の項目は求人（`checklist.header.posting`）が `short` のときだけ。1 クリックで対象を全部チェック（`values.{id} = true`）
+- 対象が全部チェック済みなら文字は「すべて外す」（`aria-pressed="true"`）。押すとブロックの**全項目**を外す（求人が通常のときに手で付けた ※ の項目も。`values` から消える）
+- 文字は `updateChecklistUI()` で追従（個別のチェック・求人の切り替え）。対象が 0 件のブロックではボタンを隠す
+- app.js `clBlockFind`・`clAllTargets`・`clAllDone`・`clAllBtnHtml`（新規）、`onContentClick` の `explain-all`
+
+### 12-6. 右サマリー（N5。台本モード）
+「応募者」カードは 4 行: `.sum-name`（氏名）・`.sum-sub`（区分・年齢・性別＋ `span.sum-attrs#sumAttrs`）・`#sumDate`・`#sumInterviewer`。`#sumAttrs` には求人が `short` のときだけ `<span class="badge info">短期求人</span>` を 1 つ。消極属性・通常求人のチップは出さない。
+
+### 12-7. A4 報告・保存 HTML（N6）
+- `checklistSheetHtml`（台本の記録）のヘッダー: 氏名・（区分・年齢・性別）・面接日・担当、チップは 卒業予定 → 応募した求人 → タクシー可否・料金。消極属性のチップと「目安 n分」は出さない（詳細モードの記録は従来どおり タクシー → 応募した求人 → 勤務期間… と目安を出す）
+- `generateReportHTML`（台本の記録）の `.rh` のチップ: 区分・年齢・性別・卒業予定・応募した求人（消極属性を削除）。「応募者情報」の表から消極属性の行が消える
+- 実測: `tests/shots/script-report.pdf` 2 ページ（pdfinfo）
+- 「短期希望」の文字は台本の質問文（「いまのところ、短期希望ですか？…」）と記入欄「短期／長期の希望」の選択肢にだけ残る（ヘッダー・サマリー・応募者情報には出ない）
+
+### 12-8. テスト（N7）
+- 単体（`tests/rules.test.js`）: #62 の morningOnly / shortTerm の expect を「`negatives` を返さない・`CHECKLIST_AUTO` / `emptyChecklist` に無い・旧 `header.negatives` があっても落ちない」に置き換え。#64 は旧い設定の `negatives`・`morningOnlyEnd` が正規化で外れること、#65 は `morningOnlyEnd` が壊れていてもエラーにしないこと、#66 は section に消極属性が出ないこと（旧レコードでも）、#76・#77 は応募者情報・`.rh`・A4 ヘッダーに消極属性・短期希望が無いこと・A4 のチップの順。**#79 を追加**（既定の台本に無い・旧設定の正規化〔冪等〕・旧レコード〔`header.negatives`・`checklistDef.header.negatives` 入り〕の保存 HTML 生成・読み込み〔データは保持〕・判定が同じ・ビューモデルに無い）。85 passed
+- e2e（`tests/e2e.js`）: E25（詳細モードのヘッダーに消極属性が無い・「すべて説明した」5 個・レポートの節に無い）、E27（A4 ヘッダー・PDF に無い）、E32（Step① が 1 枚・3 行の構成・説明 1 行・補足文なし・`#saNegatives` 無し・求人ボタン「通常」「短期」・メモ 2 行・1440px で卒業予定も 1 行目・1440×900 / 1280×800 でスクロールなしに `#saNext`・390px で 1 列・右サマリー 4 行〔短期求人のチップだけ。通常なら無し〕）、E33（`#clHeader` が 1 行・題名／説明文／目安／消極属性なし・「すべて説明した」で全チェック〔短期なので ※ も〕→ もう一度で全解除・個別に全部チェックでも「すべて外す」・【合否連絡】）、E34（保存 HTML・記録・A4 ヘッダー・応募者情報・PDF に無い）、E35（設定に消極属性の行・自動判定・終了時刻が無い。両モード）、E37（求人が通常なら ※ は付かない・「すべて外す」は手で付けた ※ も外す）、**E38 を追加**（消極属性入りの旧レコードを読み込み → 右サマリー・紙・② のヘッダー・① に出ない → 保存し直しても表示部分に無い → 旧レコードから作った保存 HTML もエラーなし）。ALL PASSED（513 件。12-10 の修正後は 516 件）
+- 撮り直し: `tests/shots/40-script-step1.png`・`41-script-step2.png`・`44-script-report.png`・`script-report.pdf`（2 ページ）
+
+### 12-9. 残った点
+- 詳細モードの Step3 ヘッダー（`clHeaderHtml`）は入力欄つきのまま（目安時間・説明文も従来どおり）。1 行化は台本モードだけ
+- ① の区分の長い選択肢（「専門学校生3年生」など 8 文字）は、1280px で学生の区分（卒業予定年月も 1 行目に出る）のとき末尾が少し切れる（既定の「大学2年生」などは切れない）
+- ② の目次（`#clNav`）は 1280px で 2 行に折り返す（従来どおり）
+
+### 12-10. レビュー後の修正（2026-10-14）
+1. ① の性別のセレクトの未選択の文言が PC 幅で切れていた（1280px・学生の区分で「選択し」）→ 性別だけ未選択の文言を「選択」（`fSelect('gender', '性別', o.genders, { placeholder: '選択' })`。詳細モードの Step1 は従来どおり「選択してください」）。1 行目の比を 年齢 .55（min 64px）・性別 .8（min 116px）に変え、最長の「回答しない」も ▼ と重ならない。実測: 1440・1366・1280px（学生の区分）とも性別 116px・文字 76px（e2e E32）
+2. ② の 1 行ヘッダーが 1280px で 2 行に折り返していた（「担当」と「応募者を編集」が 2 行目）→ 面接日のラベルを外し（値が日付なので分かる。`SCRIPT_HEAD_SHORT` から date を削除）、1400px 以下ではチップを一段詰めて「応募者を編集」をカード上端の右に出す（12-4）。実測: 1440px 高さ 46px（従来どおり 1 行・編集リンクも同じ行）、1366px・1280px 高さ 45px（チップは 1 行・編集リンクはチップと重ならず押せる。e2e E33）
+3. メモの呼び名が入力画面「メモ（任意）」と報告書「備考（面接者メモ）」「備考」で食い違っていた → `scriptApplicantRows` の `notes` の見出しを「メモ」、`checklistSheetHtml`（台本の記録・sheet）の行を `<span class="cl-ov-k">メモ</span>` に（保存 HTML の「応募者情報」・A4〔アプリの ③ の紙・保存 HTML〕とも「メモ」。値・保存キー `applicant.reviewerNotes` は不変。詳細モードの「申し送りコメント」は従来どおり）。単体 #76・#77、e2e E34 で確認
+- テスト: 単体 85 件・e2e 516 件（E32 性別の幅、E33 1366/1280px のヘッダー、E34 メモの見出しを追加）すべて緑。`tests/shots/40-script-step1.png`・`41-script-step2.png`・`44-script-report.png`・`script-report.pdf`（2 ページ）を撮り直した

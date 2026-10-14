@@ -288,7 +288,6 @@
     periods: function (v) { return Array.isArray(v) && v.every(function (x) { return typeof x === 'string' && x !== ''; }); }
   };
   function clRules() { return global.RecruitRules || {}; }
-  function isHHMM(v) { return /^\d{1,2}:\d{2}$/.test(String(v || '')) && Number(String(v).split(':')[0]) < 24 && Number(String(v).split(':')[1]) < 60; }
   function strOr(v, def) { return typeof v === 'string' ? v : def; }
   function asStr(v) { return v == null ? '' : String(v); }
   function intIn(v, lo, hi) { return isNum(v) && Number(v) % 1 === 0 && Number(v) >= lo && (hi == null || Number(v) <= hi); }
@@ -304,7 +303,7 @@
     const out = U.deepClone(def);
     const types = R.CHECKLIST_BLOCK_TYPES || ['must', 'fields', 'explain', 'question', 'rating', 'notify', 'note'];
     const kinds = R.CHECKLIST_FIELD_KINDS || ['text', 'date', 'month', 'choice'];
-    const autos = R.CHECKLIST_AUTO || { must: [], fields: [], negatives: [] };
+    const autos = R.CHECKLIST_AUTO || { must: [], fields: [] };
 
     ['title', 'version', 'intro', 'overallLabel', 'overallHint'].forEach(function (k) { out[k] = strOr(out[k], base[k]); });
     const bo = base.overallOptions || {};
@@ -332,20 +331,9 @@
     const bh = base.header;
     if (!U.isObj(out.header)) out.header = U.deepClone(bh);
     const h = out.header;
-    h.negatives = Array.isArray(h.negatives)
-      ? h.negatives.filter(function (n) { return U.isObj(n); }).map(function (n, i) {
-        if (typeof n.id !== 'string' || !CL_ID_RE.test(n.id)) n.id = 'neg' + (i + 1);
-        n.label = asStr(n.label);
-        if ((autos.negatives || []).indexOf(n.auto) < 0) n.auto = '';
-        return n;
-      })
-      : U.deepClone(bh.negatives);
-    const negSeen = {};
-    h.negatives.forEach(function (n) {
-      if (negSeen[n.id]) { let k = 2; while (negSeen[n.id + '_' + k]) k++; n.id = n.id + '_' + k; }
-      negSeen[n.id] = true;
-    });
-    if (!isHHMM(h.morningOnlyEnd)) h.morningOnlyEnd = bh.morningOnlyEnd;
+    // 消極属性（negatives・morningOnlyEnd）は 2026-10-13 に削除。旧い設定・記録の台本に残っていれば外す（docs/SPEC-script-mode.md 12 章）
+    delete h.negatives;
+    delete h.morningOnlyEnd;
     if (!U.isObj(h.posting)) h.posting = U.deepClone(bh.posting);
     h.posting.label = strOr(h.posting.label, bh.posting.label);
     const popts = Array.isArray(h.posting.options)
@@ -505,7 +493,6 @@
       if (['none', 'review', 'reject'].indexOf(caps[k]) < 0) errors.push(P0 + 'の総合判断「' + asStr(oo[k] || k) + '」のときの設定が正しくありません。');
     });
     const hd = U.isObj(cl.header) ? cl.header : {};
-    if (!isHHMM(hd.morningOnlyEnd)) errors.push(P0 + 'の「朝～12時のみ」の終了時刻は HH:MM で入力してください。');
     if (!ratingN) warnings.push('確認点がありません。面接評価は総合判断だけで決まります。');
     if (!mustN) warnings.push('必須条件がないため、不一致による不採用推奨は働きません。');
     const mfields = (((p.management || {}).fields) || []).map(function (f) { return f && f.id; });
@@ -1155,22 +1142,24 @@
       (m.total ? '<div class="cl-ov-row"><span class="cl-ov-k">必須条件</span><span class="cl-ov-v ' + (m.mismatch ? 't-danger' : m.unknown ? 't-muted' : 't-ok') + '">' + esc(mustCountsText(m)) +
         (mustDetail.length ? '<small>（' + esc(mustDetail.join('／')) + '）</small>' : '') + '</span></div>' : '') +
       '<div class="cl-ov-row cl-ov-notes"><span class="cl-ov-k">面接所見</span><span class="cl-ov-v cl-memo-t">' + txt(record.interviewNotes) + '</span></div>' +
-      // 台本モード: Step① の備考（面接者メモ）も報告に載せる
-      (scriptRec && mode === 'sheet' && asStr(a.reviewerNotes).trim() ? '<div class="cl-ov-row cl-ov-notes"><span class="cl-ov-k">備考</span><span class="cl-ov-v cl-memo-t">' + esc(asStr(a.reviewerNotes).trim()) + '</span></div>' : '') +
+      // 台本モード: Step① のメモ（入力欄「メモ（任意）」）も報告に載せる
+      (scriptRec && mode === 'sheet' && asStr(a.reviewerNotes).trim() ? '<div class="cl-ov-row cl-ov-notes"><span class="cl-ov-k">メモ</span><span class="cl-ov-v cl-memo-t">' + esc(asStr(a.reviewerNotes).trim()) + '</span></div>' : '') +
       '</div>';
 
-    // ---- 台本ヘッダー（面接日・担当・タクシー可否・料金・消極属性・応募した求人）。section / sheet 共通 ----
+    // ---- 台本ヘッダー（面接日・担当・応募した求人・タクシー可否・料金）。section / sheet 共通 ----
+    //   消極属性は 2026-10-13 に削除（旧レコードの header.negatives は読み飛ばす。docs/SPEC-script-mode.md 12 章）
     const hd = sum.header;
-    const negOn = hd.negatives.filter(function (n) { return n.on; });
     const chips = [];
+    const postingChip = '<span class="cl-hchip"><b>' + esc(((def.header || {}).posting || {}).label || '応募した求人') + '</b>' + txt(hd.postingLabel) + '</span>';
     // 台本モードの記録は常に手入力（「（手入力）」「（自動）」を付けない）
-    chips.push('<span class="cl-hchip ' + tone(hd.taxi.tone) + '"><b>タクシー可否・料金</b>' + txt(hd.taxi.text) + (hd.taxi.auto || scriptRec ? '' : '<small>（手入力）</small>') + '</span>');
-    chips.push('<span class="cl-hchip' + (negOn.length ? ' t-danger' : '') + '"><b>消極属性</b>' +
-      (negOn.length ? negOn.map(function (n) { return esc(n.label) + (n.auto && !scriptRec ? '<small>（自動）</small>' : ''); }).join('・') : 'なし') + '</span>');
-    chips.push('<span class="cl-hchip"><b>' + esc(((def.header || {}).posting || {}).label || '応募した求人') + '</b>' + txt(hd.postingLabel) + '</span>');
+    const taxiChip = '<span class="cl-hchip ' + tone(hd.taxi.tone) + '"><b>タクシー可否・料金</b>' + txt(hd.taxi.text) + (hd.taxi.auto || scriptRec ? '' : '<small>（手入力）</small>') + '</span>';
+    // 台本モード: 応募者の属性の順（卒業予定 → 求人 → タクシー。卒業予定は sheet のヘッダーで先頭に足す）。詳細モードは従来どおりタクシー → 求人
+    if (scriptRec) chips.push(postingChip, taxiChip);
+    else chips.push(taxiChip, postingChip);
+    // 目安（台本の合計分）は詳細モードだけ。台本モードのヘッダーは 氏名・区分・年齢・性別・卒業予定・求人・タクシー・面接日・担当
     const kvHtml = '<dl class="cl-sh-kv"><div><dt>面接日</dt><dd>' + (hd.date ? esc(clFmtDate(hd.date)) : dash) + '</dd></div>' +
       '<div><dt>担当</dt><dd>' + txt(hd.interviewer) + (hd.interviewerFromStamp ? '<small>（押印より）</small>' : '') + '</dd></div>' +
-      '<div><dt>目安</dt><dd>' + esc(sum.minutesTotal) + '分</dd></div></dl>';
+      (scriptRec ? '' : '<div><dt>目安</dt><dd>' + esc(sum.minutesTotal) + '分</dd></div>') + '</dl>';
 
     if (mode === 'section') {
       const secHead = '<div class="cl-sheet-head cl-sec-head">' + kvHtml + '<div class="cl-sh-chips">' + chips.join('') + '</div></div>';
@@ -1184,7 +1173,7 @@
     if (scriptRec) {
       // 台本モード: 区分・年齢・性別と卒業予定（勤務期間・週・希望シフトは出さない）
       who = [a.category, a.age ? a.age + '歳' : '', a.gender].filter(Boolean).join('・');
-      if (asStr(a.graduationDate).trim()) chips.push('<span class="cl-hchip"><b>卒業予定</b>' + esc(clFmtMonth(asStr(a.graduationDate).trim())) + '</span>');
+      if (asStr(a.graduationDate).trim()) chips.unshift('<span class="cl-hchip"><b>卒業予定</b>' + esc(clFmtMonth(asStr(a.graduationDate).trim())) + '</span>');
     } else {
       let shiftsLine = '';
       try { shiftsLine = R.describeShifts(a, profile).join('、'); } catch (e) { shiftsLine = ''; }
@@ -1718,7 +1707,7 @@
       const jOv = j ? ((j.overall && typeof j.overall === 'object') ? j.overall : (j.checklist && j.checklist.overall) || { value: ovV, label: ovL }) : { value: ovV, label: ovL };
       // ヘッダー
       const sStep = { 1: '応募者の入力中', 3: '面接チェックリストの入力中', 4: '報告書まで完了' }[Number(record.step)] || '';
-      const sChips = [rowVal('category'), rowVal('age'), rowVal('gender'), rowVal('graduation') ? '卒業予定 ' + rowVal('graduation') : '', rowVal('posting'), rowVal('negatives')].filter(Boolean)
+      const sChips = [rowVal('category'), rowVal('age'), rowVal('gender'), rowVal('graduation') ? '卒業予定 ' + rowVal('graduation') : '', rowVal('posting')].filter(Boolean)
         .map(function (ch) { return '<span class="chip">' + esc(ch) + '</span>'; }).join('');
       const sVerdict = j
         ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title) + '</span><span class="v-sub">' + esc('必須条件 ' + mustShort(jMust) + '・総合判断 ' + (jOv.label || '未入力')) + '</span></div>'

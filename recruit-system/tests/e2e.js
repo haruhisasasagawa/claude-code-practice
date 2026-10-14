@@ -1527,16 +1527,15 @@ const pdfTextOf = (f) => {
   await pick('continueAfterGraduation', 'undecided');
   await wait(200);
   expect((await page.textContent('#clTaxiAuto')).includes('可・2,500円'), 'E25 タクシー可否・料金を応募情報から自動表示: ' + await page.textContent('#clTaxiAuto'));
-  // 消極属性「短期希望」: 面接での回答（短期）で自動該当 → 「該当しない」で外す
+  // 消極属性は 2026-10-13 に削除（docs/SPEC-script-mode.md 12 章）: 詳細モードのヘッダーにも出さない
   await setCl('values.term', 'short');
   await wait(150);
-  expect((await page.textContent('#clNeg-short')).includes('該当（自動）'), 'E25 短期希望と答えると消極属性「短期希望」が自動で該当: ' + await page.textContent('#clNeg-short'));
+  expect(!(await page.$('#clNeg-short, .cl-negs, [data-cl^="header.negatives"]')) && !(await page.textContent('#clHeader')).includes('消極属性'), 'E25 詳細モードのヘッダーに消極属性（自動・該当・該当しない）が無い');
   expect((await page.textContent('.cl-field[data-item="term"] .cl-auto-hint')).includes('異なります'), 'E25 短期／長期の希望が応募情報（長期）と食い違うと hint');
-  await setCl('header.negatives.short', 'off');
-  await wait(150);
-  expect((await page.textContent('#clNeg-short')).includes('該当しない'), 'E25 「該当しない」で手動で外せる');
-  await setCl('header.negatives.short', '');
   await setCl('values.term', 'long');
+  // 「すべて説明した」は詳細モードの【説明】【合否連絡】にも出る
+  expect(await st(() => document.querySelectorAll('#stepContent .cl-block-explain [data-action="explain-all"], #stepContent .cl-block-notify [data-action="explain-all"]').length) === 5,
+    'E25 詳細モードの【説明】4 ブロック・【合否連絡】に「すべて説明した」');
   // 必須条件「週3日」一致・指定繁忙期は未確認のまま・① の説明 2 件・② の説明 3 件・契約開始日・メモ・○4 △3 ＋採用
   await setCl('values.must_weekly', 'match');
   await page.click('label.cl-check[data-item="ex_fare"]');
@@ -1586,7 +1585,7 @@ const pdfTextOf = (f) => {
   expect(r25.checklist.notes.conditions_q === MEMO25, 'E25 閉じタグ・コメント開始を含むメモも埋め込みデータで一致');
   expect(saved25.html.includes('data-sec="checklist"') && saved25.html.includes('cl-s-no">①</span><span class="cl-s-title">勤務条件') && saved25.html.includes('前職は飲食で2年') && !saved25.html.includes('面接評価（旧形式') && saved25.html.includes('id="rtPrintChecklist"'),
     'E25 レポートに「面接チェックリスト」節（① 勤務条件・メモ）と A4 報告のボタン・旧形式の節なし');
-  // 節（画面表示部分。印刷専用の #clSheet を除く）にも台本ヘッダー（面接日・担当・タクシー・消極属性・応募した求人）とページ題名・確認点の補足が出る
+  // 節（画面表示部分。印刷専用の #clSheet を除く）にも台本ヘッダー（面接日・担当・タクシー・応募した求人）とページ題名・確認点の補足が出る（消極属性は削除）
   const sec25 = await (async () => {
     const pg = await browser.newPage();
     await pg.setContent(saved25.html, { waitUntil: 'load' });
@@ -1594,8 +1593,8 @@ const pdfTextOf = (f) => {
     await pg.close();
     return t;
   })();
-  expect(['面接日', '2026/10/10', '担当', 'タクシー可否・料金', '可・2,500円', '消極属性', '応募した求人', '必須条件一致・継続性', '人物確認・逆質問', '「大丈夫です」のみ連呼は特に要注意。'].every(k => sec25.includes(k)),
-    'E25 レポートの節に面接日・担当・タクシー・消極属性・応募した求人・ページ題名・確認点の補足: ' + ['面接日', '2026/10/10', '担当', 'タクシー可否・料金', '可・2,500円', '消極属性', '応募した求人', '必須条件一致・継続性', '人物確認・逆質問', '「大丈夫です」のみ連呼は特に要注意。'].filter(k => !sec25.includes(k)).join('・'));
+  expect(['面接日', '2026/10/10', '担当', 'タクシー可否・料金', '可・2,500円', '応募した求人', '必須条件一致・継続性', '人物確認・逆質問', '「大丈夫です」のみ連呼は特に要注意。'].every(k => sec25.includes(k)) && !sec25.includes('消極属性') && !sec25.includes('朝～12時のみ'),
+    'E25 レポートの節に面接日・担当・タクシー・応募した求人・ページ題名・確認点の補足（消極属性なし）: ' + ['面接日', '2026/10/10', '担当', 'タクシー可否・料金', '可・2,500円', '応募した求人', '必須条件一致・継続性', '人物確認・逆質問', '「大丈夫です」のみ連呼は特に要注意。'].filter(k => !sec25.includes(k)).join('・'));
   await page.click('#btnNew');
   await wait(200);
   await page.setInputFiles('#fileInput', saved25.file);
@@ -1694,15 +1693,15 @@ const pdfTextOf = (f) => {
   }));
   expect(p27.app === 'none' && p27.sheet === 'block' && p27.pages === 2 && p27.stamps === 3, 'E27 印刷時はアプリを隠し、報告（2 ページ構成・押印 3 枠）を出す: ' + JSON.stringify({ app: p27.app, sheet: p27.sheet, pages: p27.pages, stamps: p27.stamps }));
   expect(p27.judge.includes(r25.judgment.title) && p27.head.includes('面接 花子') && p27.head.includes('2026/10/10') && p27.head.includes('可・2,500円'), 'E27 ヘッダー（応募者・面接日・タクシー）と判定サマリーの結果');
-  // ヘッダーのチップ（タクシー可否・料金／消極属性…）は印刷でも見える（Step3 の目次 .cl-chip の印刷規則に巻き込まれない）
+  // ヘッダーのチップ（タクシー可否・料金／応募した求人／勤務期間…）は印刷でも見える（Step3 の目次 .cl-chip の印刷規則に巻き込まれない）
   const chips27 = await st(() => Array.from(document.querySelectorAll('#clSheet .cl-sh-chips > *')).map(el => getComputedStyle(el).display));
-  expect(chips27.length >= 3 && chips27.every(d => d !== 'none'), 'E27 印刷時もヘッダーのチップ（タクシー・消極属性）を表示: ' + chips27.join(','));
+  expect(chips27.length >= 3 && chips27.every(d => d !== 'none') && !p27.head.includes('消極属性'), 'E27 印刷時もヘッダーのチップ（タクシー・求人など。消極属性なし）を表示: ' + chips27.join(','));
   const pdf27a = path.join(OUT, 'checklist-app.pdf');
   await page.pdf({ path: pdf27a, format: 'A4', preferCSSPageSize: true, printBackground: true });
   const n27a = pdfPages27(pdf27a);
   expect(pagesOk(n27a), 'E27 アプリの面接チェックリスト報告は A4 1〜2 枚: ' + pagesTxt(n27a));
   const txt27a = pdfText27(pdf27a);
-  expect(txt27a === null || (txt27a.includes('タクシー可否') && txt27a.includes('消極属性')), 'E27 アプリの報告 PDF にタクシー可否・消極属性: ' + (txt27a === null ? 'pdftotext なし（省略）' : 'ok'));
+  expect(txt27a === null || (txt27a.includes('タクシー可否') && !txt27a.includes('消極属性')), 'E27 アプリの報告 PDF にタクシー可否（消極属性なし）: ' + (txt27a === null ? 'pdftotext なし（省略）' : 'ok'));
   await page.emulateMedia({ media: 'screen' });
   await st(() => window.RecruitApp.prepareChecklistSheet(false));
   expect(await st(() => !document.body.classList.contains('print-checklist') && document.getElementById('clSheet').innerHTML === ''), 'E27 印刷後に通常表示へ戻る（#clSheet は空）');
@@ -2211,7 +2210,6 @@ const pdfTextOf = (f) => {
     if (o.category) await page.selectOption('[data-field="category"]', o.category);
     if (o.graduationDate) await page.fill('[data-field="graduationDate"]', o.graduationDate);
     if (o.posting) await setCl('header.posting', o.posting);
-    for (const id of (o.negatives || [])) await page.click('label:has([data-cl="header.negatives.' + id + '"])');
     if (o.taxi) await page.fill('[data-cl="header.taxi"]', o.taxi);
     if (o.interviewer) await page.selectOption('[data-cl="header.interviewer"]', o.interviewer);
     if (o.notes) await page.fill('[data-field="reviewerNotes"]', o.notes);
@@ -2246,13 +2244,30 @@ const pdfTextOf = (f) => {
       card: !!q('#scriptApplicantCard'), name: !!q('#scriptApplicantCard [data-field="name"][data-required]'), age: !!q('[data-field="age"]'),
       gender: !!q('select[data-field="gender"]'), category: !!q('select[data-field="category"]'),
       posting: document.querySelectorAll('#saPosting [data-action="cl-set"][data-cl="header.posting"]').length,
-      negShort: !!q('#saNegatives input[type="checkbox"][data-cl="header.negatives.short"]'), negMorning: !!q('#saNegatives input[type="checkbox"][data-cl="header.negatives.morningOnly"]'),
+      noNeg: !q('#saNegatives') && !q('[data-cl^="header.negatives"]') && !q('#scriptApplicantCard').textContent.includes('消極属性'),
       taxi: !!q('#saTaxi[data-cl="header.taxi"]'), date: q('#saDate[data-cl="header.date"]') ? q('#saDate').value : null,
-      ivOpts: iv ? Array.from(iv.options).map(o => o.value) : [], notes: notes ? notes.closest('.field').textContent.includes('備考（面接者メモ）') : false
+      ivOpts: iv ? Array.from(iv.options).map(o => o.value) : [], notes: notes ? notes.closest('.field').textContent.includes('メモ（任意）') && notes.rows === 2 : false
     };
   });
-  expect(f32.card && f32.name && f32.age && f32.gender && f32.category && f32.posting === 2 && f32.negShort && f32.negMorning && f32.taxi && f32.date === '2026-10-10' && f32.ivOpts.includes('笹川 晴央') && f32.notes,
-    'E32 Step① に氏名（必須）・年齢・性別・区分・応募した求人・消極属性・タクシー可否・料金・面接日（今日）・面接担当者（名簿）・備考（面接者メモ）: ' + JSON.stringify(f32));
+  expect(f32.card && f32.name && f32.age && f32.gender && f32.category && f32.posting === 2 && f32.noNeg && f32.taxi && f32.date === '2026-10-10' && f32.ivOpts.includes('笹川 晴央') && f32.notes,
+    'E32 Step① に氏名（必須）・年齢・性別・区分・応募した求人・タクシー可否・料金・面接日（今日）・面接担当者（名簿）・メモ（任意・2 行）。消極属性は無い: ' + JSON.stringify(f32));
+  // 1 枚のカード・3 行（docs/SPEC-script-mode.md 12 章）。説明文は冒頭の 1 行だけ・各入力の下の補足文なし
+  const lay32 = await page.evaluate(() => {
+    const card = document.getElementById('scriptApplicantCard');
+    const rows = Array.from(card.querySelectorAll(':scope > .field-row'));
+    const sel = (row) => Array.from(row.children).map(f => { const c = f.querySelector('[data-field], [data-cl], [id^="sa"]'); return f.id || (c ? (c.dataset.field || c.id) : ''); });
+    const btns = Array.from(document.querySelectorAll('#saPosting .seg-btn')).map(b => b.textContent);
+    return {
+      cards: document.querySelectorAll('#stepContent .card').length, rows: rows.length, r: rows.map(sel),
+      lead: Array.from(card.querySelectorAll('.card-head p')).map(e => e.textContent), hints: card.querySelectorAll('.hint').length, subs: card.querySelectorAll('h3.sub').length,
+      ivTitle: (document.getElementById('saInterviewer').title || '').includes('応募者の管理（押印）'), taxiPh: document.getElementById('saTaxi').placeholder,
+      btns, postLabel: (document.querySelector('#saPosting > label') || {}).textContent
+    };
+  });
+  expect(lay32.cards === 1 && lay32.rows === 3 && JSON.stringify(lay32.r) === JSON.stringify([['name', 'age', 'gender', 'category', 'grp-graduation'], ['saDate', 'saInterviewer', 'saPosting'], ['saTaxi', 'reviewerNotes']]) &&
+    JSON.stringify(lay32.lead) === JSON.stringify(['氏名だけ必須です。あとは分かる範囲で入力してください。']) && lay32.hints === 0 && lay32.subs === 0 && lay32.ivTitle && lay32.taxiPh === '例: 可・2,500円' &&
+    JSON.stringify(lay32.btns) === JSON.stringify(['通常', '短期']) && lay32.postLabel === '応募した求人',
+    'E32 Step① は 1 枚・3 行（氏名・年齢・性別・区分〔卒業予定〕／面接日・面接担当者・求人〔通常・短期〕／タクシー・メモ）・説明は冒頭 1 行・補足文なし（名簿の案内は title）: ' + JSON.stringify(lay32));
   // 5. 詳細項目なし
   const absent32 = [];
   for (const sel of ['[data-field="workDays"]', '[data-field="anyDay"]', '[data-field="shifts.mon.start"]', '[data-field="daysMin"]', '[data-field="daysMax"]', '[data-field="workPeriod"]', '[data-field="commuteMethod"]',
@@ -2267,25 +2282,72 @@ const pdfTextOf = (f) => {
   await wait(100);
   const grad32b = await visible('#grp-graduation');
   expect(grad32a && !grad32b, 'E32 卒業予定年月は学生の区分のときだけ表示');
+  await page.selectOption('[data-field="category"]', '大学2年生');
+  await wait(100);
+  const row32 = await page.evaluate(() => ['name', 'age', 'gender', 'category', 'graduationDate'].map(k => Math.round(document.querySelector('[data-field="' + k + '"]').getBoundingClientRect().top)));
+  expect(row32.every(t => Math.abs(t - row32[0]) <= 2), 'E32 1440px では卒業予定年月も 1 行目（氏名・年齢・性別・区分と同じ行）の末尾: ' + row32.join(','));
+  await page.selectOption('[data-field="category"]', '');
+  await wait(100);
   // 7. 氏名が空
   await page.click('[data-action="script-next"]');
   await wait(300);
   expect(await step() === 1 && (await toastText()).includes('必須'), 'E32 氏名が空なら面接チェックリストへ進めない');
   // 8. 入力
-  await fillScript({ name: '台本 花子', age: 20, gender: '女性', category: '大学2年生', graduationDate: '2029-03', posting: 'short', negatives: ['short'], taxi: '可・2,500円', interviewer: '笹川 晴央', notes: '電話の受け答えが丁寧。' });
+  await fillScript({ name: '台本 花子', age: 20, gender: '女性', category: '大学2年生', graduationDate: '2029-03', posting: 'short', taxi: '可・2,500円', interviewer: '笹川 晴央', notes: '電話の受け答えが丁寧。' });
   const s32 = await st(() => { const s = window.RecruitApp.state; return { a: s.applicant, h: s.checklist.header }; });
   expect(s32.a.name === '台本 花子' && s32.a.age === '20' && s32.a.gender === '女性' && s32.a.category === '大学2年生' && s32.a.graduationDate === '2029-03' && s32.a.reviewerNotes === '電話の受け答えが丁寧。' &&
-    s32.h.posting === 'short' && s32.h.negatives.short === 'on' && !s32.h.negatives.morningOnly && s32.h.taxi === '可・2,500円' && s32.h.interviewer === '笹川 晴央' && s32.h.date === '2026-10-10',
+    s32.h.posting === 'short' && s32.h.negatives === undefined && s32.h.taxi === '可・2,500円' && s32.h.interviewer === '笹川 晴央' && s32.h.date === '2026-10-10',
     'E32 Step① の入力は applicant と checklist.header に入る: ' + JSON.stringify(s32.h));
   // 9. 右サマリー
   const sum32 = await page.textContent('#summaryPanel');
-  expect(['台本 花子', '大学2年生', '20歳', '短期希望', '短期求人', '笹川 晴央'].every(t => sum32.includes(t)) && !['シフト貢献度', '留意点', '通勤'].some(t => sum32.includes(t)),
-    'E32 右サマリー（台本モード）に氏名・属性・消極属性・求人・担当。貢献度・留意点・通勤は出さない');
+  expect(['台本 花子', '大学2年生', '20歳', '短期求人', '笹川 晴央'].every(t => sum32.includes(t)) && !['シフト貢献度', '留意点', '通勤', '消極属性', '短期希望', '朝～12時のみ'].some(t => sum32.includes(t)),
+    'E32 右サマリー（台本モード）に氏名・属性・短期求人・担当。消極属性・貢献度・留意点・通勤は出さない');
+  const sa32 = await page.evaluate(() => { const c = document.getElementById('sumApplicant'); return { kids: Array.from(c.children).filter(e => e.tagName !== 'H4').map(e => e.id || e.className), badges: Array.from(c.querySelectorAll('.badge')).map(b => b.textContent) }; });
+  expect(JSON.stringify(sa32.kids) === JSON.stringify(['sum-name', 'sum-sub', 'sumDate', 'sumInterviewer']) && JSON.stringify(sa32.badges) === JSON.stringify(['短期求人']),
+    'E32 右サマリーの「応募者」は 氏名・区分/年齢/性別・面接日・担当 の 4 行（チップは短期求人 1 つだけ）: ' + JSON.stringify(sa32));
+  await setCl('header.posting', 'regular');
+  await wait(100);
+  const sa32b = await page.$$eval('#sumApplicant .badge', els => els.map(b => b.textContent));
+  expect(sa32b.length === 0 && !(await page.textContent('#sumApplicant')).includes('通常求人'), 'E32 求人が通常なら右サマリーに求人のチップを出さない: ' + JSON.stringify(sa32b));
+  await setCl('header.posting', 'short');
+  await wait(100);
+  // 1440px・1280px で 1 画面に収まる（スクロールなしで「面接チェックリストへ進む →」まで見える）
+  const fit32 = [];
+  for (const [w, h] of [[1440, 900], [1280, 800]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await wait(200);
+    fit32.push(await page.evaluate(([w, h]) => { window.scrollTo(0, 0); const r = document.getElementById('saNext').getBoundingClientRect();
+      const cardR = document.getElementById('scriptApplicantCard').getBoundingClientRect();
+      const inCard = Array.from(document.querySelectorAll('#scriptApplicantCard input, #scriptApplicantCard select, #scriptApplicantCard textarea, #scriptApplicantCard .seg-btn')).every(el => { const b = el.getBoundingClientRect(); return b.left >= cardR.left - 1 && b.right <= cardR.right + 1; });
+      return { w, bottom: Math.round(r.bottom), h: innerHeight, sy: window.scrollY, inCard }; }, [w, h]));
+  }
+  expect(fit32.every(x => x.bottom <= x.h && x.sy === 0 && x.inCard), 'E32 1440×900・1280×800 でスクロールなしに「面接チェックリストへ進む →」まで見え、入力欄はカードからはみ出さない: ' + JSON.stringify(fit32));
+  // 性別のセレクトは PC 幅（卒業予定年月も出る学生の区分＝1 行目が最も詰まる状態）でも文言が切れない。未選択の文言は「選択」（「選択してください」は狭くて切れる）
+  const gen32 = [];
+  for (const [w, h] of [[1440, 900], [1366, 768], [1280, 800]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await wait(150);
+    gen32.push(await page.evaluate((w) => {
+      const g = document.querySelector('select[data-field="gender"]'); const cs = getComputedStyle(g);
+      const sp = document.createElement('span'); sp.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:' + cs.font; document.body.appendChild(sp);
+      const tw = Math.max.apply(null, Array.from(g.options).map(o => { sp.textContent = o.text; return sp.getBoundingClientRect().width; })); sp.remove();
+      // 文字の領域 = 幅 − 枠 − 左右の余白（右は ▼ の領域。Chromium の ▼ は最大 24px として見積もる）
+      const room = g.getBoundingClientRect().width - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingLeft) - Math.max(parseFloat(cs.paddingRight), 24);
+      const grad = document.getElementById('grp-graduation'); const name = document.querySelector('[data-field="name"]');
+      return { w, width: Math.round(g.getBoundingClientRect().width), text: Math.round(tw), room: Math.round(room), ph: g.options[0].text,
+        oneRow: !!grad && grad.offsetParent !== null && Math.abs(grad.getBoundingClientRect().top - name.closest('.field').getBoundingClientRect().top) <= 2 };
+    }, w));
+  }
+  expect(gen32.every(x => x.ph === '選択' && x.text <= x.room) && gen32.find(x => x.w === 1440).oneRow,
+    'E32 性別のセレクトは 1440・1366・1280px（学生の区分）でも文言（選択／男性／女性／回答しない）が切れない幅: ' + JSON.stringify(gen32));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await wait(200);
   // 10. 390px
   await page.setViewportSize({ width: 390, height: 900 });
   await wait(300);
   const ov32 = await overflowX();
-  expect(ov32 <= 1, 'E32 390px 幅の Step① で横スクロールなし: ' + ov32);
+  const col32 = await page.evaluate(() => ['name', 'age', 'gender', 'category'].map(k => Math.round(document.querySelector('[data-field="' + k + '"]').closest('.field').getBoundingClientRect().left)));
+  expect(ov32 <= 1 && col32.every(x => x === col32[0]), 'E32 390px 幅の Step① は 1 列・横スクロールなし: ' + ov32 + ' ' + col32.join(','));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await wait(200);
   await sshot('40-script-step1.png');
@@ -2303,8 +2365,65 @@ const pdfTextOf = (f) => {
   expect(has33['#cl-conditions'] && has33['#cl-continuity'] && has33['#cl-job'] && has33['#cl-teamwork'] && has33['#cl-reverse'] && has33['#clOverall'] && !has33['#shiftConfirm'] && !has33['#unresolvedAlert'] && !has33['.cl-group-label'],
     'E33 Step② は ①〜⑤ と総合判断だけ（「面接で確認する項目」・未確認の留意点は出さない）: ' + JSON.stringify(has33));
   const hd33 = await page.textContent('#clHeader');
-  expect(['大学2年生', '20歳', '短期希望', '短期求人', '笹川 晴央', '2026/10/10'].every(t => hd33.includes(t)) && !hd33.includes('自動') && !(await page.$('#clHeader input, #clHeader select')),
+  expect(['台本 花子', '大学2年生', '20歳', '短期求人', '可・2,500円', '笹川 晴央', '2026/10/10', '応募者を編集'].every(t => hd33.includes(t)) && !hd33.includes('自動') && !(await page.$('#clHeader input, #clHeader select')),
     'E33 #clHeader の属性は Step① の入力から（読み取り専用・自動の表示なし）');
+  // 1 行に圧縮（氏名・区分・年齢・求人・タクシー・面接日・担当 のチップと「応募者を編集」だけ。題名・説明文・目安時間・消極属性は出さない。docs/SPEC-script-mode.md 12 章）
+  const hl33 = await page.evaluate(() => {
+    const hd = document.getElementById('clHeader');
+    const kids = Array.from(document.querySelectorAll('#clHeaderAttrs > *'));
+    const mids = kids.map(e => { const r = e.getBoundingClientRect(); return Math.round(r.top + r.height / 2); });
+    return { attrs: Array.from(document.querySelectorAll('#clHeaderAttrs .cl-attr')).map(e => e.dataset.attr), mids, h: Math.round(hd.getBoundingClientRect().height),
+      h2: !!hd.querySelector('h2'), min: !!document.getElementById('clMinutesTotal'), edit: !!hd.querySelector('[data-action="to-step"][data-step="1"]') };
+  });
+  expect(JSON.stringify(hl33.attrs) === JSON.stringify(['name', 'category', 'age', 'posting', 'taxi', 'date', 'interviewer']) && Math.max(...hl33.mids) - Math.min(...hl33.mids) <= 4 && hl33.h <= 60 &&
+    !hl33.h2 && !hl33.min && hl33.edit && !['消極属性', '短期希望', '朝～12時のみ', '目安', '台本の順に確認し'].some(t => hd33.includes(t)),
+    'E33 #clHeader は 1 行（氏名・区分・年齢・求人・タクシー・面接日・担当＋応募者を編集。題名・説明文・目安・消極属性なし）: ' + JSON.stringify(hl33));
+  // 本文が狭い 1366px・1280px でもチップは 1 行（チップを一段詰め、「応募者を編集」はカード上端の枠線上・右に出してチップの行から外す）
+  const hn33 = [];
+  for (const [w, h] of [[1366, 768], [1280, 800]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await wait(150);
+    hn33.push(await page.evaluate((w) => {
+      const hd = document.getElementById('clHeader'); hd.scrollIntoView({ block: 'center' }); const cr = hd.getBoundingClientRect();
+      const chips = Array.from(hd.querySelectorAll('.cl-attr')).map(e => e.getBoundingClientRect());
+      const mids = chips.map(r => r.top + r.height / 2);
+      const ed = hd.querySelector('.cl-head-edit'); const er = ed.getBoundingClientRect();
+      const hit = document.elementFromPoint(er.left + er.width / 2, er.top + er.height / 2);
+      return { w, h: Math.round(cr.height), spread: Math.round(Math.max(...mids) - Math.min(...mids)), label: hd.querySelector('[data-attr="date"]').textContent,
+        edit: ed.textContent, editIn: er.width > 0 && er.left >= cr.left && er.right <= cr.right && er.top >= cr.top - 12 && er.bottom <= cr.bottom,
+        noOverlap: chips.every(r => r.right <= er.left || r.left >= er.right || r.bottom <= er.top || r.top >= er.bottom), clickable: !!hit && (hit === ed || ed.contains(hit)) };
+    }, w));
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await wait(150);
+  expect(hn33.every(x => x.h <= 60 && x.spread <= 4 && x.edit === '応募者を編集' && x.editIn && x.noOverlap && x.clickable && x.label === '2026/10/10'),
+    'E33 1366px・1280px でも #clHeader のチップは 1 行（面接日はラベルなしの日付）・「応募者を編集」はカードの右上でチップと重ならず押せる: ' + JSON.stringify(hn33));
+  // 「すべて説明した」（docs/SPEC-script-mode.md 12 章）。求人が短期なので「※短期求人のみ」も付く
+  const ea33 = await page.$$eval('#stepContent [data-action="explain-all"]', els => els.map(e => e.dataset.block + ':' + e.textContent));
+  expect(JSON.stringify(ea33) === JSON.stringify(['conditions_explain:すべて説明した', 'continuity_explain:すべて説明した', 'job_explain:すべて説明した', 'teamwork_explain:すべて説明した', 'reverse_notify:すべて説明した']),
+    'E33 【説明】4 ブロックと⑤【合否連絡】の見出しの右に「すべて説明した」: ' + JSON.stringify(ea33));
+  const exVals = (ids) => st(ids => { const v = window.RecruitApp.state.checklist.values; return ids.map(id => v[id] === true); }, ids);
+  const exUi = (ids) => st(ids => ids.map(id => { const l = document.querySelector('label.cl-check[data-item="' + id + '"]'); return !!l && l.classList.contains('on') && l.querySelector('input').checked; }), ids);
+  const EX1 = ['ex_fare', 'ex_hours', 'ex_contract', 'ex_switch'];
+  const exAll = (blk) => page.click('[data-action="explain-all"][data-block="' + blk + '"]').then(() => wait(120));
+  const exTxt = (blk) => page.textContent('[data-action="explain-all"][data-block="' + blk + '"]');
+  await exAll('conditions_explain');
+  const ea33a = { v: await exVals(EX1), ui: await exUi(EX1), t: await exTxt('conditions_explain'), other: await exVals(['ex_submit']) };
+  expect(ea33a.v.every(Boolean) && ea33a.ui.every(Boolean) && ea33a.t === 'すべて外す' && !ea33a.other[0], 'E33 1 クリックで ① の【説明】を全部チェック（短期求人なので ※ の 2 項目も）・ボタンは「すべて外す」・他のブロックは触らない: ' + JSON.stringify(ea33a));
+  await exAll('conditions_explain');
+  const ea33b = { v: await exVals(EX1), ui: await exUi(EX1), t: await exTxt('conditions_explain') };
+  expect(ea33b.v.every(x => !x) && ea33b.ui.every(x => !x) && ea33b.t === 'すべて説明した' && await st(() => !Object.keys(window.RecruitApp.state.checklist.values).some(k => k.indexOf('ex_') === 0)),
+    'E33 もう一度押すと全部外す（values から消える）・ボタンは「すべて説明した」: ' + JSON.stringify(ea33b));
+  for (const id of ['ex_submit', 'ex_phone', 'ex_absence']) await page.click('label.cl-check[data-item="' + id + '"]');
+  await wait(120);
+  expect(await exTxt('continuity_explain') === 'すべて外す', 'E33 個別に全部チェックしてもボタンは「すべて外す」に変わる');
+  await exAll('continuity_explain');
+  expect((await exVals(['ex_submit', 'ex_phone', 'ex_absence'])).every(x => !x), 'E33 「すべて外す」で ② の【説明】を全部外す');
+  await exAll('reverse_notify');
+  const nt33 = await st(() => { const d = window.RecruitApp.state.profile.checklist; const b = d.sections.find(s => s.id === 'reverse').blocks.find(b => b.type === 'notify'); const v = window.RecruitApp.state.checklist.values; return b.items.map(it => v[it.id] === true); });
+  expect(nt33.length >= 2 && nt33.every(Boolean) && await exTxt('reverse_notify') === 'すべて外す', 'E33 ⑤【合否連絡】も「すべて説明した」で全部チェック: ' + JSON.stringify(nt33));
+  await exAll('reverse_notify');
+  await exAll('conditions_explain');   // 撮影用に ① の【説明】だけチェックしておく
   const auto33 = await page.$$eval('#stepContent .cl-auto, #stepContent .cl-auto-hint', els => els.map(e => e.textContent.trim()).filter(Boolean));
   expect(auto33.length === 0, 'E33 必須条件・記入欄に応募情報からの自動表示（見込み・自動: …）を出さない: ' + auto33.join(' / '));
   expect((await page.textContent('#backToApplicant')).trim() === '← 応募者に戻る' && (await page.textContent('#toReportBtn')).trim() === '報告書へ進む →' && !(await page.$('#stepContent [data-action="to-step"][data-step="2"]')),
@@ -2386,6 +2505,9 @@ const pdfTextOf = (f) => {
   const out34 = ['<h2>面接者への申し送り（留意点）</h2>', '<h2>シフト貢献度</h2>', '<h2>面接で確認した情報</h2>', '<h2>面接前に分かっている情報（未確認）</h2>', '<h2>応募時の情報</h2>', '<h2>面接者への申し送りコメント</h2>',
     'id="rtPrintSheet"', '<section class="sec" data-sec="contrib"', '<section class="sec" data-sec="handoff"'].filter(t => saved34.html.includes(t));
   expect(!in34.length && !out34.length, 'E34 保存 HTML は台本モードの節だけ（留意点・面接で確認した情報・シフト貢献度・申し送りの節と申し送りシートの印刷ボタンなし）: ' + JSON.stringify({ missing: in34, extra: out34 }));
+  // 消極属性は 2026-10-13 に削除: 保存 HTML（埋め込みの記録を含む）に「消極属性」「朝～12時のみ」が無い（「短期希望」は台本の質問文にだけ出るので、ヘッダー・応募者情報・A4 のヘッダーで調べる）
+  expect(!saved34.html.includes('消極属性') && !saved34.html.includes('朝～12時のみ') && r34.checklist.header.negatives === undefined && !('negatives' in r34.checklistDef.header),
+    'E34 保存 HTML・記録に消極属性が無い');
   const rp34Err = [];
   const rp34 = await newReportPage(rp34Err);
   await rp34.goto('file://' + saved34.file);
@@ -2393,6 +2515,10 @@ const pdfTextOf = (f) => {
   const cls34 = await rp34.evaluate(() => document.body.className);
   expect(cls34.includes('view-report') && cls34.includes('mode-script') && await shownIn(rp34, '#clPaper .cl-sheet') && !(await shownIn(rp34, '.rh')) && await shownIn(rp34, '#decision') && await shownIn(rp34, '#mgmt') && await dispIn(rp34, '#clSheet') === 'none',
     'E34 保存 HTML は報告書表示で開く（紙プレビュー・最終合否・押印。印刷用 #clSheet は非表示）: ' + cls34);
+  const hd34 = await rp34.evaluate(() => ({ paper: (document.querySelector('#clPaper .cl-sheet-head') || {}).textContent || '', sheet: (document.querySelector('#clSheet .cl-sheet-head') || {}).textContent || '', rh: (document.querySelector('.rh') || {}).textContent || '' }));
+  expect(['台本 花子', '大学2年生・20歳・女性', '2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央'].every(t => hd34.paper.includes(t) && hd34.sheet.includes(t)) &&
+    [hd34.paper, hd34.sheet, hd34.rh].every(t => !t.includes('短期希望') && !t.includes('消極属性')) && !hd34.paper.includes('目安') && hd34.rh.includes('短期求人'),
+    'E34 A4 のヘッダーは 氏名・区分・年齢・性別・卒業予定・求人・タクシー・面接日・担当（消極属性・短期希望・目安なし）: ' + JSON.stringify(hd34));
   const pj34 = await txtIn(rp34, '#clPaper .cl-judge');
   expect(pj34.includes('総合判断') && pj34.includes('採用推奨') && !pj34.includes('シフト貢献度'), 'E34 紙プレビューの判定サマリー（総合判断・結果。貢献度なし）');
   await rp34.screenshot({ path: path.join(OUT, '44-script-report.png'), fullPage: true });
@@ -2403,8 +2529,13 @@ const pdfTextOf = (f) => {
   expect(JSON.stringify(secs34) === JSON.stringify(['applicant', 'checklist', 'judgment', 'mgmt']) && await shownIn(rp34, '.rh') && !dash34.includes('シフト貢献度') && !dash34.includes('留意点'),
     'E34 「詳細」は ヘッダー・ダッシュ・応募者情報・面接チェックリスト・採用可否判定・応募者の管理 だけ: ' + secs34.join(','));
   const app34 = await txtIn(rp34, 'section.sec[data-sec="applicant"]');
-  expect(['台本 花子', '20歳', '女性', '大学2年生', '2029年3月', '短期求人', '短期希望', '可・2,500円', '2026/10/10', '笹川 晴央', '電話の受け答えが丁寧。'].every(t => app34.includes(t)) && !app34.includes('通勤') && !app34.includes('勤務期間'),
-    'E34 「応募者情報」は Step① の項目だけ');
+  expect(['台本 花子', '20歳', '女性', '大学2年生', '2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央', '電話の受け答えが丁寧。'].every(t => app34.includes(t)) && !app34.includes('通勤') && !app34.includes('勤務期間') &&
+    !app34.includes('短期希望') && !app34.includes('消極属性'),
+    'E34 「応募者情報」は Step① の項目だけ（消極属性なし）');
+  const memo34 = await rp34.evaluate(() => Array.from(document.querySelectorAll('section.sec[data-sec="applicant"] th')).map(e => e.textContent.trim()));
+  const paperMemo34 = await rp34.evaluate(() => Array.from(document.querySelectorAll('#clSheet .cl-ov-notes .cl-ov-k')).map(e => e.textContent.trim()));
+  expect(memo34.includes('メモ') && !memo34.some(t => t.includes('備考')) && paperMemo34.includes('メモ') && !paperMemo34.includes('備考'),
+    'E34 Step① の「メモ（任意）」は保存 HTML の応募者情報・A4 でも「メモ」（「備考」の見出しは出さない）: ' + JSON.stringify({ memo34, paperMemo34 }));
   const jd34 = await txtIn(rp34, 'section.sec[data-sec="judgment"]');
   expect(['必須条件', '面接評価（確認点）', '総合判断', '採用推奨'].every(t => jd34.includes(t)) && !jd34.includes('2軸') && !jd34.includes('シフト貢献度'), 'E34 「採用可否判定」は台本モードの要約（必須条件・採点・総合判断・結果）');
   const pb34 = await rp34.$$eval('.rtool button[id^="rtPrint"]', els => els.map(e => e.id));
@@ -2432,7 +2563,7 @@ const pdfTextOf = (f) => {
   const n34 = pdfPages30(pdf34);
   const t34 = pdfText30(pdf34);
   console.log('script-report.pdf pages:', n34);
-  expect((n34 === -1 || (n34 >= 1 && n34 <= 2)) && (t34 === null || (t34.includes('面接チェックリスト報告') && !t34.includes('シフト貢献度'))),
+  expect((n34 === -1 || (n34 >= 1 && n34 <= 2)) && (t34 === null || (t34.includes('面接チェックリスト報告') && !t34.includes('シフト貢献度') && !t34.includes('消極属性'))),
     'E34 報告書表示のまま印刷すると面接チェックリスト報告（A4 2 ページ以内・貢献度なし）: ' + n34);
   expect(rp34Err.length === 0, 'E34 保存 HTML のページエラー・console error なし: ' + (rp34Err.join(' / ') || 'none'));
   await rp34.close();
@@ -2497,7 +2628,7 @@ const pdfTextOf = (f) => {
       band: !!sc.querySelector('[data-bind="evaluation.thresholds.recommendPct"]') && !!sc.querySelector('[data-bind="evaluation.thresholds.reviewPct"]'),
       mxNote: !document.querySelector('#s-matrix [data-bind^="evaluation.thresholds."]') && ((document.getElementById('mxBandNote') || {}).textContent || '').includes('「面接チェックリスト」の節'),
       dup: binds.filter((b, i) => binds.indexOf(b) !== i),
-      steps: t.includes('説明（Step② に表示）') && t.includes('Step② の説明文') && t.includes('消極属性（Step① でチェックします）'),
+      steps: t.includes('説明（Step② に表示）') && t.includes('Step② の説明文') && !t.includes('消極属性') && !sc.querySelector('[data-bind^="checklist.header.negatives"], [data-action="cl-neg-add"]'),
       mgmt: document.getElementById('s-mgmt').textContent.includes('Step③ に「採用」「不採用」のボタン'),
       io: io.includes('新しい設定項目が既定値で補われます') && !io.includes('2軸判定'),
       hint: document.querySelector('[data-bind="management.fields[0].hint"]').value
@@ -2518,14 +2649,15 @@ const pdfTextOf = (f) => {
     return {
       hold: !!sc.querySelector('[data-bind="evaluation.holdOnUnresolvedBlock"]') && !!sc.querySelector('[data-bind="evaluation.holdOnHighschoolException"]'),
       autos: sc.querySelectorAll('select[data-bind$=".auto"]').length,
-      texts: ['説明（Step3 に表示）', 'Step3 の説明文', '応募情報から自動表示し、Step3 で上書きできます', '高・中の境界（%）は「2軸判定」で設定します'].filter(w => !t.includes(w)),
+      texts: ['説明（Step3 に表示）', 'Step3 の説明文', '高・中の境界（%）は「2軸判定」で設定します'].filter(w => !t.includes(w)),
+      noNeg: !t.includes('消極属性') && !t.includes('朝～12時のみ') && !sc.querySelector('[data-bind^="checklist.header.negatives"], [data-bind="checklist.header.morningOnlyEnd"], [data-action="cl-neg-add"]'),
       band: !sc.querySelector('[data-bind^="evaluation.thresholds."]') && !!document.querySelector('#s-matrix [data-bind="evaluation.thresholds.recommendPct"]'),
       mgmt: document.getElementById('s-mgmt').textContent.includes('Step4 に「採用」「不採用」のボタン'),
       full: !document.getElementById('s-checklist-full')
     };
   });
-  expect(clF35.hold && clF35.autos > 0 && !clF35.texts.length && clF35.band && clF35.mgmt && clF35.full,
-    'E35 詳細モードの「面接チェックリスト」節は従来どおり（要判断・高校生の設定・自動表示・Step3/Step4・境界は「2軸判定」）: ' + JSON.stringify(clF35));
+  expect(clF35.hold && clF35.autos > 0 && !clF35.texts.length && clF35.band && clF35.mgmt && clF35.full && clF35.noNeg,
+    'E35 詳細モードの「面接チェックリスト」節は従来どおり（要判断・高校生の設定・自動表示・Step3/Step4・境界は「2軸判定」。消極属性の行・自動判定・終了時刻は削除）: ' + JSON.stringify(clF35));
   await saveSettings();
   const t35b = await toastText();
   await toView('judge');
@@ -2604,8 +2736,20 @@ const pdfTextOf = (f) => {
   await page.click('#btnNew');
   await wait(200);
   await fillScript({ name: '台本 次郎', age: 22, gender: '男性', category: 'フリーター', interviewer: '笹川 晴央' });
+  await setCl('header.posting', 'regular');
   await page.click('[data-action="script-next"]');
   await wait(400);
+  // 「すべて説明した」: 求人が通常なら「※短期求人のみ」の項目は付けない（docs/SPEC-script-mode.md 12 章）
+  await page.click('[data-action="explain-all"][data-block="conditions_explain"]');
+  await wait(120);
+  const ex37 = await st(() => { const v = window.RecruitApp.state.checklist.values; return { fare: v.ex_fare === true, hours: v.ex_hours === true, contract: v.ex_contract === true, sw: v.ex_switch === true,
+    t: document.querySelector('[data-action="explain-all"][data-block="conditions_explain"]').textContent }; });
+  expect(ex37.fare && ex37.hours && !ex37.contract && !ex37.sw && ex37.t === 'すべて外す', 'E37 求人が通常なら「すべて説明した」で ※短期求人のみ の項目は付かない（それ以外で全部 → 「すべて外す」）: ' + JSON.stringify(ex37));
+  await page.click('label.cl-check[data-item="ex_contract"]');   // 通常求人でも手で付けた ※ の項目は「すべて外す」で外れる
+  await wait(100);
+  await page.click('[data-action="explain-all"][data-block="conditions_explain"]');
+  await wait(120);
+  expect(await st(() => !['ex_fare', 'ex_hours', 'ex_contract', 'ex_switch'].some(id => window.RecruitApp.state.checklist.values[id] === true)), 'E37 「すべて外す」はブロックの全項目（手で付けた ※ の項目も）を外す');
   await rateAll('good');
   expect(await step() === 3 && await st(() => window.RecruitApp.state.judgment) === null, 'E37 ② では未判定（state.judgment なし）');
   // 1. ② から保存（③ は開かない）
@@ -2695,6 +2839,44 @@ const pdfTextOf = (f) => {
   await saveRecord('script-step1-save.html');
   const t37c = await toastText();
   expect(t37c.includes('総合判断が未入力です'), 'E37 チェックリストが未入力でも総合判断が空なら保存時に警告: ' + t37c);
+
+  // =====================================================================
+  // E38 入力の簡素化: 旧レコード（消極属性入り）の読み込み（docs/SPEC-script-mode.md 12 章）
+  // =====================================================================
+  console.log('\n== E38 旧レコード（消極属性入り）の読み込み ==');
+  const old38 = parseRecord(fs.readFileSync(file34b, 'utf8'));
+  old38.checklist.header.negatives = { short: 'on', morningOnly: 'on' };
+  old38.checklistDef.header.negatives = [{ id: 'short', label: '短期希望', auto: 'shortTerm' }, { id: 'morningOnly', label: '朝～12時のみ', auto: 'morningOnly' }];
+  old38.checklistDef.header.morningOnlyEnd = '12:00';
+  const html38 = await st(r => window.RecruitStorage.generateReportHTML(r, window.RecruitApp.state.profile), old38);
+  const file38 = path.join(OUT, 'script-old-negatives.html');
+  fs.writeFileSync(file38, html38);
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', file38);
+  await wait(500);
+  const s38 = await st(() => { const s = window.RecruitApp.state; return { step: s.step, name: s.applicant.name, posting: s.checklist.header.posting, neg: s.checklist.header.negatives, d: s.decision && s.decision.result }; });
+  const sum38 = await page.textContent('#sumApplicant');
+  expect(s38.step === 4 && s38.name === '台本 花子' && s38.posting === 'short' && s38.d === 'hire' && !['短期希望', '消極属性', '朝～12時のみ'].some(t => sum38.includes(t)) && sum38.includes('短期求人'),
+    'E38 消極属性入りの旧レコードもエラーなく読め、右サマリーに消極属性を出さない: ' + JSON.stringify(s38));
+  const paper38 = (await txtIn(page, '#appPaper .cl-sheet-head'));
+  expect(paper38.includes('短期求人') && !['短期希望', '消極属性', '朝～12時のみ'].some(t => paper38.includes(t)), 'E38 報告書の紙（A4 ヘッダー）に消極属性を出さない: ' + paper38);
+  await navStep(3);
+  const hd38 = await page.textContent('#clHeader');
+  expect(await step() === 3 && hd38.includes('短期求人') && !['短期希望', '消極属性', '朝～12時のみ'].some(t => hd38.includes(t)), 'E38 ② のヘッダーに消極属性を出さない: ' + hd38);
+  await navStep(1);
+  expect(!(await page.$('#saNegatives, [data-cl^="header.negatives"]')) && !(await page.textContent('#scriptApplicantCard')).includes('短期希望'), 'E38 ① にも消極属性の入力・表示なし');
+  const saved38 = await saveRecord('script-old-negatives-resaved.html');
+  const shown38 = saved38.html.replace(/<script type="application\/json" id="recruit-record">[\s\S]*?<\/script>/, '');
+  expect(!shown38.includes('消極属性') && !shown38.includes('朝～12時のみ') && saved38.rec.checklist.header.posting === 'short' && !('negatives' in saved38.rec.checklistDef.header),
+    'E38 保存し直した HTML の表示部分に消極属性なし・台本（checklistDef）からは外れる');
+  const rp38Err = [];
+  const rp38 = await newReportPage(rp38Err);
+  await rp38.goto('file://' + file38);
+  await rp38.waitForTimeout(300);
+  const p38 = await rp38.evaluate(() => document.body.innerText);
+  expect(rp38Err.length === 0 && !['消極属性', '朝～12時のみ'].some(t => p38.includes(t)) && p38.includes('短期求人'), 'E38 旧レコードから作った保存 HTML もエラーなし・消極属性なし: ' + (rp38Err.join(' / ') || 'ok'));
+  await rp38.close();
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');

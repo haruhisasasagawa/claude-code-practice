@@ -823,7 +823,51 @@ p.handoff-comment { font-size: 13.5px; }
 .cl-head-attrs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cl-attr { display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-size: 13px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
 .cl-attr small { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
-.cl-attr[data-attr="negatives"] { border-color: var(--warn); color: var(--warn); }
+.cl-attr-name { font-size: 14px; font-weight: 700; background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+/* Step② の読み取り専用ヘッダー（1 行。docs/SPEC-script-mode.md 12 章） */
+.card.cl-head-line { padding: 8px 12px; }
+.cl-head-line .cl-head-attrs { gap: 4px; }
+.cl-head-line .cl-attr { padding: 2px 7px; gap: 4px; font-size: 12.5px; }
+.cl-head-line .cl-attr small { font-size: 10.5px; }
+.cl-head-line .cl-attr-name { font-size: 13.5px; }
+/* 「応募者を編集」はリンクの見た目（枠なし）で右端へ */
+.cl-head-line .cl-head-edit { margin-left: auto; padding: 2px 4px; border: 0; background: none; color: var(--accent); font-size: 12.5px; text-decoration: underline; text-underline-offset: 2px; }
+.cl-head-line .cl-head-edit:hover { background: var(--accent-soft); }
+/* 本文が狭い幅（1400px 以下。1280px で本文 約 640px）: チップを一段詰め、「応募者を編集」はカード上端の枠線上・右へ出してチップの行から外す（チップは 1 行のまま） */
+@media screen and (max-width: 1400px) {
+  .card.cl-head-line { position: relative; padding: 8px 10px; }
+  .cl-head-line .cl-head-attrs { gap: 3px; }
+  .cl-head-line .cl-attr { padding: 2px 6px; gap: 3px; font-size: 12px; }
+  .cl-head-line .cl-attr small { font-size: 10px; }
+  .cl-head-line .cl-attr-name { font-size: 13px; }
+  .cl-head-line .cl-head-edit { position: absolute; top: -9px; right: 12px; margin: 0; padding: 0 6px; line-height: 16px; font-size: 11.5px; border-radius: 4px; background: var(--surface); }
+  .cl-head-line .cl-head-edit:hover { background: var(--accent-soft); }
+}
+/* Step① 応募者（1 枚・3 行。docs/SPEC-script-mode.md 12 章） */
+#scriptApplicantCard { padding: 16px 20px 4px; }
+#scriptApplicantCard .card-head { margin-bottom: 10px; align-items: baseline; }
+#scriptApplicantCard .card-head p { width: auto; flex: 1; min-width: 14em; }
+#scriptApplicantCard .field { margin-bottom: 12px; }
+#scriptApplicantCard textarea { min-height: 0; resize: vertical; }
+/* 1 行目は flex（卒業予定年月は学生の区分のときだけ末尾に出る）。狭くて入らないときだけ卒業予定年月が次の行へ回る */
+.sa-row1 { display: flex; flex-wrap: wrap; gap: 0 10px; }
+.sa-row1 > .field { flex: 1.25 1 0; min-width: 118px; }
+.sa-row1 > .field:first-child { flex-grow: 1.3; min-width: 120px; }  /* 氏名 */
+.sa-row1 > .field:nth-child(2) { flex-grow: .55; min-width: 64px; }  /* 年齢（2 桁＋「歳」） */
+.sa-row1 > .field:nth-child(3) { flex-grow: .8; min-width: 116px; }  /* 性別（最長の「回答しない」が▼と重ならない幅。未選択の文言は「選択」） */
+.sa-row1 > .field:nth-child(4) { flex-grow: 1.1; min-width: 110px; } /* 区分 */
+.sa-row1 .inline { flex-wrap: nowrap; gap: 6px; }
+.sa-row1 input, .sa-row1 select { padding-left: 9px; padding-right: 9px; }
+.sa-row1 input[type="number"], .sa-row1 input[type="month"] { min-width: 0; width: 100%; }
+.sa-row1 .inline input { flex: 1 1 auto; }
+.sa-row1 input[type="number"] { -moz-appearance: textfield; appearance: textfield; }   /* 年齢は 2 桁なので増減ボタンを出さない（幅を取らない） */
+.sa-row1 input[type="number"]::-webkit-inner-spin-button, .sa-row1 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.sa-row2 #saPosting .cl-seg { width: 100%; }
+.sa-row2 #saPosting .seg-btn { flex: 1 1 0; }
+.sa-row3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
+@media (max-width: 840px) { .sa-row1 { flex-direction: column; } .sa-row1 > .field { flex: none; min-width: 0; } }
+.sum-attrs .badge { margin-left: 2px; vertical-align: 1px; }
+.cl-all-btn { margin-left: auto; font-weight: 600; }
 .report-paper-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px 2px 14px; }
 .report-paper-cap { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; width: 210mm; max-width: 100%; margin: 0 auto 6px; font-size: 12px; color: var(--muted); }
 .report-paper-cap b { color: var(--text); }
@@ -916,9 +960,6 @@ p.handoff-comment { font-size: 13.5px; }
 .cl-static { font-size: 15px; font-weight: 700; padding: 6px 0; overflow-wrap: anywhere; }
 .cl-static .muted { font-size: 12.5px; font-weight: 600; margin-left: 4px; }
 .cl-total-min { font-weight: 600; }
-.cl-negs { grid-column: span 2; }
-.cl-neg-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.cl-neg-label { font-size: 13px; font-weight: 600; min-width: 7em; }
 .cl-auto { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .cl-auto.tone-ok { color: var(--ok); }
 .cl-auto.tone-warn { color: var(--warn); }
@@ -1022,20 +1063,18 @@ p.handoff-comment { font-size: 13.5px; }
 .cl-contrib-wrap { display: block; }
 #sumMust .sum-val { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 
-@media (max-width: 1100px) { .cl-head-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cl-negs { grid-column: 1 / -1; } }
+@media (max-width: 1100px) { .cl-head-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 840px) {
   .cl-row, .cl-must-row, .cl-rate-row { grid-template-columns: minmax(0, 1fr); }
   .cl-unknown.is-off { display: none; }
   .cl-unknown { justify-self: start; }
   .cl-fields, .cl-checks, .cl-head-grid { grid-template-columns: minmax(0, 1fr); }
-  .cl-negs { grid-column: auto; }
   .cl-nav { top: 0; position: static; }
   .cl-legend { margin-left: 0; }
 }
 @media (max-width: 480px) {
   .seg-btn.wide { padding: 0 8px; font-size: 12.5px; }
   .cl-seg.lg .seg-btn { padding: 0 10px; }
-  .cl-neg-label { min-width: 0; width: 100%; }
   .cl-rate-table th:nth-child(4), .cl-rate-table td.cl-memo-td { display: none; }
 }
 
@@ -1068,11 +1107,9 @@ p.handoff-comment { font-size: 13.5px; }
 .s-cl-item-add { margin-top: 4px; }
 .s-cl-add { margin-top: 8px; align-items: center; }
 .s-cl-add select { width: auto; }
-.s-cl-neg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; gap: 8px; align-items: center; margin-bottom: 6px; }
-.s-cl-neg.s-cl-neg-plain { grid-template-columns: minmax(0, 1fr) auto; }   /* 台本モード: 自動判定の選択が無い（名前と削除だけ） */
 .s-cl-legacy-list { margin: 0 0 6px; padding-left: 1.6em; font-size: 13px; }
 @media (max-width: 720px) {
-  .s-cl-sec-row, .s-cl-block-head, .s-cl-block[data-block-type="note"] .s-cl-block-head, .s-cl-neg { grid-template-columns: minmax(0, 1fr); }
+  .s-cl-sec-row, .s-cl-block-head, .s-cl-block[data-block-type="note"] .s-cl-block-head { grid-template-columns: minmax(0, 1fr); }
   .s-cl-item { grid-template-columns: 1.6em minmax(0, 1fr); }
   .s-cl-item .row-actions { grid-column: 2; }
 }

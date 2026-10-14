@@ -674,7 +674,6 @@
     const pages = Array.isArray(cl.pages) ? cl.pages : (cl.pages = []);
     const oo = U.isObj(cl.overallOptions) ? cl.overallOptions : (cl.overallOptions = {});
     const hd = U.isObj(cl.header) ? cl.header : (cl.header = {});
-    const negs = Array.isArray(hd.negatives) ? hd.negatives : (hd.negatives = []);
     const posting = U.isObj(hd.posting) ? hd.posting : (hd.posting = { label: '', options: [] });
     const nRating = clRatingCount();
     const capOpts = [{ value: 'none', label: '調整しない' }, { value: 'review', label: resultTitle('review') + 'まで' }, { value: 'reject', label: resultTitle('reject') }];
@@ -685,11 +684,6 @@
       pageOpts.push({ value: k, label: k + '枚目' + (pg && pg.title ? '（' + pg.title + '）' : '') });
     }
     const mfields = ((draft.management || {}).fields || []).filter(function (f) { return f && f.id; });
-    const negAuto = [
-      { value: '', label: '自動判定なし' },
-      { value: 'shortTerm', label: '短期希望（勤務期間・短期／長期の希望が短期）' },
-      { value: 'morningOnly', label: '朝～12時のみ（勤務の終了がすべて ' + (hd.morningOnlyEnd || '12:00') + ' まで）' }
-    ];
     const pOpts = Array.isArray(posting.options) ? posting.options : [];
     // 面接評価の帯（高・中・低）の境界 evaluation.thresholds。台本モードはこの節に描く（詳細モードは「2軸判定」の節。同じ data-bind を 2 回描かない）
     const th = (draft.evaluation || {}).thresholds || {};
@@ -731,16 +725,9 @@
       '</div>' +
       '<div class="hint" style="margin:-6px 0 8px">点は 採用 2・保留 1・不採用 0 で固定です。</div>' +
 
+      // 消極属性（negatives・morningOnlyEnd）の行は 2026-10-13 に削除（docs/SPEC-script-mode.md 12 章）
       '<h3 class="sub">ヘッダー</h3>' +
-      '<div class="field"><label>' + (o.scriptLayout ? '消極属性（' + stepRef(1) + ' でチェックします）' : '消極属性（応募情報から自動表示し、Step3 で上書きできます）') + '</label>' +
-        negs.map(function (ng, i) {
-          return '<div class="s-cl-neg' + (o.scriptLayout ? ' s-cl-neg-plain' : '') + '">' + inputTag('checklist.header.negatives[' + i + '].label', { aria: '消極属性の名前' }) +
-            (o.scriptLayout ? '' : selectTag('checklist.header.negatives[' + i + '].auto', negAuto, { aria: '自動判定' })) +
-            '<button type="button" class="btn ghost danger" data-action="cl-neg-del" data-index="' + i + '">削除</button></div>';
-        }).join('') +
-        '<div class="actions" style="margin-top:6px"><button type="button" class="btn sm" data-action="cl-neg-add">＋ 消極属性を追加</button></div></div>' +
       '<div class="field-row">' +
-        (o.scriptLayout ? '' : sInput('checklist.header.morningOnlyEnd', '「朝～12時のみ」の判定の終了時刻', { type: 'time', repaint: true })) +
         sSelect('checklist.header.interviewerField', '担当と連動する押印欄', [{ value: '', label: '連動しない' }].concat(mfields.map(function (f) { return { value: f.id, label: f.label || f.id }; })),
           '担当が空欄のときは、この押印欄の氏名を報告書の担当に使います（自動で押印はしません）。') +
       '</div>' +
@@ -858,18 +845,6 @@
         const order = (draft.options.vacationItems || []).map(function (v) { return v.id; });
         it.autoParams.periods = ps.sort(function (x, z) { return order.indexOf(x) - order.indexOf(z); });
         return true;
-      }
-      case 'cl-neg-add':
-        if (!U.isObj(cl.header)) cl.header = {};
-        if (!Array.isArray(cl.header.negatives)) cl.header.negatives = [];
-        cl.header.negatives.push({ id: U.uid('neg'), label: '新しい消極属性', auto: '' });
-        break;
-      case 'cl-neg-del': {
-        const ng = ((cl.header || {}).negatives || []);
-        const i2 = Number(b.dataset.index);
-        if (!ng[i2] || !window.confirm('消極属性「' + (ng[i2].label || ng[i2].id) + '」を削除します。よろしいですか？')) return true;
-        ng.splice(i2, 1);
-        break;
       }
       case 'cl-default':
         if (!window.confirm('面接チェックリストを既定の台本（2026-10-08 版）に戻します。編集した文言・項目は失われます。保存済みの応募者ファイルのレポートは保存時点の台本で表示されます。よろしいですか？')) return true;
