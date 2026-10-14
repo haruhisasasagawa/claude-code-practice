@@ -18,95 +18,7 @@
     return U.deepClone(global.RECRUIT_DEFAULT_PROFILE);
   }
 
-  // ---------- プロファイルの正規化・移行（schemaVersion 1 → 2） ----------
-  // v1（コミット 32a643e）の既定文言。完全一致したものだけ v2 の既定文言に置き換える（編集済みの文言は維持）
-  const V1_DEFAULT_TEXTS = {
-    graduation_midterm: '来年3月卒業予定で勤務期間が「中期」です。実際に中期で勤務できるか面接時に確認してください。',
-    vacation_ng: '長期休暇期間（{vacationLabels}）の勤務ができません。繁忙期対応の観点から面接実施の可否を判断してください。',
-    vacation_consult: '長期休暇期間（{vacationLabels}）が要相談です。具体的にどの程度入れるか確認してください。',
-    highschool_hours: '高校生は法令上22:00まで。当劇場では{highschoolLatestEnd}までの勤務としている旨を伝えてください。',
-    foreign_hour_cap_exceeded: '希望シフトの合計（週{weeklyHours}時間目安）が週{foreignWeeklyHourCap}時間の上限を超えています。シフト調整の可否を判断してください。'
-  };
-  const V1_VACATION_IDS = ['summer', 'obon', 'yearend', 'gw'];
-  const V1_VACATION_LABELS = { summer: '夏休み', obon: 'お盆', yearend: '年末年始', gw: 'GW' };
-  const V1_VACATION_OK = '長期休暇期間すべてに対応可能です';
-  const SHINJUKU = 'TOHOシネマズ新宿';
-  const BUSY_ITEM_FALLBACK = { periodNote: '', unit: 'total', maxDays: 7, refDays: 3, weight: 1, critical: false };
-  const RESULTS = ['recommend', 'review', 'reject'];
-  const HS_MODES = ['allow', 'exceptionOnly', 'deny'];
-  const MATRIX_KEYS = (function () {
-    const b = ['high', 'mid', 'low'], out = [];
-    b.forEach(function (i) { b.forEach(function (c) { out.push(i + '_' + c); }); });
-    return out;
-  })();
-
   function isNum(v) { return v !== '' && v != null && typeof v !== 'boolean' && !isNaN(Number(v)); }
-
-  function migrateV1(merged, base, raw) {
-    const o = merged.options = merged.options || {};
-    // 新宿以外の劇場（meta があり劇場名が新宿でない・高校生方針が未設定）は従来動作を保つ（SPEC 8-1 の 4・10-1 #16）
-    const keepLegacy = !raw.highschoolPolicy && !!raw.meta && raw.meta.theaterName !== SHINJUKU;
-    // 1. 繁忙期: 既定にあって raw に無い期間を追加
-    const rawItems = Array.isArray(o.vacationItems) ? o.vacationItems.slice() : [];
-    const rawIds = rawItems.map(function (v) { return v && v.id; });
-    const defItems = base.options.vacationItems;
-    const untouched = rawIds.length === V1_VACATION_IDS.length && rawIds.every(function (id, i) { return id === V1_VACATION_IDS[i]; });
-    let items;
-    if (untouched && !keepLegacy) {
-      // v1 既定の並びのまま → v2 既定の並び・期間に置き換える（編集済みのラベルは維持）
-      items = defItems.map(function (d) {
-        const hit = rawItems.find(function (v) { return v.id === d.id; });
-        const out = U.deepClone(d);
-        if (hit && hit.label && hit.label !== V1_VACATION_LABELS[d.id]) out.label = hit.label;
-        return out;
-      });
-    } else {
-      items = rawItems.map(function (v) {
-        const out = Object.assign({}, v);
-        const d = defItems.find(function (x) { return x.id === v.id; });
-        if (d && out.label === V1_VACATION_LABELS[v.id]) out.label = d.label;
-        return out;
-      });
-      // 他劇場には v1 に無かった期間（3連休・SW・春休み）を足さない（未回答の留意点が新たに付かないように）
-      if (!keepLegacy) defItems.forEach(function (d, di) {
-        if (items.some(function (v) { return v.id === d.id; })) return;
-        // 既定配列での直前の既定 id の後ろ（無ければ先頭）に挿入
-        let pos = 0;
-        for (let k = di - 1; k >= 0; k--) {
-          const idx = items.findIndex(function (v) { return v.id === defItems[k].id; });
-          if (idx >= 0) { pos = idx + 1; break; }
-        }
-        items.splice(pos, 0, U.deepClone(d));
-      });
-    }
-    o.vacationItems = items;
-
-    // 2. 留意点ルール: v1 既定文言のままなら v2 既定文言へ、繁忙期系はカテゴリを busy へ
-    const baseRules = {};
-    base.handoffRules.forEach(function (r) { baseRules[r.id] = r; });
-    (merged.handoffRules || []).forEach(function (r) {
-      if (!r || !r.id) return;
-      if (V1_DEFAULT_TEXTS[r.id] && r.text === V1_DEFAULT_TEXTS[r.id] && baseRules[r.id]) r.text = baseRules[r.id].text;
-      if ((r.id === 'vacation_ng' || r.id === 'vacation_consult' || r.id === 'weekend_missing') && r.category === 'general') r.category = 'busy';
-    });
-
-    // 3. 強みの文言
-    const st = (merged.texts || {}).strengths;
-    if (st && st.vacationOk === V1_VACATION_OK) st.vacationOk = base.texts.strengths.vacationOk;
-
-    // 4. 劇場ごとの既定の振り分け（新宿以外の従来動作は変えない）
-    if (keepLegacy) {
-      merged.highschoolPolicy.mode = 'allow';
-      merged.features.contribution = false;
-      merged.features.allNight = false;
-      // v1 に無かった入力欄（繁忙期の日数・祝日・土日の頻度）は出さない
-      merged.features.vacationDays = false;
-      merged.features.holidayWork = false;
-      merged.features.weekendFreq = false;
-      // 2軸判定 OFF の劇場では「シフト条件の未確認」の留意点を出さない（設定画面で ON にできる）
-      (merged.handoffRules || []).forEach(function (r) { if (r.id === 'shift_unanswered') r.enabled = false; });
-    }
-  }
 
   // ---------- 最終合否（profile.management.decision / record.decision。docs/SPEC-report.md 1 章） ----------
   const DECISION_FALLBACK = {
@@ -169,124 +81,35 @@
     return { id: id, svgId: svgId, title: dcfg.label, hireLabel: dcfg.hireLabel, rejectLabel: dcfg.rejectLabel, hireColor: dcfg.hireColor, rejectColor: dcfg.rejectColor, sub: dcfg.sub, size: 64 };
   }
 
-  // deepMerge は配列を丸ごと置き換えるため、配列の要素単位で不足キーを補う（毎回・冪等）
-  function fillArrays(merged, base) {
-    const o = merged.options = U.isObj(merged.options) ? merged.options : U.deepClone(base.options);
-    const bo = base.options;
-
-    if (!Array.isArray(o.vacationItems)) o.vacationItems = U.deepClone(bo.vacationItems);
-    o.vacationItems = o.vacationItems.filter(function (v) { return U.isObj(v); }).map(function (v) {
-      const d = bo.vacationItems.find(function (x) { return x.id === v.id; }) || BUSY_ITEM_FALLBACK;
-      const out = Object.assign({}, v);
-      ['periodNote', 'unit', 'critical'].forEach(function (k) { if (out[k] === undefined) out[k] = d[k]; });
-      if (out.label === undefined) out.label = d.label || out.id || '';
-      ['maxDays', 'refDays', 'weight'].forEach(function (k) {
-        out[k] = isNum(out[k]) ? Number(out[k]) : (isNum(d[k]) ? d[k] : BUSY_ITEM_FALLBACK[k]);
-      });
-      out.critical = out.critical !== false;
-      return out;
-    });
-
-    if (!Array.isArray(o.workPeriods) || !o.workPeriods.length) o.workPeriods = U.deepClone(bo.workPeriods);
-    o.workPeriods = o.workPeriods.map(function (w) {
-      if (!U.isObj(w)) return w;
-      const d = bo.workPeriods.find(function (x) { return x.value === w.value; }) || { minMonths: 0, contributionRatio: 0 };
-      const out = Object.assign({}, w);
-      out.minMonths = isNum(out.minMonths) ? Number(out.minMonths) : d.minMonths;
-      out.contributionRatio = isNum(out.contributionRatio) ? Number(out.contributionRatio) : d.contributionRatio;
-      return out;
-    });
-
-    ['weekendFrequencies', 'allNightFrequencies', 'careerPaths'].forEach(function (k) {
-      if (!Array.isArray(o[k]) || !o[k].length) o[k] = U.deepClone(bo[k]);
-    });
-    ['weekendFrequencies', 'allNightFrequencies'].forEach(function (k) {
-      o[k] = o[k].map(function (x) {
-        if (!U.isObj(x)) return x;
-        const out = Object.assign({}, x);
-        out.ratio = isNum(out.ratio) ? Number(out.ratio) : 0;
-        return out;
-      });
-    });
-
-    // シフト貢献度の項目（id は計算関数と対応するため既定の id だけ）
-    const co = merged.contribution = U.isObj(merged.contribution) ? merged.contribution : U.deepClone(base.contribution);
-    const defCo = base.contribution.items;
-    let ci = Array.isArray(co.items) && co.items.length ? co.items : U.deepClone(defCo);
-    ci = ci.filter(function (it) { return U.isObj(it) && defCo.some(function (d) { return d.id === it.id; }); });
-    defCo.forEach(function (d) { if (!ci.some(function (it) { return it.id === d.id; })) ci.push(U.deepClone(d)); });
-    co.items = ci.map(function (it) {
-      const d = defCo.find(function (x) { return x.id === it.id; });
-      const out = Object.assign({}, it);
-      if (out.enabled === undefined) out.enabled = d.enabled;
-      if (out.label === undefined) out.label = d.label;
-      out.max = isNum(out.max) ? Number(out.max) : d.max;
-      return out;
-    });
-
-    // 2軸マトリクス
-    const mx = merged.matrix = U.isObj(merged.matrix) ? merged.matrix : U.deepClone(base.matrix);
-    mx.cells = U.isObj(mx.cells) ? mx.cells : {};
-    mx.cellNotes = U.isObj(mx.cellNotes) ? mx.cellNotes : {};
-    MATRIX_KEYS.forEach(function (k) {
-      if (RESULTS.indexOf(mx.cells[k]) < 0) mx.cells[k] = base.matrix.cells[k];
-      mx.cellNotes[k] = mx.cellNotes[k] == null ? (base.matrix.cellNotes[k] || '') : String(mx.cellNotes[k]);
-    });
-
-    // 高校生の方針
-    const hp = merged.highschoolPolicy = U.isObj(merged.highschoolPolicy) ? merged.highschoolPolicy : U.deepClone(base.highschoolPolicy);
-    if (HS_MODES.indexOf(hp.mode) < 0) hp.mode = base.highschoolPolicy.mode;
-    if (!Array.isArray(hp.exceptionCategories)) hp.exceptionCategories = U.deepClone(base.highschoolPolicy.exceptionCategories);
-
-    // 応募者の管理（押印欄・名簿）
-    const mg = merged.management = U.isObj(merged.management) ? merged.management : U.deepClone(base.management);
-    if (!Array.isArray(mg.fields) || !mg.fields.length) mg.fields = U.deepClone(base.management.fields);
-    mg.fields = mg.fields.filter(function (x) { return U.isObj(x) && x.id; }).map(function (x) {
+  // 応募者の管理（押印欄・名簿・手入力・最終合否）。id 'initial' の押印欄は 2026-10-14 に廃止したので外す
+  //   （JSON で足した独自の欄は残す。空になったら既定の 2 欄。docs/SPEC-slim.md D4）
+  function fillManagement(src, base) {
+    const bm = base.management;
+    const mg = U.isObj(src) ? src : {};
+    let fields = (Array.isArray(mg.fields) ? mg.fields : []).filter(function (x) { return U.isObj(x) && x.id && String(x.id) !== 'initial'; }).map(function (x) {
       return { id: String(x.id), label: String(x.label || x.id), hint: String(x.hint || '') };
     });
-    if (!mg.fields.length) mg.fields = U.deepClone(base.management.fields);
-    // 初期対応者の旧既定の説明（「応募受付・申し送りを行った担当者」）は現在の既定にする（書き換えた説明はそのまま）
-    const initBase = (base.management.fields || []).find(function (x) { return x && x.id === 'initial'; });
-    mg.fields.forEach(function (x) { if (x.id === 'initial' && x.hint === '応募受付・申し送りを行った担当者' && initBase) x.hint = initBase.hint; });
-    mg.managers = (Array.isArray(mg.managers) ? mg.managers : []).filter(function (x) { return U.isObj(x) && x.name; }).map(function (x) {
+    if (!fields.length) fields = U.deepClone(bm.fields);
+    const srcManagers = Array.isArray(mg.managers) ? mg.managers : bm.managers;
+    const managers = srcManagers.filter(function (x) { return U.isObj(x) && x.name; }).map(function (x) {
       const name = String(x.name).trim();
       const short = String(x.short || '').trim() || (global.RecruitStamp ? global.RecruitStamp.shortName(name) : name);
       const out = { name: name, short: short, title: String(x.title || '').trim() };
       if (x.grade) out.grade = String(x.grade).trim();
       return out;
     });
-    mg.allowFreeName = mg.allowFreeName !== false;
-    // 最終合否（mg.fields 確定後。既知のキーだけ整え、未知のキーは残す）
-    mg.decision = Object.assign({}, U.isObj(mg.decision) ? mg.decision : {}, decisionFields(mg.decision, mg.fields, (base.management || {}).decision));
-    if (!U.isObj(hp.rejectCareerPaths)) hp.rejectCareerPaths = U.deepClone(base.highschoolPolicy.rejectCareerPaths);
-    // 旧設定 disallowedPathResult（対象外の進路を一律 reject/review）からの移行: 'review' なら不採用推奨にする進路なし
-    if (hp.disallowedPathResult === 'review') Object.keys(hp.rejectCareerPaths).forEach(function (k) { hp.rejectCareerPaths[k] = false; });
-    delete hp.disallowedPathResult;
+    // 最終合否（fields 確定後。既知のキーだけ整え、未知のキーは残す）
+    const dsrc = U.isObj(mg.decision) ? mg.decision : bm.decision;
+    return {
+      fields: fields,
+      managers: managers,
+      allowFreeName: mg.allowFreeName !== false,
+      decision: Object.assign({}, U.deepClone(dsrc), decisionFields(dsrc, fields, bm.decision))
+    };
   }
 
-  // ---------- 入力の段階（docs/SPEC-stages.md 2-2） ----------
-  const STAGES = ['pre', 'interview'];
-  // 入力の段階: 既定のキーだけ残し、不正値・欠落は既定に戻す（未知のキーは削除）。旧プロファイル（inputStages なし）は既定の段階
-  function fillStages(merged, base) {
-    const def = base.inputStages;
-    const src = U.isObj(merged.inputStages) ? merged.inputStages : {};
-    const out = {};
-    Object.keys(def).forEach(function (k) { out[k] = STAGES.indexOf(src[k]) >= 0 ? src[k] : def[k]; });
-    // 該当の有無が分からないまま詳細だけ面接前に聞くことはないため、外国籍が面接時なら詳細も面接時
-    if (out.foreignFlag === 'interview') out.foreignDetail = 'interview';
-    merged.inputStages = out;
-    const so = U.isObj(merged.stageOptions) ? merged.stageOptions : {};
-    merged.stageOptions = {};
-    Object.keys(base.stageOptions).forEach(function (k) { merged.stageOptions[k] = typeof so[k] === 'boolean' ? so[k] : base.stageOptions[k]; });
-  }
   // ---------- 面接チェックリスト（docs/SPEC-checklist.md 6-1） ----------
   const CL_ID_RE = /^[A-Za-z][\w-]{0,40}$/;
-  const CL_AUTO_PARAM_RULES = {   // autoParams の検査（不正値は既定の項目なら既定値、そうでなければ削除）
-    minDays: function (v) { return isNum(v) && Number(v) % 1 === 0 && Number(v) >= 1 && Number(v) <= 7; },
-    minHours: function (v) { return isNum(v) && Number(v) >= 1 && Number(v) <= 12; },
-    monthsAfter: function (v) { return isNum(v) && Number(v) % 1 === 0 && Number(v) >= 0 && Number(v) <= 12; },
-    periods: function (v) { return Array.isArray(v) && v.every(function (x) { return typeof x === 'string' && x !== ''; }); }
-  };
   function clRules() { return global.RecruitRules || {}; }
   function strOr(v, def) { return typeof v === 'string' ? v : def; }
   function asStr(v) { return v == null ? '' : String(v); }
@@ -295,7 +118,8 @@
     return U.isObj(def) && Array.isArray(def.sections) && def.sections.some(function (s) { return U.isObj(s); });
   }
 
-  // 台本の正規化（決定的・冪等。未知のキーは残す）。baseDef は既定の台本
+  // 台本の正規化（決定的・冪等。未知のキーは残す）。baseDef は既定の台本。
+  //   自動表示（auto / autoParams）は 2026-10-14 に削除した（docs/SPEC-slim.md D8）。旧い設定・記録の台本に残っていれば外す
   function normalizeChecklistDef(def, baseDef) {
     const R = clRules();
     const base = U.isObj(baseDef) ? baseDef : defaults().checklist;
@@ -303,7 +127,6 @@
     const out = U.deepClone(def);
     const types = R.CHECKLIST_BLOCK_TYPES || ['must', 'fields', 'explain', 'question', 'rating', 'notify', 'note'];
     const kinds = R.CHECKLIST_FIELD_KINDS || ['text', 'date', 'month', 'choice'];
-    const autos = R.CHECKLIST_AUTO || { must: [], fields: [] };
 
     ['title', 'version', 'intro', 'overallLabel', 'overallHint'].forEach(function (k) { out[k] = strOr(out[k], base[k]); });
     const bo = base.overallOptions || {};
@@ -340,10 +163,6 @@
       ? h.posting.options.filter(function (x) { return U.isObj(x) && typeof x.value === 'string' && x.value !== ''; }) : [];
     h.posting.options = popts.length ? popts.map(function (x) { x.label = asStr(x.label); return x; }) : U.deepClone(bh.posting.options);
     h.interviewerField = strOr(h.interviewerField, bh.interviewerField);
-
-    // 既定の項目（autoParams の補完用）
-    const baseItems = {};
-    (base.sections || []).forEach(function (s) { (s.blocks || []).forEach(function (b) { (b.items || []).forEach(function (it) { baseItems[it.id] = it; }); }); });
 
     // セクション → ブロック → 項目
     const seen = {};
@@ -391,24 +210,8 @@
           // 1 ページの報告書で使う短い名前（任意）。空・文字列以外は外す（無いときは描画時に文言の先頭 14 文字。docs/SPEC-checklist.md 4-2）
           if (typeof it.short === 'string' && it.short.trim()) it.short = it.short.trim();
           else delete it.short;
-          const allowed = autos[b.type] || [];
-          if (it.auto !== undefined && allowed.indexOf(it.auto) < 0) delete it.auto;
-          if (it.auto === undefined) delete it.autoParams;
-          else if (it.autoParams !== undefined) {
-            const bi = baseItems[it.id];
-            const bap = bi && bi.auto === it.auto && U.isObj(bi.autoParams) ? bi.autoParams : null;
-            if (!U.isObj(it.autoParams)) {
-              if (bap) it.autoParams = U.deepClone(bap); else delete it.autoParams;
-            } else {
-              Object.keys(CL_AUTO_PARAM_RULES).forEach(function (key) {
-                if (it.autoParams[key] === undefined || CL_AUTO_PARAM_RULES[key](it.autoParams[key])) return;
-                if (bap && bap[key] !== undefined) it.autoParams[key] = U.deepClone(bap[key]); else delete it.autoParams[key];
-              });
-              ['minDays', 'minHours', 'monthsAfter'].forEach(function (key) {
-                if (it.autoParams[key] !== undefined) it.autoParams[key] = Number(it.autoParams[key]);
-              });
-            }
-          }
+          delete it.auto;
+          delete it.autoParams;
           return it;
         });
         return b;
@@ -419,15 +222,11 @@
     return out;
   }
 
-  // normalizeProfile から呼ぶ（fillStages の後・毎回・冪等）。旧プロファイル（checklist なし）には既定の台本を補う
-  function fillChecklist(merged, base, raw, report) {
+  // 旧プロファイル（checklist なし・壊れた checklist）には既定の台本を補う
+  function fillChecklist(raw, base) {
     const rc = raw.checklist;
-    if (!U.isObj(rc) || !clHasSections(rc)) {
-      merged.checklist = U.deepClone(base.checklist);
-      if (rc === undefined || rc === null) { if (report) report.checklistAdded = true; }
-      return;
-    }
-    merged.checklist = normalizeChecklistDef(merged.checklist, base.checklist);
+    if (!U.isObj(rc) || !clHasSections(rc)) return U.deepClone(base.checklist);
+    return normalizeChecklistDef(U.deepClone(U.deepMerge(base.checklist, rc)), base.checklist);
   }
 
   // 保存前チェック（validateProfile から呼ぶ。SPEC-checklist 5-4）
@@ -437,7 +236,6 @@
     const R = clRules();
     const types = R.CHECKLIST_BLOCK_TYPES || [];
     const kinds = R.CHECKLIST_FIELD_KINDS || [];
-    const autos = R.CHECKLIST_AUTO || {};
     const circ = R.circled || function (n) { return '(' + n + ')'; };
     const TYPE_NAMES = { must: '必須条件', fields: '記入欄', explain: '説明', question: '質問', rating: '確認点', notify: '合否連絡', note: '注記' };
     const P0 = '面接チェックリスト';
@@ -474,13 +272,6 @@
               else if (vs.some(function (v, x) { return vs.indexOf(v) !== x; })) errors.push(P0 + ' ' + bn + 'の「' + asStr(it.label) + '」の選択肢の値が重複しています。');
             }
           }
-          if (it.auto !== undefined && it.auto !== '' && (autos[b.type] || []).indexOf(it.auto) < 0) errors.push(P0 + ' ' + bn + 'の' + (k + 1) + '行目の自動表示の種類が正しくありません。');
-          const ap = U.isObj(it.autoParams) ? it.autoParams : {};
-          Object.keys(CL_AUTO_PARAM_RULES).forEach(function (key) {
-            if (ap[key] !== undefined && !CL_AUTO_PARAM_RULES[key](ap[key])) {
-              errors.push(P0 + ' ' + bn + 'の' + (k + 1) + '行目の自動表示の設定（' + key + '）が範囲外です。');
-            }
-          });
         });
       });
     });
@@ -501,140 +292,77 @@
     const mfields = (((p.management || {}).fields) || []).map(function (f) { return f && f.id; });
     if (hd.interviewerField && mfields.indexOf(hd.interviewerField) < 0) warnings.push('担当と連動する押印欄が見つかりません。');
   }
-
-  // v2 内での既定文言の変更。旧既定と完全一致するものだけ新既定へ（編集済みの文言は維持）
-  const V2_TEXT_UPGRADES = {
-    rules: {
-      shift_unanswered: ['面接で確認が必要なシフト条件があります（{missingLabels}）。面接で確認し、Step3「シフト条件の最終確認」に入力してください。'],
-      // 繁忙期は既定で面接時に確認するため、面接後にも意味が通る文言へ（「面接実施の可否」→「採用可否」）
-      vacation_ng: ['繁忙期（{vacationLabels}）の勤務ができません。新宿は連休・長期休暇の貢献を重視するため、面接実施の可否を判断してください。']
-    },
-    texts: { contributionIntro: ['応募情報から計算したシフト貢献度の見込みです。「未確認」は面接で確認し、Step3「シフト条件の最終確認」で入力すると確定します。'] }
-  };
-  function upgradeTexts(merged, base) {
-    (merged.handoffRules || []).forEach(function (r) {
-      const olds = V2_TEXT_UPGRADES.rules[r && r.id];
-      const b = olds && base.handoffRules.find(function (x) { return x.id === r.id; });
-      if (b && olds.indexOf(r.text) >= 0) r.text = b.text;
-    });
-    Object.keys(V2_TEXT_UPGRADES.texts).forEach(function (k) {
-      if (merged.texts && V2_TEXT_UPGRADES.texts[k].indexOf(merged.texts[k]) >= 0) merged.texts[k] = base.texts[k];
-    });
-  }
-
-  // 法令ルールは常に ON・重要度固定
-  function enforceLocked(merged) {
-    const locked = (global.RecruitRules && global.RecruitRules.LOCKED_RULES) || {};
-    (merged.handoffRules || []).forEach(function (r) {
-      if (r && locked[r.id]) { r.enabled = true; r.severity = locked[r.id]; }
-    });
-  }
-
-  // 既定値に不足キーを補う。既定に追加された新ルールも末尾に追加する。
-  // report を渡すと、旧形式から移行したとき report.migratedFrom に元の版数を入れる。
+  // ---------- プロファイルの正規化（docs/SPEC-slim.md 3-1） ----------
+  // 許可したキーだけを組み立てる（トップレベルは schemaVersion, meta, features, management, options, evaluation, checklist, texts の 8 個）。
+  // 2026-10-14 に削除した機能の設定（REMOVED_KEYS など）は読み飛ばす。
+  // report を渡すと次を入れる: v1Reset（v1 は移行せず既定値）・fullModeRemoved（mode: 'full' の設定だった）・stripped（読み飛ばしたキーがあった）。
   // 冪等: normalizeProfile(normalizeProfile(x)) と normalizeProfile(x) は同じ内容になる。
+  const REMOVED_KEYS = ['mode', 'inputStages', 'stageOptions', 'highschoolPolicy', 'params', 'handoffRules', 'contribution', 'matrix'];
+  const TEXT_SCRIPT_KEYS = ['recommend', 'review', 'reject', 'missing', 'mustGate', 'adjusted'];
   function normalizeProfile(p, report) {
     const raw = U.isObj(p) ? p : {};
-    const fromVersion = Number(raw.schemaVersion) || 1;
     const base = defaults();
-    const merged = U.deepClone(U.deepMerge(base, raw));
-    merged.handoffRules = Array.isArray(merged.handoffRules) ? merged.handoffRules.filter(function (r) { return U.isObj(r); }) : [];
-    const ids = {};
-    merged.handoffRules.forEach(function (r) { if (r.id) ids[r.id] = true; });
-    base.handoffRules.forEach(function (r) { if (!ids[r.id]) merged.handoffRules.push(U.deepClone(r)); });
-    merged.evaluation = U.isObj(merged.evaluation) ? merged.evaluation : U.deepClone(base.evaluation);
-    if (!Array.isArray(merged.evaluation.items) || !merged.evaluation.items.length) {
-      merged.evaluation.items = U.deepClone(base.evaluation.items);
+    if (Object.keys(raw).length && (Number(raw.schemaVersion) || 1) < 2) {
+      if (report) report.v1Reset = true;
+      return base;
     }
-    if (fromVersion < 2) {
-      migrateV1(merged, base, raw);
-      if (report) report.migratedFrom = fromVersion;
+    const str = function (v, d) { return typeof v === 'string' ? v : d; };
+    const obj = function (v) { return U.isObj(v) ? v : {}; };
+    const out = { schemaVersion: 2 };
+    // 劇場情報
+    const rm = obj(raw.meta);
+    out.meta = {};
+    ['theaterName', 'appTitle', 'version', 'footer'].forEach(function (k) { out.meta[k] = str(rm[k], base.meta[k]); });
+    // 入力項目（卒業予定年月だけ）
+    const rf = obj(raw.features);
+    out.features = { graduationDate: rf.graduationDate === undefined ? base.features.graduationDate : rf.graduationDate !== false };
+    // 応募者の管理（押印）
+    out.management = fillManagement(raw.management, base);
+    // 区分・性別
+    const ro = obj(raw.options);
+    const genders = (Array.isArray(ro.genders) ? ro.genders : []).filter(function (g) { return typeof g === 'string' && g.trim(); });
+    const cats = (Array.isArray(ro.categories) ? ro.categories : []).filter(function (c) { return U.isObj(c) && typeof c.value === 'string' && c.value.trim(); })
+      .map(function (c) { return { value: c.value, group: typeof c.group === 'string' && c.group ? c.group : 'other' }; });
+    out.options = { genders: genders.length ? genders : U.deepClone(base.options.genders), categories: cats.length ? cats : U.deepClone(base.options.categories) };
+    // 面接評価の帯の境界（範囲の検査は validateProfile）
+    const th = obj(obj(raw.evaluation).thresholds), bth = base.evaluation.thresholds;
+    out.evaluation = { thresholds: {
+      recommendPct: isNum(th.recommendPct) ? Number(th.recommendPct) : bth.recommendPct,
+      reviewPct: isNum(th.reviewPct) ? Number(th.reviewPct) : bth.reviewPct
+    } };
+    // 面接チェックリスト（台本）
+    out.checklist = fillChecklist(raw, base);
+    // 担当と連動する押印欄が無くなった（旧設定の 'initial' など）ときは面接対応者、無ければ連動しない
+    const fids = out.management.fields.map(function (f) { return f.id; });
+    const hdr = out.checklist.header;
+    if (U.isObj(hdr) && hdr.interviewerField && fids.indexOf(hdr.interviewerField) < 0) hdr.interviewerField = fids.indexOf('interviewer') >= 0 ? 'interviewer' : '';
+    // 結果の文言
+    const rt = obj(raw.texts), bt = base.texts;
+    out.texts = {};
+    ['recommend', 'review', 'reject'].forEach(function (k) { out.texts[k] = { title: str(obj(rt[k]).title, bt[k].title) }; });
+    out.texts.disclaimer = str(rt.disclaimer, bt.disclaimer);
+    const rbl = obj(rt.bandLabels);
+    out.texts.bandLabels = {};
+    ['high', 'mid', 'low'].forEach(function (k) { out.texts.bandLabels[k] = str(rbl[k], bt.bandLabels[k]); });
+    const rs = obj(rt.script);
+    out.texts.script = {};
+    TEXT_SCRIPT_KEYS.forEach(function (k) { out.texts.script[k] = str(rs[k], bt.script[k]); });
+    if (report) {
+      if (raw.mode === 'full') report.fullModeRemoved = true;
+      if (REMOVED_KEYS.some(function (k) { return raw[k] !== undefined; }) || (Object.keys(raw).length && JSON.stringify(out) !== JSON.stringify(raw))) report.stripped = true;
     }
-    fillArrays(merged, base);
-    fillStages(merged, base);
-    fillChecklist(merged, base, raw, report);
-    upgradeTexts(merged, base);
-    enforceLocked(merged);
-    // 運用モード（docs/SPEC-script-mode.md 1-1）。無い・不正は台本モード。保存済みの設定に mode が無かったときは report.modeAdded
-    // （空オブジェクト = 保存済み設定なし は知らせない）
-    const rawMode = raw.mode;
-    merged.mode = (rawMode === 'script' || rawMode === 'full') ? rawMode : 'script';
-    if (report && rawMode !== 'script' && rawMode !== 'full' && Object.keys(raw).length) report.modeAdded = true;
-    merged.schemaVersion = 2;
-    return merged;
+    return out;
   }
 
   // 保存前チェック（DOM 非依存）。errors があれば保存しない。
   function validateProfile(p) {
     const errors = [], warnings = [];
     p = p || {};
-    if (p.mode !== undefined && p.mode !== 'script' && p.mode !== 'full') errors.push('運用モード（台本モード／詳細モード）が正しくありません。');
     const inRange = function (v, lo, hi) { return isNum(v) && Number(v) >= lo && Number(v) <= hi; };
-    const isTime = function (v) { return /^\d{1,2}:\d{2}$/.test(String(v || '')) && Number(String(v).split(':')[0]) < 24 && Number(String(v).split(':')[1]) < 60; };
     const ev = p.evaluation || {}, th = ev.thresholds || {};
     if (!inRange(th.recommendPct, 0, 100) || !inRange(th.reviewPct, 0, 100) || !(Number(th.recommendPct) > Number(th.reviewPct))) {
       errors.push('面接評価の境界（高 > 中、0〜100%）が正しくありません。');
     }
-    const co = p.contribution || {}, bands = co.bands || {};
-    if (!inRange(bands.highPct, 0, 100) || !inRange(bands.midPct, 0, 100) || !(Number(bands.highPct) > Number(bands.midPct))) {
-      errors.push('シフト貢献度の境界（高 > 中、0〜100%）が正しくありません。');
-    }
-    const o = p.options || {};
-    const seen = {};
-    (o.vacationItems || []).forEach(function (v, i) {
-      const name = '繁忙期「' + ((v && v.label) || (i + 1) + '行目') + '」';
-      if (!v || !v.id) { errors.push(name + 'の id が空です。'); return; }
-      if (seen[v.id]) errors.push(name + 'の id「' + v.id + '」が重複しています。');
-      seen[v.id] = true;
-      // 上限日数 1〜62（perWeek は 7 固定扱いのため検査しない）
-      const maxOk = v.unit === 'perWeek' || v.maxDays == null || inRange(v.maxDays, 1, 62);
-      if (!maxOk) errors.push(name + 'の上限日数は1〜62にしてください。');
-      const maxDays = v.unit === 'perWeek' ? 7 : Number(v.maxDays);
-      if (!isNum(v.refDays) || Number(v.refDays) < 1) errors.push(name + 'の満点日数は1以上にしてください。');
-      else if (maxOk && isNum(maxDays) && Number(v.refDays) > maxDays) errors.push(name + 'の満点日数が上限日数を超えています。');
-      if (v.weight != null && !inRange(v.weight, 0, 10)) errors.push(name + 'の重みは0〜10にしてください。');
-    });
-    const ratioChecks = [
-      ['△（要相談）の割合', co.consultFactor],
-      ['土日の推定割合（両日）', (co.weekendDerived || {}).both],
-      ['土日の推定割合（片方）', (co.weekendDerived || {}).one],
-      ['土日片方の上限', co.weekendOneDayCap],
-      ['22時以降○の割合', co.lateNightAvailFactor],
-      ['土日頻度の要確認しきい値', (p.params || {}).weekendFreqWarnBelow]
-    ];
-    (o.weekendFrequencies || []).forEach(function (x) { ratioChecks.push(['土日頻度「' + (x && x.label) + '」の割合', x && x.ratio]); });
-    (o.allNightFrequencies || []).forEach(function (x) { ratioChecks.push(['オールナイト頻度「' + (x && x.label) + '」の割合', x && x.ratio]); });
-    (o.workPeriods || []).forEach(function (x) { if (x && x.contributionRatio != null) ratioChecks.push(['勤務期間「' + x.label + '」の貢献度割合', x.contributionRatio]); });
-    ratioChecks.forEach(function (rc) { if (rc[1] != null && !inRange(rc[1], 0, 1)) errors.push(rc[0] + 'は0〜1にしてください。'); });
-    // SPEC 4-5 の範囲（負の満点は黙って計算から外れ、極端な満点は1項目が貢献度を支配するため保存させない）
-    (co.items || []).forEach(function (it, i) {
-      if (!it) return;
-      const nm = 'シフト貢献度「' + (it.label || it.id || (i + 1) + '行目') + '」';
-      if (!inRange(it.max, 0, 100) || Number(it.max) % 1 !== 0) errors.push(nm + 'の満点は0〜100の整数にしてください。');
-    });
-    const tg = co.targets || {};
-    [['クローズの満点日数', tg.closeDaysPerWeek], ['オープンの満点日数', tg.openDaysPerWeek], ['週の勤務日数の満点', tg.weeklyDaysFull]].forEach(function (t) {
-      if (t[1] != null && !inRange(t[1], 1, 7)) errors.push(t[0] + 'は1〜7にしてください。');
-    });
-    if (co.busyStrongPct != null && !inRange(co.busyStrongPct, 0, 100)) errors.push('繁忙期の強みを出す得点率は0〜100%にしてください。');
-    (o.workPeriods || []).forEach(function (x) {
-      if (x && x.minMonths != null && !inRange(x.minMonths, 0, 60)) errors.push('勤務期間「' + x.label + '」の最低月数は0〜60にしてください。');
-    });
-    const cells = (p.matrix || {}).cells || {};
-    MATRIX_KEYS.forEach(function (k) { if (RESULTS.indexOf(cells[k]) < 0) errors.push('2軸判定のマス「' + k + '」の結果が正しくありません。'); });
-    const pr = p.params || {};
-    if (pr.dayBoundaryHour != null && !inRange(pr.dayBoundaryHour, 0, 12)) errors.push('終電の日付の区切りは0〜12時にしてください。');
-    [['オールナイト開始', pr.allNightShiftStart], ['オールナイト終了', pr.allNightShiftEnd], ['高校生の終了上限', pr.highschoolLatestEnd]].forEach(function (t) {
-      if (t[1] != null && t[1] !== '' && !isTime(t[1])) errors.push(t[0] + 'の時刻は HH:MM で入力してください。');
-    });
-    if (pr.closeShiftStandardEnd && !isTime(pr.closeShiftStandardEnd)) errors.push('クローズ標準終了の時刻は HH:MM で入力してください。');
-
-    const sum = (co.items || []).reduce(function (a, it) { return a + (it && it.enabled !== false && isNum(it.max) ? Math.max(0, Number(it.max)) : 0); }, 0);
-    if (sum <= 0) warnings.push('有効なシフト貢献度項目の満点合計が0のため、2軸判定は自動で無効になります（面接評価のみで判定）。');
-    const cats = (o.categories || []).map(function (c) { return c && c.value; });
-    ((p.highschoolPolicy || {}).exceptionCategories || []).forEach(function (c) {
-      if (cats.indexOf(c) < 0) warnings.push('高校生の例外区分「' + c + '」は区分の選択肢にありません。');
-    });
     validateChecklist(p, errors, warnings);
     // 最終合否（docs/SPEC-report.md 1-5）
     const dc = (p.management || {}).decision;
@@ -667,9 +395,10 @@
     return defaults();
   }
 
+  // 劇場情報（meta）があり、台本・押印・旧形式の設定のどれかがある JSON を受け付ける（このアプリで書き出した JSON と旧い JSON の両方）
   function parseProfileJSON(text, report) {
     const obj = JSON.parse(text);
-    if (!obj || typeof obj !== 'object' || !obj.meta || !obj.handoffRules) {
+    if (!U.isObj(obj) || !U.isObj(obj.meta) || !(obj.checklist || obj.management || obj.handoffRules)) {
       throw new Error('劇場プロファイルの形式ではありません。');
     }
     return normalizeProfile(obj, report);
@@ -706,52 +435,34 @@
     return String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) || '応募者';
   }
 
-  // ---------- 応募者レコード ----------
+  // ---------- 応募者レコード（docs/SPEC-slim.md 3-2・3-3） ----------
+  // 応募者データは 6 キー（すべて文字列）。旧レコードの他のキー（勤務条件・通勤・繁忙期など）は読み込み時に捨てる
+  const APPLICANT_KEYS = ['name', 'gender', 'age', 'category', 'graduationDate', 'reviewerNotes'];
+  function pickApplicant(src) {
+    src = U.isObj(src) ? src : {};
+    const out = {};
+    APPLICANT_KEYS.forEach(function (k) { out[k] = src[k] == null ? '' : String(src[k]); });
+    return out;
+  }
+
   function buildRecord(state) {
-    const h = state.handoff;
     const R = global.RecruitRules;
-    let contribution = null, highschool = null;
-    try { contribution = R.computeContribution(state.applicant, state.profile); } catch (e) { contribution = null; }
-    try {
-      const hs = R.highschoolStatus(state.applicant, state.profile);
-      highschool = hs.applicable ? { status: hs.status, reasonsText: hs.reasonsText, mode: (state.profile.highschoolPolicy || {}).mode || '' } : null;
-    } catch (e) { highschool = null; }
     return {
       kind: RECORD_KIND,
       schemaVersion: 2,
       savedAt: new Date().toISOString(),
       profile: { theaterName: state.profile.meta.theaterName, version: state.profile.meta.version, schemaVersion: 2 },
       step: state.step,
-      // 保存時の運用モード（'script' | 'full'）。保存 HTML の形はこれで決める（旧レコードは無し＝'full'）
-      mode: R.isScriptMode(state.profile) ? 'script' : 'full',
-      // 保存時点の入力の段階（レポートの「応募時の情報／面接で確認した情報」の振り分け用。読込では使わない）
-      inputStages: U.deepClone(state.profile.inputStages || null),
-      applicant: U.deepClone(state.applicant),
-      handoff: {
-        // deferred / section / aggregate は該当するときだけ付ける（SPEC-stages 6-1）
-        items: h ? h.items.map(function (i) {
-          const out = { id: i.id, severity: i.severity, category: i.category, text: i.text };
-          if (i.deferred) { out.deferred = true; out.section = i.section; }
-          if (i.aggregate) out.aggregate = true;
-          return out;
-        }) : [],
-        strengths: h ? h.strengths.map(function (s) { return s.text; }) : [],
-        checks: U.deepClone(state.handoffChecks || {}),
-        note: state.handoffNote || ''
-      },
-      // 旧形式（10項目×5点）の面接評価。新しい面接では {}（面接はチェックリストで評価する）
-      scores: U.deepClone(state.scores || {}),
+      applicant: pickApplicant(state.applicant),
       // 面接チェックリストの回答（SPEC-checklist 1-4）と保存時点の台本（レポートの文言・並び用。読込では使わない）
       checklist: U.deepClone(U.isObj(state.checklist) ? state.checklist : R.emptyChecklist()),
       checklistDef: state.profile.checklist ? U.deepClone(state.profile.checklist) : null,
       interviewNotes: state.interviewNotes || '',
-      // 応募者の管理（押印）: { initial: { name, short, title, date, at }, ... }
+      // 応募者の管理（押印）: { interviewer: { name, short, title, date, at }, final: { ... } }
       management: U.deepClone(state.management || {}),
       // 最終合否（人の決定）: { result, label, date, at, by: { name, short, title } } または null。判定とは独立
       decision: normalizeDecision(state.decision),
-      // 保存時点のスナップショット（レポート表示・監査用。読み込み時は現在の設定で再計算する）
-      contribution: contribution ? U.deepClone(contribution) : null,
-      highschool: highschool,
+      // 保存時点の判定（evaluateScript の戻り値。読み込み時は現在の設定で判定し直す）
       judgment: state.judgment ? U.deepClone(state.judgment) : null
     };
   }
@@ -771,21 +482,45 @@
     }
   }
 
-  // ---------- HTMLレポート生成 ----------
-  const HS_STATUS_LABELS = {
-    excluded: '原則対象外',
-    exception_met: '例外対象（条件充足）',
-    exception_unmet: '例外条件 未充足',
-    exception_incomplete: '例外条件 未入力あり',
-    allowed: '制限なし'
-  };
-  const MODE_LABELS = {
-    matrix: '2軸判定（面接評価 × シフト貢献度）',
-    incomplete: 'シフト条件が未確定のため面接評価のみで判定（採用推奨には留めない）',
-    interviewOnly: '面接評価のみで判定（シフト貢献度 OFF）'
-  };
-  const SHORT_RESULT = { recommend: '推奨', review: '上長', reject: '不採用' };
-  const FLAG_LABELS = { unanswered: '未確認', restricted: '法令/運用で対象外', estimated: '推定' };
+  // 読み込んだレコードを今の形に整える（DOM 非依存）。旧い形式の記録も例外なく読む（docs/SPEC-slim.md 3-2）。
+  //   legacy: v1（schemaVersion 1）／scores（旧評価の点数あり）／full（mode: 'full' の記録）／initial（廃止した押印欄の印あり）
+  //   full の判別は mode === 'full'、または mode が 'script' でなく旧キー handoff がある（今の記録はどちらも書かない。D12）
+  function normalizeRecord(rec) {
+    rec = U.isObj(rec) ? rec : {};
+    const R = global.RecruitRules;
+    const mg = {};
+    if (U.isObj(rec.management)) {
+      Object.keys(rec.management).forEach(function (k) {
+        const e = rec.management[k];
+        if (k !== 'initial' && U.isObj(e) && e.name) mg[k] = U.deepClone(e);
+      });
+    }
+    const ver = Number(rec.schemaVersion) || 1;
+    const scores = U.isObj(rec.scores) ? rec.scores : {};
+    const checklist = U.deepMerge(R.emptyChecklist(), U.isObj(rec.checklist) ? U.deepClone(rec.checklist) : {});
+    ['header', 'values', 'notes'].forEach(function (k) { if (!U.isObj(checklist[k])) checklist[k] = k === 'header' ? R.emptyChecklist().header : {}; });
+    // 消極属性（2026-10-13 に削除）は読み飛ばす
+    delete checklist.header.negatives;
+    const step = Number(rec.step);
+    return {
+      applicant: pickApplicant(rec.applicant),
+      checklist: checklist,
+      checklistDef: U.isObj(rec.checklistDef) ? rec.checklistDef : null,
+      interviewNotes: typeof rec.interviewNotes === 'string' ? rec.interviewNotes : '',
+      management: mg,
+      decision: normalizeDecision(rec.decision),
+      judgment: U.isObj(rec.judgment) && rec.judgment.result ? rec.judgment : null,
+      step: [1, 3, 4].indexOf(step) >= 0 ? step : 1,
+      savedAt: rec.savedAt || null,
+      theaterName: U.isObj(rec.profile) ? String(rec.profile.theaterName || '') : '',
+      legacy: {
+        v1: ver < 2,
+        scores: ver < 2 || Object.keys(scores).some(function (k) { return isNum(scores[k]); }),
+        full: rec.mode === 'full' || (rec.mode !== 'script' && U.isObj(rec.handoff)),
+        initial: U.isObj(rec.management) && U.isObj(rec.management.initial) && !!rec.management.initial.name
+      }
+    };
+  }
 
   // ---------- HTML レポートのスタイル（アプリと同じデザイントークン。印刷・共有向けにライトテーマ固定） ----------
   function reportCss() {
@@ -815,16 +550,6 @@
       '.verdict.recommend{border-color:var(--ok);background:var(--ok-soft)}.verdict.recommend .v-title{color:var(--ok)}',
       '.verdict.review{border-color:var(--warn);background:var(--warn-soft)}.verdict.review .v-title{color:var(--warn)}',
       '.verdict.reject{border-color:var(--danger);background:var(--danger-soft)}.verdict.reject .v-title{color:var(--danger)}',
-      // サマリータイル
-      '.dash{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}',
-      '.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:0}',
-      '.tile .t-label{font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted)}',
-      '.tile .t-val{font-size:24px;font-weight:800;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}.tile .t-val small{font-size:12px;font-weight:600;color:var(--muted);margin-left:2px}',
-      '.tile .t-val.txt{font-size:15px;line-height:1.4;margin-top:6px}',
-      '.tile .t-sub{font-size:12px;color:var(--muted);margin-top:2px}',
-      '.meter{height:7px;border-radius:999px;background:var(--surface-3);overflow:hidden;margin-top:8px}.meter>span{display:block;height:100%;border-radius:999px;background:var(--accent)}',
-      '.meter>span.hi{background:var(--ok)}.meter>span.mid{background:var(--warn)}.meter>span.lo{background:var(--danger)}',
-      '.counts{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}',
       // セクション
       '.sec{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px 20px;margin-top:16px;box-shadow:0 1px 2px rgba(16,24,40,.05)}',
       '.sec h2{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--border)}',
@@ -835,46 +560,12 @@
       'table.kv th{width:10em;text-align:left;font-weight:600;color:var(--muted);padding:7px 10px 7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}',
       'table.kv td{padding:7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}',
       'table.kv tr:last-child th,table.kv tr:last-child td{border-bottom:none}',
-      'table.list{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}',
-      'table.list th{text-align:left;font-weight:600;color:var(--muted);background:var(--surface-2);padding:7px 10px;border-bottom:1px solid var(--border)}',
-      'table.list td{padding:7px 10px;border-bottom:1px solid var(--surface-3);vertical-align:top}',
-      'table.list td.num,table.list th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}',
-      'table.list tr.total td{font-weight:800;background:var(--surface-2);border-top:2px solid var(--border)}table.list tr.na td{color:#8a94a3}',
-      // バー
-      '.bars{display:flex;flex-direction:column;gap:7px}',
-      '.bar{display:grid;grid-template-columns:minmax(0,1fr) 150px 4.5em;gap:12px;align-items:center;font-size:13.5px}',
-      '.bar.wide{grid-template-columns:minmax(0,1fr) 150px 5.5em}',
-      '.bar .b-label{min-width:0}.bar .b-label small{display:block;font-size:11.5px;color:var(--muted);line-height:1.4}',
-      '.bar .b-track{height:9px;border-radius:999px;background:var(--surface-3);overflow:hidden}.bar .b-track>span{display:block;height:100%;border-radius:999px;background:var(--accent)}',
-      '.bar .b-track>span.hi{background:var(--ok)}.bar .b-track>span.mid{background:var(--warn)}.bar .b-track>span.lo{background:var(--danger)}',
-      '.bar .b-val{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}.bar .b-val small{font-weight:600;color:var(--muted)}',
-      '.bar.overall .b-label{font-weight:700}.bar.na{color:#8a94a3}',
-      '.total-line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);font-size:13.5px}',
-      '.total-line b{font-size:22px;font-weight:800}.total-line .right{margin-left:auto;font-weight:700;display:flex;align-items:center;gap:8px}',
       // バッジ・タグ
       '.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;background:var(--surface-3);color:var(--muted)}',
       '.badge.ok{background:var(--ok-soft);color:var(--ok)}.badge.warn{background:var(--warn-soft);color:var(--warn)}.badge.danger{background:var(--danger-soft);color:var(--danger)}.badge.info{background:var(--info-soft);color:var(--info)}.badge.accent{background:var(--accent-soft);color:var(--accent)}',
       '.badge.lg{font-size:14px;padding:5px 14px}',
       '.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:5px;background:var(--surface-3);color:#3a4556;white-space:nowrap;vertical-align:1px}',
       '.tag.warn{background:var(--warn-soft);color:#9a5b00}.tag.danger{background:var(--danger-soft);color:#b42318}.tag.ok{background:var(--ok-soft);color:#0b7a55}',
-      // 留意点
-      '.hgroup{margin-bottom:12px}.hgroup:last-child{margin-bottom:0}',
-      '.hgroup-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px;color:var(--muted)}.hgroup-head b{color:var(--text)}',
-      'ul.hlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}',
-      'li.h{display:grid;grid-template-columns:20px 1fr;gap:10px;align-items:start;padding:9px 12px;border:1px solid var(--border);border-left-width:4px;border-radius:8px;font-size:13.5px;background:var(--surface)}',
-      'li.h.block{border-left-color:var(--danger)}li.h.warn{border-left-color:var(--warn)}li.h.info{border-left-color:var(--info)}',
-      'li.h.done{background:var(--ok-soft);border-color:#bfe3d3;border-left-color:var(--ok)}li.h.done .txt{color:var(--muted)}',
-      'li.h .box{font-size:16px;line-height:1.2;color:var(--muted)}li.h.done .box{color:var(--ok)}',
-      'li.h .hmeta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:2px}',
-      'li.h .sev{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--surface-3);color:var(--muted)}',
-      'li.h .sev.block{background:var(--danger-soft);color:var(--danger)}li.h .sev.warn{background:var(--warn-soft);color:var(--warn)}li.h .sev.info{background:var(--info-soft);color:var(--info)}',
-      'li.h .cat{font-size:11px;color:var(--muted);padding:0 6px;border:1px solid var(--border);border-radius:4px}',
-      'li.h .txt{line-height:1.55}',
-      'ul.strengths{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 16px}',
-      'ul.strengths li{position:relative;padding-left:1.4em;font-size:13.5px}ul.strengths li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:800}',
-      '.callout{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-left:4px solid var(--warn);border-radius:8px;padding:10px 12px;margin-top:12px;font-size:13.5px;background:var(--warn-soft)}',
-      '.callout.danger{border-left-color:var(--danger);background:var(--danger-soft)}.callout.ok{border-left-color:var(--ok);background:var(--ok-soft)}.callout.info{border-left-color:var(--info);background:var(--info-soft)}',
-      '.callout>div{min-width:0}.callout .muted{display:block}',
       '.note{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.7}',
       '.muted{color:var(--muted)}.empty{color:var(--muted);font-size:13.5px}',
       // 判定
@@ -884,19 +575,6 @@
       '.result-title{font-size:24px;font-weight:800;margin:2px 0 6px}',
       '.result.recommend .result-title{color:var(--ok)}.result.review .result-title{color:var(--warn)}.result.reject .result-title{color:var(--danger)}',
       '.result-body{font-size:14.5px}',
-      '.result-must{margin-top:8px;font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:4px}',
-      '.result-note{margin-top:10px;padding:9px 12px;background:rgba(255,255,255,.75);border:1px solid var(--border);border-radius:8px;font-size:13.5px}',
-      '.axes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px}',
-      '.axis{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-width:0}',
-      '.axis .a-label{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em}.axis .a-val{font-size:20px;font-weight:800;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}.axis .a-val small{font-size:12px;font-weight:600;color:var(--muted)}.axis .a-val.txt{font-size:13.5px;line-height:1.45;margin-top:4px}.axis .a-sub{font-size:12px;color:var(--muted);margin-top:2px}',
-      '.mx-wrap{margin-top:12px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px}',
-      '.mx{border-collapse:separate;border-spacing:4px;width:100%;font-size:12.5px}',
-      '.mx th{font-weight:700;text-align:center;padding:6px 4px;color:var(--text)}.mx th small{display:block;font-weight:600;color:var(--muted);font-size:11px}',
-      '.mx thead th:first-child{text-align:left;color:var(--muted);font-size:11.5px;font-weight:600}',
-      '.mx td{text-align:center;padding:9px 6px;border-radius:7px;font-weight:600;background:var(--surface-3)}',
-      '.mx td.recommend{background:var(--ok-soft);color:#0b7a55}.mx td.review{background:var(--warn-soft);color:#9a5b00}.mx td.reject{background:var(--danger-soft);color:#b42318}',
-      '.mx td.cur{outline:3px solid var(--text);outline-offset:-3px;font-weight:800}',
-      '.mx-note{font-size:12px;color:var(--muted);margin-top:6px}',
       '.adj{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}',
       '.adj li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.75);border:1px solid var(--border);font-size:13px}',
       '.adj .step{white-space:nowrap;font-weight:700;color:var(--muted)}',
@@ -906,6 +584,8 @@
       '.foot{margin-top:28px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}',
       // 押印欄
       '.stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}',
+      // 押印欄が 2 つ（既定）のときは 2 列（docs/SPEC-slim.md D10）
+      '.stamp-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}',
       '.stamp-box{border:1px solid var(--border);border-radius:10px;padding:12px 10px 10px;text-align:center;background:var(--surface-2);min-width:0}',
       '.stamp-label{font-size:12.5px;font-weight:700;color:var(--muted)}.stamp-hint{font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4}',
       '.stamp-area{height:100px;display:grid;place-items:center}',
@@ -920,11 +600,11 @@
       '.stamp-ctl button:hover{filter:brightness(.97)}',
       '.mgmt-save{display:none;margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--warn-soft);border:1px solid #f3cf8a;font-size:13px;align-items:center;gap:10px;flex-wrap:wrap}.mgmt-save.show{display:flex}',
       '.mgmt-note{font-size:12px;color:var(--muted);margin-top:10px}',
-      '@media (max-width:720px){.stamp-row{grid-template-columns:1fr}}',
-      // 申し送りシート（A4 1枚）印刷
+      '@media (max-width:720px){.stamp-row,.stamp-row.cols-2{grid-template-columns:1fr}}',
+      // 表示切替・印刷のツールバー
       '.rtool{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--muted)}',
       '.rtool button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:var(--text);cursor:pointer}.rtool button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.rtool-hint{font-size:11.5px}',
-      // 表示切替（報告書／詳細）と報告書表示（docs/SPEC-report.md 5-1）。報告書表示の規則は画面だけ・印刷準備中（print-*）は外す
+      // 表示切替（報告書／詳細）と報告書表示（docs/SPEC-report.md 5-1）。報告書表示の規則は画面だけ・A4 の印刷準備中（print-checklist）は外す
       '.rtool-view{display:inline-flex;border:1px solid #c7d0db;border-radius:7px;overflow:hidden;background:#fff}',
       '.rtool .rtool-view button{border:none;border-radius:0;padding:5px 14px;color:var(--muted);background:#fff}',
       '.rtool .rtool-view button+button{border-left:1px solid #c7d0db}',
@@ -934,12 +614,10 @@
       '.paper-cap{display:flex;justify-content:space-between;gap:4px 12px;flex-wrap:wrap;width:210mm;max-width:100%;margin:0 auto 6px;font-size:12px;color:var(--muted)}.paper-cap b{color:var(--text)}',
       '.paper{box-sizing:content-box;width:190mm;margin:0 auto;padding:10mm;background:#fff;color:#111;border:1px solid #d5dbe3;border-radius:2px;box-shadow:0 1px 2px rgba(16,24,40,.08),0 12px 32px rgba(16,24,40,.12)}',
       '@media screen{',
-      'body.view-report.has-cl:not(.print-checklist):not(.print-handoff) .page>:not(.rtool):not(.paper-wrap):not(section[data-sec="mgmt"]):not(.foot){display:none}',
-      'body.view-report.has-cl:not(.print-checklist):not(.print-handoff) .paper-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 2px 14px}',
-      'body.view-report.has-cl:not(.print-checklist):not(.print-handoff) section.sec[data-sec="mgmt"]{max-width:210mm;margin:12px auto 0}',
-      'body.view-report.has-cl:not(.print-checklist):not(.print-handoff) section.sec[data-sec="mgmt"] h2::before{display:none}',
-      'body.view-report:not(.has-cl):not(.print-checklist):not(.print-handoff) .dash{display:none}',
-      'body.view-report:not(.has-cl):not(.print-checklist):not(.print-handoff) section.sec:not([data-sec="pre"]):not([data-sec="comment"]):not([data-sec="handoff"]):not([data-sec="interview"]):not([data-sec="mgmt"]){display:none}',
+      'body.view-report.has-cl:not(.print-checklist) .page>:not(.rtool):not(.paper-wrap):not(section[data-sec="mgmt"]):not(.foot){display:none}',
+      'body.view-report.has-cl:not(.print-checklist) .paper-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 2px 14px}',
+      'body.view-report.has-cl:not(.print-checklist) section.sec[data-sec="mgmt"]{max-width:210mm;margin:12px auto 0}',
+      'body.view-report.has-cl:not(.print-checklist) section.sec[data-sec="mgmt"] h2::before{display:none}',
       '}',
       // 最終合否パネル（「応募者の管理」節の先頭）
       '.decision{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 18px;align-items:center;padding:12px 16px;margin:0 0 14px;border:1px solid var(--border);border-left:4px solid #24324a;border-radius:10px;background:var(--surface-2)}',
@@ -958,46 +636,27 @@
       '.verdict-stamp{mix-blend-mode:multiply}',
       '.rh-decision{flex:0 0 auto;display:grid;place-items:center}.rh-decision:empty{display:none}',
       '@media (max-width:720px){.decision{grid-template-columns:1fr}}',
-      '@media print{.paper-wrap,.dec-ctl,.dec-hint{display:none !important}.decision.is-none{display:none !important}body.print-checklist #decision,body.print-handoff #decision,body.print-handoff .rh-decision{display:none !important}.decision{break-inside:avoid;padding:6px 10px;margin-bottom:8px;gap:4px 12px}.dec-stamp{width:100px;height:64px}.dec-stamp .verdict-stamp{width:96px;height:61px}.decision,.verdict-stamp,.dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
-      '.print-only{display:none}',
-      '@page sheet{size:A4;margin:7mm 9mm}',
-      '@media print{.rtool{display:none !important}',
-      'body.print-handoff{page:sheet;font-size:10px;line-height:1.35}',
-      'body.print-handoff .print-only{display:block}body.print-handoff .sheet-title{font-size:13px;font-weight:800;color:var(--accent);margin-bottom:2px}',
-      'body.print-handoff .dash,body.print-handoff .verdict,body.print-handoff .rh-top,body.print-handoff .foot,body.print-handoff .mgmt-note,body.print-handoff .stamp-hint,body.print-handoff .stamp-ctl,body.print-handoff .mgmt-save{display:none !important}',
-      'body.print-handoff section.sec:not([data-sec="pre"]):not([data-sec="comment"]):not([data-sec="handoff"]):not([data-sec="interview"]):not([data-sec="mgmt"]){display:none !important}',
-      'body.print-handoff .rh{border-radius:5px}body.print-handoff .rh-main{padding:3px 10px 4px;gap:10px}body.print-handoff .rh-name{font-size:16px;margin:0 0 3px}body.print-handoff .rh-name small{font-size:10px}body.print-handoff .rh-kicker{display:none}body.print-handoff .chip{font-size:9px;padding:0 6px}body.print-handoff .rh-chips{gap:4px}',
-      'body.print-handoff .sec{padding:4px 8px 5px;margin-top:4px;border-radius:5px;box-shadow:none}body.print-handoff .sec h2{font-size:11px;padding-bottom:3px;margin-bottom:4px;gap:6px}body.print-handoff .sec h2::before{width:15px;height:15px;font-size:9.5px;border-radius:4px}body.print-handoff .sec h3{font-size:9.5px;margin:4px 0 2px;padding-bottom:1px}',
-      'body.print-handoff table.kv{font-size:10px;display:block}body.print-handoff table.kv tbody{display:block;columns:2;column-gap:14px}body.print-handoff table.kv tr{display:grid;grid-template-columns:6.5em 1fr;break-inside:avoid;border-bottom:1px solid #eef2f6}body.print-handoff table.kv th,body.print-handoff table.kv td{padding:1px 4px 1px 0;border:none;width:auto}',
-      'body.print-handoff .note{padding:2px 8px;font-size:10px;line-height:1.35}body.print-handoff .callout{padding:3px 8px;font-size:10px;margin-top:5px}',
-      'body.print-handoff li.h{padding:1px 6px;gap:5px;grid-template-columns:12px 1fr;font-size:9.7px;border-left-width:3px;border-radius:4px;break-inside:avoid}body.print-handoff li.h .box{font-size:11px}body.print-handoff li.h .hmeta{margin-bottom:0;gap:4px}body.print-handoff li.h .sev,body.print-handoff li.h .cat,body.print-handoff .tag{font-size:8px;padding:0 4px}body.print-handoff li.h .txt{line-height:1.3}',
-      'body.print-handoff ul.hlist{gap:2px}body.print-handoff .hgroup{margin-bottom:4px}body.print-handoff .hgroup-head{margin-bottom:2px;font-size:9.5px;gap:6px}body.print-handoff .hgroup-head>span:not(.badge){display:none}body.print-handoff .badge{font-size:8.5px;padding:0 5px}',
-      'body.print-handoff ul.strengths{gap:0 12px}body.print-handoff ul.strengths li{font-size:10px}',
-      'body.print-handoff .sheet-2col ul.hlist{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;align-items:start}',
-      'body.print-handoff .stamp-row{gap:8px}body.print-handoff .stamp-box{display:flex;align-items:center;gap:8px;text-align:left;padding:2px 8px}body.print-handoff .stamp-label{font-size:10px;min-width:5.5em}body.print-handoff .stamp-area{height:auto}body.print-handoff .hanko{width:46px;height:46px}body.print-handoff .stamp-empty{width:44px;height:44px;font-size:8.5px}body.print-handoff .stamp-meta{font-size:9px;min-height:0;line-height:1.3}}',
+      '@media print{.paper-wrap,.dec-ctl,.dec-hint{display:none !important}.decision.is-none{display:none !important}body.print-checklist #decision{display:none !important}.decision{break-inside:avoid;padding:6px 10px;margin-bottom:8px;gap:4px 12px}.dec-stamp{width:100px;height:64px}.dec-stamp .verdict-stamp{width:96px;height:61px}.decision,.verdict-stamp,.dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
+      '@media print{.rtool{display:none !important}}',
       '@media print{.stamp-ctl,.mgmt-save,.mgmt-note{display:none !important}.stamp-row{break-inside:avoid}.hanko,.stamp-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}',
-      '@media (max-width:720px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}.rh-main{flex-direction:column;align-items:stretch}.verdict{align-items:flex-start}ul.strengths{grid-template-columns:1fr}.bar,.bar.wide{grid-template-columns:minmax(0,1fr) 90px 4.5em}.rh-top{flex-direction:column;align-items:flex-start}.rh-meta{text-align:left}}',
-      // 全体印刷: 画面用の余白を詰め、大きなブロックは途中で改ページ可にして各ページ下部の空白を減らす
+      '@media (max-width:720px){.rh-main{flex-direction:column;align-items:stretch}.verdict{align-items:flex-start}.rh-top{flex-direction:column;align-items:flex-start}.rh-meta{text-align:left}}',
+      // 「詳細」の印刷（ブラウザの既定の印刷）: 画面用の余白を詰め、大きなブロックは途中で改ページ可にして各ページ下部の空白を減らす
       '@media print{@page{size:A4;margin:10mm 11mm}body{background:#fff;font-size:11px;line-height:1.45}.page{padding:0;max-width:none}',
-      '.rh,.sec,.tile,.result,li.h{box-shadow:none}.rh{border-radius:8px}.rh-top{padding:5px 14px}.rh-main{padding:8px 14px;gap:12px}.rh-name{font-size:19px;margin:0 0 4px}.rh-chips{gap:4px}.chip{font-size:10.5px;padding:1px 8px}.verdict{padding:6px 12px;min-width:170px;gap:0}.verdict .v-title{font-size:16px}',
-      '.dash{margin-top:8px;gap:8px}.tile{padding:7px 10px}.tile .t-val{font-size:17px}.tile .t-label{font-size:10.5px}.meter{margin-top:5px}',
+      '.rh,.sec,.result{box-shadow:none}.rh{border-radius:8px}.rh-top{padding:5px 14px}.rh-main{padding:8px 14px;gap:12px}.rh-name{font-size:19px;margin:0 0 4px}.rh-chips{gap:4px}.chip{font-size:10.5px;padding:1px 8px}.verdict{padding:6px 12px;min-width:170px;gap:0}.verdict .v-title{font-size:16px}',
       '.sec{margin-top:8px;padding:9px 14px 11px;border-radius:8px}.sec h2{font-size:12.5px;margin-bottom:7px;padding-bottom:5px}.sec h2::before{width:20px;height:20px;font-size:11px}.sec h3{margin:9px 0 5px}',
-      'table.kv th,table.kv td{padding:2px 8px 2px 0}table.kv tr{break-inside:avoid}table.list th,table.list td{padding:3px 8px}',
-      'li.h{padding:4px 9px}ul.hlist{gap:4px}.hgroup{margin-bottom:7px}.hgroup-head{margin-bottom:4px}ul.strengths{gap:3px 14px}.note{padding:7px 11px}.callout{padding:7px 10px;margin-top:8px}',
-      '.bars{gap:4px}.bar{grid-template-columns:minmax(0,1fr) 120px 4.5em}.bar.wide{grid-template-columns:minmax(0,1fr) 120px 5.5em}.total-line{padding:6px 10px;margin-top:8px}.total-line b{font-size:16px}',
-      '.result{padding:11px 14px;break-inside:auto}.result-title{font-size:18px}.axes{margin-top:8px;gap:8px}.axis{padding:6px 10px}.axis .a-val{font-size:15px}.mx-wrap{margin-top:8px;padding:6px}.mx td{padding:6px 4px}.adj{margin-top:8px}.adj li{padding:5px 10px}',
+      'table.kv th,table.kv td{padding:2px 8px 2px 0}table.kv tr{break-inside:avoid}.note{padding:7px 11px}',
+      '.result{padding:11px 14px;break-inside:auto}.result-title{font-size:18px}.adj{margin-top:8px}.adj li{padding:5px 10px}',
       '.stamp-row{gap:8px}.stamp-box{padding:8px}.stamp-area{height:80px}.hanko{width:70px;height:70px}.stamp-empty{width:66px;height:66px}.foot{margin-top:12px}',
-      '.dash,.tile,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line,.axes,.stamp-row,.adj li{break-inside:avoid}.sec h2,.sec h3,.result-kicker,.result-title,.result-body,.hgroup-head{break-after:avoid}',
-      '.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+      '.note,.stamp-row,.adj li{break-inside:avoid}.sec h2,.sec h3,.result-kicker,.result-title,.result-body{break-after:avoid}',
+      '.verdict,.result,.badge,.tag,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     ].join('\n');
   }
-
   // ---------- 面接チェックリスト（報告書の描画。アプリの A4 報告・保存レポートで共用。docs/SPEC-checklist.md 4-2） ----------
   //   DOM 非依存の HTML 文字列を返す。o = { mode: 'section' | 'sheet', stamps: html文字列 | '', decisionId, decisionSvgId }
   //   'section' = 保存レポート「詳細」の「面接チェックリスト」節（台本の全文）
   //   'sheet'   = A4「面接チェックリスト報告」（1 ページの要約。台本の説明文・質問文・空の記入欄は載せない。2026-10-14）
   const CL_SHEET_PAGE_PX = 1040;   // A4 の印字可能高さ（297mm − 上下余白 16mm ≒ 1062px）の安全側
-  const CL_SHEET_STAMPS_PX = 90;   // 押印行（アプリ: .cl-stamps／保存 HTML: 直後に印刷する押印の節）に取っておく高さ（押印欄 3 件＝1 段）
+  const CL_SHEET_STAMPS_PX = 90;   // 押印行（アプリ: .cl-stamps／保存 HTML: 直後に印刷する押印の節）に取っておく高さ（押印欄 3 件まで＝1 段。既定は 2 件）
   const CL_SHEET_STAMP_ROW_PX = 60;   // 押印欄が 4 件以上（1 段 3 件で 2 段目以降）のとき 1 段ごとに足す高さ（実測 1 段 ≒ 56px）
   const CL_SHEET_BODY_PX = CL_SHEET_PAGE_PX - CL_SHEET_STAMPS_PX;   // 押印欄 3 件までの本文の上限。超えたら .cl-compact → .cl-compact-q1 → .cl-compact-2
   // 押印行を除いた本文の上限（押印欄の件数で決める。アプリの紙プレビュー・印刷用、保存 HTML の紙プレビュー・印刷用で同じ値を使う）
@@ -1088,11 +747,9 @@
     const a = record.applicant || {};
     const cl = U.isObj(record.checklist) ? record.checklist : R.emptyChecklist();
     const def = normalizeChecklistDef(record.checklistDef || profile.checklist, defaults().checklist);
-    // 運用モードは保存時の記録で決める（台本モードの記録は自動表示なし。docs/SPEC-script-mode.md 3-6）
-    const scriptRec = R.isScriptRecord(record);
-    const prof = Object.assign({}, profile, { checklist: def, mode: scriptRec ? 'script' : 'full' });
-    const sum = R.checklistSummary(a, cl, prof, { scores: record.scores, management: record.management });
-    if (mode === 'sheet') return clOnePageHtml(record, profile, o, def, sum, scriptRec);
+    const prof = Object.assign({}, profile, { checklist: def });
+    const sum = R.checklistSummary(a, cl, prof, { management: record.management });
+    if (mode === 'sheet') return clOnePageHtml(record, profile, o, def, sum);
 
     // ---- 以下 'section'（保存レポート「詳細」の節。台本の全文） ----
     const showQ = !(U.isObj(def.print) && def.print.showQuestions === false);
@@ -1123,8 +780,7 @@
           let v = it.effectiveLabel != null ? it.effectiveLabel : asStr(it.effective);
           if (it.kind === 'date') v = clFmtDate(v);
           else if (it.kind === 'month') v = clFmtMonth(v);
-          const suffix = it.fromAuto ? (it.auto === 'firstEnd' ? '（自動）' : '（応募情報より）') : '';
-          return '<div><dt>' + esc(it.label) + '</dt><dd>' + (asStr(v).trim() ? esc(v) + (suffix ? '<small>' + suffix + '</small>' : '') : dash) + '</dd></div>';
+          return '<div><dt>' + esc(it.label) + '</dt><dd>' + (asStr(v).trim() ? esc(v) : dash) + '</dd></div>';
         }).join('') + '</dl></div>';
       }
       if (b.type === 'explain' || b.type === 'notify') {
@@ -1214,15 +870,11 @@
     const hd = sum.header;
     const chips = [];
     const postingChip = '<span class="cl-hchip"><b>' + esc(((def.header || {}).posting || {}).label || '応募した求人') + '</b>' + txt(hd.postingLabel) + '</span>';
-    // 台本モードの記録は常に手入力（「（手入力）」「（自動）」を付けない）
-    const taxiChip = '<span class="cl-hchip ' + tone(hd.taxi.tone) + '"><b>タクシー可否・料金</b>' + txt(hd.taxi.text) + (hd.taxi.auto || scriptRec ? '' : '<small>（手入力）</small>') + '</span>';
-    // 台本モード: 応募者の属性の順（求人 → タクシー）。詳細モードは従来どおりタクシー → 求人
-    if (scriptRec) chips.push(postingChip, taxiChip);
-    else chips.push(taxiChip, postingChip);
-    // 目安（台本の合計分）は詳細モードだけ
+    const taxiChip = '<span class="cl-hchip ' + tone(hd.taxi.tone) + '"><b>タクシー可否・料金</b>' + txt(hd.taxi.text) + '</span>';
+    // 応募者の属性の順（求人 → タクシー）
+    chips.push(postingChip, taxiChip);
     const kvHtml = '<dl class="cl-sh-kv"><div><dt>面接日</dt><dd>' + (hd.date ? esc(clFmtDate(hd.date)) : dash) + '</dd></div>' +
-      '<div><dt>担当</dt><dd>' + txt(hd.interviewer) + (hd.interviewerFromStamp ? '<small>（押印より）</small>' : '') + '</dd></div>' +
-      (scriptRec ? '' : '<div><dt>目安</dt><dd>' + esc(sum.minutesTotal) + '分</dd></div>') + '</dl>';
+      '<div><dt>担当</dt><dd>' + txt(hd.interviewer) + (hd.interviewerFromStamp ? '<small>（押印より）</small>' : '') + '</dd></div></dl>';
 
     const secHead = '<div class="cl-sheet-head cl-sec-head">' + kvHtml + '<div class="cl-sh-chips">' + chips.join('') + '</div></div>';
     return '<div class="cl-sheet cl-mode-section">' + secHead + pagesHtml + overallHtml + '</div>';
@@ -1232,12 +884,10 @@
   //   上から: ヘッダー帯 → 応募者（2 行）→ 結果ストリップ（結果・総合判断・必須条件・確認点・最終合否、調整 1 行）→
   //   必須条件｜勤務条件の確認 → 確認点（7 行）→ 面接メモ（記入があるものだけ）→ 説明・連絡（1 行）→ 押印行
   //   色は結果・○△×（必須条件の一致／不一致を含む）・最終合否だけ。他はグレースケール
-  function clOnePageHtml(record, profile, o, def, sum, scriptRec) {
-    const R = global.RecruitRules;
+  function clOnePageHtml(record, profile, o, def, sum) {
     const esc = U.esc;
     const a = record.applicant || {};
     const meta = profile.meta || {};
-    const opts = profile.options || {};
     const texts = profile.texts || {};
     const titleOf = function (r) { return ((texts[r] || {}).title) || r; };
     const baseItems = clDefaultItems();
@@ -1257,26 +907,14 @@
       '<span class="cl-band-r">' + esc([asStr(meta.theaterName).trim(), '作成 ' + clFmtDate(created)].filter(Boolean).join(' ／ ')) + '</span></div>';
 
     // ---- 2. 応募者（1 行目: 氏名・区分・年齢・性別・卒業予定／2 行目: 面接日・担当・求人・タクシー。空の値は項目ごと省く） ----
-    let who, grad = '';
     const kv = [];
     const kvPush = function (k, v) { const s = asStr(v).trim(); if (s) kv.push('<div><dt>' + esc(k) + '</dt><dd>' + esc(s) + '</dd></div>'); };
     kvPush('面接日', hd.date ? clFmtDate(hd.date) : '');
     kvPush('担当', hd.interviewer);
     kvPush(((def.header || {}).posting || {}).label || '応募した求人', hd.postingLabel);
     kvPush('タクシー可否・料金', hd.taxi && hd.taxi.text);
-    if (scriptRec) {
-      // 台本モード: 区分・年齢・性別と卒業予定（勤務期間・週・希望シフトは出さない）
-      who = [a.category, a.age ? a.age + '歳' : '', a.gender].filter(Boolean).join('・');
-      grad = asStr(a.graduationDate).trim() ? clFmtMonth(asStr(a.graduationDate).trim()) : '';
-    } else {
-      // 詳細モード: 区分・年齢と勤務期間・週・希望シフト
-      who = [a.category, a.age ? a.age + '歳' : ''].filter(Boolean).join('・');
-      if (a.workPeriod) kvPush('勤務期間', R.labelOf(opts.workPeriods, a.workPeriod));
-      if (a.daysMin || a.daysMax) kvPush('週', (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日');
-      let shiftsLine = '';
-      try { shiftsLine = R.describeShifts(a, profile).join('、'); } catch (e) { shiftsLine = ''; }
-      kvPush('希望シフト', shiftsLine);
-    }
+    const who = [a.category, a.age ? a.age + '歳' : '', a.gender].filter(Boolean).join('・');
+    const grad = asStr(a.graduationDate).trim() ? clFmtMonth(asStr(a.graduationDate).trim()) : '';
     const headHtml = '<div class="cl-sheet-head">' + bandHtml +
       '<div class="cl-who"><div class="cl-who-1"><span class="cl-sh-name">' + esc(a.name || '応募者') + '<small>さん</small></span>' +
         (who ? '<span class="cl-sh-who">' + esc(who) + '</span>' : '') +
@@ -1297,16 +935,6 @@
       (m.total && m.mismatch && m.unknown ? '<span class="cl-tile-s">未確認 ' + m.unknown + '</span>' : '') + '</div>';
     const scoreTile = '<div class="cl-tile cl-tile-score"><span class="cl-tile-k">確認点</span><span class="cl-tile-v">' + esc(sc.total) + '<small>/' + esc(sc.max) + '点</small></span>' +
       '<span class="cl-tile-s">' + esc('○' + cnt.good + ' △' + cnt.fair + ' ×' + cnt.poor + (cnt.blank ? ' 未入力' + cnt.blank : '')) + '</span></div>';
-    // 詳細モードの記録: シフト貢献度（2 軸判定のもう 1 軸）
-    let contribTile = '';
-    if (!scriptRec && hasJ) {
-      const jc = j.contribution || {};
-      contribTile = '<div class="cl-tile cl-tile-contrib"><span class="cl-tile-k">シフト貢献度</span>' +
-        (j.mode === 'incomplete' ? '<span class="cl-tile-v">未確定</span>'
-          : j.mode === 'interviewOnly' || !j.interview ? '<span class="cl-tile-v">OFF</span>'
-            : '<span class="cl-tile-v">' + esc(jc.total == null ? '-' : jc.total) + '<small>/' + esc(jc.max == null ? '-' : jc.max) + '点</small></span>' +
-              '<span class="cl-tile-s">' + esc((jc.pct == null ? '-' : jc.pct) + '%' + (jc.bandLabel ? '・' + jc.bandLabel : '')) + '</span>') + '</div>';
-    }
     // 最終合否（有効時のみ）。ストリップの右端（docs/SPEC-report.md 4-7）
     let decHtml = '';
     if (global.RecruitStamp) {
@@ -1321,7 +949,7 @@
     }).join('') + '</ul>' : '';
     // ストリップの地色は結果に合わせる（data-result。class は従来どおり "cl-judge"）
     const judgeHtml = '<div class="cl-judge' + (hasJ ? '"' + ' data-result="' + esc(j.result) + '"' : ' cl-judge-none"') + '><div class="cl-judge-row"><div class="cl-judge-main">' +
-      '<div class="cl-tiles' + (contribTile ? ' n5' : '') + '">' + resTile + ovTile + mustTile + scoreTile + contribTile + '</div></div>' + decHtml + '</div>' + adjHtml + '</div>';
+      '<div class="cl-tiles">' + resTile + ovTile + mustTile + scoreTile + '</div></div>' + decHtml + '</div>' + adjHtml + '</div>';
 
     // ---- 4. 必須条件（＋必須条件の直後の記入欄）｜勤務条件の確認（ほかの記入欄） ----
     const mustBlocks = [], leftFields = [], rightFields = [];
@@ -1389,8 +1017,8 @@
     });
     const ivNotes = asStr(record.interviewNotes).trim();
     if (ivNotes) memoRows.push('<div class="cl-nm-row cl-nm-iv"><div class="cl-nm-k">面接所見</div><div class="cl-nm-v">' + esc(ivNotes) + '</div></div>');
-    // 台本モード: Step① のメモ（入力欄「メモ（任意）」）
-    const rvNotes = scriptRec ? asStr(a.reviewerNotes).trim() : '';
+    // ① 応募者のメモ（入力欄「メモ（任意）」）
+    const rvNotes = asStr(a.reviewerNotes).trim();
     if (rvNotes) memoRows.push('<div class="cl-nm-row cl-nm-memo"><div class="cl-nm-k">メモ</div><div class="cl-nm-v">' + esc(rvNotes) + '</div></div>');
     // 案内 1 行: 「…」で切れたメモがあるとき（.cl-nm-cut）／質問の回答を省いたとき（.cl-compact-2）だけ表示（clFitSheet が付ける）
     const notesHtml = memoRows.length
@@ -1501,7 +1129,6 @@
       '.cl-mode-sheet .cl-judge-row{display:flex;gap:6px;align-items:stretch;min-height:58px}',
       '.cl-mode-sheet .cl-judge-main{flex:1 1 auto;min-width:0;display:flex}',
       '.cl-mode-sheet .cl-tiles{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:6px}',
-      '.cl-mode-sheet .cl-tiles.n5{grid-template-columns:minmax(0,1.4fr) repeat(4,minmax(0,1fr))}',
       '.cl-mode-sheet .cl-tile{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;padding:3px 8px;background:#fff;border:1px solid #d5dbe3;border-radius:4px}',
       '.cl-mode-sheet .cl-tile-k{font-size:8.5px;font-weight:700;color:#5b6675;line-height:1.2}',
       '.cl-mode-sheet .cl-tile-v{font-size:11px;font-weight:800;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
@@ -1564,6 +1191,7 @@
       // 8. 押印行
       '.cl-mode-sheet .cl-stamps{margin:10px 0 0;break-inside:avoid}',
       '.cl-sheet .stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;break-inside:avoid}',
+      '.cl-sheet .stamp-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}',
       '.cl-sheet .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px;border:1px solid #c9d2dd;border-radius:4px;background:#fff;min-width:0}',
       '.cl-sheet .stamp-label{font-size:9.5px;font-weight:700;min-width:5em;color:#1a2233}.cl-sheet .stamp-area{height:auto;display:grid;place-items:center}',
       '.cl-sheet .hanko{width:46px;height:46px;filter:none}.cl-sheet .stamp-empty{width:44px;height:44px;font-size:8.5px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;color:#5b6675;background:#fff}',
@@ -1597,18 +1225,21 @@
       'body.print-checklist .stamp-hint,body.print-checklist .stamp-ctl,body.print-checklist .mgmt-save,body.print-checklist .mgmt-note{display:none !important}',
       'body.print-checklist .stamp-row{gap:6px}body.print-checklist .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px}body.print-checklist .stamp-label{font-size:9.5px;min-width:5em}body.print-checklist .stamp-area{height:auto}body.print-checklist .hanko{width:46px;height:46px}body.print-checklist .stamp-empty{width:44px;height:44px;font-size:8.5px}body.print-checklist .stamp-meta{font-size:8.5px;min-height:0;line-height:1.3}',
       '.cl-sheet .cl-s-h,.cl-sheet tr,.cl-sheet .cl-tile,.cl-sheet .cl-hchip,.cl-sheet .cl-page-no,.cl-sheet .cl-memo,.cl-sheet .hanko,.cl-sheet .stamp-empty,.cl-sheet .cl-band,.cl-sheet .cl-judge,.cl-sheet .cl-mark,.cl-sheet .cl-mm,.cl-sheet .cl-exline,.cl-sheet .cl-decision,.cl-sheet .verdict-stamp,.cl-sheet .cl-dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}',
-      // 全体印刷（レポートの「面接チェックリスト」節）: 余白を詰める
+      // 「詳細」の印刷（レポートの「面接チェックリスト」節）: 余白を詰める
       '.cl-mode-section .cl-s{break-inside:auto}.cl-mode-section table td{padding:2px 5px}',
       '}'
     ].join('\n');
   }
 
+  // ---------- 保存 HTML（報告書。docs/SPEC-report.md・docs/SPEC-script-mode.md 3 章） ----------
+  //   開くと報告書表示（A4 の紙プレビュー＋押印・最終合否）。「詳細」はヘッダー・応募者情報・面接チェックリスト（台本の全文）・採用可否判定・応募者の管理。
+  //   印刷は「A4 で印刷（1 ページ）」だけ（報告書表示のままブラウザで印刷しても A4 報告。「詳細」の印刷はブラウザの既定）
   function generateReportHTML(record, profile) {
     const R = global.RecruitRules;
     const esc = U.esc;
-    const a = record.applicant || {};
-    // 台本モードの記録（record.mode === 'script'）は応募者情報・面接チェックリスト・採用可否判定（台本）・応募者の管理だけ（docs/SPEC-script-mode.md 3 章）
-    const scriptRec = R.isScriptRecord(record);
+    record = record || {};
+    profile = profile || defaults();
+    const a = U.isObj(record.applicant) ? record.applicant : {};
     // 押印・最終合否（docs/SPEC-report.md 4-1）。ファイル名は合否付き（有効かつ合否ありのとき 基本名_採用.html）
     const Stamp = global.RecruitStamp;
     const dcfg = decisionConfig(profile);
@@ -1623,389 +1254,90 @@
     const name = a.name ? a.name + 'さん' : '応募者';
     const savedAt = U.fmtDateTime(record.savedAt);
     const texts = profile.texts || {};
-    const o = profile.options || {};
-    const f = profile.features || {};
     const titleOf = function (r) { return ((texts[r] || {}).title) || r; };
-    const bandName = function (b) { return ((texts.bandLabels || {})[b]) || { high: '高', mid: '中', low: '低' }[b] || '—'; };
-    const fmtN = function (v) { return v == null || v === '' ? '-' : String(v); };
-    const clamp = function (x) { const n = Number(x); return isNaN(n) ? 0 : Math.max(0, Math.min(100, Math.round(n * 10) / 10)); };
-    const pctCls = function (pct) { const n = Number(pct); return isNaN(n) ? '' : n >= 70 ? 'hi' : n >= 40 ? 'mid' : 'lo'; };
-    const bandCls = function (b) { return { high: 'hi', mid: 'mid', low: 'lo' }[b] || ''; };
-    const bandTone = function (b) { return { high: 'ok', mid: 'warn', low: 'danger' }[b] || ''; };
-    const resultTone = function (r) { return { recommend: 'ok', review: 'warn', reject: 'danger' }[r] || ''; };
-    const tagsOf = function (flags) {
-      return (flags || []).map(function (fl) {
-        return '<span class="tag ' + (fl === 'restricted' ? 'danger' : fl === 'unanswered' ? 'warn' : '') + '">' + esc(FLAG_LABELS[fl] || fl) + '</span>';
-      }).join('');
-    };
-
-    // ---- 応募情報を段階で振り分ける（保存時点の段階を優先。どちらも無い旧データは全部「応募時の情報」） ----
-    const stages = record.inputStages || profile.inputStages;
-    const sp = { inputStages: stages || {} };
-    const rowHtml = function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; };
-    const descRows = R.describeApplicant(a, profile);
-    const preRows = descRows.filter(function (r) { return r.section !== 'notes' && R.stageOf(sp, r.section) === 'pre'; }).map(rowHtml).join('');
-    const ivRows = descRows.filter(function (r) { return r.section !== 'notes' && R.stageOf(sp, r.section) === 'interview'; }).map(rowHtml).join('');
-
-    // 保存時点で未入力の「面接で確認する項目」
-    let unconfirmed = '';
-    try {
-      const cf = R.interviewConfirm(a, Object.assign({}, profile, sp));
-      const groups = [];
-      cf.items.filter(function (it) { return it.level === 'required' || it.level === 'check'; }).forEach(function (it) {
-        let g = groups.find(function (x) { return x.label === it.sectionLabel; });
-        if (!g) { g = { label: it.sectionLabel, items: [] }; groups.push(g); }
-        g.items.push(it.label);
-      });
-      unconfirmed = groups.map(function (g) { return g.label + '：' + g.items.join('、'); }).join('／');
-    } catch (e) { unconfirmed = ''; }
-
-    // ---- 高校生の採用方針（保存時点のスナップショットを優先） ----
-    let hs = record.highschool;
-    if (hs === undefined) {
-      try { const h0 = R.highschoolStatus(a, profile); hs = h0.applicable ? { status: h0.status, reasonsText: h0.reasonsText } : null; } catch (e) { hs = null; }
-    }
-    let hsHtml = '';
-    let hsChip = '';
-    if (hs && hs.status && hs.status !== 'none' && hs.status !== 'allowed') {
-      const cls = hs.status === 'exception_met' ? 'ok' : hs.status === 'exception_incomplete' ? '' : 'danger';
-      const policy = (profile.highschoolPolicy || {}).notice || '';
-      hsHtml = '<div class="callout ' + cls + '"><span>' + (cls === 'ok' ? '✓' : '⚠') + '</span><div><b>高校生の採用方針: ' + esc(HS_STATUS_LABELS[hs.status] || hs.status) + '</b>' +
-        (hs.reasonsText ? '（' + esc(hs.reasonsText) + '）' : '') +
-        (policy ? '<span class="muted" style="font-size:12.5px;margin-top:4px">' + esc(policy) + '</span>' : '') + '</div></div>';
-      hsChip = '<span class="badge ' + (cls === 'ok' ? 'ok' : cls === 'danger' ? 'danger' : 'warn') + '">' + esc(HS_STATUS_LABELS[hs.status] || hs.status) + '</span>';
-    }
-
-    // ---- 留意点（重要度ごと） ----
-    const items = record.handoff.items || [];
-    const checks = record.handoff.checks || {};
-    const counts = { block: 0, warn: 0, info: 0 };
-    let doneCount = 0;
-    items.forEach(function (i) { if (counts[i.severity] != null) counts[i.severity]++; if (checks[i.id]) doneCount++; });
-    const handoffHtml = ['block', 'warn', 'info'].map(function (k) {
-      const list = items.filter(function (i) { return i.severity === k; });
-      if (!list.length) return '';
-      const m = R.SEVERITY[k] || R.SEVERITY.info;
-      const tone = k === 'block' ? 'danger' : k === 'warn' ? 'warn' : 'info';
-      return '<div class="hgroup"><div class="hgroup-head"><span class="badge ' + tone + '">' + esc(m.label) + '</span><b>' + list.length + '件</b><span>' + esc(m.desc || '') + '</span></div>' +
-        '<ul class="hlist">' + list.map(function (i) {
-          const done = !!checks[i.id];
-          return '<li class="h ' + esc(i.severity) + (done ? ' done' : '') + '">' +
-            '<span class="box">' + (done ? '☑' : '☐') + '</span>' +
-            '<div><div class="hmeta"><span class="sev ' + esc(i.severity) + '">' + esc(m.label) + '</span>' +
-            '<span class="cat">' + esc(R.CATEGORY_LABELS[i.category] || i.category) + '</span>' +
-            (i.deferred || i.aggregate ? '<span class="tag warn">面接で確認</span>' : '') + '</div>' +
-            '<div class="txt">' + esc(i.text) + '</div></div></li>';
-        }).join('') + '</ul></div>';
-    }).join('');
-    const strengths = (record.handoff.strengths || []).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
-
-    // ---- シフト貢献度（保存時点のスナップショット） ----
-    const j = record.judgment;
-    const c = record.contribution || (j && j.contribution) || null;
-    const requireComplete = !(profile.contribution && profile.contribution.requireComplete === false);
-    const cPending = !!(c && c.incomplete && requireComplete);
-    let contribHtml;
-    let contribBand = '';
-    let contribBandTxt = '';
-    if (!c || !Array.isArray(c.parts)) {
-      contribHtml = '<p class="empty">シフト貢献度は未計算です（旧形式のデータ）。</p>';
-    } else {
-      contribBand = c.band || '';
-      contribBandTxt = c.enabled ? (cPending ? '未確定' : (c.bandLabel || bandName(c.band))) : '2軸判定OFF（参考値）';
-      const partRows = c.parts.map(function (pt) {
-        const na = pt.applicable === false;
-        const max = Number(pt.max) || 0;
-        const sc = Number(pt.score) || 0;
-        const pct = na || !max ? 0 : clamp(sc / max * 100);
-        return '<div class="bar wide' + (na ? ' na' : '') + '"><div class="b-label">' + esc(pt.label) + tagsOf(pt.flags) +
-          (pt.detail ? '<small>' + esc(pt.detail) + '</small>' : '') + '</div>' +
-          '<div class="b-track"><span class="' + (na ? '' : pctCls(pct)) + '" style="width:' + pct + '%"></span></div>' +
-          '<div class="b-val">' + (na ? '<small>対象外</small>' : esc(fmtN(pt.score)) + '<small> / ' + esc(fmtN(pt.max)) + '</small>') + '</div></div>';
-      }).join('');
-      contribHtml = '<div class="bars">' + partRows + '</div>' +
-        '<div class="total-line">合計 <b>' + esc(fmtN(c.total)) + '</b><span class="muted">/ ' + esc(fmtN(c.max)) + '点</span>' +
-        '<span class="right">得点率 ' + esc(fmtN(c.pct)) + '%<span class="badge ' + (cPending || !c.enabled ? '' : bandTone(c.band)) + '">' + esc(contribBandTxt) + '</span></span></div>' +
-        (c.incomplete && c.missing && c.missing.length ? '<div class="callout"><span>⚠</span><div>未確認: ' + esc(c.missing.join('・')) + '</div></div>' : '');
-
-      // 繁忙期の明細（表の形式はテスト・読み戻しで参照しているため維持）
-      const unitL = R.UNIT_LABEL || {};
-      const triL = R.TRI_LABELS || {};
-      const busyRows = (c.busyRows || []).map(function (b) {
-        const days = b.days == null ? (R.isTri(b.avail) && f.vacationDays !== false ? '未確認' : '-') : b.days + (unitL[b.unit] || '日');
-        return '<tr' + (b.weight > 0 ? '' : ' class="na"') + '><td>' + esc(b.label) + (b.critical && b.weight > 0 ? '<span class="tag">重点</span>' : '') + (b.weight > 0 ? '' : '<span class="tag">記録のみ</span>') + '</td>' +
-          '<td>' + esc(b.avail ? (triL[b.avail] || b.avail) : '未確認') + '</td>' +
-          '<td class="num">' + esc(days) + '</td>' +
-          '<td class="num">' + esc(fmtN(b.refDays)) + (unitL[b.unit] ? esc(unitL[b.unit]) : '') + '</td>' +
-          '<td class="num">' + esc(fmtN(b.weight)) + '</td></tr>';
-      }).join('');
-      if (busyRows) {
-        contribHtml += '<h3>繁忙期（3連休・長期休暇）</h3><table class="list"><thead><tr><th>期間</th><th>可否</th><th class="num">出られる日数</th><th class="num">満点の日数</th><th class="num">重み</th></tr></thead><tbody>' + busyRows + '</tbody></table>';
-      }
-      const an = a.allNight || {};
-      const extra = [];
-      if (f.holidayWork !== false) extra.push(['祝日', a.holidayWork ? (triL[a.holidayWork] || a.holidayWork) : '未確認']);
-      if (f.weekendFreq !== false) extra.push(['土日の頻度', a.weekendFreq ? R.labelOf(o.weekendFrequencies, a.weekendFreq) : (c.parts.some(function (p) { return p.id === 'weekend' && (p.flags || []).indexOf('unanswered') >= 0; }) ? '未確認' : '-')]);
-      if (f.allNight !== false) {
-        const anPart = c.parts.find(function (p) { return p.id === 'allNight'; });
-        let anTxt;
-        if (anPart && (anPart.flags || []).indexOf('restricted') >= 0) anTxt = anPart.detail;
-        else {
-          const ps = [];
-          ps.push(an.availability ? (triL[an.availability] || an.availability) : '未確認');
-          if (R.isTri(an.availability)) ps.push(an.frequency ? R.labelOf(o.allNightFrequencies, an.frequency) : '頻度未確認');
-          if (an.note) ps.push(an.note);
-          anTxt = ps.join(' / ');
-        }
-        const pr = profile.params || {};
-        extra.push(['オールナイト', anTxt + (pr.allNightShiftStart ? '（' + pr.allNightShiftStart + '〜翌' + (pr.allNightShiftEnd || '') + '目安）' : '')]);
-      }
-      if (extra.length) {
-        contribHtml += '<h3>祝日・土日・オールナイト</h3><table class="kv">' + extra.map(function (x) { return '<tr><th>' + esc(x[0]) + '</th><td>' + esc(x[1]) + '</td></tr>'; }).join('') + '</table>';
-      }
-    }
+    const j = U.isObj(record.judgment) && record.judgment.result ? record.judgment : null;
 
     // ---- 面接チェックリスト（SPEC-checklist 4-3）。保存時点の台本（checklistDef）の文言で出す ----
     const clRec = U.isObj(record.checklist) ? record.checklist : R.emptyChecklist();
     const clHas = R.checklistHasInput(clRec);
     const clProf = Object.assign({}, profile, { checklist: normalizeChecklistDef(record.checklistDef || profile.checklist, defaults().checklist) });
-    const ivModel = R.interviewModel(clProf, record.scores || {}, clRec);
     const clMust = R.mustSummary(clProf.checklist, clRec);
 
-    // ---- 面接評価（旧形式・10項目×5点。旧レコードの scores があるときだけ） ----
-    const ev = profile.evaluation || {};
-    const scale = Number(ev.scaleMax) || 5;
-    const scoresObj = U.isObj(record.scores) ? record.scores : {};
-    const hasScores = Object.keys(scoresObj).some(function (k) { return isNum(scoresObj[k]); });
-    // ラベルは現在の旧評価項目 → 保存時の判定の内訳 → id の順に補う
-    const bdLabels = {};
-    ((j && j.interviewMode !== 'checklist' && j.breakdown) || []).forEach(function (b) { if (b && b.id) bdLabels[b.id] = b.label; });
-    let evItems = (ev.items || []).slice();
-    Object.keys(scoresObj).forEach(function (k) {
-      if (!evItems.some(function (it) { return it.id === k; })) evItems.push({ id: k, label: bdLabels[k] || k });
-    });
-    let scoreSum = 0;
-    const scoreRows = evItems.map(function (it) {
-      const s = scoresObj[it.id];
-      const has = !(s == null || s === '');
-      const n = has ? Number(s) : 0;
-      if (has && !isNaN(n)) scoreSum += n;
-      const pct = has ? clamp(n / scale * 100) : 0;
-      const isOverall = it.id === ev.overallItemId;
-      return '<div class="bar' + (isOverall ? ' overall' : '') + '"><div class="b-label">' + esc(it.label) + '</div>' +
-        '<div class="b-track"><span class="' + (has ? pctCls(pct) : '') + '" style="width:' + pct + '%"></span></div>' +
-        '<div class="b-val">' + (has ? esc(s) + '<small> / ' + scale + '</small>' : '<small>-</small>') + '</div></div>';
-    }).join('');
-    const scoreMax = (ev.items || []).length ? (ev.items || []).length * scale : evItems.length * scale;
-    // 判定が旧方式なら判定の値（帯つき）、チェックリスト方式の判定がある（参考表示）なら点数から計算
-    const legacyJ = j && j.interview && j.interviewMode !== 'checklist';
-    const scorePct = legacyJ ? j.interview.pct : (scoreMax ? Math.round(scoreSum / scoreMax * 1000) / 10 : 0);
-    const scoreTotal = legacyJ ? j.interview.total : scoreSum;
-    const scoreBand = legacyJ ? j.interview.band : '';
-    const scoreBandTxt = legacyJ ? (j.interview.bandLabel || bandName(j.interview.band)) : '';
-    const interviewTotal = hasScores
-      ? '<div class="total-line">合計 <b>' + esc(scoreTotal) + '</b><span class="muted">/ ' + esc(scoreMax) + '点</span>' +
-        '<span class="right">得点率 ' + esc(scorePct) + '%' + (scoreBandTxt ? '<span class="badge ' + bandTone(scoreBand) + '">' + esc(scoreBandTxt) + '</span>' : '') + '</span></div>'
-      : '';
-
-    // ---- 採用可否判定 ----
-    const beforeIv = !j && Number(record.step) < 3;
-    let judgmentHtml = '<p class="empty">' + (beforeIv ? '面接前（申し送り段階）の保存のため、採用可否判定は未実施です。' : '採用可否判定は未実施です。') + '</p>';
-    let axesSummary = '';
-    if (j) {
-      let axes = '', mx = '', note = '', adj = '', mode = '';
-      if (j.interview) {
-        const jc = j.contribution || {};
-        const cBandTxt = j.mode === 'incomplete' ? '未確定' : j.mode === 'interviewOnly' ? '—' : (jc.bandLabel || bandName(jc.band));
-        const iBandTxt = j.interview.bandLabel || bandName(j.interview.band);
-        axesSummary = '面接 ' + j.interview.pct + '%（' + iBandTxt + '）' + (j.mode === 'interviewOnly' ? '' : ' × 貢献 ' + fmtN(jc.pct) + '%（' + cBandTxt + '）');
-        axes = '<div class="axes">' +
-          '<div class="axis"><div class="a-label">面接評価</div><div class="a-val">' + esc(j.interview.total) + '<small> / ' + esc(j.interview.max) + '点</small></div>' +
-          '<div class="a-sub">得点率 ' + esc(j.interview.pct) + '%・' + esc(iBandTxt) + '　採用推奨 ' + esc(j.thresholds.recommendPts) + '点以上／上長判断 ' + esc(j.thresholds.reviewPts) + '点以上</div></div>' +
-          (j.mode !== 'interviewOnly'
-            ? '<div class="axis"><div class="a-label">シフト貢献度</div><div class="a-val">' + (j.mode === 'incomplete' ? '未確定' : esc(fmtN(jc.total)) + '<small> / ' + esc(fmtN(jc.max)) + '点</small>') + '</div>' +
-              '<div class="a-sub">' + (j.mode === 'incomplete' ? '面接評価のみで判定' : '得点率 ' + esc(fmtN(jc.pct)) + '%・' + esc(cBandTxt)) + '</div></div>'
-            : '') +
-          '<div class="axis"><div class="a-label">判定方式</div><div class="a-val txt">' + esc(MODE_LABELS[j.mode] || j.mode || '面接評価のみ') + '</div></div>' +
-          '</div>';
-        if (j.mode !== 'interviewOnly' && j.matrix && j.matrix.table) {
-          const B = ['high', 'mid', 'low'];
-          const bi = (j.matrix.bands || {}).interview || {}, bc = (j.matrix.bands || {}).contribution || {};
-          const iR = { high: bi.high + '%以上', mid: bi.mid + '〜' + bi.high + '%', low: bi.mid + '%未満' };
-          const cR = { high: bc.high + '%以上', mid: bc.mid + '〜' + bc.high + '%', low: bc.mid + '%未満' };
-          mx = '<div class="mx-wrap"><table class="mx"><thead><tr><th>面接 ＼ 貢献度</th>' +
-            B.map(function (cb) { return '<th>' + esc(bandName(cb)) + '<small>' + esc(cR[cb]) + '</small></th>'; }).join('') + '</tr></thead><tbody>' +
-            B.map(function (ib) {
-              return '<tr><th>' + esc(bandName(ib)) + '<small>' + esc(iR[ib]) + '</small></th>' + B.map(function (cb) {
-                const k = ib + '_' + cb, r = j.matrix.table[k];
-                const cur = j.matrix.cellKey === k;
-                return '<td class="' + esc(r || '') + (cur ? ' cur' : '') + '">' + (cur ? '▶ ' : '') + esc(r ? titleOf(r) : '-') + '</td>';
-              }).join('') + '</tr>';
-            }).join('') + '</tbody></table>' +
-            (j.mode === 'incomplete' ? '<div class="mx-note">シフト貢献度が未確定のため、マトリクスには当てていません。</div>' : '') +
-            '</div>';
-        }
-        if (j.matrix && j.matrix.note) note = '<div class="result-note">' + esc(j.matrix.note) + '</div>';
-        if (j.adjustments && j.adjustments.length) {
-          adj = '<div class="adj-head">' + (j.mode === 'matrix' ? 'マトリクスの結果' : '面接評価の結果') + '「' + esc(titleOf(j.baseResult)) + '」' +
-            (j.result === j.baseResult ? '。必須条件の不一致により「' + esc(titleOf(j.result)) + '」に固定' : 'から「' + esc(titleOf(j.result)) + '」に調整') + '</div>' +
-            '<ul class="adj">' + j.adjustments.map(function (x) {
-              return '<li><span class="step">' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</span><span>' + esc(x.reason) + '</span></li>';
-            }).join('') + '</ul>';
-        }
-      } else {
-        axesSummary = '面接評価 ' + j.pct + '%';
-      }
-      const shownReasons = {};
-      (j.adjustments || []).forEach(function (x) { shownReasons[x.reason] = true; });
-      const warns = (j.warnings || []).filter(function (w) { return !shownReasons[w]; });
-      judgmentHtml = '<div class="result ' + esc(j.result) + '">' +
-        '<div class="result-kicker">採用可否判定</div>' +
-        '<div class="result-title">' + esc(j.title) + '</div>' +
-        '<div class="result-body">' + esc(j.body) + '</div>' +
-        (j.checklist && j.checklist.must && j.checklist.must.total ? '<div class="result-must"><b>必須条件:</b> 一致 ' + esc(j.checklist.must.match) + '・不一致 ' + esc(j.checklist.must.mismatch) + '・未確認 ' + esc(j.checklist.must.unknown) +
-          ((j.checklist.must.mismatchLabels || []).length ? '<span class="tag danger">不一致: ' + esc(j.checklist.must.mismatchLabels.join('、')) + '</span>' : '') +
-          ((j.checklist.must.unknownLabels || []).length ? '<span class="tag">未確認: ' + esc(j.checklist.must.unknownLabels.join('、')) + '</span>' : '') + '</div>' : '') +
-        note + axes +
-        (j.interview ? '' : '<div class="result-mode">面接評価 合計 ' + esc(j.total) + ' / ' + esc(j.max) + '点（' + esc(j.pct) + '%）　採用推奨 ' + esc(j.thresholds.recommendPts) + '点以上／上長判断 ' + esc(j.thresholds.reviewPts) + '点以上</div>') +
-        mx + adj +
-        (warns.length ? '<ul class="warn-list">' + warns.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') +
-        '<div class="disclaimer">' + esc(j.disclaimer) + (j.evaluatedAt ? '　判定日時: ' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div>' +
-        '</div>';
-    }
-
-    // ---- ヘッダー・サマリー ----
-    const stepLabel = { 1: '応募情報の入力中', 2: '面接者への申し送り', 3: '面接チェックリストの入力中', 4: '採用可否判定まで完了' }[Number(record.step)] || '';
-    const chips = [];
-    if (a.category) chips.push(a.category);
-    if (a.age) chips.push(a.age + '歳');
-    if (a.gender) chips.push(a.gender);
-    if (a.commuteMethod || a.commuteMinutes) chips.push([a.commuteMethod, a.commuteMinutes ? a.commuteMinutes + '分' : ''].filter(Boolean).join(' '));
-    if (a.workPeriod) chips.push(R.labelOf(o.workPeriods, a.workPeriod));
-    if (a.daysMin || a.daysMax) chips.push('週' + (a.daysMin || '?') + '〜' + (a.daysMax || '?') + '日');
-    const chipsHtml = chips.map(function (ch) { return '<span class="chip">' + esc(ch) + '</span>'; }).join('') + hsChip;
-    const verdictHtml = j
-      ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title) + '</span><span class="v-sub">' + esc(axesSummary) + '</span></div>'
-      : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">' + (beforeIv ? '面接前' : '未実施') + '</span><span class="v-sub">' + esc(beforeIv ? '申し送り段階で保存' : '面接チェックリストの入力後に判定') + '</span></div>';
-    // 全体レポートのヘッダー: 判定バッジの横に最終合否（小）
-    const rhDecHtml = dcfg.enabled ? '<div class="rh-decision" id="rhDecision">' + decSvg(72, 'vdHead') + '</div>' : '';
-    const headerHtml = '<header class="rh"><div class="rh-top">' +
-      '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
-      '<div class="rh-meta">保存日時 ' + esc(savedAt) + (stepLabel ? '<br>進捗: ' + esc(stepLabel) : '') + '</div></div>' +
-      '<div class="rh-main"><div><div class="sheet-title print-only">面接者への申し送りシート</div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' + verdictHtml + rhDecHtml + '</div></header>\n';
-
-    // 面接評価: チェックリスト方式は ○△× ＋総合判断、旧レコードは旧 10 項目（interviewModel が方式を決める）
-    const tileMustNg = ivModel.mode === 'checklist' && clMust.mismatch ? '<span style="color:var(--danger);font-weight:700">・必須 不一致' + clMust.mismatch + '</span>' : '';
-    const tileInterview = ivModel.rated > 0
-      ? '<div class="tile"><div class="t-label">面接評価' + (ivModel.mode === 'legacy' ? '（旧形式）' : '') + '</div><div class="t-val">' + esc(ivModel.total) + '<small>/ ' + esc(ivModel.max) + '点</small></div><div class="meter"><span class="' + (ivModel.band ? bandCls(ivModel.band) : pctCls(ivModel.pct)) + '" style="width:' + clamp(ivModel.pct) + '%"></span></div><div class="t-sub">得点率 ' + esc(ivModel.pct) + '%' + (ivModel.bandLabel ? '・' + esc(ivModel.bandLabel) : '') + tileMustNg + '</div></div>'
-      : '<div class="tile"><div class="t-label">面接評価</div><div class="t-val txt muted">未入力</div><div class="t-sub">' + (clMust.mismatch ? '<span style="color:var(--danger);font-weight:700">必須 不一致' + clMust.mismatch + '</span>' : '面接チェックリストで評価します') + '</div></div>';
-    const tileContrib = c && Array.isArray(c.parts)
-      ? (cPending
-        ? '<div class="tile"><div class="t-label">シフト貢献度</div><div class="t-val txt">未確定</div><div class="t-sub">面接で確認後に確定（' + esc((c.missing || []).length) + '項目）</div></div>'
-        : '<div class="tile"><div class="t-label">シフト貢献度</div><div class="t-val">' + esc(fmtN(c.total)) + '<small>/ ' + esc(fmtN(c.max)) + '点</small></div><div class="meter"><span class="' + bandCls(contribBand) + '" style="width:' + clamp(c.pct) + '%"></span></div><div class="t-sub">得点率 ' + esc(fmtN(c.pct)) + '%・' + esc(contribBandTxt) + '</div></div>')
-      : '<div class="tile"><div class="t-label">シフト貢献度</div><div class="t-val txt muted">—</div><div class="t-sub">未計算</div></div>';
-    const tileHandoff = '<div class="tile"><div class="t-label">留意点</div><div class="t-val">' + items.length + '<small>件</small></div>' +
-      '<div class="counts"><span class="badge danger">要判断 ' + counts.block + '</span><span class="badge warn">要確認 ' + counts.warn + '</span><span class="badge info">共有 ' + counts.info + '</span></div>' +
-      '<div class="t-sub">確認済み ' + doneCount + ' / ' + items.length + '</div></div>';
-    const tileVerdict = j
-      ? '<div class="tile"><div class="t-label">判定</div><div class="t-val txt"><span class="badge lg ' + resultTone(j.result) + '">' + esc(j.title) + '</span></div><div class="t-sub">' + esc(j.mode === 'matrix' ? '2軸判定' : j.mode === 'incomplete' ? '面接評価のみ（貢献度未確定）' : '面接評価のみ') + (j.evaluatedAt ? '・' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div></div>'
-      : '<div class="tile"><div class="t-label">判定</div><div class="t-val txt muted">' + (beforeIv ? '面接前' : '未実施') + '</div><div class="t-sub">' + esc(beforeIv ? '面接で確認する項目: ' + (unconfirmed ? unconfirmed.split('／').length + 'セクション' : 'なし') : '面接評価の入力後に判定') + '</div></div>';
-    const dashHtml = '<div class="dash">' + tileInterview + tileContrib + tileHandoff + tileVerdict + '</div>\n';
-
     const sec = function (title, body, key) { return '<section class="sec"' + (key ? ' data-sec="' + key + '"' : '') + '><h2>' + title + '</h2>\n' + body + '</section>\n'; };
-    // 「面接チェックリスト」節と「面接評価（旧形式）」節（SPEC-checklist 4-3 の表）
     const notesHtml = record.interviewNotes ? '<h3>面接所見</h3><div class="note">' + esc(record.interviewNotes) + '</div>' : '';
     const checklistSecHtml = clHas
       ? sec('面接チェックリスト', checklistSheetHtml(record, profile, { mode: 'section' }), 'checklist')
-      : !hasScores ? sec('面接チェックリスト', '<p class="empty">面接チェックリストは未入力です。</p>' + notesHtml, 'checklist') : '';
-    const legacySecHtml = hasScores
-      ? sec(clHas ? '面接評価（旧形式・10項目×5点・参考）' : '面接評価（旧形式・10項目×5点）', '<div class="bars">' + scoreRows + '</div>' + interviewTotal + (clHas ? '' : notesHtml), 'scores')
-      : '';
+      : sec('面接チェックリスト', '<p class="empty">面接チェックリストは未入力です。</p>' + notesHtml, 'checklist');
     const json = jsonForScript(record);
     const SCRIPT_END = '</scr' + 'ipt>';
 
-    // ---- 台本モードの記録（docs/SPEC-script-mode.md 3-3〜3-5）。留意点・面接で確認した情報・シフト貢献度は出さない ----
-    let scriptHeaderHtml = '', scriptDashHtml = '', scriptApplicantSecHtml = '', scriptJudgmentSecHtml = '';
-    if (scriptRec) {
-      const sRows = R.scriptApplicantRows(a, clRec, clProf, record.management);
-      const rowVal = function (k) { const r = sRows.find(function (x) { return x.key === k; }); return r ? r.value : ''; };
-      const ivS = R.interviewModel(clProf, {}, clRec);
-      const cntS = ivS.counts || { good: 0, fair: 0, poor: 0, blank: 0 };
-      const marksS = '○' + cntS.good + ' △' + cntS.fair + ' ×' + cntS.poor;
-      const oo = (clProf.checklist && clProf.checklist.overallOptions) || {};
-      const ovV = R.OVERALL_POINTS.hasOwnProperty(clRec.overall) ? clRec.overall : '';
-      const ovL = ovV ? (oo[ovV] || { hire: '採用', hold: '保留', reject: '不採用' }[ovV]) : '';
-      const mustShort = function (m) { return !m || !m.total ? 'なし' : m.mismatch ? '不一致 ' + m.mismatch : m.unknown ? '未確認 ' + m.unknown : 'すべて一致'; };
-      const mustCounts = function (m) { return '一致 ' + m.match + '・不一致 ' + m.mismatch + '・未確認 ' + m.unknown; };
-      const jMust = j ? ((j.checklist && j.checklist.must) || j.must || clMust) : clMust;
-      const jOv = j ? ((j.overall && typeof j.overall === 'object') ? j.overall : (j.checklist && j.checklist.overall) || { value: ovV, label: ovL }) : { value: ovV, label: ovL };
-      // ヘッダー
-      const sStep = { 1: '応募者の入力中', 3: '面接チェックリストの入力中', 4: '報告書まで完了' }[Number(record.step)] || '';
-      const sChips = [rowVal('category'), rowVal('age'), rowVal('gender'), rowVal('graduation') ? '卒業予定 ' + rowVal('graduation') : '', rowVal('posting')].filter(Boolean)
-        .map(function (ch) { return '<span class="chip">' + esc(ch) + '</span>'; }).join('');
-      const sVerdict = j
-        ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title) + '</span><span class="v-sub">' + esc('必須条件 ' + mustShort(jMust) + '・総合判断 ' + (jOv.label || '未入力')) + '</span></div>'
-        : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">未実施</span><span class="v-sub">アプリの「報告書」を開くと判定します</span></div>';
-      scriptHeaderHtml = '<header class="rh"><div class="rh-top">' +
-        '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
-        '<div class="rh-meta">保存日時 ' + esc(savedAt) + (sStep ? '<br>進捗: ' + esc(sStep) : '') + '</div></div>' +
-        '<div class="rh-main"><div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + sChips + '</div></div>' +
-        sVerdict + (dcfg.enabled ? '<div class="rh-decision" id="rhDecision">' + decSvg(72, 'vdHead') + '</div>' : '') + '</div></header>\n';
-      // ダッシュ（面接評価〔確認点〕・必須条件・総合判断・結果）
-      const ivBandTxt = ivS.bandLabel || '';
-      scriptDashHtml = '<div class="dash">' +
-        (ivS.rated > 0
-          ? '<div class="tile" data-tile="interview"><div class="t-label">面接評価（確認点）</div><div class="t-val">' + esc(ivS.total) + '<small>/ ' + esc(ivS.max) + '点</small></div><div class="meter"><span class="' + (ivS.band ? bandCls(ivS.band) : pctCls(ivS.pct)) + '" style="width:' + clamp(ivS.pct) + '%"></span></div><div class="t-sub">得点率 ' + esc(ivS.pct) + '%' + (ivBandTxt ? '・' + esc(ivBandTxt) : '') + '　' + esc(marksS) + '</div></div>'
-          : '<div class="tile" data-tile="interview"><div class="t-label">面接評価（確認点）</div><div class="t-val txt muted">未入力</div><div class="t-sub">' + esc(marksS) + '</div></div>') +
-        '<div class="tile" data-tile="must"><div class="t-label">必須条件</div><div class="t-val txt"' + (clMust.mismatch ? ' style="color:var(--danger)"' : '') + '>' + esc(mustShort(clMust)) + '</div><div class="t-sub">' + esc(mustCounts(clMust)) + '</div></div>' +
-        '<div class="tile" data-tile="overall"><div class="t-label">総合判断</div><div class="t-val txt' + (ovV ? '' : ' muted') + '">' + esc(ovL || '未入力') + '</div><div class="t-sub">面接者の総合判断</div></div>' +
-        (j
-          ? '<div class="tile" data-tile="result"><div class="t-label">結果</div><div class="t-val txt"><span class="badge lg ' + resultTone(j.result) + '">' + esc(j.title) + '</span></div><div class="t-sub">台本モード' + (j.evaluatedAt ? '・' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div></div>'
-          : '<div class="tile" data-tile="result"><div class="t-label">結果</div><div class="t-val txt muted">未実施</div><div class="t-sub">台本モード</div></div>') +
-        '</div>\n';
-      // 応募者情報（Step① の項目だけ）
-      scriptApplicantSecHtml = sec('応募者情報', sRows.length
-        ? '<table class="kv">' + sRows.map(function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; }).join('') + '</table>\n'
-        : '<p class="empty">応募者情報の入力はありません。</p>\n', 'applicant');
-      // 採用可否判定（台本モード）
-      let sj = '<p class="empty">採用可否判定は未実施です（アプリの「報告書」を開くと判定します）。</p>';
-      if (j) {
-        const jiv = j.interview || { total: j.total, max: j.max, pct: j.pct, band: '', bandLabel: '' };
-        const jc = (j.checklist && j.checklist.counts) || cntS;
-        const mDet = [];
-        if ((jMust.mismatchLabels || []).length) mDet.push('不一致: ' + jMust.mismatchLabels.join('、'));
-        if ((jMust.unknownLabels || []).length) mDet.push('未確認: ' + jMust.unknownLabels.join('、'));
-        let adjS = '';
-        if (j.adjustments && j.adjustments.length) {
-          // 必須条件の不一致（must_conditions）があれば、総合判断の結果から変わったかどうか（from / to）に関係なく「固定」と書く
-          const fixed = j.adjustments.some(function (x) { return x.code === 'must_conditions'; });
-          adjS = '<div class="adj-head">' + (fixed ? '必須条件の不一致により「' + esc(j.title) + '」に固定' + (jOv.label ? '' : '（総合判断は未入力）') : '総合判断による結果「' + esc(titleOf(j.baseResult)) + '」から「' + esc(j.title) + '」に調整') + '</div>' +
-            '<ul class="adj">' + j.adjustments.map(function (x) {
-              return '<li><span class="step">' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</span><span>' + esc(x.reason) + '</span></li>';
-            }).join('') + '</ul>';
-        }
-        const shownS = {};
-        (j.adjustments || []).forEach(function (x) { shownS[x.reason] = true; });
-        const warnsS = (j.warnings || []).filter(function (w) { return !shownS[w]; });
-        sj = '<div class="result ' + esc(j.result) + '"><div class="result-kicker">採用可否判定（台本モード）</div>' +
-          '<div class="result-title">' + esc(j.title) + '</div><div class="result-body">' + esc(j.body) + '</div>' +
-          '<table class="kv script-judge">' +
-            '<tr><th>必須条件</th><td>' + esc(mustCounts(jMust) + (mDet.length ? '（' + mDet.join('／') + '）' : '')) + '</td></tr>' +
-            '<tr><th>面接評価（確認点）</th><td>' + esc(jiv.total + '/' + jiv.max + '点（' + jiv.pct + '%' + (jiv.bandLabel ? '・' + jiv.bandLabel : '') + '）　○' + jc.good + ' △' + jc.fair + ' ×' + jc.poor) + '</td></tr>' +
-            '<tr><th>総合判断</th><td>' + esc(jOv.label || '未入力') + '</td></tr>' +
-            '<tr><th>結果</th><td>' + esc(j.title) + '</td></tr>' +
-          '</table>' + adjS +
-          (warnsS.length ? '<ul class="warn-list">' + warnsS.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') +
-          '<div class="disclaimer">' + esc(j.disclaimer) + (j.evaluatedAt ? '　判定日時: ' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div></div>';
+    // ---- ヘッダー・応募者情報・採用可否判定（docs/SPEC-script-mode.md 3-3〜3-5） ----
+    const sRows = R.scriptApplicantRows(a, clRec, clProf, record.management);
+    const rowVal = function (k) { const r = sRows.find(function (x) { return x.key === k; }); return r ? r.value : ''; };
+    const ivS = R.interviewModel(clProf, clRec);
+    const cntS = ivS.counts || { good: 0, fair: 0, poor: 0, blank: 0 };
+    const oo = (clProf.checklist && clProf.checklist.overallOptions) || {};
+    const ovV = R.OVERALL_POINTS.hasOwnProperty(clRec.overall) ? clRec.overall : '';
+    const ovL = ovV ? (oo[ovV] || { hire: '採用', hold: '保留', reject: '不採用' }[ovV]) : '';
+    const mustShort = function (m) { return !m || !m.total ? 'なし' : m.mismatch ? '不一致 ' + m.mismatch : m.unknown ? '未確認 ' + m.unknown : 'すべて一致'; };
+    const mustCounts = function (m) { return '一致 ' + m.match + '・不一致 ' + m.mismatch + '・未確認 ' + m.unknown; };
+    const jMust = j ? ((j.checklist && j.checklist.must) || j.must || clMust) : clMust;
+    const jOv = j ? ((j.overall && typeof j.overall === 'object') ? j.overall : (j.checklist && j.checklist.overall) || { value: ovV, label: ovL }) : { value: ovV, label: ovL };
+    // ヘッダー
+    const stepText = { 1: '応募者の入力中', 3: '面接チェックリストの入力中', 4: '報告書まで完了' }[Number(record.step)] || '';
+    const chipsHtml = [rowVal('category'), rowVal('age'), rowVal('gender'), rowVal('graduation') ? '卒業予定 ' + rowVal('graduation') : '', rowVal('posting')].filter(Boolean)
+      .map(function (ch) { return '<span class="chip">' + esc(ch) + '</span>'; }).join('');
+    const verdictHtml = j
+      ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title || titleOf(j.result)) + '</span><span class="v-sub">' + esc('必須条件 ' + mustShort(jMust) + '・総合判断 ' + (jOv.label || '未入力')) + '</span></div>'
+      : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">未実施</span><span class="v-sub">アプリの「報告書」を開くと判定します</span></div>';
+    const headerHtml = '<header class="rh"><div class="rh-top">' +
+      '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
+      '<div class="rh-meta">保存日時 ' + esc(savedAt) + (stepText ? '<br>進捗: ' + esc(stepText) : '') + '</div></div>' +
+      '<div class="rh-main"><div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' +
+      verdictHtml + (dcfg.enabled ? '<div class="rh-decision" id="rhDecision">' + decSvg(72, 'vdHead') + '</div>' : '') + '</div></header>\n';
+    // 応募者情報（① 応募者の項目だけ）
+    const applicantSecHtml = sec('応募者情報', sRows.length
+      ? '<table class="kv">' + sRows.map(function (r) { return '<tr><th>' + esc(r.label) + '</th><td>' + esc(r.value) + '</td></tr>'; }).join('') + '</table>\n'
+      : '<p class="empty">応募者情報の入力はありません。</p>\n', 'applicant');
+    // 採用可否判定
+    let sj = '<p class="empty">採用可否判定は未実施です（アプリの「報告書」を開くと判定します）。</p>';
+    if (j) {
+      const jiv = j.interview || { total: j.total, max: j.max, pct: j.pct, band: '', bandLabel: '' };
+      const jc = (j.checklist && j.checklist.counts) || cntS;
+      const jTitle = j.title || titleOf(j.result);
+      const mDet = [];
+      if ((jMust.mismatchLabels || []).length) mDet.push('不一致: ' + jMust.mismatchLabels.join('、'));
+      if ((jMust.unknownLabels || []).length) mDet.push('未確認: ' + jMust.unknownLabels.join('、'));
+      let adjS = '';
+      if (j.adjustments && j.adjustments.length) {
+        // 必須条件の不一致（must_conditions）があれば、総合判断の結果から変わったかどうか（from / to）に関係なく「固定」と書く
+        const fixed = j.adjustments.some(function (x) { return x.code === 'must_conditions'; });
+        adjS = '<div class="adj-head">' + (fixed ? '必須条件の不一致により「' + esc(jTitle) + '」に固定' + (jOv.label ? '' : '（総合判断は未入力）') : '総合判断による結果「' + esc(titleOf(j.baseResult)) + '」から「' + esc(jTitle) + '」に調整') + '</div>' +
+          '<ul class="adj">' + j.adjustments.map(function (x) {
+            return '<li><span class="step">' + (x.from === x.to ? esc(titleOf(x.to)) + '（固定）' : esc(titleOf(x.from)) + ' → ' + esc(titleOf(x.to))) + '</span><span>' + esc(x.reason) + '</span></li>';
+          }).join('') + '</ul>';
       }
-      scriptJudgmentSecHtml = sec('採用可否判定', sj, 'judgment');
+      const shownS = {};
+      (j.adjustments || []).forEach(function (x) { shownS[x.reason] = true; });
+      const warnsS = (j.warnings || []).filter(function (w) { return !shownS[w]; });
+      sj = '<div class="result ' + esc(j.result) + '"><div class="result-kicker">採用可否判定</div>' +
+        '<div class="result-title">' + esc(jTitle) + '</div><div class="result-body">' + esc(j.body || '') + '</div>' +
+        '<table class="kv script-judge">' +
+          '<tr><th>必須条件</th><td>' + esc(mustCounts(jMust) + (mDet.length ? '（' + mDet.join('／') + '）' : '')) + '</td></tr>' +
+          '<tr><th>面接評価（確認点）</th><td>' + esc(jiv.total + '/' + jiv.max + '点（' + jiv.pct + '%' + (jiv.bandLabel ? '・' + jiv.bandLabel : '') + '）　○' + jc.good + ' △' + jc.fair + ' ×' + jc.poor) + '</td></tr>' +
+          '<tr><th>総合判断</th><td>' + esc(jOv.label || '未入力') + '</td></tr>' +
+          '<tr><th>結果</th><td>' + esc(jTitle) + '</td></tr>' +
+        '</table>' + adjS +
+        (warnsS.length ? '<ul class="warn-list">' + warnsS.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') +
+        '<div class="disclaimer">' + esc(j.disclaimer || '') + (j.evaluatedAt ? '　判定日時: ' + esc(U.fmtDateTime(j.evaluatedAt)) : '') + '</div></div>';
     }
+    const judgmentSecHtml = sec('採用可否判定', sj, 'judgment');
 
     // ---- 応募者の管理（押印欄）。レポート上でも押印でき、「押印を保存」で同じ形式のファイルを再出力する ----
     const mg = profile.management || {};
     const mgFields = Array.isArray(mg.fields) && mg.fields.length ? mg.fields : [];
     const mgManagers = Array.isArray(mg.managers) ? mg.managers : [];
-    const management = record.management || {};
+    const management = U.isObj(record.management) ? record.management : {};
     const stampBoxes = mgFields.map(function (fld, idx) {
       const e = management[fld.id];
       const svg = e && e.name && Stamp ? Stamp.render(e, { size: 88, id: 'rp' + idx }) : '';
@@ -2034,7 +1366,7 @@
       let selIdx = -1;
       mgManagers.forEach(function (m, i) { if (selIdx < 0 && selName && m.name === selName) selIdx = i; });
       const useFree = !!selName && selIdx < 0 && allowFree;
-      const jd = record.judgment;
+      const jd = j;
       const noteText = dec && jd && ((dec.result === 'hire' && jd.result === 'reject') || (dec.result === 'reject' && jd.result === 'recommend'))
         ? '※ アプリの判定「' + (jd.title || '') + '」と異なる最終合否です（記録はそのまま残ります）。' : '';
       const decBtn = function (r, cls, label) {
@@ -2059,13 +1391,11 @@
         '</div></div>';
     }
     const saveBarHtml = '<div class="mgmt-save" id="mgmtSave"><span id="mgmtSaveMsg">押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div>';
-    const mgmtNoteHtml = '<div class="mgmt-note">' + (dcfg.enabled && scriptRec
+    const mgmtNoteHtml = '<div class="mgmt-note">' + (dcfg.enabled
       ? '運用: 面接者はアプリで面接チェックリストを入力し、報告書の「面接対応者」に押印して保存したファイルをスレッドに添付します。副支配人はこのファイルをブラウザで開き、「' + esc(dcfg.label) + '」で担当者を選んで「' + esc(dcfg.hireLabel) + '」または「' + esc(dcfg.rejectLabel) + '」を押し（押印欄「最終確認」が未押印なら同じ担当者の印も押されます）、「押印を保存」で再出力したファイルをスレッドに添付してください。レポート上で押した印・合否は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。'
-      : dcfg.enabled
-      ? '運用: 面接者はアプリで面接チェックリストを入力・判定し、「面接対応者」に押印して保存したファイルをスレッドに添付します。副支配人はこのファイルをブラウザで開き、「' + esc(dcfg.label) + '」で担当者を選んで「' + esc(dcfg.hireLabel) + '」または「' + esc(dcfg.rejectLabel) + '」を押し（押印欄「最終確認」が未押印なら同じ担当者の印も押されます）、「押印を保存」で再出力したファイルをスレッドに添付してください。レポート上で押した印・合否は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。'
       : '担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。レポート上で押した印は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印ごと引き継げます。') + '</div>';
     const mgmtHtml = decPanelHtml + (mgFields.length
-      ? '<div class="stamp-row" id="mgmt">' + stampBoxes + '</div>' + saveBarHtml + mgmtNoteHtml
+      ? '<div class="stamp-row' + (mgFields.length === 2 ? ' cols-2' : '') + '" id="mgmt">' + stampBoxes + '</div>' + saveBarHtml + mgmtNoteHtml
       : '<p class="empty">押印欄は設定されていません。</p>' + (dcfg.enabled ? saveBarHtml + mgmtNoteHtml : ''));
     const mgmtConfig = jsonForScript({ fields: mgFields, managers: mgManagers, allowFreeName: mg.allowFreeName !== false,
       decision: dcfg.enabled ? { label: dcfg.label, hireLabel: dcfg.hireLabel, rejectLabel: dcfg.rejectLabel, hireColor: dcfg.hireColor, rejectColor: dcfg.rejectColor,
@@ -2140,59 +1470,24 @@
       'initDecSel();render();\n})();\n' + SCRIPT_END + '\n'
     ) : '';
 
-    // 詳細モード・旧レコードの本文（従来どおり）
-    function fullBodyHtml() {
-      return '<span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button>' +
-        (clHas ? '<button type="button" id="rtPrintChecklist">面接チェックリスト報告（A4）</button>' : '') +
-        '<button type="button" id="rtPrintAll">レポート全体</button><span class="rtool-hint">申し送りシートは応募情報・留意点・面接で確認する項目・押印欄だけを 1 枚にまとめます。' +
-        (clHas ? '面接チェックリスト報告は結果・必須条件・確認点・面接メモ・押印を A4 1 枚にまとめます（台本の全文は「詳細」）。' : '') + '</span></div>\n' +
-      // 報告書表示の紙プレビュー（画面用。印刷用の #clSheet とは別に描く。docs/SPEC-report.md 4-4）
-      (clHas ? '<div class="paper-wrap" id="reportPaper"><div class="paper-cap"><b>面接チェックリスト報告（A4 プレビュー）</b><span>印刷は「面接チェックリスト報告（A4）」で 1 枚。台本の全文は「詳細」</span></div>' +
-        '<div class="paper" id="clPaper">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '', decisionId: 'clPaperDecision', decisionSvgId: 'vdPaper' }) + '</div></div>\n' : '') +
-      headerHtml + dashHtml +
-      sec('応募時の情報', (preRows ? '<table class="kv">' + preRows + '</table>\n' : '<p class="empty">応募時の情報はありません。</p>\n') + hsHtml, 'pre') +
-      (a.reviewerNotes ? sec('面接者への申し送りコメント', '<div class="note">' + esc(a.reviewerNotes) + '</div>', 'comment') : '') +
-      sec('面接者への申し送り（留意点）',
-        (handoffHtml || '<p class="empty">留意点はありません。</p>') +
-        (strengths ? '<h3>強み（面接者へ共有）</h3><ul class="strengths">' + strengths + '</ul>' : '') +
-        (record.handoff.note ? '<h3>追記（申し送りコメントの補足）</h3><div class="note">' + esc(record.handoff.note) + '</div>' : ''), 'handoff') +
-      sec(beforeIv ? '面接前に分かっている情報（未確認）' : '面接で確認した情報',
-        (ivRows ? '<table class="kv">' + ivRows + '</table>\n'
-          : beforeIv ? '<p class="empty">面接前に分かっている項目の入力はありません（面接で確認します）。</p>\n'
-            : '<p class="empty">面接で確認した項目の入力はありません。</p>\n') +
-        (unconfirmed ? '<div class="callout"><span>⚠</span><div>保存時点で未入力: ' + esc(unconfirmed) + '</div></div>\n' : ''), 'interview') +
-      sec('シフト貢献度', contribHtml, 'contrib') +
-      checklistSecHtml + legacySecHtml +
-      sec('採用可否判定', judgmentHtml, 'judgment') +
-      (clHas ? '<div id="clSheet" class="cl-sheet-print">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '' }) + '</div>\n' : '') +
-      sec('応募者の管理', mgmtHtml, 'mgmt');
-    }
-
     return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '<title>応募者情報 - ' + esc(name) + ' | ' + esc(meta.theaterName) + '</title>\n' +
-      '<style>\n' + reportCss() + '\n' + checklistSheetCss() + '\n</style>\n</head>\n<body class="view-report' + (scriptRec ? ' has-cl mode-script' : clHas ? ' has-cl' : '') + '" data-filename="' + esc(filename) + '">\n<div class="page">\n' +
-      // 表示切替（報告書＝既定／詳細＝全体レポート）＋印刷（docs/SPEC-report.md 4-3）
+      '<style>\n' + reportCss() + '\n' + checklistSheetCss() + '\n</style>\n</head>\n<body class="view-report has-cl mode-script" data-filename="' + esc(filename) + '">\n<div class="page">\n' +
+      // 表示切替（報告書＝既定／詳細）＋印刷（docs/SPEC-report.md 4-3）。回答が無くても白紙の台本として A4 報告を出す
       '<div class="rtool no-print"><div class="rtool-view" role="group" aria-label="表示"><button type="button" id="rtViewReport" class="on" aria-pressed="true">報告書</button><button type="button" id="rtViewFull" aria-pressed="false">詳細</button></div><span class="rtool-sep"></span>' +
-      (scriptRec
-        // 台本モード: 申し送りシートは無い（回答が無くても白紙の台本として A4 報告を出す。docs/SPEC-script-mode.md 3-2）
-        ? '<span>印刷:</span><button type="button" id="rtPrintChecklist" class="primary">面接チェックリスト報告（A4）</button><button type="button" id="rtPrintAll">レポート全体</button>' +
-          '<span class="rtool-hint">面接チェックリスト報告は結果・必須条件・確認点・面接メモ・押印を A4 1 枚にまとめます。「レポート全体」は「詳細」（台本の全文）を印刷します。</span></div>\n' +
-          '<div class="paper-wrap" id="reportPaper"><div class="paper-cap"><b>面接チェックリスト報告（A4 プレビュー）</b><span>印刷は「面接チェックリスト報告（A4）」で 1 枚。台本の全文は「詳細」</span></div>' +
-          '<div class="paper" id="clPaper">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '', decisionId: 'clPaperDecision', decisionSvgId: 'vdPaper' }) + '</div></div>\n' +
-          scriptHeaderHtml + scriptDashHtml + scriptApplicantSecHtml + checklistSecHtml + legacySecHtml + scriptJudgmentSecHtml +
-          '<div id="clSheet" class="cl-sheet-print">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '' }) + '</div>\n' +
-          sec('応募者の管理', mgmtHtml, 'mgmt')
-        : fullBodyHtml()) +
+      '<span>印刷:</span><button type="button" id="rtPrintChecklist" class="primary">A4 で印刷（1 ページ）</button>' +
+      '<span class="rtool-hint">結果・必須条件・確認点・面接メモ・押印を A4 1 枚にまとめた面接チェックリスト報告を印刷します。台本の全文は「詳細」にあります。</span></div>\n' +
+      '<div class="paper-wrap" id="reportPaper"><div class="paper-cap"><b>面接チェックリスト報告（A4 プレビュー）</b><span>印刷は「A4 で印刷（1 ページ）」で 1 枚。台本の全文は「詳細」</span></div>' +
+      '<div class="paper" id="clPaper">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '', decisionId: 'clPaperDecision', decisionSvgId: 'vdPaper' }) + '</div></div>\n' +
+      headerHtml + applicantSecHtml + checklistSecHtml + judgmentSecHtml +
+      '<div id="clSheet" class="cl-sheet-print">' + checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '' }) + '</div>\n' +
+      sec('応募者の管理', mgmtHtml, 'mgmt') +
       '<div class="foot"><span>' + esc(meta.footer) + '</span><span>このファイルはアプリの「読み込み」から再度開けます。埋め込みデータを編集しないでください。</span></div>\n' +
       '</div>\n' +
       '<script type="application/json" id="recruit-record">' + json + SCRIPT_END + '\n' +
-      '<script>\n(function(){var b=document.getElementById("rtPrintSheet"),a=document.getElementById("rtPrintAll");\n' +
-      'function prep(on){var h=document.querySelector(\'section.sec[data-sec="handoff"]\');if(h){h.classList.toggle("sheet-2col",!!on&&h.querySelectorAll("li.h").length>=9);}document.body.classList.toggle("print-handoff",!!on);}\n' +
-      'window.__prepareHandoffSheet=prep;\n' +
-      'if(b)b.addEventListener("click",function(){prep(true);var done=function(){prep(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});\n' +
-      'if(a)a.addEventListener("click",function(){printingAll=true;try{window.print();}finally{printingAll=false;}});\n' +
-      // 面接チェックリスト報告（A4 1 枚）: body.print-checklist の付け外しと 1 ページ保証（.cl-compact → .cl-compact-q1 → .cl-compact-2 → 縮小。アプリと同じ関数 clFitSheet）。
+      '<script>\n(function(){\n' +
+      // A4 で印刷（1 ページ）: body.print-checklist の付け外しと 1 ページ保証（.cl-compact → .cl-compact-q1 → .cl-compact-2 → 縮小。アプリと同じ関数 clFitSheet）。
       //   印刷用 #clSheet は押印行を含まない（直後の押印の節を続けて印刷する）ので、押印の節の分（押印欄の件数で段数が変わる）を除いた上限で計る
       'var c=document.getElementById("rtPrintChecklist"),host=document.getElementById("clSheet");\n' +
       clFitSheet.toString() + '\n' +
@@ -2211,10 +1506,10 @@
       'if(vr)vr.addEventListener("click",function(){setView("report");});\n' +
       'if(vf)vf.addEventListener("click",function(){setView("full");});\n' +
       'setView("report");\n' +
-      // 報告書表示（チェックリスト回答あり）のままブラウザで印刷したときは面接チェックリスト報告にする。「レポート全体」ボタンは除く
-      'var autoCl=false,printingAll=false;\n' +
+      // 報告書表示のままブラウザで印刷したときは A4 報告にする（「詳細」の印刷はブラウザの既定のまま）
+      'var autoCl=false;\n' +
       'window.addEventListener("beforeprint",function(){var bd=document.body;\n' +
-      '  if(printingAll||!bd.classList.contains("view-report")||!bd.classList.contains("has-cl")||bd.classList.contains("print-handoff")||bd.classList.contains("print-checklist"))return;\n' +
+      '  if(!bd.classList.contains("view-report")||bd.classList.contains("print-checklist"))return;\n' +
       '  if(prepCl(true))autoCl=true;});\n' +
       'window.addEventListener("afterprint",function(){if(autoCl){autoCl=false;prepCl(false);}});\n' +
       '})();\n' + SCRIPT_END + '\n' +
@@ -2237,7 +1532,6 @@
     reportCss: reportCss,
     normalizeDecision: normalizeDecision,
     decisionConfig: decisionConfig,
-    V1_DEFAULT_TEXTS: V1_DEFAULT_TEXTS,
     loadProfile: loadProfile,
     saveProfile: saveProfile,
     resetProfile: resetProfile,
@@ -2248,6 +1542,7 @@
     safeName: safeName,
     buildRecord: buildRecord,
     parseRecordFromHTML: parseRecordFromHTML,
+    normalizeRecord: normalizeRecord,
     generateReportHTML: generateReportHTML
   };
 })(window);

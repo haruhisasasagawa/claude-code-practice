@@ -1,5 +1,7 @@
 # 詳細仕様書（確定版）: 台本モード（既定）— 応募者 → 面接チェックリスト → 報告書（フェーズ6）
 
+> 2026-10-14 の面接特化（docs/SPEC-slim.md）で、詳細モード・初期対応者・旧 10 項目評価・レポート全体印刷に関する記述は無効。
+
 - 対象: `recruit-system/`（ブランチ `claude/toho-shinjuku-hiring-app-quhjtc`。直前コミット ff2d405 = フェーズ5完了。**commit / push はしない**）
 - 根拠: 副支配人「なんかちがくて、応募者の名前と属性入れたらもう渡した面接台本のとおりの報告でいいんだよね。。。今までの一旦忘れて欲しいのに。意図を汲み取って」と、オーケストレータの決定（0-2。変更不可）
 - 前提資料: `docs/reference/interview-script-1008.md`（台本）、`docs/SPEC-checklist.md`（1 章: `profile.checklist`・`record.checklist`、4 章: `checklistSheetHtml`・`body.print-checklist`）、`docs/SPEC-report.md`（3 章 DOM 一覧・4 章 保存 HTML・`#decision`・`#clPaper`）、`docs/HANDOFF.md`（7〜11 章）

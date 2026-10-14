@@ -1,5 +1,7 @@
 # 詳細仕様書（確定版）: 報告書表示と最終合否スタンプ（フェーズ5）
 
+> 2026-10-14 の面接特化（docs/SPEC-slim.md）で、詳細モード・初期対応者・旧 10 項目評価・レポート全体印刷に関する記述は無効。
+
 - 対象: `recruit-system/`（ブランチ `claude/toho-shinjuku-hiring-app-quhjtc`。直前コミット 6f32341 = フェーズ4完了。**commit / push はしない**）
 - 根拠: ユーザー決定 D1〜D12（下記 0-2 に要約。変更不可）
 - 前提資料: `docs/SPEC-checklist.md`（4 章: A4 報告 `checklistSheetHtml`・`body.print-checklist`）、`docs/HANDOFF.md`（7〜10 章: 押印・申し送りシート・改ページ・チェックリスト）

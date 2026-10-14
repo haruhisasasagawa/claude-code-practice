@@ -1,5 +1,7 @@
 # 詳細仕様書（確定版）: 高校生ポリシー／繁忙期・3連休／オールナイト／2軸判定
 
+> full-mode-last 時点の仕様（現行には無い）。現行は docs/SPEC-slim.md。
+
 - 対象: `recruit-system/`（ブランチ `claude/toho-shinjuku-hiring-app-quhjtc`、基準コミット `32a643e`）。**git commit / push はしない**（作業ツリーに変更を残すだけ）
 - 位置づけ: 仕様案 0（現場運用）を骨格にし、案 1（法令・判定の厳密さ・状態管理の修正）と案 2（設定可能性・他劇場展開・移行）を取り込んだ統合版。本書の名前・既定値・式は**確定値**として実装する
 - 実装後に更新するもの: `README.md`（Step3/4 の説明、`node tests/rules.test.js`）、`docs/HANDOFF.md`（決定事項 B〜E の追記、TODO の完了チェック）、`node build.js` による `dist/` の再生成

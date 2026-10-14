@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>応募者情報 - 押印 太郎さん | TOHOシネマズ新宿</title>
+<style>
+:root{--bg:#f3f5f8;--surface:#fff;--surface-2:#f8fafc;--surface-3:#eef2f6;--text:#1a2233;--muted:#5b6675;--border:#dde3ea;--accent:#1f5fbf;--accent-soft:#e6eefb;--ok:#0e9f6e;--ok-soft:#e3f6ee;--warn:#d97706;--warn-soft:#fdf1dc;--danger:#dc2626;--danger-soft:#fde8e8;--info:#2563eb;--info-soft:#e5edff;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+.page{max-width:900px;margin:0 auto;padding:28px 20px 48px;counter-reset:sec}
+h1,h2,h3,p{margin:0}
+.rh{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1)}
+.rh-top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border);background:var(--surface-2);font-size:12px;color:var(--muted)}
+.rh-brand{display:flex;align-items:center;gap:10px;color:var(--text)}
+.rh-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#6f3fd1);color:#fff;font-weight:800;display:grid;place-items:center;font-size:14px;flex:none}
+.rh-theater{font-weight:700;font-size:13.5px;line-height:1.3}.rh-app{font-size:11.5px;color:var(--muted);line-height:1.3}
+.rh-meta{text-align:right;line-height:1.5}
+.rh-main{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px 22px;flex-wrap:wrap}
+.rh-main>div:first-child{flex:1 1 400px;min-width:0}.rh-main>.verdict{flex:0 0 auto}
+.rh-kicker{font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--muted)}
+.rh-name{font-size:28px;font-weight:800;line-height:1.2;margin:2px 0 8px}.rh-name small{font-size:14px;font-weight:600;color:var(--muted);margin-left:4px}
+.rh-chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:var(--surface-3);font-size:12px;font-weight:600;color:var(--text)}
+.verdict{display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:12px 18px;border-radius:12px;border:2px solid var(--border);background:var(--surface-2);min-width:230px}
+.verdict .v-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted)}
+.verdict .v-title{font-size:22px;font-weight:800;line-height:1.25}
+.verdict .v-sub{font-size:12.5px;color:var(--muted)}
+.verdict.recommend{border-color:var(--ok);background:var(--ok-soft)}.verdict.recommend .v-title{color:var(--ok)}
+.verdict.review{border-color:var(--warn);background:var(--warn-soft)}.verdict.review .v-title{color:var(--warn)}
+.verdict.reject{border-color:var(--danger);background:var(--danger-soft)}.verdict.reject .v-title{color:var(--danger)}
+.dash{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:0}
+.tile .t-label{font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted)}
+.tile .t-val{font-size:24px;font-weight:800;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}.tile .t-val small{font-size:12px;font-weight:600;color:var(--muted);margin-left:2px}
+.tile .t-val.txt{font-size:15px;line-height:1.4;margin-top:6px}
+.tile .t-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.meter{height:7px;border-radius:999px;background:var(--surface-3);overflow:hidden;margin-top:8px}.meter>span{display:block;height:100%;border-radius:999px;background:var(--accent)}
+.meter>span.hi{background:var(--ok)}.meter>span.mid{background:var(--warn)}.meter>span.lo{background:var(--danger)}
+.counts{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+.sec{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px 20px;margin-top:16px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.sec h2{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--border)}
+.sec h2::before{counter-increment:sec;content:counter(sec);display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:800;flex:none}
+.sec h3{font-size:12.5px;font-weight:700;letter-spacing:.04em;color:var(--muted);margin:18px 0 8px;padding-bottom:5px;border-bottom:1px dashed var(--border)}
+table.kv{width:100%;border-collapse:collapse;font-size:13.5px}
+table.kv th{width:10em;text-align:left;font-weight:600;color:var(--muted);padding:7px 10px 7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}
+table.kv td{padding:7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}
+table.kv tr:last-child th,table.kv tr:last-child td{border-bottom:none}
+table.list{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+table.list th{text-align:left;font-weight:600;color:var(--muted);background:var(--surface-2);padding:7px 10px;border-bottom:1px solid var(--border)}
+table.list td{padding:7px 10px;border-bottom:1px solid var(--surface-3);vertical-align:top}
+table.list td.num,table.list th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+table.list tr.total td{font-weight:800;background:var(--surface-2);border-top:2px solid var(--border)}table.list tr.na td{color:#8a94a3}
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar{display:grid;grid-template-columns:minmax(0,1fr) 150px 4.5em;gap:12px;align-items:center;font-size:13.5px}
+.bar.wide{grid-template-columns:minmax(0,1fr) 150px 5.5em}
+.bar .b-label{min-width:0}.bar .b-label small{display:block;font-size:11.5px;color:var(--muted);line-height:1.4}
+.bar .b-track{height:9px;border-radius:999px;background:var(--surface-3);overflow:hidden}.bar .b-track>span{display:block;height:100%;border-radius:999px;background:var(--accent)}
+.bar .b-track>span.hi{background:var(--ok)}.bar .b-track>span.mid{background:var(--warn)}.bar .b-track>span.lo{background:var(--danger)}
+.bar .b-val{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}.bar .b-val small{font-weight:600;color:var(--muted)}
+.bar.overall .b-label{font-weight:700}.bar.na{color:#8a94a3}
+.total-line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);font-size:13.5px}
+.total-line b{font-size:22px;font-weight:800}.total-line .right{margin-left:auto;font-weight:700;display:flex;align-items:center;gap:8px}
+.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;background:var(--surface-3);color:var(--muted)}
+.badge.ok{background:var(--ok-soft);color:var(--ok)}.badge.warn{background:var(--warn-soft);color:var(--warn)}.badge.danger{background:var(--danger-soft);color:var(--danger)}.badge.info{background:var(--info-soft);color:var(--info)}.badge.accent{background:var(--accent-soft);color:var(--accent)}
+.badge.lg{font-size:14px;padding:5px 14px}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:5px;background:var(--surface-3);color:#3a4556;white-space:nowrap;vertical-align:1px}
+.tag.warn{background:var(--warn-soft);color:#9a5b00}.tag.danger{background:var(--danger-soft);color:#b42318}.tag.ok{background:var(--ok-soft);color:#0b7a55}
+.hgroup{margin-bottom:12px}.hgroup:last-child{margin-bottom:0}
+.hgroup-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px;color:var(--muted)}.hgroup-head b{color:var(--text)}
+ul.hlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+li.h{display:grid;grid-template-columns:20px 1fr;gap:10px;align-items:start;padding:9px 12px;border:1px solid var(--border);border-left-width:4px;border-radius:8px;font-size:13.5px;background:var(--surface)}
+li.h.block{border-left-color:var(--danger)}li.h.warn{border-left-color:var(--warn)}li.h.info{border-left-color:var(--info)}
+li.h.done{background:var(--ok-soft);border-color:#bfe3d3;border-left-color:var(--ok)}li.h.done .txt{color:var(--muted)}
+li.h .box{font-size:16px;line-height:1.2;color:var(--muted)}li.h.done .box{color:var(--ok)}
+li.h .hmeta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:2px}
+li.h .sev{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--surface-3);color:var(--muted)}
+li.h .sev.block{background:var(--danger-soft);color:var(--danger)}li.h .sev.warn{background:var(--warn-soft);color:var(--warn)}li.h .sev.info{background:var(--info-soft);color:var(--info)}
+li.h .cat{font-size:11px;color:var(--muted);padding:0 6px;border:1px solid var(--border);border-radius:4px}
+li.h .txt{line-height:1.55}
+ul.strengths{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 16px}
+ul.strengths li{position:relative;padding-left:1.4em;font-size:13.5px}ul.strengths li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:800}
+.callout{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-left:4px solid var(--warn);border-radius:8px;padding:10px 12px;margin-top:12px;font-size:13.5px;background:var(--warn-soft)}
+.callout.danger{border-left-color:var(--danger);background:var(--danger-soft)}.callout.ok{border-left-color:var(--ok);background:var(--ok-soft)}.callout.info{border-left-color:var(--info);background:var(--info-soft)}
+.callout>div{min-width:0}.callout .muted{display:block}
+.note{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.7}
+.muted{color:var(--muted)}.empty{color:var(--muted);font-size:13.5px}
+.result{border:2px solid var(--border);border-radius:12px;padding:18px 20px;background:var(--surface)}
+.result.recommend{border-color:var(--ok);background:linear-gradient(180deg,var(--ok-soft),#fff 60%)}.result.review{border-color:var(--warn);background:linear-gradient(180deg,var(--warn-soft),#fff 60%)}.result.reject{border-color:var(--danger);background:linear-gradient(180deg,var(--danger-soft),#fff 60%)}
+.result-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted)}
+.result-title{font-size:24px;font-weight:800;margin:2px 0 6px}
+.result.recommend .result-title{color:var(--ok)}.result.review .result-title{color:var(--warn)}.result.reject .result-title{color:var(--danger)}
+.result-body{font-size:14.5px}
+.result-must{margin-top:8px;font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.result-note{margin-top:10px;padding:9px 12px;background:rgba(255,255,255,.75);border:1px solid var(--border);border-radius:8px;font-size:13.5px}
+.axes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px}
+.axis{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-width:0}
+.axis .a-label{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.04em}.axis .a-val{font-size:20px;font-weight:800;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}.axis .a-val small{font-size:12px;font-weight:600;color:var(--muted)}.axis .a-val.txt{font-size:13.5px;line-height:1.45;margin-top:4px}.axis .a-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.mx-wrap{margin-top:12px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px}
+.mx{border-collapse:separate;border-spacing:4px;width:100%;font-size:12.5px}
+.mx th{font-weight:700;text-align:center;padding:6px 4px;color:var(--text)}.mx th small{display:block;font-weight:600;color:var(--muted);font-size:11px}
+.mx thead th:first-child{text-align:left;color:var(--muted);font-size:11.5px;font-weight:600}
+.mx td{text-align:center;padding:9px 6px;border-radius:7px;font-weight:600;background:var(--surface-3)}
+.mx td.recommend{background:var(--ok-soft);color:#0b7a55}.mx td.review{background:var(--warn-soft);color:#9a5b00}.mx td.reject{background:var(--danger-soft);color:#b42318}
+.mx td.cur{outline:3px solid var(--text);outline-offset:-3px;font-weight:800}
+.mx-note{font-size:12px;color:var(--muted);margin-top:6px}
+.adj{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.adj li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.75);border:1px solid var(--border);font-size:13px}
+.adj .step{white-space:nowrap;font-weight:700;color:var(--muted)}
+.adj-head{margin-top:14px;font-size:13px;font-weight:700}
+.warn-list{margin:10px 0 0;padding-left:1.3em;font-size:13px}.warn-list li{margin-bottom:3px}
+.disclaimer{margin-top:12px;font-size:12px;color:var(--muted)}
+.foot{margin-top:28px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.stamp-box{border:1px solid var(--border);border-radius:10px;padding:12px 10px 10px;text-align:center;background:var(--surface-2);min-width:0}
+.stamp-label{font-size:12.5px;font-weight:700;color:var(--muted)}.stamp-hint{font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4}
+.stamp-area{height:100px;display:grid;place-items:center}
+.stamp-empty{width:84px;height:84px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;font-size:11px;color:var(--muted);background:#fff}
+.hanko{mix-blend-mode:multiply}
+.stamp-meta{font-size:12px;color:var(--muted);min-height:1.3em;line-height:1.4}
+.stamp-ctl{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.stamp-ctl select,.stamp-ctl input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;max-width:100%;background:#fff;color:var(--text)}
+.stamp-ctl input{width:100%}
+.stamp-ctl button,.mgmt-save button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:var(--text);cursor:pointer}
+.stamp-ctl button.primary,.mgmt-save button{background:var(--accent);color:#fff;border-color:var(--accent)}
+.stamp-ctl button:hover{filter:brightness(.97)}
+.mgmt-save{display:none;margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--warn-soft);border:1px solid #f3cf8a;font-size:13px;align-items:center;gap:10px;flex-wrap:wrap}.mgmt-save.show{display:flex}
+.mgmt-note{font-size:12px;color:var(--muted);margin-top:10px}
+@media (max-width:720px){.stamp-row{grid-template-columns:1fr}}
+.rtool{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--muted)}
+.rtool button{font:inherit;font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:var(--text);cursor:pointer}.rtool button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.rtool-hint{font-size:11.5px}
+.rtool-view{display:inline-flex;border:1px solid #c7d0db;border-radius:7px;overflow:hidden;background:#fff}
+.rtool .rtool-view button{border:none;border-radius:0;padding:5px 14px;color:var(--muted);background:#fff}
+.rtool .rtool-view button+button{border-left:1px solid #c7d0db}
+.rtool .rtool-view button.on{background:#24324a;color:#fff}
+.rtool-sep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.paper-wrap{display:none}
+.paper-cap{display:flex;justify-content:space-between;gap:4px 12px;flex-wrap:wrap;width:210mm;max-width:100%;margin:0 auto 6px;font-size:12px;color:var(--muted)}.paper-cap b{color:var(--text)}
+.paper{box-sizing:content-box;width:190mm;margin:0 auto;padding:10mm;background:#fff;color:#111;border:1px solid #d5dbe3;border-radius:2px;box-shadow:0 1px 2px rgba(16,24,40,.08),0 12px 32px rgba(16,24,40,.12)}
+@media screen{
+body.view-report.has-cl:not(.print-checklist):not(.print-handoff) .page>:not(.rtool):not(.paper-wrap):not(section[data-sec="mgmt"]):not(.foot){display:none}
+body.view-report.has-cl:not(.print-checklist):not(.print-handoff) .paper-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 2px 14px}
+body.view-report.has-cl:not(.print-checklist):not(.print-handoff) section.sec[data-sec="mgmt"]{max-width:210mm;margin:12px auto 0}
+body.view-report.has-cl:not(.print-checklist):not(.print-handoff) section.sec[data-sec="mgmt"] h2::before{display:none}
+body.view-report:not(.has-cl):not(.print-checklist):not(.print-handoff) .dash{display:none}
+body.view-report:not(.has-cl):not(.print-checklist):not(.print-handoff) section.sec:not([data-sec="pre"]):not([data-sec="comment"]):not([data-sec="handoff"]):not([data-sec="interview"]):not([data-sec="mgmt"]){display:none}
+}
+.decision{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 18px;align-items:center;padding:12px 16px;margin:0 0 14px;border:1px solid var(--border);border-left:4px solid #24324a;border-radius:10px;background:var(--surface-2)}
+.decision.is-hire{border-left-color:var(--dec-hire,#c8232c)}.decision.is-reject{border-left-color:var(--dec-reject,#1f4e8c)}
+.dec-head{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.dec-title{font-size:14px;font-weight:800}.dec-hint{font-size:12px;color:var(--muted)}
+.dec-stamp{width:124px;height:80px;display:grid;place-items:center}
+.dec-empty{width:116px;height:70px;border:2px dashed #c7d0db;border-radius:9px;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted);background:#fff}
+.dec-body{min-width:0;display:flex;flex-direction:column;gap:8px}
+.dec-meta{font-size:13.5px;font-weight:700;min-height:1.4em}.dec-meta:empty::before{content:"まだ押されていません";color:var(--muted);font-weight:600}
+.dec-note{font-size:12.5px;color:#9a5b00;background:var(--warn-soft);border:1px solid #f3cf8a;border-radius:6px;padding:4px 10px}.dec-note:empty{display:none}
+.dec-ctl{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.dec-ctl select,.dec-ctl input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;background:#fff;color:var(--text);max-width:100%}
+.dec-ctl button{font:inherit;font-size:13px;font-weight:800;padding:5px 16px;border-radius:6px;cursor:pointer;background:#fff;color:var(--text);border:1px solid #c7d0db}
+.dec-ctl .dec-btn{color:var(--dec);border:1.5px solid var(--dec)}.dec-ctl .dec-hire{--dec:var(--dec-hire,#c8232c)}.dec-ctl .dec-reject{--dec:var(--dec-reject,#1f4e8c)}
+.dec-ctl .dec-btn:hover,.dec-ctl .dec-btn.on{background:var(--dec);color:#fff}
+.verdict-stamp{mix-blend-mode:multiply}
+.rh-decision{flex:0 0 auto;display:grid;place-items:center}.rh-decision:empty{display:none}
+@media (max-width:720px){.decision{grid-template-columns:1fr}}
+@media print{.paper-wrap,.dec-ctl,.dec-hint{display:none !important}.decision.is-none{display:none !important}body.print-checklist #decision,body.print-handoff #decision,body.print-handoff .rh-decision{display:none !important}.decision{break-inside:avoid;padding:6px 10px;margin-bottom:8px;gap:4px 12px}.dec-stamp{width:100px;height:64px}.dec-stamp .verdict-stamp{width:96px;height:61px}.decision,.verdict-stamp,.dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.print-only{display:none}
+@page sheet{size:A4;margin:7mm 9mm}
+@media print{.rtool{display:none !important}
+body.print-handoff{page:sheet;font-size:10px;line-height:1.35}
+body.print-handoff .print-only{display:block}body.print-handoff .sheet-title{font-size:13px;font-weight:800;color:var(--accent);margin-bottom:2px}
+body.print-handoff .dash,body.print-handoff .verdict,body.print-handoff .rh-top,body.print-handoff .foot,body.print-handoff .mgmt-note,body.print-handoff .stamp-hint,body.print-handoff .stamp-ctl,body.print-handoff .mgmt-save{display:none !important}
+body.print-handoff section.sec:not([data-sec="pre"]):not([data-sec="comment"]):not([data-sec="handoff"]):not([data-sec="interview"]):not([data-sec="mgmt"]){display:none !important}
+body.print-handoff .rh{border-radius:5px}body.print-handoff .rh-main{padding:3px 10px 4px;gap:10px}body.print-handoff .rh-name{font-size:16px;margin:0 0 3px}body.print-handoff .rh-name small{font-size:10px}body.print-handoff .rh-kicker{display:none}body.print-handoff .chip{font-size:9px;padding:0 6px}body.print-handoff .rh-chips{gap:4px}
+body.print-handoff .sec{padding:4px 8px 5px;margin-top:4px;border-radius:5px;box-shadow:none}body.print-handoff .sec h2{font-size:11px;padding-bottom:3px;margin-bottom:4px;gap:6px}body.print-handoff .sec h2::before{width:15px;height:15px;font-size:9.5px;border-radius:4px}body.print-handoff .sec h3{font-size:9.5px;margin:4px 0 2px;padding-bottom:1px}
+body.print-handoff table.kv{font-size:10px;display:block}body.print-handoff table.kv tbody{display:block;columns:2;column-gap:14px}body.print-handoff table.kv tr{display:grid;grid-template-columns:6.5em 1fr;break-inside:avoid;border-bottom:1px solid #eef2f6}body.print-handoff table.kv th,body.print-handoff table.kv td{padding:1px 4px 1px 0;border:none;width:auto}
+body.print-handoff .note{padding:2px 8px;font-size:10px;line-height:1.35}body.print-handoff .callout{padding:3px 8px;font-size:10px;margin-top:5px}
+body.print-handoff li.h{padding:1px 6px;gap:5px;grid-template-columns:12px 1fr;font-size:9.7px;border-left-width:3px;border-radius:4px;break-inside:avoid}body.print-handoff li.h .box{font-size:11px}body.print-handoff li.h .hmeta{margin-bottom:0;gap:4px}body.print-handoff li.h .sev,body.print-handoff li.h .cat,body.print-handoff .tag{font-size:8px;padding:0 4px}body.print-handoff li.h .txt{line-height:1.3}
+body.print-handoff ul.hlist{gap:2px}body.print-handoff .hgroup{margin-bottom:4px}body.print-handoff .hgroup-head{margin-bottom:2px;font-size:9.5px;gap:6px}body.print-handoff .hgroup-head>span:not(.badge){display:none}body.print-handoff .badge{font-size:8.5px;padding:0 5px}
+body.print-handoff ul.strengths{gap:0 12px}body.print-handoff ul.strengths li{font-size:10px}
+body.print-handoff .sheet-2col ul.hlist{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;align-items:start}
+body.print-handoff .stamp-row{gap:8px}body.print-handoff .stamp-box{display:flex;align-items:center;gap:8px;text-align:left;padding:2px 8px}body.print-handoff .stamp-label{font-size:10px;min-width:5.5em}body.print-handoff .stamp-area{height:auto}body.print-handoff .hanko{width:46px;height:46px}body.print-handoff .stamp-empty{width:44px;height:44px;font-size:8.5px}body.print-handoff .stamp-meta{font-size:9px;min-height:0;line-height:1.3}}
+@media print{.stamp-ctl,.mgmt-save,.mgmt-note{display:none !important}.stamp-row{break-inside:avoid}.hanko,.stamp-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+@media (max-width:720px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}.rh-main{flex-direction:column;align-items:stretch}.verdict{align-items:flex-start}ul.strengths{grid-template-columns:1fr}.bar,.bar.wide{grid-template-columns:minmax(0,1fr) 90px 4.5em}.rh-top{flex-direction:column;align-items:flex-start}.rh-meta{text-align:left}}
+@media print{@page{size:A4;margin:10mm 11mm}body{background:#fff;font-size:11px;line-height:1.45}.page{padding:0;max-width:none}
+.rh,.sec,.tile,.result,li.h{box-shadow:none}.rh{border-radius:8px}.rh-top{padding:5px 14px}.rh-main{padding:8px 14px;gap:12px}.rh-name{font-size:19px;margin:0 0 4px}.rh-chips{gap:4px}.chip{font-size:10.5px;padding:1px 8px}.verdict{padding:6px 12px;min-width:170px;gap:0}.verdict .v-title{font-size:16px}
+.dash{margin-top:8px;gap:8px}.tile{padding:7px 10px}.tile .t-val{font-size:17px}.tile .t-label{font-size:10.5px}.meter{margin-top:5px}
+.sec{margin-top:8px;padding:9px 14px 11px;border-radius:8px}.sec h2{font-size:12.5px;margin-bottom:7px;padding-bottom:5px}.sec h2::before{width:20px;height:20px;font-size:11px}.sec h3{margin:9px 0 5px}
+table.kv th,table.kv td{padding:2px 8px 2px 0}table.kv tr{break-inside:avoid}table.list th,table.list td{padding:3px 8px}
+li.h{padding:4px 9px}ul.hlist{gap:4px}.hgroup{margin-bottom:7px}.hgroup-head{margin-bottom:4px}ul.strengths{gap:3px 14px}.note{padding:7px 11px}.callout{padding:7px 10px;margin-top:8px}
+.bars{gap:4px}.bar{grid-template-columns:minmax(0,1fr) 120px 4.5em}.bar.wide{grid-template-columns:minmax(0,1fr) 120px 5.5em}.total-line{padding:6px 10px;margin-top:8px}.total-line b{font-size:16px}
+.result{padding:11px 14px;break-inside:auto}.result-title{font-size:18px}.axes{margin-top:8px;gap:8px}.axis{padding:6px 10px}.axis .a-val{font-size:15px}.mx-wrap{margin-top:8px;padding:6px}.mx td{padding:6px 4px}.adj{margin-top:8px}.adj li{padding:5px 10px}
+.stamp-row{gap:8px}.stamp-box{padding:8px}.stamp-area{height:80px}.hanko{width:70px;height:70px}.stamp-empty{width:66px;height:66px}.foot{margin-top:12px}
+.dash,.tile,.mx-wrap,li.h,.bar,table.list tr,.callout,.note,.total-line,.axes,.stamp-row,.adj li{break-inside:avoid}.sec h2,.sec h3,.result-kicker,.result-title,.result-body,.hgroup-head{break-after:avoid}
+.verdict,.result,.mx td,.badge,.tag,.sev,.meter>span,.b-track>span,li.h.done,.callout,.tile,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.cl-sheet{color:#1a2233;font-size:13px;line-height:1.5}
+.cl-sheet *{box-sizing:border-box}
+.cl-sheet .cl-s{border:1px solid #c9d2dd;border-radius:8px;margin:0 0 10px;overflow:hidden;background:#fff;break-inside:auto}
+.cl-sheet .cl-s-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0;padding:5px 12px;background:#24324a;color:#fff;font-size:14px;font-weight:700;break-after:avoid}
+.cl-sheet .cl-s.cl-s-ng .cl-s-h{background:#9b1c1c}
+.cl-sheet .cl-s-no{font-size:1.15em}.cl-sheet .cl-s-min{font-size:.85em;font-weight:600;opacity:.85;padding:0 6px;border:1px solid rgba(255,255,255,.55);border-radius:999px}
+.cl-sheet .cl-s-sum{margin-left:auto;font-size:.85em;font-weight:600}
+.cl-sheet .cl-s-lead{margin:0;padding:4px 12px 0;color:#5b6675;font-size:.92em}
+.cl-sheet .cl-s-body{padding:6px 12px 8px}
+.cl-sheet .cl-2col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 16px}
+.cl-sheet .cl-b{margin:0 0 6px}.cl-sheet .cl-b:last-child{margin-bottom:0}
+.cl-sheet .cl-bt{font-weight:700;font-size:.92em;margin:2px 0 3px;break-after:avoid}.cl-sheet .cl-bt small{font-weight:500;color:#5b6675;margin-left:6px}
+.cl-sheet table{width:100%;border-collapse:collapse}
+.cl-sheet table td{padding:3px 6px;border-bottom:1px solid #e3e8ee;vertical-align:top}
+.cl-sheet table tr{break-inside:avoid}
+.cl-sheet .cl-must .cl-val{width:6em;white-space:nowrap;font-weight:700;text-align:center}
+.cl-sheet .cl-rate .cl-lbl{font-weight:600;width:40%}.cl-sheet .cl-rate .cl-mk{width:4.5em;text-align:center;font-weight:800;font-size:1.15em;white-space:nowrap}.cl-sheet .cl-rate .cl-mk small{font-size:.75em;font-weight:600;color:#8a94a3}
+.cl-sheet .cl-rate .cl-pt{width:3em;text-align:right;white-space:nowrap;color:#5b6675}.cl-sheet .cl-rate .cl-nt{white-space:pre-wrap;overflow-wrap:anywhere}
+.cl-sheet tr.t-ok .cl-val,.cl-sheet tr.t-ok .cl-mk{color:#0b7a55;background:#e3f6ee}.cl-sheet tr.t-warn .cl-mk{color:#9a5b00;background:#fdf1dc}
+.cl-sheet tr.t-danger .cl-val,.cl-sheet tr.t-danger .cl-mk{color:#b42318;background:#fde8e8}.cl-sheet tr.t-muted .cl-val{color:#5b6675;background:#eef2f6}
+.cl-sheet dl.cl-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 12px;margin:0}
+.cl-sheet dl.cl-fields>div{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:4px;border-bottom:1px solid #e3e8ee;padding:2px 0;break-inside:avoid}
+.cl-sheet dl.cl-fields dt{color:#5b6675;font-weight:600}.cl-sheet dl.cl-fields dd{margin:0;overflow-wrap:anywhere}.cl-sheet dl.cl-fields dd small{color:#5b6675;margin-left:3px}
+.cl-sheet .cl-col dl.cl-fields{grid-template-columns:minmax(0,1fr)}.cl-sheet .cl-col dl.cl-fields>div{grid-template-columns:10em minmax(0,1fr)}
+.cl-sheet ul.cl-checks{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px 12px}
+.cl-sheet .cl-col ul.cl-checks,.cl-sheet .cl-b-notify ul.cl-checks{grid-template-columns:minmax(0,1fr)}
+.cl-sheet ul.cl-checks li{display:grid;grid-template-columns:1.2em minmax(0,1fr);gap:3px;break-inside:avoid}.cl-sheet ul.cl-checks li.off{color:#5b6675}.cl-sheet ul.cl-checks li.dim{opacity:.6}
+.cl-sheet .cl-box{font-size:1.1em;line-height:1.3}.cl-sheet li.on .cl-box{color:#0b7a55}
+.cl-sheet ol.cl-qs{margin:0 0 3px;padding-left:1.5em;color:#3a4556}.cl-sheet ol.cl-qs li{break-inside:avoid}
+.cl-sheet .cl-memo{display:flex;gap:4px;padding:3px 8px;background:#f8fafc;border:1px solid #e3e8ee;border-left:3px solid #1f5fbf;border-radius:4px;break-inside:avoid}.cl-sheet .cl-memo b{flex:none}
+.cl-sheet .cl-memo-t{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
+.cl-sheet .cl-blank{color:#8a94a3}
+.cl-sheet .cl-hint{display:block;font-weight:500;font-size:.85em;color:#5b6675;line-height:1.35}
+.cl-mode-section .cl-sheet-head{border:1px solid #c9d2dd;border-radius:8px;padding:6px 12px;margin:0 0 10px;background:#f8fafc;break-inside:avoid}
+.cl-mode-section dl.cl-sh-kv{display:flex;flex-wrap:wrap;gap:2px 20px;margin:0 0 4px}.cl-mode-section dl.cl-sh-kv>div{display:flex;gap:6px;align-items:baseline}
+.cl-mode-section dl.cl-sh-kv dt{color:#5b6675;font-weight:600}.cl-mode-section dl.cl-sh-kv dd{margin:0;font-weight:700}.cl-mode-section dl.cl-sh-kv dd small{font-weight:500;color:#5b6675;margin-left:3px}
+.cl-mode-section .cl-sh-chips{display:flex;flex-wrap:wrap;gap:4px}
+.cl-mode-section .cl-hchip{display:inline-flex;gap:6px;align-items:baseline;padding:1px 8px;border:1px solid #c9d2dd;border-radius:5px;font-size:12px;background:#fff}.cl-mode-section .cl-hchip b{color:#5b6675;font-weight:700}.cl-mode-section .cl-hchip small{color:#5b6675}
+.cl-mode-section .cl-hchip.t-ok{border-color:#9fd8bf;background:#e3f6ee}.cl-mode-section .cl-hchip.t-warn{border-color:#f3cf8a;background:#fdf1dc}.cl-mode-section .cl-hchip.t-danger{border-color:#f5b5b5;background:#fde8e8;color:#b42318}.cl-mode-section .cl-hchip.t-info{border-color:#b9cdf7;background:#e5edff}
+.cl-mode-section .cl-page-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:4px 0 6px;padding-bottom:3px;border-bottom:2px solid #24324a;break-after:avoid}
+.cl-mode-section .cl-page-no{font-size:11.5px;font-weight:800;color:#fff;background:#24324a;padding:0 7px;border-radius:4px}.cl-mode-section .cl-page-t{font-weight:800;font-size:14px}
+.cl-mode-section .cl-page-lead{flex-basis:100%;font-size:12px;color:#3a4556}
+.cl-sheet .cl-sflow{margin:5px 0 0;font-size:.92em;font-weight:600;color:#3a4556}
+.cl-sheet .cl-overall{border:2px solid #24324a;border-radius:8px;padding:6px 12px;margin:0 0 10px;break-inside:avoid}
+.cl-sheet .cl-ov-row{display:grid;grid-template-columns:9em minmax(0,1fr);gap:8px;padding:2px 0;border-bottom:1px solid #e3e8ee}.cl-sheet .cl-ov-row:last-child{border-bottom:none}
+.cl-sheet .cl-ov-k{font-weight:700;color:#3a4556}.cl-sheet .cl-ov-v{font-weight:700}.cl-sheet .cl-ov-v small{font-weight:600;color:#5b6675;margin-left:4px}.cl-sheet .cl-ov-notes .cl-ov-v{font-weight:400}
+.cl-sheet .cl-ov-v.t-ok{color:#0b7a55}.cl-sheet .cl-ov-v.t-warn{color:#9a5b00}.cl-sheet .cl-ov-v.t-danger{color:#b42318}.cl-sheet .cl-ov-v.t-muted{color:#5b6675}
+.cl-sheet.cl-mode-sheet{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:9.5px;line-height:1.4;background:#fff;color:#111}
+.cl-mode-sheet .cl-blank{color:#8a94a3;font-weight:400}
+.cl-mode-sheet .cl-band{display:flex;align-items:center;gap:10px;height:22px;padding:0 8px;background:#24324a;color:#fff;border-radius:3px}
+.cl-mode-sheet .cl-band-t{flex:none;font-size:11px;font-weight:800;letter-spacing:.04em}
+.cl-mode-sheet .cl-band-v{flex:1 1 auto;min-width:0;text-align:center;font-size:8.5px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-band-r{flex:none;font-size:8.5px;white-space:nowrap}
+.cl-mode-sheet .cl-who{padding:6px 2px 6px;border-bottom:1px solid #d5dbe3}
+.cl-mode-sheet .cl-who-1{display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;min-width:0}
+.cl-mode-sheet .cl-sh-name{font-size:16px;font-weight:800;line-height:1.25;overflow-wrap:anywhere}.cl-mode-sheet .cl-sh-name small{font-size:10px;font-weight:600;margin-left:2px}
+.cl-mode-sheet .cl-sh-who,.cl-mode-sheet .cl-sh-grad{font-size:9.5px;font-weight:600;color:#3a4556}.cl-mode-sheet .cl-sh-grad b{font-size:8.5px;font-weight:600;color:#5b6675;margin-right:4px}
+.cl-mode-sheet dl.cl-sh-kv{display:flex;flex-wrap:wrap;gap:1px 16px;margin:3px 0 0}
+.cl-mode-sheet dl.cl-sh-kv>div{display:flex;gap:5px;align-items:baseline;min-width:0;max-width:100%}
+.cl-mode-sheet dl.cl-sh-kv dt{flex:none;font-size:8.5px;font-weight:600;color:#5b6675}
+.cl-mode-sheet dl.cl-sh-kv dd{margin:0;min-width:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-judge{margin:8px 0 0;padding:6px;border:1px solid #d5dbe3;border-radius:5px;background:#f3f5f8;break-inside:avoid}
+.cl-mode-sheet .cl-judge[data-result="recommend"]{background:#eef8f3;border-color:#bfe3d2}.cl-mode-sheet .cl-judge[data-result="review"]{background:#fdf6e9;border-color:#efd5a4}.cl-mode-sheet .cl-judge[data-result="reject"]{background:#fdf1f1;border-color:#efc2c2}
+.cl-mode-sheet .cl-judge-row{display:flex;gap:6px;align-items:stretch;min-height:58px}
+.cl-mode-sheet .cl-judge-main{flex:1 1 auto;min-width:0;display:flex}
+.cl-mode-sheet .cl-tiles{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:6px}
+.cl-mode-sheet .cl-tiles.n5{grid-template-columns:minmax(0,1.4fr) repeat(4,minmax(0,1fr))}
+.cl-mode-sheet .cl-tile{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;padding:3px 8px;background:#fff;border:1px solid #d5dbe3;border-radius:4px}
+.cl-mode-sheet .cl-tile-k{font-size:8.5px;font-weight:700;color:#5b6675;line-height:1.2}
+.cl-mode-sheet .cl-tile-v{font-size:11px;font-weight:800;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-tile-v small{font-size:8.5px;font-weight:600;color:#5b6675;margin-left:1px}
+.cl-mode-sheet .cl-tile-s{font-size:8.5px;color:#3a4556;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-tile.is-ng .cl-tile-v{color:#b42318}
+.cl-mode-sheet .cl-tile-res{border-width:2px;padding:3px 10px}.cl-mode-sheet .cl-tile-res .cl-tile-v{font-size:14px;line-height:1.3}
+.cl-mode-sheet .cl-tile-res.t-ok{border-color:#0b7a55}.cl-mode-sheet .cl-tile-res.t-ok .cl-tile-v{color:#0b7a55}
+.cl-mode-sheet .cl-tile-res.t-warn{border-color:#c98a1b}.cl-mode-sheet .cl-tile-res.t-warn .cl-tile-v{color:#9a5b00}
+.cl-mode-sheet .cl-tile-res.t-danger{border-color:#b42318}.cl-mode-sheet .cl-tile-res.t-danger .cl-tile-v{color:#b42318}
+.cl-mode-sheet .cl-tile-res.t-none{border-color:#b8c2cf;border-style:dashed}.cl-mode-sheet .cl-tile-res.t-none .cl-tile-v{color:#5b6675}
+.cl-mode-sheet .cl-adj{list-style:none;margin:5px 2px 0;padding:0;font-size:9px;color:#3a4556}
+.cl-mode-sheet .cl-adj li{overflow-wrap:anywhere}.cl-mode-sheet .cl-adj li::before{content:"※ "}.cl-mode-sheet .cl-adj li b{color:#111}
+.cl-mode-sheet .cl-decision{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid #d5dbe3;border-radius:4px;background:#fff}
+.cl-mode-sheet .cl-dec-stamp{flex:none;display:grid;place-items:center}.cl-mode-sheet .cl-dec-stamp .verdict-stamp{width:64px;height:41px;mix-blend-mode:multiply;filter:none}
+.cl-mode-sheet .cl-dec-meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#5b6675}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}
+.cl-mode-sheet .cl-dec-by,.cl-mode-sheet .cl-dec-date{font-size:8.5px;color:#3a4556;white-space:nowrap}
+.cl-mode-sheet .cl-decision.is-none{padding:3px 6px}
+.cl-mode-sheet .cl-dec-empty{width:72px;height:44px;border:1.5px dashed #b8c2cf;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.3;color:#5b6675;text-align:center}
+.cl-mode-sheet .cl-blk{margin:10px 0 0;break-inside:avoid}
+.cl-mode-sheet .cl-h{margin:0 0 3px;padding:0 0 0 6px;border-left:3px solid #24324a;font-size:10.5px;font-weight:800;line-height:1.35;color:#1a2233}
+.cl-mode-sheet .cl-h small{margin-left:10px;font-size:8.5px;font-weight:500;color:#5b6675}
+.cl-mode-sheet .cl-cols{display:grid;grid-template-columns:minmax(0,45fr) minmax(0,55fr);gap:0 16px;margin-top:10px}.cl-mode-sheet .cl-cols>.cl-blk{margin-top:0}
+.cl-mode-sheet table.cl-mtab{width:100%;border-collapse:collapse}
+.cl-mode-sheet .cl-mtab td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:top}
+.cl-mode-sheet .cl-mm-c{width:5em;white-space:nowrap}.cl-mode-sheet .cl-mm-l{font-weight:600}
+.cl-mode-sheet .cl-mm{display:inline-block;padding:0 5px;border-radius:3px;font-weight:800;line-height:1.45;color:#5b6675;background:#eef1f5}
+.cl-mode-sheet .m-match .cl-mm{color:#0b7a55;background:#e3f6ee}.cl-mode-sheet .m-mismatch .cl-mm{color:#fff;background:#b42318}
+.cl-mode-sheet dl.cl-kv{margin:0}
+.cl-mode-sheet dl.cl-kv>div{display:grid;grid-template-columns:9.5em minmax(0,1fr);gap:6px;align-items:baseline;padding:3px 4px;border-bottom:1px solid #e6eaef}
+.cl-mode-sheet dl.cl-kv dt{font-size:8.5px;font-weight:600;color:#5b6675}
+.cl-mode-sheet dl.cl-kv dd{margin:0;min-width:0;font-weight:700;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.cl-mode-sheet table.cl-rt{width:100%;border-collapse:collapse;table-layout:fixed}
+.cl-mode-sheet .cl-rt col.c-no{width:20px}.cl-mode-sheet .cl-rt col.c-lbl{width:40%}.cl-mode-sheet .cl-rt col.c-mk{width:30px}
+.cl-mode-sheet .cl-rt td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:middle}
+.cl-mode-sheet .cl-rt-no{font-size:8.5px;color:#5b6675;text-align:center}.cl-mode-sheet .cl-rt-lbl{font-weight:600}.cl-mode-sheet .cl-rt-mk{text-align:center}
+.cl-mode-sheet .cl-rt-nt{color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-mark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:10px;font-weight:800;line-height:1;color:#fff;background:#8a94a3}
+.cl-mode-sheet .cl-mark.m-good{background:#0b7a55}.cl-mode-sheet .cl-mark.m-fair{background:#c98a1b}.cl-mode-sheet .cl-mark.m-poor{background:#b42318}.cl-mode-sheet .cl-mark.m-none{color:#8a94a3;background:#eef1f5}
+.cl-mode-sheet .cl-nm-row{display:grid;grid-template-columns:18em minmax(0,1fr);gap:8px;padding:3px 4px;border-bottom:1px solid #e6eaef}
+.cl-mode-sheet .cl-nm-k{font-size:8.5px;font-weight:700;color:#5b6675;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.cl-mode-sheet .cl-nm-no{margin-right:3px;color:#24324a}
+.cl-mode-sheet .cl-nm-v{min-width:0;overflow-wrap:anywhere}
+.cl-mode-sheet .cl-nm-q .cl-nm-v,.cl-mode-sheet .cl-nm-b .cl-nm-v{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.cl-mode-sheet .cl-nm-iv .cl-nm-v,.cl-mode-sheet .cl-nm-memo .cl-nm-v{white-space:pre-wrap}
+.cl-mode-sheet .cl-nm-ref{display:none;margin:3px 4px 0;font-size:8.5px;color:#5b6675}
+.cl-mode-sheet.cl-nm-cut .cl-nm-ref,.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q{display:block}
+.cl-mode-sheet .cl-nm-ref-q{display:none}.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q .cl-nm-ref-q{display:inline}.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q .cl-nm-ref-c{display:none}
+.cl-mode-sheet .cl-exline{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 5px;margin:10px 0 0;padding:4px 8px;border:1px solid #e1e6ec;border-radius:4px;background:#fafbfc}
+.cl-mode-sheet .cl-ex-k{font-size:8.5px;font-weight:700;color:#5b6675;margin-right:2px}.cl-mode-sheet .cl-ex-i{font-weight:600;white-space:nowrap}.cl-mode-sheet .cl-ex-i.is-off{font-weight:800;text-decoration:underline}
+.cl-mode-sheet .cl-ex-sep{color:#8a94a3}.cl-mode-sheet .cl-ex-bar{margin:0 6px;color:#b8c2cf}
+.cl-mode-sheet .cl-stamps{margin:10px 0 0;break-inside:avoid}
+.cl-sheet .stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;break-inside:avoid}
+.cl-sheet .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px;border:1px solid #c9d2dd;border-radius:4px;background:#fff;min-width:0}
+.cl-sheet .stamp-label{font-size:9.5px;font-weight:700;min-width:5em;color:#1a2233}.cl-sheet .stamp-area{height:auto;display:grid;place-items:center}
+.cl-sheet .hanko{width:46px;height:46px;filter:none}.cl-sheet .stamp-empty{width:44px;height:44px;font-size:8.5px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;color:#5b6675;background:#fff}
+.cl-sheet .stamp-meta{font-size:8.5px;min-height:0;line-height:1.3;color:#3a4556}
+.cl-mode-sheet.cl-compact{font-size:9px;line-height:1.35}
+.cl-mode-sheet.cl-compact .cl-blk,.cl-mode-sheet.cl-compact .cl-cols,.cl-mode-sheet.cl-compact .cl-exline,.cl-mode-sheet.cl-compact .cl-stamps{margin-top:7px}
+.cl-mode-sheet.cl-compact .cl-mtab td,.cl-mode-sheet.cl-compact .cl-rt td,.cl-mode-sheet.cl-compact dl.cl-kv>div,.cl-mode-sheet.cl-compact .cl-nm-row{padding-top:2px;padding-bottom:2px}
+.cl-mode-sheet.cl-compact dl.cl-kv dd{-webkit-line-clamp:1}
+.cl-mode-sheet.cl-compact .cl-nm-k{-webkit-line-clamp:1}
+.cl-mode-sheet.cl-compact .cl-nm-iv .cl-nm-v,.cl-mode-sheet.cl-compact .cl-nm-memo .cl-nm-v{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:10;overflow:hidden}
+.cl-mode-sheet.cl-compact .cl-nm-memo .cl-nm-v{-webkit-line-clamp:3}
+.cl-mode-sheet.cl-compact-q1 .cl-nm-q .cl-nm-v,.cl-mode-sheet.cl-compact-q1 .cl-nm-b .cl-nm-v{-webkit-line-clamp:1}
+.cl-mode-sheet.cl-compact-q1 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:6}.cl-mode-sheet.cl-compact-q1 .cl-nm-memo .cl-nm-v{-webkit-line-clamp:2}
+.cl-mode-sheet.cl-compact-2 .cl-nm-q{display:none}
+.cl-mode-sheet.cl-compact-2 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:4}.cl-mode-sheet.cl-compact-2 .cl-nm-memo .cl-nm-v{-webkit-line-clamp:1}.cl-mode-sheet.cl-compact-2 .cl-adj li+li{display:none}
+.cl-sheet-host,.cl-sheet-print{display:none}
+body.print-checklist .cl-sheet-host,body.print-checklist .cl-sheet-print{display:block;position:absolute;left:-10000px;top:0;width:190mm}
+@page clsheet{size:A4;margin:8mm 10mm}
+@media print{
+body.print-checklist{page:clsheet;background:#fff}
+body.print-checklist .cl-sheet-host,body.print-checklist .cl-sheet-print{position:static;left:auto;width:auto}
+body:not(.print-checklist) .cl-sheet-host,body:not(.print-checklist) .cl-sheet-print{display:none !important}
+body.print-checklist .page{padding:0;max-width:none}
+body.print-checklist .page>:not(#clSheet):not(section[data-sec="mgmt"]){display:none !important}
+body.print-checklist section.sec[data-sec="mgmt"]{margin-top:8px;padding:2px 8px 4px;border-radius:4px;box-shadow:none;break-inside:avoid}
+body.print-checklist section.sec[data-sec="mgmt"] h2{font-size:9.5px;padding-bottom:1px;margin-bottom:3px;border-bottom:none}body.print-checklist section.sec[data-sec="mgmt"] h2::before{display:none}
+body.print-checklist .stamp-hint,body.print-checklist .stamp-ctl,body.print-checklist .mgmt-save,body.print-checklist .mgmt-note{display:none !important}
+body.print-checklist .stamp-row{gap:6px}body.print-checklist .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px}body.print-checklist .stamp-label{font-size:9.5px;min-width:5em}body.print-checklist .stamp-area{height:auto}body.print-checklist .hanko{width:46px;height:46px}body.print-checklist .stamp-empty{width:44px;height:44px;font-size:8.5px}body.print-checklist .stamp-meta{font-size:8.5px;min-height:0;line-height:1.3}
+.cl-sheet .cl-s-h,.cl-sheet tr,.cl-sheet .cl-tile,.cl-sheet .cl-hchip,.cl-sheet .cl-page-no,.cl-sheet .cl-memo,.cl-sheet .hanko,.cl-sheet .stamp-empty,.cl-sheet .cl-band,.cl-sheet .cl-judge,.cl-sheet .cl-mark,.cl-sheet .cl-mm,.cl-sheet .cl-exline,.cl-sheet .cl-decision,.cl-sheet .verdict-stamp,.cl-sheet .cl-dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.cl-mode-section .cl-s{break-inside:auto}.cl-mode-section table td{padding:2px 5px}
+}
+</style>
+</head>
+<body class="view-report" data-filename="応募者_押印_太郎_2026-10-10.html">
+<div class="page">
+<div class="rtool no-print"><div class="rtool-view" role="group" aria-label="表示"><button type="button" id="rtViewReport" class="on" aria-pressed="true">報告書</button><button type="button" id="rtViewFull" aria-pressed="false">詳細</button></div><span class="rtool-sep"></span><span>印刷:</span><button type="button" id="rtPrintSheet" class="primary">申し送りシート（A4 1枚）</button><button type="button" id="rtPrintAll">レポート全体</button><span class="rtool-hint">申し送りシートは応募情報・留意点・面接で確認する項目・押印欄だけを 1 枚にまとめます。</span></div>
+<header class="rh"><div class="rh-top"><div class="rh-brand"><span class="rh-mark">新</span><div><div class="rh-theater">TOHOシネマズ新宿</div><div class="rh-app">リクルート判定システム 5.0.0-alpha</div></div></div><div class="rh-meta">保存日時 2026/10/10 00:00<br>進捗: 面接者への申し送り</div></div><div class="rh-main"><div><div class="sheet-title print-only">面接者への申し送りシート</div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">押印 太郎<small>さん</small></h1><div class="rh-chips"><span class="chip">フリーター</span><span class="chip">24歳</span><span class="chip">公共交通機関 30分</span><span class="chip">長期（1年以上）</span><span class="chip">週2〜3日</span></div></div><div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">面接前</span><span class="v-sub">申し送り段階で保存</span></div><div class="rh-decision" id="rhDecision"></div></div></header>
+<div class="dash"><div class="tile"><div class="t-label">面接評価</div><div class="t-val txt muted">未入力</div><div class="t-sub">面接チェックリストで評価します</div></div><div class="tile"><div class="t-label">シフト貢献度</div><div class="t-val txt">未確定</div><div class="t-sub">面接で確認後に確定（5項目）</div></div><div class="tile"><div class="t-label">留意点</div><div class="t-val">3<small>件</small></div><div class="counts"><span class="badge danger">要判断 0</span><span class="badge warn">要確認 2</span><span class="badge info">共有 1</span></div><div class="t-sub">確認済み 0 / 3</div></div><div class="tile"><div class="t-label">判定</div><div class="t-val txt muted">面接前</div><div class="t-sub">面接で確認する項目: 3セクション</div></div></div>
+<section class="sec" data-sec="pre"><h2>応募時の情報</h2>
+<table class="kv"><tbody><tr><th>氏名</th><td>押印 太郎</td></tr><tr><th>年齢</th><td>24歳</td></tr><tr><th>区分</th><td>フリーター</td></tr><tr><th>通勤方法</th><td>公共交通機関</td></tr><tr><th>通勤時間</th><td>30分</td></tr><tr><th>勤務可能曜日</th><td>土・日</td></tr><tr><th>週勤務日数</th><td>2〜3日</td></tr><tr><th>希望シフト</th><td>土曜 10:00〜18:00（8時間） / 日曜 10:00〜18:00（8時間）</td></tr><tr><th>勤務期間</th><td>長期（1年以上）</td></tr></tbody></table>
+</section>
+<section class="sec" data-sec="handoff"><h2>面接者への申し送り（留意点）</h2>
+<div class="hgroup"><div class="hgroup-head"><span class="badge warn">要確認</span><b>2件</b><span>面接時に応募者へ確認する項目</span></div><ul class="hlist"><li class="h warn"><span class="box">☐</span><div><div class="hmeta"><span class="sev warn">要確認</span><span class="cat">繁忙期・休日</span><span class="tag warn">面接で確認</span></div><div class="txt">判定の前に面接で確認が必要なシフト条件があります（繁忙期・土日祝：繁忙期の可否（3連休（祝日を含む連休）・GW・夏休み期間・お盆・シルバーウィーク・年末年始・春休み期間）、土日の出勤頻度、祝日の勤務／深夜帯（22時以降）：22時以降の勤務／オールナイト上映：オールナイトの可否）。面接で確認し、Step3「面接で確認する項目」に入力してください。</div></div></li><li class="h warn"><span class="box">☐</span><div><div class="hmeta"><span class="sev warn">要確認</span><span class="cat">入力の整合</span></div><div class="txt">週の勤務日数の入力に矛盾があります（勤務可能曜日 2日分・週2〜3日）。実際に入れる曜日と日数を確認してください。</div></div></li></ul></div><div class="hgroup"><div class="hgroup-head"><span class="badge info">共有</span><b>1件</b><span>面接者へ共有しておく事項</span></div><ul class="hlist"><li class="h info"><span class="box">☐</span><div><div class="hmeta"><span class="sev info">共有</span><span class="cat">全般</span></div><div class="txt">フリーターの方は社会保険の加入希望について確認してください。</div></div></li></ul></div><h3>強み（面接者へ共有）</h3><ul class="strengths"><li>土日両日の勤務が可能です</li><li>長期勤務希望で安定が見込めます</li><li>1日3時間以上の勤務が可能です</li><li>通勤30分で通勤負担が小さいです</li></ul></section>
+<section class="sec" data-sec="interview"><h2>面接前に分かっている情報（未確認）</h2>
+<table class="kv"><tbody><tr><th>繁忙期</th><td>3連休（祝日を含む連休）:未確認　GW:未確認　夏休み期間:未確認　お盆:未確認　シルバーウィーク:未確認　年末年始:未確認　春休み期間:未確認</td></tr></tbody></table>
+<div class="callout"><span>⚠</span><div>保存時点で未入力: 繁忙期・土日祝：繁忙期の可否（3連休（祝日を含む連休）・GW・夏休み期間・お盆・シルバーウィーク・年末年始・春休み期間）、土日の出勤頻度、祝日の勤務／深夜帯（22時以降）：22時以降の勤務／オールナイト上映：オールナイトの可否</div></div>
+</section>
+<section class="sec" data-sec="contrib"><h2>シフト貢献度</h2>
+<div class="bars"><div class="bar wide"><div class="b-label">繁忙期（3連休・GW・お盆・年末年始など）<span class="tag warn">未確認</span><small>3連休（祝日を含む連休）未確認・GW未確認・夏休み期間未確認・お盆未確認・シルバーウィーク未確認・年末年始未確認・春休み期間未確認</small></div><div class="b-track"><span class="lo" style="width:0%"></span></div><div class="b-val">0<small> / 30</small></div></div><div class="bar wide"><div class="b-label">土日<span class="tag warn">未確認</span><small>土日とも・頻度未確認</small></div><div class="b-track"><span class="lo" style="width:0%"></span></div><div class="b-val">0<small> / 15</small></div></div><div class="bar wide"><div class="b-label">祝日<span class="tag warn">未確認</span><small>未確認</small></div><div class="b-track"><span class="lo" style="width:0%"></span></div><div class="b-val">0<small> / 5</small></div></div><div class="bar wide"><div class="b-label">オールナイト<span class="tag warn">未確認</span><small>未確認</small></div><div class="b-track"><span class="lo" style="width:0%"></span></div><div class="b-val">0<small> / 15</small></div></div><div class="bar wide"><div class="b-label">クローズ・深夜帯<span class="tag warn">未確認</span><small>クローズ 0日/週（目標2日）／22時以降 未確認</small></div><div class="b-track"><span class="lo" style="width:0%"></span></div><div class="b-val">0<small> / 10</small></div></div><div class="bar wide"><div class="b-label">オープン<small>オープン 0日/週（目標1日）</small></div><div class="b-track"><span class="lo" style="width:0%"></span></div><div class="b-val">0<small> / 5</small></div></div><div class="bar wide"><div class="b-label">週の勤務日数<small>週2〜3日（平均2日・曜日数で上限／満点4日）</small></div><div class="b-track"><span class="mid" style="width:50%"></span></div><div class="b-val">5<small> / 10</small></div></div><div class="bar wide"><div class="b-label">勤務期間<small>長期（1年以上）</small></div><div class="b-track"><span class="hi" style="width:100%"></span></div><div class="b-val">10<small> / 10</small></div></div></div><div class="total-line">合計 <b>15</b><span class="muted">/ 100点</span><span class="right">得点率 15%<span class="badge ">未確定</span></span></div><div class="callout"><span>⚠</span><div>未確認: 繁忙期の可否（3連休（祝日を含む連休）・GW・夏休み期間・お盆・シルバーウィーク・年末年始・春休み期間）・土日の出勤頻度・祝日の勤務・オールナイトの可否・22時以降の勤務</div></div><h3>繁忙期（3連休・長期休暇）</h3><table class="list"><thead><tr><th>期間</th><th>可否</th><th class="num">出られる日数</th><th class="num">満点の日数</th><th class="num">重み</th></tr></thead><tbody><tr><td>3連休（祝日を含む連休）<span class="tag">重点</span></td><td>未確認</td><td class="num">-</td><td class="num">2日/回</td><td class="num">3</td></tr><tr><td>GW<span class="tag">重点</span></td><td>未確認</td><td class="num">-</td><td class="num">5日</td><td class="num">3</td></tr><tr><td>夏休み期間<span class="tag">重点</span></td><td>未確認</td><td class="num">-</td><td class="num">4日/週</td><td class="num">2</td></tr><tr><td>お盆<span class="tag">重点</span></td><td>未確認</td><td class="num">-</td><td class="num">3日</td><td class="num">3</td></tr><tr><td>シルバーウィーク</td><td>未確認</td><td class="num">-</td><td class="num">3日</td><td class="num">2</td></tr><tr><td>年末年始<span class="tag">重点</span></td><td>未確認</td><td class="num">-</td><td class="num">4日</td><td class="num">3</td></tr><tr><td>春休み期間</td><td>未確認</td><td class="num">-</td><td class="num">3日/週</td><td class="num">1</td></tr></tbody></table><h3>祝日・土日・オールナイト</h3><table class="kv"><tbody><tr><th>祝日</th><td>未確認</td></tr><tr><th>土日の頻度</th><td>未確認</td></tr><tr><th>オールナイト</th><td>未確認（22:00〜翌06:00目安）</td></tr></tbody></table></section>
+<section class="sec" data-sec="checklist"><h2>面接チェックリスト</h2>
+<p class="empty">面接チェックリストは未入力です。</p></section>
+<section class="sec" data-sec="judgment"><h2>採用可否判定</h2>
+<p class="empty">面接前（申し送り段階）の保存のため、採用可否判定は未実施です。</p></section>
+<section class="sec" data-sec="mgmt"><h2>応募者の管理</h2>
+<div class="decision is-none" id="decision" data-result="" style="--dec-hire:#c8232c;--dec-reject:#1f4e8c"><div class="dec-head"><span class="dec-title">最終合否</span><span class="dec-hint">最終確認者が合否を決めて押します</span></div><div class="dec-stamp"><div class="dec-empty">未押印</div></div><div class="dec-body"><div class="dec-meta"></div><div class="dec-note"></div><div class="dec-ctl"><select aria-label="最終合否 担当者"><option value="">担当者を選択</option><option value="0">笹川 晴央（副支配人）</option><option value="__free">名簿にない担当者（手入力）</option></select><input type="text" placeholder="氏名（例：山田 太郎）" style=""><button type="button" class="dec-btn dec-hire" data-act="decide" data-value="hire" aria-pressed="false">採用</button><button type="button" class="dec-btn dec-reject" data-act="decide" data-value="reject" aria-pressed="false">不採用</button><button type="button" class="dec-undo" data-act="undecide" style="display:none">取消</button></div></div></div><div class="stamp-row" id="mgmt"><div class="stamp-box" data-field-id="initial"><div class="stamp-label">初期対応者</div><div class="stamp-hint">応募受付を行った担当者</div><div class="stamp-area"><svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="88" height="88" role="img" aria-label="笹川 2026.10.10 副支配人"><defs><filter id="rp0" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap></filter></defs><g filter="url(#rp0)" transform="rotate(-6 50 50)" opacity="0.93"><circle cx="50" cy="50" r="42" fill="none" stroke="#c8232c" stroke-width="3"></circle><line x1="11" y1="36" x2="89" y2="36" stroke="#c8232c" stroke-width="1.5"></line><line x1="11" y1="64" x2="89" y2="64" stroke="#c8232c" stroke-width="1.5"></line><g fill="#c8232c" font-family="'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif" font-weight="700" text-anchor="middle"><text x="50" y="32" font-size="18">笹川</text><text x="50" y="54" font-size="11.5" letter-spacing="0.4">2026.10.10</text><text x="50" y="78.6" font-size="9.5">副支配人</text></g></g></svg></div><div class="stamp-meta">笹川 晴央（副支配人）　2026.10.10</div><div class="stamp-ctl"><select aria-label="初期対応者 担当者"><option value="">担当者を選択</option><option value="0">笹川 晴央（副支配人）</option><option value="__free">名簿にない担当者（手入力）</option></select><input type="text" placeholder="氏名（例：山田 太郎）" style="display: none;"><button type="button" class="primary" data-act="stamp">押印</button><button type="button" data-act="unstamp">取消</button></div></div><div class="stamp-box" data-field-id="interviewer"><div class="stamp-label">面接対応者</div><div class="stamp-hint">面接を行った担当者</div><div class="stamp-area"><svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="88" height="88" role="img" aria-label="笹川 2026.10.10 副支配人"><defs><filter id="rp1" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap></filter></defs><g filter="url(#rp1)" transform="rotate(-6 50 50)" opacity="0.93"><circle cx="50" cy="50" r="42" fill="none" stroke="#c8232c" stroke-width="3"></circle><line x1="11" y1="36" x2="89" y2="36" stroke="#c8232c" stroke-width="1.5"></line><line x1="11" y1="64" x2="89" y2="64" stroke="#c8232c" stroke-width="1.5"></line><g fill="#c8232c" font-family="'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif" font-weight="700" text-anchor="middle"><text x="50" y="32" font-size="18">笹川</text><text x="50" y="54" font-size="11.5" letter-spacing="0.4">2026.10.10</text><text x="50" y="78.6" font-size="9.5">副支配人</text></g></g></svg></div><div class="stamp-meta">笹川 晴央（副支配人）　2026.10.10</div><div class="stamp-ctl"><select aria-label="面接対応者 担当者"><option value="">担当者を選択</option><option value="0">笹川 晴央（副支配人）</option><option value="__free">名簿にない担当者（手入力）</option></select><input type="text" placeholder="氏名（例：山田 太郎）" style="display: none;"><button type="button" class="primary" data-act="stamp">押印</button><button type="button" data-act="unstamp" style="">取消</button></div></div><div class="stamp-box" data-field-id="final"><div class="stamp-label">最終確認</div><div class="stamp-hint">採用可否を最終確認した上長</div><div class="stamp-area"><svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="88" height="88" role="img" aria-label="Y&lt; 2026.10.10 "><defs><filter id="rp2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap></filter></defs><g filter="url(#rp2)" transform="rotate(-6 50 50)" opacity="0.93"><circle cx="50" cy="50" r="42" fill="none" stroke="#c8232c" stroke-width="3"></circle><line x1="11" y1="36" x2="89" y2="36" stroke="#c8232c" stroke-width="1.5"></line><line x1="11" y1="64" x2="89" y2="64" stroke="#c8232c" stroke-width="1.5"></line><g fill="#c8232c" font-family="'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif" font-weight="700" text-anchor="middle"><text x="50" y="32" font-size="18">Y&lt;</text><text x="50" y="54" font-size="11.5" letter-spacing="0.4">2026.10.10</text><text x="50" y="79.2" font-size="11"></text></g></g></svg></div><div class="stamp-meta">Y&lt;!--&lt;script&gt;　2026.10.10</div><div class="stamp-ctl"><select aria-label="最終確認 担当者"><option value="">担当者を選択</option><option value="0">笹川 晴央（副支配人）</option><option value="__free">名簿にない担当者（手入力）</option></select><input type="text" placeholder="氏名（例：山田 太郎）" style=""><button type="button" class="primary" data-act="stamp">押印</button><button type="button" data-act="unstamp" style="">取消</button></div></div></div><div class="mgmt-save" id="mgmtSave"><span id="mgmtSaveMsg">押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。</span><button type="button" id="mgmtSaveBtn">押印を保存</button></div><div class="mgmt-note">運用: 面接者はアプリで面接チェックリストを入力・判定し、「面接対応者」に押印して保存したファイルをスレッドに添付します。副支配人はこのファイルをブラウザで開き、「最終合否」で担当者を選んで「採用」または「不採用」を押し（押印欄「最終確認」が未押印なら同じ担当者の印も押されます）、「押印を保存」で再出力したファイルをスレッドに添付してください。レポート上で押した印・合否は「押印を保存」で再出力したファイルにだけ記録されます（保存せずに閉じると消えます）。再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。担当者名簿は設定（劇場ルール）の「応募者の管理」で編集できます。</div></section>
+<div class="foot"><span>© 2025 Haruhisa Sasagawa｜このツールの著作権は制作者に帰属します。無断転用・改変を禁じます。</span><span>このファイルはアプリの「読み込み」から再度開けます。埋め込みデータを編集しないでください。</span></div>
+</div>
+<script type="application/json" id="recruit-record">{"kind":"recruit-applicant-record","schemaVersion":2,"savedAt":"2026-10-10T00:00:00.000Z","profile":{"theaterName":"TOHOシネマズ新宿","version":"5.0.0-alpha","schemaVersion":2},"step":2,"mode":"full","inputStages":{"commute":"pre","hsException":"pre","continuation":"interview","foreignFlag":"pre","foreignDetail":"interview","sideJob":"interview","busy":"interview","lateNight":"interview","allNight":"interview","extras":"interview"},"applicant":{"name":"押印 太郎","gender":"","age":"24","category":"フリーター","graduationDate":"","commuteMethod":"公共交通機関","commuteMinutes":"30","nearestStation":"","workDays":["sat","sun"],"anyDay":false,"daysMin":"2","daysMax":"3","shifts":{"mon":{"start":"","end":"","nextDay":false},"tue":{"start":"","end":"","nextDay":false},"wed":{"start":"","end":"","nextDay":false},"thu":{"start":"","end":"","nextDay":false},"fri":{"start":"","end":"","nextDay":false},"sat":{"start":"10:00","end":"18:00","nextDay":false},"sun":{"start":"10:00","end":"18:00","nextDay":false},"any":{"start":"","end":"","nextDay":false}},"workPeriod":"long","sideJob":"","sideJobDetail":"","vacation":{"threeday":"","gw":"","summer":"","obon":"","silver":"","yearend":"","spring":""},"vacationDays":{"threeday":"","gw":"","summer":"","obon":"","silver":"","yearend":"","spring":""},"holidayWork":"","weekendFreq":"","allNight":{"availability":"","frequency":"","note":""},"highschool":{"careerDecided":"","careerPath":"","destination":""},"continueAfterGraduation":"","sideJobHoursPerWeek":"","lateNight":{"availability":"","returnMethod":"","lastTrain":"","taxiFare":""},"foreign":{"isForeign":"","residenceStatus":"","workPermit":"","residenceExpiry":"","japaneseLevel":""},"department":"","applicationRoute":"","reviewerNotes":""},"handoff":{"items":[{"id":"shift_unanswered","severity":"warn","category":"busy","text":"判定の前に面接で確認が必要なシフト条件があります（繁忙期・土日祝：繁忙期の可否（3連休（祝日を含む連休）・GW・夏休み期間・お盆・シルバーウィーク・年末年始・春休み期間）、土日の出勤頻度、祝日の勤務／深夜帯（22時以降）：22時以降の勤務／オールナイト上映：オールナイトの可否）。面接で確認し、Step3「面接で確認する項目」に入力してください。","aggregate":true},{"id":"weekly_days_mismatch","severity":"warn","category":"consistency","text":"週の勤務日数の入力に矛盾があります（勤務可能曜日 2日分・週2〜3日）。実際に入れる曜日と日数を確認してください。"},{"id":"freeter_insurance","severity":"info","category":"general","text":"フリーターの方は社会保険の加入希望について確認してください。"}],"strengths":["土日両日の勤務が可能です","長期勤務希望で安定が見込めます","1日3時間以上の勤務が可能です","通勤30分で通勤負担が小さいです"],"checks":{},"note":""},"scores":{},"checklist":{"v":1,"header":{"date":"","interviewer":"","posting":"","taxi":""},"values":{},"notes":{},"overall":""},"checklistDef":{"title":"スタッフ面接チェックリスト","version":"2026-10-08","intro":"台本の順に確認し、その場で入力してください。必須条件が1つでも不一致なら判定は不採用推奨になります（追加質問して解消しなければ「⑤ 逆質問」へ進み、最大10分で終了してください）。","pages":[{"no":1,"title":"必須条件一致・継続性","lead":"必須条件と報連相の意識・具体性を確認。最低限の話し方、敬語が可能か。必須条件が不一致なら不採用、逆質問を最大１０分で終了。"},{"no":2,"title":"人物確認・逆質問","lead":"行動を確認。採用を検討できる人には不安解消の時間を取る。"}],"mustFailResult":"reject","mustUnknownResult":"none","mustFailJumpTo":"reverse","overallLabel":"面接者の総合判断","overallHint":"①〜⑤の確認を踏まえて選んでください。","overallOptions":{"hire":"採用","hold":"保留","reject":"不採用"},"overallCaps":{"hold":"review","reject":"reject"},"header":{"posting":{"label":"応募した求人","options":[{"value":"regular","label":"通常求人"},{"value":"short","label":"短期求人"}]},"interviewerField":"interviewer"},"print":{"showQuestions":true},"sections":[{"id":"conditions","title":"勤務条件","minutes":10,"minutesMax":false,"page":1,"lead":"","blocks":[{"id":"conditions_must","type":"must","title":"必須条件","note":"1つでも不一致なら不採用（追加質問して解消しなければ「⑤」へ）","memo":false,"memoLabel":"","items":[{"id":"must_weekly","label":"土日を含む週3日以上、5時間以上","auto":"weeklyCondition","autoParams":{"minDays":3,"minHours":5}},{"id":"must_busy","label":"指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）","auto":"busyAll","autoParams":{"periods":["yearend","spring","gw","obon"]}}]},{"id":"conditions_f1","type":"fields","title":"","note":"","memo":false,"memoLabel":"","items":[{"id":"weekend","label":"土日勤務可否","kind":"choice","options":[{"value":"one","label":"いずれか"},{"value":"both","label":"両日"}],"auto":"weekend"},{"id":"busy_ng","label":"出勤不可な繁忙","kind":"text","auto":"busyNg"}]},{"id":"conditions_explain","type":"explain","title":"説明","note":"※は短期求人に応募の場合のみご説明ください","memo":false,"memoLabel":"","items":[{"id":"ex_fare","label":"交通費（往復500円まで/日）"},{"id":"ex_hours","label":"営業開始・終了時間、タクシー条件の説明"},{"id":"ex_contract","label":"初回契約は2か月間(契約日の翌月末)。","shortOnly":true},{"id":"ex_switch","label":"長期への切り替えあり。本人希望と勤務状況等で判断","shortOnly":true}]},{"id":"conditions_f2","type":"fields","title":"質問","note":"","memo":false,"memoLabel":"","items":[{"id":"term","label":"短期／長期の希望","kind":"choice","options":[{"value":"short","label":"短期希望"},{"value":"long","label":"長期希望"}],"auto":"term"},{"id":"start_date","label":"契約開始日の希望","kind":"date"},{"id":"first_end","label":"初回契約終了（月末締）","short":"初回契約終了","kind":"month","auto":"firstEnd","autoParams":{"monthsAfter":1}},{"id":"open_late","label":"OPEN／25時(タク〇のみ)までの可否","short":"OPEN／25時の可否","kind":"text","auto":"openLate"}]},{"id":"conditions_q","type":"question","title":"","note":"","memo":true,"memoLabel":"メモ","items":[{"id":"q_term","label":"「いまのところ、短期希望ですか？長期希望ですか？」or「採用となった場合、希望としては、いつ頃まで勤務継続希望でしょうか？」","short":"短期／長期の希望"},{"id":"q_two_months","label":"「最初の2か月で勤務条件が満たせない可能性は？（土日出せない、など）」","short":"最初の2か月で条件を満たせない可能性"},{"id":"q_family","label":"「歌舞伎町ですので、ご家族の反対などあれば遠慮なく辞退お願いします。」","short":"家族の反対"}]},{"id":"conditions_rate","type":"rating","title":"確認事項","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_concrete","label":"勤務条件の一致に「具体性」があるか","hint":"「大丈夫です」のみ連呼は特に要注意。"},{"id":"rt_manner","label":"最低限の話し方、敬語が可能か","hint":"面接全体を通して（台本1枚目の冒頭）"}]},{"id":"conditions_flow","type":"note","title":"","note":"条件一致：2へ　／　必須条件不一致：追加質問してみて、解消しなければ「５」へ","memo":false,"memoLabel":"","items":[]}]},{"id":"continuity","title":"継続性・報連相","minutes":3,"minutesMax":false,"page":1,"lead":"","blocks":[{"id":"continuity_explain","type":"explain","title":"説明","note":"","memo":false,"memoLabel":"","items":[{"id":"ex_submit","label":"シフト提出は木曜23時、確定は水曜"},{"id":"ex_phone","label":"シフト関連の連絡：原則電話のみ"},{"id":"ex_absence","label":"欠勤・遅刻は分かった時点で連絡"}]},{"id":"continuity_q","type":"question","title":"質問","note":"","memo":true,"memoLabel":"メモ","items":[{"id":"q_prev_job","label":"「前のアルバイトの期間と退職理由は？差し支えなければ退職理由は？」","short":"前のバイトの期間・退職理由"},{"id":"q_cant_3days","label":"「週3日出せないと事前に分かったら、どうするべきだと思いますか？」","short":"週3日出せないと分かったら"},{"id":"q_sudden_absence","label":"「当日、急に出勤できなくなったら、どうするべきだと思いますか？」","short":"当日急に出られなくなったら"}]},{"id":"continuity_rate","type":"rating","title":"確認事項","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_hourensou","label":"報連相できるか"},{"id":"rt_turnover","label":"離職要因はないか","hint":"○＝離職要因なし（前のアルバイトの期間・退職理由から）"}]}]},{"id":"job","title":"仕事内容の説明","minutes":10,"minutesMax":false,"page":2,"lead":"","blocks":[{"id":"job_explain","type":"explain","title":"説明","note":"","memo":false,"memoLabel":"","items":[{"id":"ex_start","label":"コンセorフロア業務からスタート"},{"id":"ex_busy","label":"多忙・立ち仕事・汚物清掃の可否"},{"id":"ex_opinion","label":"ときにはご意見の対応も"},{"id":"ex_rules","label":"細かなルールや接客指導あり"}]},{"id":"job_q","type":"question","title":"質問","note":"","memo":true,"memoLabel":"回答","items":[{"id":"q_value","label":"「前職で大切にしていたことは？」","short":"前職で大切にしていたこと"},{"id":"q_failure","label":"「前職での失敗談はありますか？」","short":"前職の失敗談"},{"id":"q_unsure","label":"「説明した業務で自信がないことや、相談・不明点はありますか？」","short":"自信がない業務・不明点"}]},{"id":"job_rate","type":"rating","title":"確認点","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_understand","label":"業務理解と接客の実行可能性"}]}]},{"id":"teamwork","title":"集団行動特性","minutes":8,"minutesMax":false,"page":2,"lead":"","blocks":[{"id":"teamwork_explain","type":"explain","title":"説明","note":"","memo":false,"memoLabel":"","items":[{"id":"ex_team","label":"チームで分業（例：清掃、商材補充）"},{"id":"ex_sudden","label":"急な指示も多い（例：SH、無線呼出）"},{"id":"ex_radio","label":"不明点・権限外の対応は無線で確認。"}]},{"id":"teamwork_q","type":"question","title":"質問","note":"","memo":true,"memoLabel":"回答","items":[{"id":"q_feedback","label":"「指摘を受けて行動を変えた経験はありますか？（仕事・部活動など）」","short":"指摘で行動を変えた経験"},{"id":"q_unknown","label":"「お客様に質問されて答えがわからない時、どうしますか？」","short":"答えが分からない時"},{"id":"q_busy_mind","label":"「忙しいときこそ心掛けたいことは？」","short":"忙しい時に心掛けること"}]},{"id":"teamwork_rate","type":"rating","title":"確認点","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_team","label":"自己判断せずチームで動けるか"}]}]},{"id":"reverse","title":"逆質問","minutes":10,"minutesMax":true,"page":2,"lead":"ミスマッチを解消するための時間","blocks":[{"id":"reverse_q","type":"question","title":"","note":"※業務の大変な面も率直に伝える。","memo":true,"memoLabel":"回答","items":[{"id":"q_concerns","label":"「条件・業務・映画館のことなど、何か気になる点はありますか？」","short":"気になる点（逆質問）"}]},{"id":"reverse_notify","type":"notify","title":"合否連絡","note":"面接の最後に伝えたらチェック","memo":false,"memoLabel":"","items":[{"id":"nt_hire","label":"採用時：数日中に電話連絡。ご家族の反対あればご辞退ください。同時に初日出勤日時を調整、もちものなど詳細はメールで送付。","short":"採用時"},{"id":"nt_reject","label":"不合格：メール連絡","short":"不合格"}]},{"id":"reverse_rate","type":"rating","title":"確認点","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_mismatch","label":"採用後のミスマッチを低減","hint":"○＝不安・不明点を解消できた"}]}]}]},"interviewNotes":"","management":{"initial":{"name":"笹川 晴央","short":"笹川","title":"副支配人","date":"2026.10.10","at":"2026-10-10T00:00:00.000Z"},"interviewer":{"name":"笹川 晴央","short":"笹川","title":"副支配人","date":"2026.10.10","at":"2026-10-10T00:00:00.000Z"},"final":{"name":"Y\u003c!--\u003cscript\u003e","short":"Y\u003c","title":"","date":"2026.10.10","at":"2026-10-10T00:00:00.000Z"}},"decision":null,"contribution":{"enabled":true,"total":15,"max":100,"pct":15,"band":"low","bandLabel":"低","incomplete":true,"missing":["繁忙期の可否（3連休（祝日を含む連休）・GW・夏休み期間・お盆・シルバーウィーク・年末年始・春休み期間）","土日の出勤頻度","祝日の勤務","オールナイトの可否","22時以降の勤務"],"missingKeys":["busy","weekendFreq","holiday","allNight","lateNight"],"restricted":false,"parts":[{"id":"busy","label":"繁忙期（3連休・GW・お盆・年末年始など）","max":30,"score":0,"ratio":0,"applicable":true,"detail":"3連休（祝日を含む連休）未確認・GW未確認・夏休み期間未確認・お盆未確認・シルバーウィーク未確認・年末年始未確認・春休み期間未確認","flags":["unanswered"]},{"id":"weekend","label":"土日","max":15,"score":0,"ratio":0,"applicable":true,"detail":"土日とも・頻度未確認","flags":["unanswered"]},{"id":"holiday","label":"祝日","max":5,"score":0,"ratio":0,"applicable":true,"detail":"未確認","flags":["unanswered"]},{"id":"allNight","label":"オールナイト","max":15,"score":0,"ratio":0,"applicable":true,"detail":"未確認","flags":["unanswered"]},{"id":"close","label":"クローズ・深夜帯","max":10,"score":0,"ratio":0,"applicable":true,"detail":"クローズ 0日/週（目標2日）／22時以降 未確認","flags":["unanswered"]},{"id":"open","label":"オープン","max":5,"score":0,"ratio":0,"applicable":true,"detail":"オープン 0日/週（目標1日）","flags":[]},{"id":"weeklyDays","label":"週の勤務日数","max":10,"score":5,"ratio":0.5,"applicable":true,"detail":"週2〜3日（平均2日・曜日数で上限／満点4日）","flags":[]},{"id":"period","label":"勤務期間","max":10,"score":10,"ratio":1,"applicable":true,"detail":"長期（1年以上）","flags":[]}],"busyRows":[{"id":"threeday","label":"3連休（祝日を含む連休）","unit":"perEvent","avail":"","days":null,"refDays":2,"weight":3,"critical":true,"ratio":0},{"id":"gw","label":"GW","unit":"total","avail":"","days":null,"refDays":5,"weight":3,"critical":true,"ratio":0},{"id":"summer","label":"夏休み期間","unit":"perWeek","avail":"","days":null,"refDays":4,"weight":2,"critical":true,"ratio":0},{"id":"obon","label":"お盆","unit":"total","avail":"","days":null,"refDays":3,"weight":3,"critical":true,"ratio":0},{"id":"silver","label":"シルバーウィーク","unit":"total","avail":"","days":null,"refDays":3,"weight":2,"critical":false,"ratio":0},{"id":"yearend","label":"年末年始","unit":"total","avail":"","days":null,"refDays":4,"weight":3,"critical":true,"ratio":0},{"id":"spring","label":"春休み期間","unit":"perWeek","avail":"","days":null,"refDays":3,"weight":1,"critical":false,"ratio":0}],"busyRatio":0},"highschool":null,"judgment":null}</script>
+<script>
+(function(){var b=document.getElementById("rtPrintSheet"),a=document.getElementById("rtPrintAll");
+function prep(on){var h=document.querySelector('section.sec[data-sec="handoff"]');if(h){h.classList.toggle("sheet-2col",!!on&&h.querySelectorAll("li.h").length>=9);}document.body.classList.toggle("print-handoff",!!on);}
+window.__prepareHandoffSheet=prep;
+if(b)b.addEventListener("click",function(){prep(true);var done=function(){prep(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});
+if(a)a.addEventListener("click",function(){printingAll=true;try{window.print();}finally{printingAll=false;}});
+var c=document.getElementById("rtPrintChecklist"),host=document.getElementById("clSheet");
+function clFitSheet(sheet, limit) {
+    if (!sheet || !sheet.getBoundingClientRect) return '';
+    var cls = sheet.classList;
+    var lv = ['cl-compact', 'cl-compact-q1', 'cl-compact-2'];
+    var i, h, z, n;
+    var hOf = function () {
+      var r = sheet.getBoundingClientRect(), st = sheet.querySelector('.cl-stamps'), pv = st && st.previousElementSibling;
+      return st ? (pv ? pv.getBoundingClientRect().bottom - r.top : 0) : r.height;
+    };
+    var cut = function () {
+      var vs = sheet.querySelectorAll('.cl-nm-v,.cl-rt-nt'), c = false, k, v;
+      for (k = 0; k < vs.length && !c; k++) {
+        v = vs[k];
+        if (v.getClientRects().length && (v.scrollHeight > v.clientHeight + 1 || v.scrollWidth > v.clientWidth + 1)) c = true;
+      }
+      if (c) cls.add('cl-nm-cut'); else cls.remove('cl-nm-cut');
+    };
+    for (i = 0; i < lv.length; i++) cls.remove(lv[i]);
+    sheet.style.zoom = '';
+    cut();
+    h = hOf();
+    if (!h || h <= limit) return '';
+    for (i = 0; i < lv.length; i++) {
+      cls.add(lv[i]);
+      cut();
+      h = hOf();
+      if (h <= limit) return lv[i];
+    }
+    z = 1;
+    for (n = 0; n < 12 && h > limit && z > 0.3; n++) {
+      z = Math.max(0.3, Math.floor(z * limit / h * 1000) / 1000 - (n ? 0.005 : 0));
+      sheet.style.zoom = String(z);
+      h = hOf();
+    }
+    return 'zoom';
+  }
+var CL_LIMIT=950;
+function prepCl(on){if(!host)return false;var sh=host.querySelector(".cl-sheet");document.body.classList.toggle("print-checklist",!!on);if(sh){if(on)clFitSheet(sh,CL_LIMIT);else{sh.classList.remove("cl-compact");sh.classList.remove("cl-compact-q1");sh.classList.remove("cl-compact-2");sh.style.zoom="";}}return true;}
+function fitPaper(){var p=document.querySelector("#clPaper .cl-sheet");if(p)clFitSheet(p,CL_LIMIT);}
+window.__fitChecklistPaper=fitPaper;
+window.__prepareChecklistSheet=prepCl;
+if(c)c.addEventListener("click",function(){prepCl(true);var done=function(){prepCl(false);window.removeEventListener("afterprint",done);};window.addEventListener("afterprint",done);setTimeout(done,3000);window.print();});
+var vr=document.getElementById("rtViewReport"),vf=document.getElementById("rtViewFull");
+function setView(v){var r=v!=="full",bd=document.body;bd.classList.toggle("view-report",r);bd.classList.toggle("view-full",!r);
+  if(vr){vr.classList.toggle("on",r);vr.setAttribute("aria-pressed",String(r));}if(vf){vf.classList.toggle("on",!r);vf.setAttribute("aria-pressed",String(!r));}if(r)fitPaper();}
+window.__setReportView=setView;
+if(vr)vr.addEventListener("click",function(){setView("report");});
+if(vf)vf.addEventListener("click",function(){setView("full");});
+setView("report");
+var autoCl=false,printingAll=false;
+window.addEventListener("beforeprint",function(){var bd=document.body;
+  if(printingAll||!bd.classList.contains("view-report")||!bd.classList.contains("has-cl")||bd.classList.contains("print-handoff")||bd.classList.contains("print-checklist"))return;
+  if(prepCl(true))autoCl=true;});
+window.addEventListener("afterprint",function(){if(autoCl){autoCl=false;prepCl(false);}});
+})();
+</script>
+<script type="application/json" id="recruit-mgmt-config">{"fields":[{"id":"initial","label":"初期対応者","hint":"応募受付を行った担当者"},{"id":"interviewer","label":"面接対応者","hint":"面接を行った担当者"},{"id":"final","label":"最終確認","hint":"採用可否を最終確認した上長"}],"managers":[{"name":"笹川 晴央","short":"笹川","title":"副支配人","grade":"S3"}],"allowFreeName":true,"decision":{"label":"最終合否","hireLabel":"採用","rejectLabel":"不採用","hireColor":"#c8232c","rejectColor":"#1f4e8c","stampField":"final","autoStampFinal":true,"filenameSuffix":true,"hint":"最終確認者が合否を決めて押します","sub":"新宿"}}</script>
+<script>
+(function(){
+var recNode=document.getElementById("recruit-record");var cfgNode=document.getElementById("recruit-mgmt-config");var root=document.getElementById("mgmt");if(!recNode||!cfgNode)return;
+var rec,cfg;try{rec=JSON.parse(recNode.textContent);cfg=JSON.parse(cfgNode.textContent);}catch(e){return;}
+var D=cfg.decision||null,dpanel=D?document.getElementById("decision"):null;if(!root&&!dpanel)return;
+function stampSvg(opts) {
+    opts = opts || {};
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    };
+    var chars = function (s) { return Array.from ? Array.from(String(s)).length : String(s).length; };
+    var name = String(opts.name || '').trim();
+    var title = String(opts.title || '').trim();
+    var date = String(opts.date || '').trim();
+    var size = Number(opts.size) || 88;
+    var color = opts.color || '#c8232c';
+    var id = String(opts.id || ('hk' + chars(name) + chars(title) + date.replace(/\D/g, '')));
+    // 文字幅の目安（em）。ASCII・半角カナは約 0.6em、それ以外（漢字・かな）は 1em
+    var units = function (str) {
+      var u = 0;
+      (Array.from ? Array.from(str) : String(str).split('')).forEach(function (ch) {
+        var c = ch.charCodeAt(0);
+        u += c < 0x80 || (c >= 0xff61 && c <= 0xff9f) ? 0.62 : 1;
+      });
+      return u;
+    };
+    // 外周（r=42・線幅3 → 内側の縁 40.5）の内側に、にじみ分の余白を取った半径
+    var R = 38.5;
+    // 文字の上端・下端の高さで使える弦の幅を超えるときだけ textLength で詰める
+    var fitAttr = function (str, s, base) {
+      var top = base - 0.88 * s, bottom = base + 0.12 * s;
+      var dy = Math.max(Math.abs(50 - top), Math.abs(bottom - 50));
+      var cap = 2 * Math.sqrt(Math.max(0, R * R - dy * dy));
+      return units(str) * s > cap ? ' textLength="' + cap.toFixed(1) + '" lengthAdjust="spacingAndGlyphs"' : '';
+    };
+    var nu = units(name);
+    var nameSize = nu <= 2 ? 18 : nu <= 3 ? 15 : nu <= 4 ? 12 : nu <= 6 ? 10 : 9;
+    var nameBase = 32;
+    var tu = units(title);
+    var titleSize = tu <= 3 ? 11 : tu <= 5 ? 9.5 : tu <= 7 ? 8 : tu <= 9 ? 7 : 6;
+    var titleBase = 75 + titleSize * 0.38;
+    var font = "'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif";
+    return '<svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="' + size + '" height="' + size + '" role="img" aria-label="' + esc(name + ' ' + date + ' ' + title) + '">' +
+      '<defs><filter id="' + esc(id) + '" x="-10%" y="-10%" width="120%" height="120%">' +
+        '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>' +
+        '<feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>' +
+      '</filter></defs>' +
+      '<g filter="url(#' + esc(id) + ')" transform="rotate(-6 50 50)" opacity="0.93">' +
+        '<circle cx="50" cy="50" r="42" fill="none" stroke="' + esc(color) + '" stroke-width="3"/>' +
+        '<line x1="11" y1="36" x2="89" y2="36" stroke="' + esc(color) + '" stroke-width="1.5"/>' +
+        '<line x1="11" y1="64" x2="89" y2="64" stroke="' + esc(color) + '" stroke-width="1.5"/>' +
+        '<g fill="' + esc(color) + '" font-family="' + font + '" font-weight="700" text-anchor="middle">' +
+          '<text x="50" y="' + nameBase + '" font-size="' + nameSize + '"' + fitAttr(name, nameSize, nameBase) + '>' + esc(name) + '</text>' +
+          '<text x="50" y="54" font-size="11.5" letter-spacing="0.4">' + esc(date) + '</text>' +
+          '<text x="50" y="' + titleBase.toFixed(1) + '" font-size="' + titleSize + '"' + fitAttr(title, titleSize, titleBase) + '>' + esc(title) + '</text>' +
+        '</g>' +
+      '</g></svg>';
+  }
+function shortName(name) {
+    var s = String(name || '').trim();
+    var head = s.split(/[\s　]+/)[0] || '';
+    if (!head) return '';
+    var arr = Array.from ? Array.from(head) : head.split('');
+    return arr.length <= 4 ? head : arr.slice(0, 2).join('');
+  }
+function verdictSvg(opts) {
+    opts = opts || {};
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    };
+    var list = function (str) { return Array.from ? Array.from(String(str)) : String(str).split(''); };
+    // 文字幅の目安（em）。ASCII・半角カナは約 0.62em、それ以外は 1em
+    var units = function (str) {
+      var u = 0;
+      list(str).forEach(function (ch) {
+        var c = ch.charCodeAt(0);
+        u += c < 0x80 || (c >= 0xff61 && c <= 0xff9f) ? 0.62 : 1;
+      });
+      return u;
+    };
+    var label = String(opts.label == null ? '採用' : opts.label).trim();
+    var date = String(opts.date || '').trim();
+    var sub = String(opts.sub || '').trim();
+    var size = Number(opts.size) || 120;
+    var color = opts.color || '#c8232c';
+    var id = String(opts.id || ('vd' + list(label).length + date.replace(/\D/g, '')));
+    var W = size, H = Math.round(size * 76 / 120);
+    var lower = [date, sub].filter(function (x) { return !!x; }).join(' ');
+    var aria = [label, date, sub].filter(function (x) { return !!x; }).join(' ');
+    var lu = units(label);
+    var fs = lu <= 2 ? 28 : lu <= 3 ? 24 : lu <= 4 ? 20 : 18;
+    var ls = lu <= 2 ? 4 : lu <= 3 ? 2 : lu <= 4 ? 1 : 0;
+    var fit = lu * fs + ls * Math.max(0, list(label).length - 1) > 88 ? ' textLength="88" lengthAdjust="spacingAndGlyphs"' : '';
+    var fit2 = units(lower) * 10 > 86 ? ' textLength="86" lengthAdjust="spacingAndGlyphs"' : '';
+    var font = "'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic','YuGothic',Meiryo,'Noto Sans JP',sans-serif";
+    var c = esc(color);
+    return '<svg class="verdict-stamp" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 76" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(aria) + '">' +
+      '<defs><filter id="' + esc(id) + '" x="-10%" y="-10%" width="120%" height="120%">' +
+        '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>' +
+        '<feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>' +
+      '</filter></defs>' +
+      '<g filter="url(#' + esc(id) + ')" transform="rotate(-3 60 38)" opacity="0.93">' +
+        '<rect x="6" y="6" width="108" height="64" rx="9" fill="none" stroke="' + c + '" stroke-width="3.2"/>' +
+        '<rect x="11" y="11" width="98" height="54" rx="6" fill="none" stroke="' + c + '" stroke-width="1.2"/>' +
+        (lower ? '<line x1="18" y1="50" x2="102" y2="50" stroke="' + c + '" stroke-width="1"/>' : '') +
+        '<g fill="' + c + '" font-family="' + font + '" font-weight="800" text-anchor="middle">' +
+          '<text x="60" y="' + (lower ? '42.5' : '48') + '" font-size="' + fs + '" letter-spacing="' + ls + '"' + fit + '>' + esc(label) + '</text>' +
+          (lower ? '<text x="60" y="61" font-size="10" letter-spacing="0.4"' + fit2 + '>' + esc(lower) + '</text>' : '') +
+        '</g>' +
+      '</g></svg>';
+  }
+function decisionSheetHtml(dec, o) {
+    o = o || {};
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    };
+    var title = o.title || '最終合否';
+    var idAttr = o.id ? ' id="' + esc(o.id) + '"' : '';
+    if (!dec || (dec.result !== 'hire' && dec.result !== 'reject')) {
+      return '<div class="cl-decision is-none"' + idAttr + ' data-result=""><div class="cl-dec-empty"><span>' + esc(title) + '</span><span>未押印</span></div></div>';
+    }
+    var hire = dec.result === 'hire';
+    var color = hire ? (o.hireColor || '#c8232c') : (o.rejectColor || '#1f4e8c');
+    var label = dec.label || (hire ? (o.hireLabel || '採用') : (o.rejectLabel || '不採用'));
+    var by = dec.by || {};
+    var name = String(by.name || '').trim();
+    var btitle = String(by.title || '').trim();
+    var svg = verdictSvg({ label: label, date: dec.date || '', color: color, size: o.size || 64, id: o.svgId || ((o.id || 'cl') + 'Svg'), sub: o.sub || '' });
+    return '<div class="cl-decision is-' + dec.result + '"' + idAttr + ' data-result="' + dec.result + '">' +
+      '<div class="cl-dec-stamp">' + svg + '</div>' +
+      '<div class="cl-dec-meta">' +
+        '<span class="cl-dec-kv"><span class="cl-dec-k">' + esc(title) + '</span><b class="cl-dec-v" style="color:' + esc(color) + '">' + esc(label) + '</b></span>' +
+        (name ? '<span class="cl-dec-by">' + esc(name) + (btitle ? '（' + esc(btitle) + '）' : '') + '</span>' : '') +
+        '<span class="cl-dec-date">' + esc(dec.date || '') + '</span>' +
+      '</div></div>';
+  }
+function decisionFilename(fn, dec, o) {
+    o = o || {};
+    var clean = function (s) { return String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_'); };
+    var name = String(fn || '');
+    var m = name.match(/\.html?$/i);
+    var ext = m ? m[0] : '.html';
+    var base = m ? name.slice(0, name.length - ext.length) : name;
+    var ok = !!dec && (dec.result === 'hire' || dec.result === 'reject');
+    var cands = ['不採用', '採用', o.rejectLabel, o.hireLabel, ok ? dec.label : '']
+      .map(function (x) { return clean(x); })
+      .filter(function (x, i, arr) { return !!x && arr.indexOf(x) === i; })
+      .sort(function (a, b) { return b.length - a.length; });
+    for (var i = 0; i < cands.length; i++) {
+      var suf = '_' + cands[i];
+      if (base.length > suf.length && base.slice(base.length - suf.length) === suf) { base = base.slice(0, base.length - suf.length); break; }
+    }
+    if (o.filenameSuffix !== false && ok) {
+      base += '_' + clean(dec.label || (dec.result === 'hire' ? (o.hireLabel || '採用') : (o.rejectLabel || '不採用')));
+    }
+    return base + ext;
+  }
+rec.management=rec.management||{};var dirty=false,saved=false;
+var MSG_DIRTY="押印を変更しました。「押印を保存」でこのレポートを再出力し、元のファイルと置き換えてください。",MSG_SAVED="押印を保存したファイルを書き出しました。保存できなかった場合は「再保存」を押してください。";
+function pad(n){return String(n).padStart(2,"0");}
+function today(){var d=new Date();return d.getFullYear()+"."+pad(d.getMonth()+1)+"."+pad(d.getDate());}
+function hasField(id){return !!id&&cfg.fields.some(function(f){return f.id===id;});}
+function curDec(){var d=rec.decision;return d&&(d.result==="hire"||d.result==="reject")&&d.by&&d.by.name?d:null;}
+function decLabel(d){return d.label||(d.result==="hire"?D.hireLabel:D.rejectLabel);}
+function decColor(d){return d.result==="hire"?D.hireColor:D.rejectColor;}
+function decSvg(d,size,id){return verdictSvg({label:decLabel(d),date:d.date||"",color:decColor(d),size:size,id:id,sub:D.sub||""});}
+function decOpts(id,svgId){return {id:id,svgId:svgId,title:D.label,hireLabel:D.hireLabel,rejectLabel:D.rejectLabel,hireColor:D.hireColor,rejectColor:D.rejectColor,sub:D.sub||"",size:64};}
+function noteText(d){var j=rec.judgment;if(!d||!j)return "";if((d.result==="hire"&&j.result==="reject")||(d.result==="reject"&&j.result==="recommend"))return "※ アプリの判定「"+(j.title||"")+"」と異なる最終合否です（記録はそのまま残ります）。";return "";}
+function pickPerson(sel,inp){var v=sel?sel.value:"";if(v==="__free"){var nm=inp?inp.value.trim():"";if(!nm){alert("氏名を入力してください");return null;}return {name:nm,short:shortName(nm),title:""};}
+  var m=cfg.managers[Number(v)];if(!v||!m){alert("担当者を選んでください");return null;}return {name:m.name,short:m.short||shortName(m.name),title:m.title||""};}
+function initDecSel(){if(!dpanel)return;var sel=dpanel.querySelector(".dec-ctl select"),inp=dpanel.querySelector(".dec-ctl input");if(!sel)return;
+  var st=D.stampField?rec.management[D.stampField]:null,d=curDec();var nm=(st&&st.name)||(d?d.by.name:"")||"";var idx=-1;
+  cfg.managers.some(function(m,i){if(nm&&m.name===nm){idx=i;return true;}return false;});
+  if(idx>=0)sel.value=String(idx);else if(nm&&inp&&sel.querySelector('option[value="__free"]')){sel.value="__free";inp.value=nm;}else sel.value="";
+  if(inp)inp.style.display=sel.value==="__free"?"":"none";}
+function renderDecision(){if(!D)return;var d=curDec();
+  [["clPaperDecision","vdPaper"],["clDecision","vdSheet"]].forEach(function(x){var el=document.getElementById(x[0]);if(el)el.outerHTML=decisionSheetHtml(d,decOpts(x[0],x[1]));});
+  if(dpanel){dpanel.className="decision "+(d?"is-"+d.result:"is-none");dpanel.setAttribute("data-result",d?d.result:"");
+    dpanel.querySelector(".dec-stamp").innerHTML=d?decSvg(d,120,"vdPanel"):'<div class="dec-empty">未押印</div>';
+    dpanel.querySelector(".dec-meta").textContent=d?(decLabel(d)+"・"+d.by.name+(d.by.title?"（"+d.by.title+"）":"")+"　"+(d.date||"")):"";
+    dpanel.querySelector(".dec-note").textContent=noteText(d);
+    Array.prototype.forEach.call(dpanel.querySelectorAll('[data-act="decide"]'),function(b){var on=!!d&&b.getAttribute("data-value")===d.result;b.classList.toggle("on",on);b.setAttribute("aria-pressed",String(on));});
+    var un=dpanel.querySelector('[data-act="undecide"]');if(un)un.style.display=d?"":"none";}
+  var rh=document.getElementById("rhDecision");if(rh)rh.innerHTML=d?decSvg(d,72,"vdHead"):"";
+  document.body.setAttribute("data-filename",decisionFilename(document.body.getAttribute("data-filename")||"applicant.html",d,D));}
+function render(){if(root)cfg.fields.forEach(function(f,idx){var box=root.querySelector('.stamp-box[data-field-id="'+f.id+'"]');if(!box)return;var e=rec.management[f.id];
+  box.querySelector(".stamp-area").innerHTML=e&&e.name?stampSvg({name:e.short||shortName(e.name),title:e.title||"",date:e.date||"",size:88,id:"rp"+idx}):'<div class="stamp-empty">未押印</div>';
+  box.querySelector(".stamp-meta").textContent=e&&e.name?(e.name+(e.title?"（"+e.title+"）":"")+"　"+(e.date||"")):"";
+  var un=box.querySelector('[data-act="unstamp"]');if(un)un.style.display=e&&e.name?"":"none";
+  var sel=box.querySelector("select"),inp=box.querySelector("input");if(sel&&inp)inp.style.display=sel.value==="__free"?"":"none";});
+  renderDecision();
+  var bar=document.getElementById("mgmtSave");if(bar)bar.classList.toggle("show",dirty||saved);
+  var msg=document.getElementById("mgmtSaveMsg");if(msg)msg.textContent=!dirty&&saved?MSG_SAVED:MSG_DIRTY;var sb=document.getElementById("mgmtSaveBtn");if(sb)sb.textContent=!dirty&&saved?"再保存":"押印を保存";}
+if(root){root.addEventListener("change",function(ev){var sel=ev.target;if(sel.tagName==="SELECT"){var inp=sel.closest(".stamp-box").querySelector("input");if(inp){inp.style.display=sel.value==="__free"?"":"none";if(sel.value==="__free")inp.focus();}}});
+root.addEventListener("click",function(ev){var b=ev.target.closest("[data-act]");if(!b)return;var box=b.closest(".stamp-box");var id=box.getAttribute("data-field-id");var act=b.getAttribute("data-act");
+  if(act==="stamp"){var sel=box.querySelector("select");var v=sel?sel.value:"";var m=null;
+    if(v==="__free"){var inp=box.querySelector("input");var nm=inp?inp.value.trim():"";if(!nm){alert("氏名を入力してください");return;}m={name:nm,short:shortName(nm),title:""};}
+    else{m=cfg.managers[Number(v)];if(!v||!m){alert("担当者を選んでください");return;}}
+    rec.management[id]={name:m.name,short:m.short||shortName(m.name),title:m.title||"",date:today(),at:new Date().toISOString()};dirty=true;render();}
+  else if(act==="unstamp"){delete rec.management[id];dirty=true;render();}});}
+if(dpanel){dpanel.addEventListener("change",function(ev){var sel=ev.target;if(sel.tagName!=="SELECT")return;var inp=dpanel.querySelector(".dec-ctl input");if(inp){inp.style.display=sel.value==="__free"?"":"none";if(sel.value==="__free")inp.focus();}});
+dpanel.addEventListener("click",function(ev){var b=ev.target.closest("[data-act]");if(!b)return;var act=b.getAttribute("data-act");
+  if(act==="decide"){var r=b.getAttribute("data-value");if(r!=="hire"&&r!=="reject")return;var p=pickPerson(dpanel.querySelector(".dec-ctl select"),dpanel.querySelector(".dec-ctl input"));if(!p)return;
+    var dt=today(),at=new Date().toISOString();rec.decision={result:r,label:r==="hire"?D.hireLabel:D.rejectLabel,date:dt,at:at,by:{name:p.name,short:p.short,title:p.title}};
+    if(D.autoStampFinal&&hasField(D.stampField)){var cur=rec.management[D.stampField];if(!cur||!cur.name)rec.management[D.stampField]={name:p.name,short:p.short,title:p.title,date:dt,at:at};}
+    dirty=true;render();}
+  else if(act==="undecide"){rec.decision=null;dirty=true;render();}});}
+var saveBtn=document.getElementById("mgmtSaveBtn");if(saveBtn)saveBtn.addEventListener("click",function(){
+  recNode.textContent=JSON.stringify(rec).replace(/[<>&\u2028\u2029]/g,function(c){return "\\u"+("000"+c.charCodeAt(0).toString(16)).slice(-4);});
+  dirty=false;saved=false;render();var html="<!DOCTYPE html>\n"+document.documentElement.outerHTML;saved=true;render();
+  var blob=new Blob([html],{type:"text/html;charset=utf-8"});var url=URL.createObjectURL(blob);
+  var a=document.createElement("a");a.href=url;a.download=document.body.getAttribute("data-filename")||"applicant.html";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1000);});
+window.addEventListener("beforeunload",function(e){if(dirty){e.preventDefault();e.returnValue="";}});
+initDecSel();render();
+})();
+</script>
+
+
+</body></html>

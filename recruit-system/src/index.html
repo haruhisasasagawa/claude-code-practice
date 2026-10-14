@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>リクルート判定システム</title>
-  <meta name="description" content="アルバイト面接を面接台本（スタッフ面接チェックリスト）のとおりに入力し、A4 の面接チェックリスト報告（電子印・最終合否つき）を作るアプリ。応募者の名前と属性 → 面接チェックリスト → 報告書の 3 ステップ。設定で詳細モード（留意点の申し送り・シフト貢献度の 2 軸判定）にも切り替えられます。">
+  <meta name="description" content="アルバイト面接を面接台本（スタッフ面接チェックリスト）のとおりに入力し、A4 の面接チェックリスト報告（電子印・最終合否つき）を作るアプリ。応募者の名前と属性 → 面接チェックリスト → 報告書の 3 ステップ。">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -20,13 +20,13 @@
       </div>
 
       <nav class="nav" aria-label="メインメニュー">
-        <button type="button" class="nav-item active" data-view="judge"><span class="ico">▣</span><span id="navJudgeLabel">応募者判定</span></button>
+        <button type="button" class="nav-item active" data-view="judge"><span class="ico">▣</span><span id="navJudgeLabel">報告書の作成</span></button>
         <button type="button" class="nav-item" data-view="settings"><span class="ico">⚙</span>設定（劇場ルール）</button>
         <button type="button" class="nav-item" data-view="help"><span class="ico">?</span>使い方</button>
       </nav>
 
       <div id="stepSection">
-        <div class="side-section-title" id="stepSectionTitle">判定ステップ</div>
+        <div class="side-section-title" id="stepSectionTitle">手順</div>
         <ol class="steps" id="stepNav"></ol>
       </div>
 
@@ -39,7 +39,7 @@
     <!-- ===== メイン ===== -->
     <main class="main">
       <header class="topbar">
-        <div class="top-title" id="topTitle">応募者判定</div>
+        <div class="top-title" id="topTitle">面接チェックリスト報告</div>
         <div class="chip-applicant" id="applicantChip"><span class="dot"></span><span>未入力</span></div>
         <div class="top-actions" id="topActions">
           <button type="button" class="btn sm" id="btnNew">＋ 新規</button>

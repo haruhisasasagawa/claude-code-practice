@@ -1,5 +1,7 @@
 # 詳細仕様書（確定版）: 面接チェックリスト（面接台本 2026-10-08 版）への置き換えと A4 報告
 
+> 2026-10-14 の面接特化（docs/SPEC-slim.md）で、詳細モード・初期対応者・旧 10 項目評価・レポート全体印刷に関する記述は無効。
+
 - 対象: `recruit-system/`（ブランチ `claude/toho-shinjuku-hiring-app-quhjtc`。**commit / push はしない**）
 - **2026-10-13 追記: 消極属性は削除した**（副支配人「消極属性って意味がわからないから削除でいいかも」）。本書の `CHECKLIST_AUTO.negatives`（shortTerm・morningOnly）、`checklist.header.negatives`・`morningOnlyEnd`、`record.checklist.header.negatives`、`checklistAuto` / `checklistSummary` の `negatives`、Step3 ヘッダーの 3 択 seg・`#clNeg-*`、A4 報告・レポートの消極属性のチップ、設定の消極属性の行・`cl-neg-add` / `cl-neg-del`、validate の終了時刻の記述は当時のもの。現行の扱い（旧データは読み飛ばす・台本の正規化で外す）は `docs/SPEC-script-mode.md` 12 章
 - **2026-10-14 改訂: A4「面接チェックリスト報告」は 1 ページの要約にした**（副支配人「出力される報告書が煩雑すぎて頭に入ってこない。わかりやすく、かつ1ページで」）。台本の説明文・質問文・空の記入欄は載せず、結果 → 必須条件 → 確認点 → 面接メモの順に 10 秒で読める 1 枚にする。台本の全文は保存 HTML「詳細」の「面接チェックリスト」節（`mode: 'section'`）に残す。現仕様は 4 章（4-2・4-4・4-5）、旧仕様（台本の 2 枚＝2 ページ）は 4-6 に短く残した。本書のほかの箇所の「A4 1〜2 枚」「.cl-page」「.cl-fit」は旧版の記述
@@ -7,7 +9,7 @@
   - 決定 1: Step3 の面接評価を台本のチェックリストに**置き換える**（10 項目×5 点は廃止）。面接評価の点数は確認事項／確認点の ○△× と面接者の総合判断から算出し、2 軸判定（面接評価 × シフト貢献度）は維持
   - 決定 2: 必須条件が 1 つでも「不一致」なら不採用推奨に固定（設定で「上長最終判断要」に変更可）
   - 決定 3: 「面接チェックリスト報告」を A4 1〜2 枚で印刷できる。保存レポートにも同じ節を入れる（**2026-10-14 に A4 1 枚の要約へ変更＝4 章**）
-- 前提資料: `docs/SPEC.md`（4・5 章: 貢献度・2 軸判定）、`docs/SPEC-stages.md`（入力の段階）、`docs/HANDOFF.md`（7〜9 章: 押印・申し送りシート・全体印刷）、`docs/reference/interview-script-1008.md`（台本の抽出テキスト）
+- 前提資料: `docs/archive/SPEC.md`（4・5 章: 貢献度・2 軸判定）、`docs/archive/SPEC-stages.md`（入力の段階）、`docs/HANDOFF.md`（7〜9 章: 押印・申し送りシート・全体印刷）、`docs/reference/interview-script-1008.md`（台本の抽出テキスト）
 - 本書は 2 つの設計案（台本への忠実さ／判定ロジックの整合）を統合した確定版。フィールド名・profile キー・data-bind パス・既定値・文言は本書の値で実装する。統合時に決めた点は 8 章
 
 ## 0. 方針
