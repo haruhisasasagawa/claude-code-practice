@@ -579,6 +579,9 @@
       ? '<textarea data-bind="' + esc(ip + '.label') + '" rows="2" aria-label="質問文">' + esc(it.label || '') + '</textarea>'
       : inputTag(ip + '.label', { aria: b.type === 'fields' ? '欄の名前' : '文言' });
     let extra = '';
+    // A4「面接チェックリスト報告」（1 枚）で使う短い名前（質問・合否連絡・記入欄。空なら文言の先頭 14 文字）
+    const shortTag = b.type === 'question' || b.type === 'notify' || b.type === 'fields'
+      ? '<div class="inline s-cl-short">' + inputTag(ip + '.short', { aria: '報告書での短い名前', placeholder: '報告書（A4 1 枚）での短い名前（任意。空なら文言の先頭 14 文字）' }) + '</div>' : '';
     if (b.type === 'rating') {
       extra = inputTag(ip + '.hint', { aria: '補足', placeholder: '補足（任意。例: 「大丈夫です」のみ連呼は要注意）' });
     } else if (b.type === 'explain') {
@@ -608,7 +611,7 @@
       }
     }
     return '<div class="s-cl-item" data-item-id="' + esc(it.id) + '"><span class="idx">' + (k + 1) + '</span>' +
-      '<div class="s-cl-item-main">' + label + (extra ? '<div class="s-cl-item-extra">' + extra + '</div>' : '') + '</div>' +
+      '<div class="s-cl-item-main">' + label + (extra || shortTag ? '<div class="s-cl-item-extra">' + extra + shortTag + '</div>' : '') + '</div>' +
       rowBtns('cl-item', attrs, k, len) + '</div>';
   }
 
@@ -738,7 +741,7 @@
       '</div>' +
 
       '<h3 class="sub">印刷</h3>' +
-      sCheck('checklist.print.showQuestions', 'A4 報告・保存レポートに質問文も載せる', 'OFF にするとメモだけになり、報告書が短くなります。') +
+      sCheck('checklist.print.showQuestions', '保存レポートの「詳細」に質問文も載せる', 'A4 の面接チェックリスト報告（1 枚）には質問文・説明文を載せません（質問の回答は短い名前で載せます）。OFF にすると「詳細」の面接チェックリスト節もメモだけになります。') +
 
       '<h3 class="sub">台本</h3>' +
       '<div class="field-row">' + sInput('checklist.title', 'タイトル') + sInput('checklist.version', '版（例: 2026-10-08）') + '</div>' +

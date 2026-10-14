@@ -225,6 +225,12 @@
   }
 
   function bindGlobal() {
+    // 画面幅が変わったら報告書（③）の紙プレビューの縮小を合わせ直す
+    let paperRaf = 0;
+    window.addEventListener('resize', function () {
+      if (paperRaf || !$('#appPaper')) return;
+      paperRaf = requestAnimationFrame(function () { paperRaf = 0; fitReportPaper(); });
+    });
     $$('.nav-item').forEach(function (b) { b.addEventListener('click', function () { showView(b.dataset.view); }); });
     $('#stepNav').addEventListener('click', function (e) {
       const li = e.target.closest('[data-step]');
@@ -449,6 +455,9 @@
 
   function renderStep() {
     const c = $('#stepContent');
+    // 右サマリーを紙の下に回すのは報告書（台本モード ③）だけ（fitReportPaper が付け直す）
+    const layout = $('#view-judge .judge-layout');
+    if (layout) layout.classList.remove('paper-stack');
     switch (state.step) {
       case 1: {
         if (isScript()) { fillChecklistDefaults(); c.innerHTML = scriptApplicantStepHtml(); applyVisibility(); break; }
@@ -470,6 +479,7 @@
         if (isScript()) {
           if (!state.judgment) { state.judgment = evaluateNow(); state.judgmentStale = false; }
           c.innerHTML = reportStepHtml();
+          fitReportPaper();
           break;
         }
         if (!state.handoff || state.handoffStale) rebuildHandoff();
@@ -2446,13 +2456,13 @@
     if (script) {
       html += '<div class="actions between">' +
         '<button type="button" class="btn" id="backToApplicant" data-action="to-step" data-step="1">← 応募者に戻る</button>' +
-        '<div class="actions"><button type="button" class="btn' + (clModel().mode === 'checklist' ? '' : ' hidden') + '" id="clPrintBtn" data-action="print-checklist" title="台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2枚に印刷">🖨 面接チェックリスト報告（A4）</button>' +
+        '<div class="actions"><button type="button" class="btn' + (clModel().mode === 'checklist' ? '' : ' hidden') + '" id="clPrintBtn" data-action="print-checklist" title="結果・必須条件・確認点・面接メモ・押印を A4 1 枚に印刷">🖨 面接チェックリスト報告（A4）</button>' +
         '<button type="button" class="btn primary" id="toReportBtn" data-action="judge">報告書へ進む →</button></div></div>';
       return html;
     }
     html += '<div class="actions between">' +
       '<button type="button" class="btn" data-action="to-step" data-step="2">← 申し送りに戻る</button>' +
-      '<div class="actions"><button type="button" class="btn' + (clModel().mode === 'checklist' ? '' : ' hidden') + '" id="clPrintBtn" data-action="print-checklist" title="台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2枚に印刷">🖨 面接チェックリスト報告（A4）</button>' +
+      '<div class="actions"><button type="button" class="btn' + (clModel().mode === 'checklist' ? '' : ' hidden') + '" id="clPrintBtn" data-action="print-checklist" title="結果・必須条件・確認点・面接メモ・押印を A4 1 枚に印刷">🖨 面接チェックリスト報告（A4）</button>' +
       '<button type="button" class="btn primary" data-action="judge">採用可否判定を実行 →</button></div></div>';
     return html;
   }
@@ -2897,7 +2907,7 @@
     html += decisionCardHtml();
     html += '<div class="actions between no-print">' +
       '<button type="button" class="btn" data-action="to-step" data-step="3">← 面接チェックリストに戻る</button>' +
-      '<div class="actions">' + (isCl ? '<button type="button" class="btn" data-action="print-checklist" title="台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2枚に印刷">🖨 面接チェックリスト報告（A4）</button>' : '') +
+      '<div class="actions">' + (isCl ? '<button type="button" class="btn" data-action="print-checklist" title="結果・必須条件・確認点・面接メモ・押印を A4 1 枚に印刷">🖨 面接チェックリスト報告（A4）</button>' : '') +
       '<button type="button" class="btn" data-action="print">🖨 印刷</button>' +
       '<button type="button" class="btn primary" data-action="save">💾 保存（HTML）</button></div></div>';
     return html;
@@ -2914,7 +2924,35 @@
   // 入力・押印・合否の変更で紙プレビューを描き直す（Step③ を開いていないときは何もしない）
   function rerenderReportPaper() {
     const el = $('#appPaper');
-    if (el) el.innerHTML = reportPaperInnerHtml();
+    if (el) { el.innerHTML = reportPaperInnerHtml(); fitReportPaper(); }
+  }
+
+  // 紙プレビューにも印刷と同じ 1 ページ保証のクラス（.cl-compact / .cl-compact-q1 / .cl-compact-2）を付ける（storage.fitChecklistSheet。画面に出ているときだけ計れる）。
+  //   紙は等倍（本文 9.5px）で見せる: 右サマリーの横で紙が入らない幅（1280px・1366px など）は右サマリーを紙の下に回す（.judge-layout.paper-stack）。
+  //   それでも列が紙より狭いときだけ縮小し、縮小は 0.95 倍まで（本文 9px 以上）。それより狭い画面（タブレット縦・スマホ）は等倍で紙だけ横スクロール。
+  //   計測は縮小を外した状態で行う（縮小したままだと高さが変わる）
+  const PAPER_MIN_ZOOM = 0.95;
+  function checklistSheetLimit() {
+    const mg = state.profile.management || {};
+    const n = Array.isArray(mg.fields) ? mg.fields.length : 0;
+    return typeof S.checklistSheetLimit === 'function' ? S.checklistSheetLimit(n) : undefined;
+  }
+  function fitReportPaper() {
+    const paper = $('#appPaper');
+    const layout = $('#view-judge .judge-layout');
+    if (!paper) { if (layout) layout.classList.remove('paper-stack'); return; }
+    paper.style.zoom = '';
+    const sh = $('.cl-sheet', paper);
+    if (sh && typeof S.fitChecklistSheet === 'function') S.fitChecklistSheet(sh, checklistSheetLimit());
+    const wrap = $('#appPaperWrap');
+    if (!wrap || !paper.offsetWidth) return;
+    const room = function () { return (wrap.clientWidth - 4) / paper.offsetWidth; };
+    if (layout) {
+      layout.classList.remove('paper-stack');
+      if (room() < 1 && getComputedStyle(layout).gridTemplateColumns.trim().split(/\s+/).length > 1) layout.classList.add('paper-stack');
+    }
+    const z = room();
+    if (z < 1 && z >= PAPER_MIN_ZOOM) paper.style.zoom = String(Math.floor(z * 1000) / 1000);
   }
 
   function reportStepHtml() {
@@ -2928,7 +2966,7 @@
       '</div>';
     }
     html += '<div class="report-paper-wrap" id="appPaperWrap">' +
-      '<div class="report-paper-cap"><b>面接チェックリスト報告（A4 プレビュー）</b><span>保存した HTML も同じ表示で開きます。印刷は「A4 で印刷」で 1〜2 枚</span></div>' +
+      '<div class="report-paper-cap"><b>面接チェックリスト報告（A4 プレビュー）</b><span>保存した HTML も同じ表示で開きます。印刷は「A4 で印刷」で 1 枚</span></div>' +
       '<div class="report-paper" id="appPaper">' + reportPaperInnerHtml() + '</div></div>';
     html += managementCardHtml();
     html += decisionCardHtml();
@@ -3313,12 +3351,10 @@
   }
 
   // =====================================================================
-  // 面接チェックリスト報告（A4 1〜2枚）の印刷（docs/SPEC-checklist.md 4-4）
+  // 面接チェックリスト報告（A4 1 枚）の印刷（docs/SPEC-checklist.md 4-4）
   //   申し送りシートと同じ body クラス方式。描画は storage.checklistSheetHtml（保存レポートと共通）で、
   //   入力 UI ではなく専用のホスト #clSheet に描く（画面では非表示）
   // =====================================================================
-  const CL_SHEET_PAGE_PX = 1040;   // A4 の印字可能高さ（297mm − 上下余白 16mm ≒ 1062px）の安全側
-
   // 押印欄（静的・小さめ。操作部品なし）
   function checklistStampsHtml() {
     const mg = state.profile.management || {};
@@ -3332,19 +3368,11 @@
     }).join('') + '</div>';
   }
 
-  // 1 ページ目（ヘッダーを含む）が A4 1 枚に収まらないときは 2 ページ目の強制改ページを外す（3 ページになるのを防ぐ）
+  // 1 ページ保証: 押印行を除いた高さが上限（storage.checklistSheetLimit。押印欄の件数で決まる）を超えたら
+  //   .cl-compact → .cl-compact-q1 → .cl-compact-2 → 縮小（storage.fitChecklistSheet）。紙プレビューと同じ上限
   function fitChecklistSheet() {
     const sheet = $('#clSheet .cl-sheet');
-    if (!sheet) return;
-    sheet.classList.remove('cl-fit');
-    const p1 = sheet.querySelector('.cl-page[data-page="1"]') || sheet.querySelector('.cl-page');
-    if (!p1) return;
-    const top = sheet.getBoundingClientRect().top;
-    const h = p1.getBoundingClientRect().bottom - top;   // シートの先頭（ヘッダー）から 1 ページ目の終わりまで
-    const total = sheet.getBoundingClientRect().bottom - top;
-    // 1 ページ目があふれるとき、または 2 ページ目（③〜⑤・判定・押印）があふれるが全体なら 2 枚に収まるときは
-    // 2 ページ目の強制改ページを外して詰める（3 枚目に流れるのを防ぐ）
-    if (h > CL_SHEET_PAGE_PX || (total - h > CL_SHEET_PAGE_PX && total <= CL_SHEET_PAGE_PX * 2)) sheet.classList.add('cl-fit');
+    if (sheet && typeof S.fitChecklistSheet === 'function') S.fitChecklistSheet(sheet, checklistSheetLimit());
   }
 
   function prepareChecklistSheet(on) {
@@ -3365,8 +3393,6 @@
       fitChecklistSheet();
     } else {
       document.body.classList.remove('print-checklist');
-      const sheet = $('.cl-sheet', host);
-      if (sheet) sheet.classList.remove('cl-fit');
       host.innerHTML = '';
     }
     return true;
@@ -3557,7 +3583,7 @@
       '<div class="help-steps">' +
         '<div class="help-step"><span class="n">1</span><h3>応募者</h3><p>1 枚のカードに 3 行だけ。氏名（必須）・年齢・性別・区分（学生は卒業予定年月）、面接日・面接担当者・応募した求人（通常／短期）、タクシー可否・料金とメモを、分かる範囲で入力します。</p></div>' +
         '<div class="help-step"><span class="n">2</span><h3>面接チェックリスト</h3><p>①勤務条件 → ②継続性・報連相 → ③仕事内容の説明 → ④集団行動特性 → ⑤逆質問 の順に、必須条件（一致／不一致）・説明のチェック・質問のメモ・確認点の ○△×・総合判断（採用／保留／不採用）を入力します。必須条件が 1 つでも不一致なら不採用推奨です。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（初期対応者／面接対応者／最終確認）に電子印を押して「報告書を保存（HTML）」します。「A4 で印刷」で 1〜2 枚に印刷できます。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（初期対応者／面接対応者／最終確認）に電子印を押して「報告書を保存（HTML）」します。「A4 で印刷」で 1 枚（結果・必須条件・確認点・面接メモ・押印）に印刷できます。台本の全文は保存 HTML の「詳細」に残ります。</p></div>' +
       '</div></div>' +
       '<div class="card" id="helpScriptFlow"><div class="card-head"><h3>報告書（HTML）の流れ</h3></div><ol class="list-plain">' +
         '<li>面接者が「面接対応者」に押印して保存し、社内スレッドに添付します。</li>' +
@@ -3582,7 +3608,7 @@
       '<div class="help-steps">' +
         '<div class="help-step"><span class="n">1</span><h3>応募情報を入力</h3><p>採用担当が応募書類・連絡内容をもとに入力します。必須は氏名・年齢・区分・通勤・曜日・時間・週の最大勤務日数・勤務期間です（週の最大勤務日数は設定で任意にもできます）。繁忙期・深夜帯・オールナイト・かけもちなどは面接で確認します（分かっていれば折りたたみから先に入力できます）。面接者への申し送りコメントは申し送りの冒頭に表示されます。</p></div>' +
         '<div class="help-step"><span class="n">2</span><h3>面接者へ申し送り</h3><p>申し送りコメント、面接で確認すること、留意点（要判断・要確認・共有）と強みが自動で出ます。「申し送り文をコピー」でチャット等に貼り付けて共有できます。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>面接チェックリスト</h3><p>面接者が台本（スタッフ面接チェックリスト）の順に確認・入力します。必須条件（一致／不一致）、説明のチェック、質問のメモ、確認点の ○△×、総合判断から面接評価を計算します。必須条件が不一致なら不採用推奨です。『面接で確認する項目』には繁忙期・深夜帯・オールナイトなどを入力します。判定に必要なシフト条件（*）が未確認だと判定に進めません（必須条件が不一致のときを除く）。「面接チェックリスト報告（A4）」で記入内容・判定・押印欄を 1〜2 枚に印刷できます。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>面接チェックリスト</h3><p>面接者が台本（スタッフ面接チェックリスト）の順に確認・入力します。必須条件（一致／不一致）、説明のチェック、質問のメモ、確認点の ○△×、総合判断から面接評価を計算します。必須条件が不一致なら不採用推奨です。『面接で確認する項目』には繁忙期・深夜帯・オールナイトなどを入力します。判定に必要なシフト条件（*）が未確認だと判定に進めません（必須条件が不一致のときを除く）。「面接チェックリスト報告（A4）」で結果・必須条件・確認点・面接メモ・押印を 1 枚に印刷できます（台本の全文は保存レポートの「面接チェックリスト」節）。</p></div>' +
         '<div class="help-step"><span class="n">4</span><h3>採用可否判定</h3><p>面接評価とシフト貢献度の2軸（マトリクス）で「採用推奨／上長最終判断要／不採用推奨」を判定します。「要判断」の留意点が未確認・高校生の採用方針に該当する場合は採用推奨に留めません。</p></div>' +
       '</div></div>' +
       '<div class="card"><div class="card-head"><h3>保存と読み込み</h3></div>' +

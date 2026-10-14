@@ -2,10 +2,11 @@
 
 - 対象: `recruit-system/`（ブランチ `claude/toho-shinjuku-hiring-app-quhjtc`。**commit / push はしない**）
 - **2026-10-13 追記: 消極属性は削除した**（副支配人「消極属性って意味がわからないから削除でいいかも」）。本書の `CHECKLIST_AUTO.negatives`（shortTerm・morningOnly）、`checklist.header.negatives`・`morningOnlyEnd`、`record.checklist.header.negatives`、`checklistAuto` / `checklistSummary` の `negatives`、Step3 ヘッダーの 3 択 seg・`#clNeg-*`、A4 報告・レポートの消極属性のチップ、設定の消極属性の行・`cl-neg-add` / `cl-neg-del`、validate の終了時刻の記述は当時のもの。現行の扱い（旧データは読み飛ばす・台本の正規化で外す）は `docs/SPEC-script-mode.md` 12 章
+- **2026-10-14 改訂: A4「面接チェックリスト報告」は 1 ページの要約にした**（副支配人「出力される報告書が煩雑すぎて頭に入ってこない。わかりやすく、かつ1ページで」）。台本の説明文・質問文・空の記入欄は載せず、結果 → 必須条件 → 確認点 → 面接メモの順に 10 秒で読める 1 枚にする。台本の全文は保存 HTML「詳細」の「面接チェックリスト」節（`mode: 'section'`）に残す。現仕様は 4 章（4-2・4-4・4-5）、旧仕様（台本の 2 枚＝2 ページ）は 4-6 に短く残した。本書のほかの箇所の「A4 1〜2 枚」「.cl-page」「.cl-fit」は旧版の記述
 - 根拠: 副支配人の要望「印鑑部分以外なんか微妙。添付の面接台本のチェックリスト（採点リスト）を入力して出力・報告できるようにしたほうがいい」と決定 1〜3（下記）。既存決定（単一 HTML 配布・設定画面＋JSON・HTML ファイル保存・PC 利用・面接前は Step1 最小入力＋Step2 申し送り・Step3 で面接時項目・2 軸マトリクス・押印・A4 申し送りシート）は維持する
   - 決定 1: Step3 の面接評価を台本のチェックリストに**置き換える**（10 項目×5 点は廃止）。面接評価の点数は確認事項／確認点の ○△× と面接者の総合判断から算出し、2 軸判定（面接評価 × シフト貢献度）は維持
   - 決定 2: 必須条件が 1 つでも「不一致」なら不採用推奨に固定（設定で「上長最終判断要」に変更可）
-  - 決定 3: 「面接チェックリスト報告」を A4 1〜2 枚で印刷できる。保存レポートにも同じ節を入れる
+  - 決定 3: 「面接チェックリスト報告」を A4 1〜2 枚で印刷できる。保存レポートにも同じ節を入れる（**2026-10-14 に A4 1 枚の要約へ変更＝4 章**）
 - 前提資料: `docs/SPEC.md`（4・5 章: 貢献度・2 軸判定）、`docs/SPEC-stages.md`（入力の段階）、`docs/HANDOFF.md`（7〜9 章: 押印・申し送りシート・全体印刷）、`docs/reference/interview-script-1008.md`（台本の抽出テキスト）
 - 本書は 2 つの設計案（台本への忠実さ／判定ロジックの整合）を統合した確定版。フィールド名・profile キー・data-bind パス・既定値・文言は本書の値で実装する。統合時に決めた点は 8 章
 
@@ -609,47 +610,53 @@ scores: U.deepClone(state.scores || {}),        // 既存。新規レコード�
 ### 4-2. 共通の描画関数（storage.js・export。DOM 非依存）
 
 ```js
-checklistSheetHtml(record, profile, o)   // o = { mode: 'section' | 'sheet', stamps: html文字列 | '' }
+checklistSheetHtml(record, profile, o)   // o = { mode: 'section' | 'sheet', stamps: html文字列 | '', decisionId, decisionSvgId }
 checklistSheetCss()                      // .cl-sheet 以下のスタイル＋@page clsheet＋body.print-checklist の印刷規則（アプリ・レポート共通）
+fitChecklistSheet(sheetEl, limitPx?)     // 1 ページ保証（4-4）。limit の既定は CL_SHEET_BODY_PX（= 1040 − 押印行 90 = 950px）
+checklistSheetLimit(nStamps)             // 押印行を除いた本文の上限（押印欄の件数で決める。3 件まで 950・4〜6 件 890・7〜9 件 830px。4-4）
+checklistShortLabel(item)                // 1 ページ用の短い名前（下記）
 normalizeChecklistDef(def, baseDef)      // 6-1。レポート描画時に record.checklistDef にも通す
 ```
 
 - `def = normalizeChecklistDef(record.checklistDef || profile.checklist, defaults().checklist)`、`sum = R.checklistSummary(record.applicant, record.checklist || R.emptyChecklist(), Object.assign({}, profile, { checklist: def }), { scores: record.scores, management: record.management })`。
-- 記号は白黒印刷でも読めるよう文字で出す: 必須条件「○一致」「×不一致」「－未確認」、説明・合否連絡「☑」「☐」、確認点「○／△／×」（色は補助）。値はすべて `U.esc`、メモは `white-space: pre-wrap`。
-- 自動値を使った欄は「（応募情報より）」、契約終了は「（自動）」を付ける。空欄は「—」。
+- 記号は白黒印刷でも読めるよう文字で出す: 必須条件「○一致」「×不一致」「－未確認」、説明・合否連絡「☑」「☐」、確認点「○／△／×」（色は補助）。値はすべて `U.esc`。
 - `checklistSheetCss()` は「</」＋「script」の並びを含めない。アプリは `init()` で `<style id="clSheetCss">` に 1 回だけ入れ（CSS の二重管理をしない）、レポートは `reportCss()` の末尾に足す。
+- **2 つのモードは別物**: `'section'` は保存レポート「詳細」の節で**台本の全文**（2026-10-13 までの描画をそのまま。下記）。`'sheet'` は A4「面接チェックリスト報告」で **1 ページの要約**（2026-10-14〜。下記）。アプリの ③ の紙プレビュー（`#appPaper`）、保存 HTML の紙プレビュー（`#clPaper`）、印刷用（`#clSheet`）はすべて `'sheet'`。
 
-出力の構成（`.cl-sheet`）:
+**mode 'section'**（保存レポート「詳細」の「面接チェックリスト」節。変更なし）:
 
 ```
-mode 'sheet':
-  .cl-sheet-head    劇場名｜「面接チェックリスト報告」（{title} {version} 版）｜作成日
-                    応募者名（大）・区分・年齢｜面接日｜担当（押印から補ったら「（押印より）」）｜目安 {minutesTotal}分
-                    チップ: タクシー可否・料金（手入力は「（手入力）」）／消極属性（該当は赤。自動は「（自動）」。無ければ「なし」）／応募した求人／希望シフト（describeShifts の要約 1 行）／週日数／勤務期間
-mode 'section'（保存レポートの節。台本のヘッダー行をすべて画面にも出す）:
-  .cl-sheet-head.cl-sec-head   面接日｜担当（「（押印より）」）｜目安 {minutesTotal}分
-                    チップ: タクシー可否・料金／消極属性／応募した求人（台本ヘッダーの 3 項目。応募者名・希望シフト等はレポートの他の節にあるので出さない）
-共通:
-  .cl-page[data-page="n"]   … ページごと。ページ見出し .cl-page-h「1枚目（section では「台本1枚目」）　必須条件一致・継続性」＋ lead（台本の前書き）。
-                              sheet の 2 枚目以降は右に応募者名・面接日を小さく再掲（section では出さない）。title も lead も空のページは section では見出しを省く
+  .cl-sheet-head.cl-sec-head   面接日｜担当（「（押印より）」）｜目安 {minutesTotal}分（詳細モードの記録だけ）
+                    チップ .cl-hchip: タクシー可否・料金（詳細モードの手入力は「（手入力）」）／応募した求人
+  .cl-page[data-page="n"]   … 台本のページごと。見出し .cl-page-h「台本1枚目　必須条件一致・継続性」＋ lead（台本の前書き）。title も lead も空のページは見出しを省く
     section.cl-s[data-cl-sec="<id>"]
-      h3: ① 勤務条件 <small>10分</small> <span class="cl-s-sum">確認点 ○2 ／ 必須 一致4 未確認1</span>
-      must    → table.cl-must（文言｜○一致/×不一致/－未確認）
-      fields  → dl.cl-fields（2 列）
-      explain / notify → ul.cl-checks（☑/☐＋文言。shortOnly は「※」）
+      h3: ① 勤務条件 <small>10分</small> <span class="cl-s-sum">確認点 ○2 ／ 必須 一致2</span>（不一致があれば .cl-s-ng）
+      must → table.cl-must ／ fields → dl.cl-fields（自動値は「（応募情報より）」、契約終了は「（自動）」。空欄は「—」）／ explain・notify → ul.cl-checks（☑/☐。shortOnly は「※」）
       question → ol.cl-qs（質問文。print.showQuestions=false なら出さない）＋ .cl-memo「{memoLabel}：本文」（空は「—」）
-      rating  → table.cl-rate（文言＋ hint を小さく（.cl-hint。例「「大丈夫です」のみ連呼は特に要注意。」。sheet では print.showQuestions=false のとき省く）｜○△×｜点｜メモ。未入力は「未入力」）
-      note    → p.cl-sflow（Step3 の .cl-flow とは別クラス）
-    （① の直後、sheet のみ）.cl-confirmed「面接で確認した勤務条件」: describeApplicant のうち interview 段階の行（繁忙期・土日・祝日・深夜帯・オールナイト等）を 2 列 kv
-  .cl-overall        総合判断 {label}｜面接評価 {total}/{max}点（{pct}%・{帯}）○n △n ×n｜必須条件 一致n・不一致n・未確認n（不一致・未確認の文言）｜面接所見（record.interviewNotes 全文）
-mode 'sheet' のみ:
-  .cl-judge          判定サマリー 4 タイル: 面接評価 {total}/{max}・{pct}%・帯｜シフト貢献度 {total}/{max}・帯（未確定／OFF も表示）｜必須条件 一致/不一致/未確認｜結果 {title}（色）
-                     調整があれば 1 行ずつ「{from} → {to}：{reason}」
-                     判定が無い（判定前・stale で印刷）ときは「採用可否判定は未実施（面接評価 {total}/{max}・{pct}% の時点）」（判定を勝手に走らせない）
-  .cl-stamps         o.stamps（アプリ: 押印欄を静的に小さく。レポート: '' で、直後の押印節を続けて印刷＝4-4）
+      rating → table.cl-rate（文言＋ hint .cl-hint｜○△×｜点｜メモ。未入力は「未入力」）／ note → p.cl-sflow
+  .cl-overall        総合判断｜面接評価 {total}/{max}点（{pct}%・{帯}）○n △n ×n｜必須条件 一致n・不一致n・未確認n｜面接所見（全文）
 ```
 
-- 旧形式（`interviewModel(...).mode === 'legacy'`）の record に `checklistSheetHtml` を呼んだ場合は ①〜⑤ を空欄の台本として出す（アプリ・レポートとも旧形式では印刷ボタンを出さないので通常は呼ばれない）。
+**mode 'sheet'**（A4「面接チェックリスト報告」＝ 1 ページの要約。A4 縦・幅 190mm ≒ 718px・本文の上限 950px＋押印行）:
+
+目的: 副支配人が 10 秒で「誰を・どう判断し・何が気になるか」を掴める。**台本の説明文（【説明】の文言）・質問文・確認点の補足（hint）・ブロックの注記・ページの前書き・空の記入欄（の説明）は載せない**。
+
+| # | ブロック（上から） | 中身 | 実測の高さ（標準のサンプル・1440px） |
+| --- | --- | --- | --- |
+| 1 | ヘッダー帯 `.cl-sheet-head > .cl-band`（濃紺地・白文字・高さ 22px） | 左「面接チェックリスト報告」、中「台本 {version} 版」小さく、右「{劇場名} ／ 作成 YYYY/MM/DD」 | 22px |
+| 2 | 応募者 `.cl-who`（2 行） | 1 行目: 氏名 16px 太字「さん」＋区分・年齢・性別（`.cl-sh-who`）＋卒業予定（`.cl-sh-grad`）。2 行目 `dl.cl-sh-kv`: 面接日／担当／応募した求人／タクシー可否・料金（詳細モードの記録は＋勤務期間／週／希望シフト）を「ラベル 値」で。**空の値は項目ごと省く**。値は 1 行（長ければ末尾を…） | 帯と合わせて 72px |
+| 3 | 結果ストリップ `.cl-judge`（地色は結果に合わせた薄い色＝`data-result`） | 左から 結果バッジ `.cl-tile.cl-tile-res`（採用推奨＝緑／上長最終判断要＝琥珀／不採用推奨＝赤、14px 太字、判定日時）・総合判断・必須条件（すべて一致／不一致 n〔赤〕／未確認 n）・確認点（`{total}/{max}点`＋`○n △n ×n`。総合判断の点を含む面接評価の点）の 4 タイル（詳細モードの記録は＋シフト貢献度）、右端に最終合否 `.cl-decision`（`#clPaperDecision` / `#clDecision` / `#appPaperDecision`。未押印は点線枠「最終合否 未押印」）。調整があればストリップの下に `<ul class="cl-adj"><li><b>…</b>：理由</li></ul>`（必須条件の不一致は「必須条件の不一致により「不採用推奨」に固定」、ほかは「A → B」「B（固定）」）。**判定が無いときは結果タイルに「未実施」**（`.cl-judge-none`・判定を勝手に走らせない） | 72px（＋調整 1 行 ≒ 14px） |
+| 4 | 2 カラム `.cl-cols`（左 45%・右 55%） | 左 `.cl-blk-must`「必須条件」: 必須条件の行（`.m-match`／`.m-mismatch`／`.m-unknown` のマーク「○一致」「×不一致」「－未確認」＋文言）＋必須条件の直後の記入欄（土日勤務可否・出勤不可な繁忙）。右 `.cl-blk-terms`「勤務条件の確認」: ほかの記入欄（短期／長期の希望・契約開始日の希望・初回契約終了・OPEN／25時の可否）。どちらも `dl.cl-kv` の「ラベル｜値」2 列（空は「—」、値は 2 行まで） | 113px |
+| 5 | 確認点 `.cl-blk-rate`（全幅・`table.cl-rt`） | 確認点の全項目（既定 7 行。未入力の行も出す＝何を見なかったか分かる）。列: セクション番号（①〜⑤）｜確認点の名前｜○△× の丸バッジ（`.cl-mark` ○緑 △琥珀 ×赤、未入力は灰「—」）｜メモ（1 行。長ければ末尾を…） | 185px |
+| 6 | 面接メモ `.cl-blk-notes`（**記入があるものだけ**。何も無ければブロックごと省く） | 「短い名前｜回答」の 2 列（名前の列 18em）: 質問ブロックのメモ（`.cl-nm-q`。名前はセクション番号＋**1 問目の短い名前＋「ほか n 問」**〔例「② 前のバイトの期間・退職理由 ほか2問」。1 問だけのブロックは短い名前だけ。回答はブロックに 1 つなので 3 問の名前は並べない＝名前が 1 行に収まり回答より目立たない〕。回答は 2 行まで＝line-clamp）、メモ欄を ON にした説明ブロックのメモ（`.cl-nm-b`。名前はメモ欄の名前）、面接所見（`.cl-nm-iv`。全文）、台本モードは Step① のメモ（`.cl-nm-memo`「メモ」。全文）。最後に案内 1 行 `.cl-nm-ref`（**「…」で切れたメモがあるとき**〔`.cl-nm-cut`〕「「…」で切れたメモの全文は、保存 HTML の「詳細」表示にあります」、`.cl-compact-2` で質問の回答を省いたとき「質問の回答は省略（…）」。どちらでもなければ出さない） | 179〜202px |
+| 7 | 説明・連絡 `.cl-exline`（1 行） | 「説明済み ① 4/4 ・ ② 3/3 ・ ③ 4/4 ・ ④ 3/3 ｜ 合否連絡 採用時 ☑ ／ 不合格 ☐」。説明は【説明】ブロックのチェック数（**※短期求人のみ の項目は求人が「短期」のときだけ数える**＝通常・未選択なら分母から除く。全部でなければ太字・下線）。合否連絡は短い名前＋☑/☐ | 24px |
+| 8 | 押印行 `.cl-stamps`（最下段） | アプリの印刷用（`#clSheet`）だけ `o.stamps`＝初期対応者／面接対応者／最終確認の小さなハンコ枠（未押印は点線丸「未押印」）。保存 HTML は `''` で、直後の押印の節（`section[data-sec="mgmt"]`）を続けて印刷する（4-4）。紙プレビューには出さない（押印はプレビューの下の押印欄で操作）。1 段 3 件で、押印欄を 4 件以上にした設定は段が増える | 50px（保存 HTML の押印の節は 78px＋間 8px。2 段で 134px） |
+
+- 文字: 本文 9.5px、ラベル 8.5px、見出し `.cl-h` 10.5px（左に 3px の濃紺の線）。色は結果・○△×（必須条件の一致／不一致を含む）・最終合否だけ。ほかはグレースケール、罫線は薄灰 1px。紙は白（アプリのダークテーマでも白地）。
+- 短い名前（`short`）: `config.default.js` の質問（例 `q_prev_job` →「前のバイトの期間・退職理由」）・合否連絡（`nt_hire` →「採用時」、`nt_reject` →「不合格」）・記入欄（`first_end` →「初回契約終了」、`open_late` →「OPEN／25時の可否」）に `short` を持たせた。`checklistShortLabel(item)` は `short` → **文言が既定と同じ項目は既定の short**（short の無い旧い設定・保存済みの記録の台本）→ 文言の先頭 14 文字＋「…」（前後の「」は外す）。`normalizeChecklistDef` は `short` の前後の空白を外し、空・文字列以外は消すだけで**補わない**（設定で質問文を書き換えたときに古い short が残らないよう、補うのは描画時）。設定画面の質問・合否連絡・記入欄の各行に「報告書（A4 1 枚）での短い名前」の欄を追加した。
+- 旧い id・構造は残す: `.cl-sheet.cl-mode-sheet`・`.cl-sheet-head`・`.cl-judge`（`class="cl-judge"` のまま。地色は `data-result`）・`.cl-judge-row`・`.cl-tile-res`・`.cl-adj`・`.cl-decision`（`#clPaperDecision` / `#clDecision` / `#appPaperDecision` の差し替えは従来どおり）・`.cl-stamps`。`.cl-page`・`.cl-s`・`.cl-overall`・`.cl-hchip`・`.cl-qs` は 'sheet' には出さない（'section' には残る）。
+- 「面接で確認した勤務条件」（詳細モードの記録の `.cl-confirmed`）は 1 ページの要約には載せない（保存 HTML「詳細」の「面接で確認した情報」の節にある）。
+- 旧形式（`interviewModel(...).mode === 'legacy'`）の record に呼んだ場合は、空欄の要約（確認点はすべて「—」）を出す（アプリ・レポートとも旧形式では印刷ボタンを出さないので通常は呼ばれない）。
 
 ### 4-3. 保存レポート（`generateReportHTML`）
 - 章の並び: 応募時の情報 → 申し送りコメント → 留意点 → 面接で確認した情報 → シフト貢献度 → **面接チェックリスト**（`data-sec="checklist"`）→ **面接評価（旧形式・10項目×5点）**（`data-sec="scores"`、旧 scores があるときだけ）→ 採用可否判定 → 応募者の管理 → （`#clSheet`、4-4）。
@@ -663,7 +670,7 @@ mode 'sheet' のみ:
 
 - ダッシュボードの「面接評価」タイル: `R.interviewModel(profile, record.scores, record.checklist)`（checklistDef を def に）から `{total}/{max}点`、t-sub「得点率 {pct}%・{帯}」、チェックリスト方式で不一致があれば「・必須 不一致{n}」を danger で。
 - 判定の結果ボックスに「必須条件: 一致{n}・不一致{n}・未確認{n}」の行（`judgment.checklist` があるとき）。
-- ツールバー `.rtool` に `<button id="rtPrintChecklist">面接チェックリスト報告（A4）</button>` を「申し送りシート」の右に追加（チェックリスト入力があるときだけ）。hint に「面接チェックリスト報告は台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2 枚にまとめます。」を追記。
+- ツールバー `.rtool` に `<button id="rtPrintChecklist">面接チェックリスト報告（A4）</button>` を「申し送りシート」の右に追加（チェックリスト入力があるときだけ）。hint に「面接チェックリスト報告は結果・必須条件・確認点・面接メモ・押印を A4 1 枚にまとめます（台本の全文は「詳細」）。」を追記（2026-10-14 改訂。旧「台本の①〜⑤の記入内容・判定・押印欄を A4 1〜2 枚にまとめます。」）。
 - 埋め込み JSON は既存どおり `jsonForScript`（メモに閉じタグやコメント開始が入っても壊れない）。
 
 ### 4-4. A4「面接チェックリスト報告」の印刷（申し送りシートと同じ body クラス方式）
@@ -675,11 +682,20 @@ mode 'sheet' のみ:
   on : rec = S.buildRecord(state)（judgment は state.judgment。stale・未実施なら null）
        #clSheet.innerHTML = S.checklistSheetHtml(rec, state.profile, { mode: 'sheet', stamps: checklistStampsHtml() })
        body.classList.add('print-checklist'); fitChecklistSheet()
-  off: body.classList.remove('print-checklist'); #clSheet.innerHTML = ''; .cl-sheet の .cl-fit を外す
+  off: body.classList.remove('print-checklist'); #clSheet.innerHTML = ''
   ```
 - `checklistStampsHtml()`: `management.fields` ごとに静的な押印（`Stamp.render(e, { size: 46, id: 'cl' + idx })`）・未押印は枠（操作部品なし）。
 - `printChecklistSheet()`: `prepareChecklistSheet(true)` → `afterprint`（保険 3 秒）で off → `window.print()`。Step3・Step4 のボタンから呼ぶ。旧形式（legacy）では Step3・Step4 にボタンを出さない。
-- `fitChecklistSheet()`: 1 ページ目（`.cl-page[data-page="1"]`、ヘッダーを含む）の高さが A4 の印字可能高さ（297mm − 上下余白 16mm ≒ 1062px。安全側 1040px）を超えたら `.cl-sheet` に `.cl-fit` を付け、2 ページ目の強制改ページを外す（3 ページになるのを防ぐ）。計測のため `body.print-checklist` のときは画面でも `#clSheet` を `display:block; position:absolute; left:-10000px; width:190mm` にする。
+- `fitChecklistSheet()`（2026-10-14〜。**1 ページ保証**）: `storage.fitChecklistSheet(#clSheet .cl-sheet, checklistSheetLimit(押印欄の件数))`。シートの高さから押印行 `.cl-stamps` とその上の余白を除いた値（押印行の直前の要素の下端まで）が上限を超えたら、次の順に 1 段ずつ詰めて、収まったところで止める。
+  - 上限 `checklistSheetLimit(n)`: A4 の印字可能高さ 297mm − 上下余白 16mm ≒ 1062px の安全側 1040px − 押印行の取り置き 90px（1 段＝押印欄 3 件まで）− 2 段目以降 1 段 60px。**3 件まで 950px**（`CL_SHEET_BODY_PX`）・4〜6 件 890px・7〜9 件 830px。アプリの印刷用・紙プレビュー、保存 HTML の印刷用・紙プレビューで同じ値（保存 HTML は保存時の押印欄の件数）。
+  - `.cl-compact`: 本文 9px・余白を詰める・面接メモの名前と記入欄の値を 1 行。**質問の回答は 2 行のまま**、面接所見は **10 行まで**・Step① のメモは 3 行まで（行数の上限は CSS で固定。残りの高さまで広げない＝長い所見が紙を占めて結果・確認点より目立たないように。超えた分は面接所見から先に削る）。
+  - `.cl-compact-q1`: 質問の回答・説明ブロックのメモを 1 行、面接所見 6 行・Step① のメモ 2 行。
+  - `.cl-compact-2`: 質問の回答の行を隠して案内 1 行（`.cl-nm-ref` の「質問の回答は省略（回答と「…」で切れたメモの全文は、保存 HTML の「詳細」表示にあります）」）、面接所見 4 行・Step① のメモ 1 行、調整は 1 行目だけ。
+  - 縮小: シートを `zoom` で縮める。**縮小後の高さを測り直し**、上限に収まるまで倍率を下げる（Chromium の zoom は小さくするほど高さが比例して縮まないため。最大 12 回・下限 0.3 倍）。
+  - 各段で、面接メモ・確認点のメモが「…」で切れているか（`scrollHeight > clientHeight` または `scrollWidth > clientWidth`。非表示の行は除く）を調べ、切れていれば `.cl-nm-cut` を付けて案内 1 行「「…」で切れたメモの全文は、保存 HTML の「詳細」表示にあります」を出す（案内の高さも含めて計る。詰めていない段でも出す）。
+  - 計測のため `body.print-checklist` のときは画面でも `#clSheet` を `display:block; position:absolute; left:-10000px; width:190mm` にする。
+- **紙プレビューにも同じクラス**: ③ の `#appPaper`（`renderStep` の ③・`rerenderReportPaper`・画面幅の変更で `fitReportPaper()`）と保存 HTML の `#clPaper`（読み込み時・「報告書」表示に戻したとき＝`setView('report')`。`window.__fitChecklistPaper`）に同じ関数を使う。紙プレビューは押印行を持たないので、印刷と同じ上限（`checklistSheetLimit`）で計れば印刷と同じ見た目になる。
+- **③ の紙プレビューは等倍で見せる**（2026-10-14 レビュー後。本文 9.5px・ラベル 8.5px を画面でも下回らない）: 右サマリー（312px）の横に A4 の紙（約 796px）が等倍で入らない幅（1280px・1366px など、1438px 未満）では `.judge-layout` に `.paper-stack` を付けて右サマリーを紙の下に回す（右サマリーは横並びのカード。③ 以外のステップでは外す）。それでも列が紙より狭いときだけ `#appPaper` を `zoom`（列の幅 ÷ 紙の幅）で縮め、**縮小は 0.95 倍まで**（本文 9px 以上）。それより狭い画面（サイドバーのある 841〜1,063px・790px 未満のスマホ 390px など）は等倍のまま紙だけ横スクロール（E36）。計測は縮小を外してから行う。旧: 縮小 0.7 倍まで（1280px で 0.80 倍＝本文 7.6px になっていた）。
 - styles.css:
   ```css
   .cl-sheet-host { display: none; }
@@ -693,7 +709,7 @@ mode 'sheet' のみ:
 
 **保存レポート**
 - 押印節（`section[data-sec="mgmt"]`）の直前に `<div id="clSheet" class="cl-sheet-print">{checklistSheetHtml(record, profile, { mode: 'sheet', stamps: '' })}</div>`（チェックリスト入力があるときだけ）。
-- インラインスクリプトに `window.__prepareChecklistSheet(on)`（`body.print-checklist` の付け外しと fit の計測。アプリと同じ規則）を追加し、`#rtPrintChecklist` で prep(true) → print → afterprint（保険 3 秒）で戻す。
+- インラインスクリプトに `window.__prepareChecklistSheet(on)`（`body.print-checklist` の付け外しと 1 ページ保証。2026-10-14〜はアプリと**同じ関数** `clFitSheet` のソースを `Function.prototype.toString` で埋め込み、上限 `var CL_LIMIT=` `checklistSheetLimit(押印欄の件数)`〔既定 3 件で 950。押印の節を直後に印刷するので、その段数の分を除く〕。外部参照なしの ES5 で、関数内にコメントを書かない）を追加し、`#rtPrintChecklist` で prep(true) → print → afterprint（保険 3 秒）で戻す。
 - `checklistSheetCss()` に含めるレポート用規則:
   ```css
   .cl-sheet-print { display: none; }
@@ -707,21 +723,31 @@ mode 'sheet' のみ:
 
 **共通の印刷 CSS（`checklistSheetCss()`）**
 - `@page clsheet { size: A4; margin: 8mm 10mm; }`、`body.print-checklist { page: clsheet; font-size: 9.5px; line-height: 1.35; }`。
-- `.cl-sheet .cl-page + .cl-page { break-before: page; }`、`.cl-sheet.cl-fit .cl-page + .cl-page { break-before: auto; }`。
-- ① と記入欄のあるセクションは全幅（内部は 2 段組み: 左=必須条件・記入欄、右=説明・質問）、他のセクションは 1 列。セクション見出しは台本と同じ濃い帯＋白文字（11px）、判定タイルの値 13px。
-- 行（`.cl-must tr`・`.cl-rate tr`・`.cl-checks li`・`.cl-judge`・`.stamp-row`）は `break-inside: avoid`、セクション（`.cl-s`）は `break-inside: auto`（HANDOFF 9 章の方針）、見出しは `break-after: avoid`、色付き要素は `print-color-adjust: exact`。
+- （旧版の `.cl-page + .cl-page { break-before: page }`・`.cl-fit` は 2026-10-14 に削除。1 ページの要約は改ページを指定しない）
+- 'sheet' の寸法・色は 4-2 の表（本文 9.5px・ラベル 8.5px・見出し 10.5px・結果 14px）。'section' は従来どおり（① と記入欄のあるセクションは 2 段組み、セクション見出しは濃い帯＋白文字）。
+- 'sheet' のブロック（`.cl-judge`・`.cl-blk`・`.cl-stamps`・`.stamp-row`）は `break-inside: avoid`、色付き要素（`.cl-band`・`.cl-judge`・`.cl-tile`・`.cl-mark`・`.cl-mm`・`.cl-decision`・ハンコ）は `print-color-adjust: exact`。'section' の行・セクションの改ページ規則は従来どおり（HANDOFF 9 章の方針）。
 - 申し送りシート（`body.print-handoff`）の表示対象には入れない（レポートの `:not()` リストに `checklist` を足さない。アプリは `.cl-sheet-host` が非表示）。全体印刷（`rtPrintAll`・アプリの 🖨 印刷）では `#clSheet` を出さず、本文の「面接チェックリスト」節（`mode: 'section'`）を詰めて出す（`dl.cl-fields` 2 列、表のセル余白 2px、`.cl-qs` は `print.showQuestions` に従う）。
 
-### 4-5. ページ数の目標と確認
+### 4-5. ページ数の目標と確認（2026-10-14〜: すべて 1 ページ）
 
 | ケース | 目標 | e2e の固定 |
 | --- | --- | --- |
-| 標準（E25 のサンプル: メモ各 30〜60 字） | A4 2 枚（台本の 2 枚と同じ割り付け） | アプリ・レポートとも `1 ≤ n ≤ 2` |
-| 重い（全メモ 150 字・確認点メモ全件 40 字・説明すべて☑・面接所見 200 字・調整 2 件） | A4 2 枚以内 | アプリ・レポートとも `1 ≤ n ≤ 2` |
+| 標準（E25・E34 のサンプル: メモ各 30〜60 字） | A4 1 枚（`.cl-compact` なし。本文 約 700px） | アプリ・レポートとも `n === 1`（E27・E30・E34。E39 で紙の高さ ≤ 950px・.cl-compact なし） |
+| 重い（全メモ 150 字・確認点メモ 40 字・説明すべて☑・面接所見 200 字・調整 2 件） | A4 1 枚 | アプリ・レポートとも `n === 1`（E27） |
+| 本文が上限を超える（全メモ・確認点のメモ・Step① のメモ 300 字・面接所見 1,500〜2,000 字） | A4 1 枚（`.cl-compact`。質問の回答は 2 行のまま・面接所見は 10 行まで・「…」の案内 1 行） | `.cl-compact` が付き `n === 1`（E27 の詳細モード・E39 の台本モード。アプリ・保存 HTML の紙プレビューと印刷用）。E39 は質問の回答 2 行・面接所見 10 行以内（紙の 2 割未満）・名前 1 行・案内 1 行も |
+| 面接所見 4,000 字（保存 HTML） | A4 1 枚（`.cl-compact` のまま所見は 10 行で「…」・案内 1 行） | `n === 1`・PDF の本文に案内（E39） |
+| 押印欄 4 件（押印行・押印の節が 2 段）＋重いメモ | A4 1 枚（上限 890px） | アプリの印刷・保存 HTML とも `n === 1`（E39） |
+| 台本の確認点を 65 件追加（保存 HTML） | A4 1 枚（`.cl-compact-2`＋縮小。縮小後の高さを測り直す） | `n === 1`・印刷用の高さ ≤ 950px（E39） |
 | 申し送りシート（E23） | 1 枚のまま（`#clSheet` が混ざらない） | 既存どおり `=== 1` |
-| 全体印刷（E24） | アプリ Step4 ≤ 5 のまま、レポートは章が 1 つ増えるため ≤ 6 | `<= 5` / `<= 6` |
+| 全体印刷（E24） | アプリ Step4 ≤ 5、レポートは ≤ 6（「詳細」の面接チェックリスト節は台本の全文のまま） | `<= 5` / `<= 6` |
 
-確認方法は E23 と同じ（`emulateMedia('print')` → `page.pdf({ format: 'A4', preferCSSPageSize: true, printBackground: true })` → 既存 `pdfPages()`。pdfinfo が無ければ省略して PASS）。2 枚に収まらないときの調整順: ① `.cl-fields`・`.cl-checks` の段組みを増やす ② 本文 9.5 → 9px ③ 空のメモを「—」1 行に。
+- 質問の回答は 2 行・確認点のメモは 1 行・記入欄の値は 2 行で打ち切るので、各メモ 300 字でも本文は上限に届かない（約 820px）。本文が上限を超えるのは際限なく長くなる面接所見（と Step① のメモ）が長いときで、そのとき `.cl-compact` が付く。
+- 確認方法は E23 と同じ（`page.pdf({ format: 'A4', preferCSSPageSize: true, printBackground: true })` → `pdfinfo`。pdfinfo が無ければ省略して PASS）。E34・E39 は `pdftotext` で本文に 結果・氏名・最終合否・笹川晴央 があり、質問文・説明文が無いことも確かめる。
+- 実測（2026-10-14・1440px）: 標準のサンプルの紙 552px（E34・メモ 1 件）〜717px（全ブロックにメモ）、押印行込みの印刷用 754〜777px、保存 HTML の押印の節 78px（間 8px。押印欄 4 件で 134px）、アプリの押印行 50px。重いサンプル（E39。全メモ 300 字・面接所見 1,500 字）は `.cl-compact` で 825px（面接所見 10 行 121px・質問の回答 2 行）。面接所見 4,000 字は `.cl-compact` で 637px。確認点 +65 件は `.cl-compact-2`＋縮小 0.478 倍で 945px。PDF はすべて 1 ページ（pdfinfo）
+
+### 4-6. 旧版（台本の 2 枚＝2 ページ。2026-10-13 まで）
+- 'sheet' は 'section' と同じ台本の全文（ページ見出し `.cl-page`・セクション `.cl-s`・質問文 `.cl-qs`・説明のチェック・記入欄・確認点の補足・`.cl-overall`）にヘッダーのチップ（`.cl-hchip`）・判定サマリー（4 タイル）・押印を足したもので、1 枚目 ①②、2 枚目 ③④⑤＋判定＋押印の A4 2 ページ（`.cl-page + .cl-page { break-before: page }`）。1 枚目があふれる、または 2 枚目だけがあふれるが全体なら 2 枚に収まるときは `.cl-fit` で強制改ページを外した（D17）。詳細モードの記録は ① の直後に「面接で確認した勤務条件」（`.cl-confirmed`）。
+- 廃止の理由: 副支配人「出力される報告書が煩雑すぎて頭に入ってこない」。読み手（副支配人）には台本の文言・空欄が多すぎ、結果が 2 ページ目の下にあった。
 
 ---
 
@@ -734,7 +760,7 @@ mode 'sheet' のみ:
   1. **判定**: `sSelect('checklist.mustFailResult', '必須条件に不一致があるとき', [reject: 不採用推奨, review: 上長最終判断要])`、`sSelect('checklist.mustUnknownResult', '必須条件に未確認が残るとき', [none: 警告のみ（判定は変えない）, review: 採用推奨に留めない（上長最終判断要まで）])`、`sSelect('checklist.overallCaps.hold', '総合判断「保留」のとき', [none: 調整しない, review: 上長最終判断要まで, reject: 不採用推奨])`、`sSelect('checklist.overallCaps.reject', '総合判断「不採用」のとき', [同])`、`sSelect('checklist.mustFailJumpTo', '不一致のとき案内するセクション', ['': 案内しない, ＋各セクション「⑤ 逆質問」])`。既存の `evaluation.holdOnUnresolvedBlock`・`evaluation.holdOnHighschoolException` のチェックをここへ移す（文言は既存のまま）。
   2. **総合判断**: `checklist.overallLabel` / `checklist.overallHint` / `checklist.overallOptions.hire|hold|reject`（hint「点は 採用 2・保留 1・不採用 0 で固定です」）。
   3. **ヘッダー**: 消極属性の行（`checklist.header.negatives[i].label` ＋ `.auto` の select〔なし／短期希望（勤務期間・短期／長期の希望が短期）／朝～12時のみ（勤務の終了がすべて {morningOnlyEnd} まで）〕＋ 削除、「＋ 消極属性を追加」）、`checklist.header.morningOnlyEnd`（time）、`checklist.header.interviewerField`（select: management.fields ＋「連動しない」''）、`checklist.header.posting.label` / `.options[m].label`。
-  4. **印刷**: `sCheck('checklist.print.showQuestions', 'A4 報告・保存レポートに質問文も載せる', 'OFF にするとメモだけになり、報告書が短くなります。')`。
+  4. **印刷**: `sCheck('checklist.print.showQuestions', '保存レポートの「詳細」に質問文も載せる', 'A4 の面接チェックリスト報告（1 枚）には質問文・説明文を載せません（質問の回答は短い名前で載せます）。OFF にすると「詳細」の面接チェックリスト節もメモだけになります。')`（2026-10-14 改訂。A4 報告は設定に関係なく質問文を載せない）。
   5. **台本**: `checklist.title` / `checklist.version` / `checklist.intro`（textarea）、`checklist.pages[n].title` / `.lead`（textarea）。続いてセクションごとに `<details class="s-details s-cl-sec">`（① は開く）:
      - 行: 番号（自動）｜`sections[i].title`｜`sections[i].minutes`（number 0〜60、suffix 分）｜`sections[i].minutesMax`（「最大」）｜`sections[i].page`（select 1..pages 数、repaint）｜↑ ↓ 削除
      - `sections[i].lead`
@@ -880,6 +906,8 @@ function judgeCL(a, cl, p, checksFn) {   // judge() と同じで evaluateHiring(
 | 65 | validateProfile | 既定はエラーなし／label 空・id 重複・セクション 0・choice の選択肢 1 件・overallLabel 空・minutes 61 → errors／rating 0・must 0 → warnings |
 | 66 | 保存・レポート | `buildRecord` に checklist・checklistDef（version '2026-10-08'）・scores {}／新形式 → `data-sec="checklist"` あり `data-sec="scores"` なし・「① 勤務条件」〜「⑤ 逆質問」・「×不一致」・メモ文・確認点の ○・`id="clSheet"`・`id="rtPrintChecklist"`／メモに `</script><!--x` を入れても `parseRecordFromHTML` で同じ値／旧形式（scores のみ）→ `data-sec="scores"`・チェックリスト節と `rtPrintChecklist` なし／`checklistDef` があれば profile 側の文言を変えてもレポートは保存時の文言／`print.showQuestions=false` で質問文が出ない／`mode: 'section'` に台本ヘッダー（`<dt>面接日</dt><dd>2026/10/10</dd>`・担当・タクシー可否・料金・消極属性・応募した求人）とページ題名・前書き（「台本1枚目」「必須条件一致・継続性」「人物確認・逆質問」）、判定サマリー・押印は無し／担当が空なら「笹川 晴央（押印より）」、タクシー手入力「（手入力）」、消極属性の手動 ON（朝～12時のみ）／確認点の hint（「大丈夫です」のみ連呼は特に要注意。）が section・sheet・レポート全体に出て、`print.showQuestions=false` の sheet では出ない |
 
+- 2026-10-14（A4 報告を 1 ページの要約に）: #66 の A4（'sheet'）の確認を新レイアウトの同じ確認に置き換え（`.cl-s-ng` → `.cl-must-ng`、`.cl-hchip` → `dl.cl-sh-kv`、「採用可否判定は未実施（…の時点）」→ 結果タイル「未実施」、A4 の hint は**出ない**こと）。**#80**（1 ページの要約。`docs/SPEC-script-mode.md` 13-5）を追加
+
 ### 7-2. e2e `tests/e2e.js`
 
 書き換えるヘルパー（`scoreAll` は削除）:
@@ -915,7 +943,7 @@ const rateAll = async (level = 'good', o = {}) => {
 | --- | --- | --- |
 | E25 | Step3 チェックリスト入力 → 判定 → Step4 → 保存 → 読込 → レポート | E15 と同じ応募者（長期）で Step3 へ。DOM 順 `#clHeader → #clNav → #cl-conditions → #shiftConfirm → #cl-continuity → #cl-job → #cl-teamwork → #cl-reverse → #clOverall`（compareDocumentPosition）、`.cl-page-head` 2 個、見出しに「① 勤務条件」「10分」「最大10分」・「合計 41分」、質問文「歌舞伎町ですので」が表示／ヘッダー: 面接日 `2026-10-10` 自動・担当の datalist に「笹川 晴央」・`#shiftConfirm` で深夜帯○・帰宅手段タクシー・料金 2500 を入れると `#clTaxiAuto` に「可・2,500円」／`setCl('values.term','short')` で消極属性「短期希望」が該当（自動）→ 「該当しない」で外れる／必須 `must_weekly` 一致＋`must_busy` 未確認（`#cl-conditions .cl-must-row` は 2 行。② に【説明】ex_submit・ex_phone・ex_absence がある）、① の説明 2 件・② の説明 3 件☑、`start_date=2026-11-01` → `first_end` の hint「2026-12」、メモ入力、○4△3＋採用 → `#clScoreTotal` 13・`#clScorePct` 81.3%・`#clNavScore`「13/16」／判定 → toast「必須条件に未確認が 1 件」・step 4・`#judgeWarnings` に未確認の文言・`#clBreakdown` に必須条件 2 行（未確認 1）・確認点 7 行＋総合判断・合計「13/16」・右サマリー `#sumMust`「未確認 1」／Step3 で `must_busy` を一致 → 再判定 → `#sumMust`「すべて一致」・強みに ○ の確認点／保存: `rec.checklist.values.rt_team === 'fair'`・`rec.checklistDef.version === '2026-10-08'`・`Object.keys(rec.scores).length === 0`・レポートに `data-sec="checklist"`・「① 勤務条件」・メモ文・「面接評価（旧形式」なし・節（`section.sec[data-sec="checklist"]` の textContent。印刷専用の `#clSheet` を除く）に「面接日」「2026/10/10」「担当」「タクシー可否・料金」「可・2,500円」「消極属性」「応募した求人」「必須条件一致・継続性」「人物確認・逆質問」「「大丈夫です」のみ連呼は特に要注意。」／メモに `</script><!--` を含めた値が読込後も一致／読込: `state.checklist` が保存時と deepEqual・ボタンの active・`start_date` が復元・再判定の結果が保存時と一致。スクリーンショット `28-step3-checklist.png`・`30-step4-checklist.png` |
 | E26 | 必須条件ゲート | E25 の応募者で `must_busy` を不一致 → `#clMustAlert`（「⑤ 逆質問へ進み…終了」）・`#clState-conditions` に「不一致あり」・②〜④ に `.cl-skippable`・「⑤ 逆質問へ」で `#cl-reverse` へスクロール／判定 → `result === 'reject'`・`adjustments[0] === 'must_conditions'`・本文は必須条件を理由にし「点数上は」を含まない・`.adjust-box`「→ 最終: 不採用推奨」・右サマリー「不一致 1」・結果カードの `.result-must`／設定 `mustFailResult=review` → 案内は「確認点も評価…上長最終判断要以下」（省略可・⑤ へ ボタンなし）→ 確認点未入力では止まる → 入力して再判定 review → 設定を戻す／新規応募者（貢献度未確定のまま）で必須 1 件不一致＋確認点空＋総合判断空 → 判定に進める・結果 不採用推奨・adjustments[0] と warnings[0] が必須条件・本文に 0% を出さない・調整欄「不採用推奨（固定）」・A4 の `.cl-adj` に理由。スクリーンショット `29-step3-must-ng.png` |
-| E27 | A4「面接チェックリスト報告」 | Step3・Step4 に `[data-action="print-checklist"]`、画面では `#clSheet` 非表示／`RecruitApp.prepareChecklistSheet(true)` → print メディアで `.app` が none・`#clSheet .cl-sheet` が block・`.cl-page` 2 個・`.cl-judge` に結果・押印 3 枠／PDF `1 ≤ n ≤ 2`（E25 の応募者・重いサンプルとも）／`prepareChecklistSheet(false)` で戻る（`body.print-checklist` なし・`#clSheet` 空）／レポート: `#rtPrintChecklist` → `__prepareChecklistSheet(true)` で print 時に見えるのは `#clSheet` と `section[data-sec="mgmt"]` だけ・`.rtool/.dash` none・レポート上で押した印が出る・PDF `1 ≤ n ≤ 2`（重いサンプルも）／`__prepareHandoffSheet(true)` では `#clSheet` が出ない（E23 の表示節リストが従来どおり）／`print.showQuestions` OFF で `.cl-qs` が出ない |
+| E27 | A4「面接チェックリスト報告」（**2026-10-14〜: `.cl-page` 0 個・確認点 7 行・PDF `n === 1`・本文が上限を超えるサンプルは `.cl-compact`・質問文は設定に関係なく出さない**。以下は旧版の記述） | Step3・Step4 に `[data-action="print-checklist"]`、画面では `#clSheet` 非表示／`RecruitApp.prepareChecklistSheet(true)` → print メディアで `.app` が none・`#clSheet .cl-sheet` が block・`.cl-page` 2 個・`.cl-judge` に結果・押印 3 枠／PDF `1 ≤ n ≤ 2`（E25 の応募者・重いサンプルとも）／`prepareChecklistSheet(false)` で戻る（`body.print-checklist` なし・`#clSheet` 空）／レポート: `#rtPrintChecklist` → `__prepareChecklistSheet(true)` で print 時に見えるのは `#clSheet` と `section[data-sec="mgmt"]` だけ・`.rtool/.dash` none・レポート上で押した印が出る・PDF `1 ≤ n ≤ 2`（重いサンプルも）／`__prepareHandoffSheet(true)` では `#clSheet` が出ない（E23 の表示節リストが従来どおり）／`print.showQuestions` OFF で `.cl-qs` が出ない |
 | E28 | 設定で台本を変更 | `[data-bind="checklist.sections[0].blocks[0].items[1].label"]` を「指定繁忙期間すべて出勤可（年末年始・GW・お盆）」に変更・保存 → Step3 の must 行と判定の理由文に新しい文言／③ の説明に「＋ 項目を追加」→ Step3 に新しい行／① の `rt_manner` を削除 → 満点 14（右サマリー「/ 14点」、2 軸判定の節「現在の満点 14点」）／④ に確認点を追加 → 満点 16／E25 で保存したファイルを読み込むと読込 toast に「確認点が異なります（追加 1・削除 1）」・元ファイルのレポートは旧文言のまま／空 label で保存 → 検証エラーで保存されない／「既定の台本に戻す」で満点 16／localStorage に壊れた checklist（`sections: 'x'`・`mustFailResult: 'xxx'`）を入れて再読込 → 既定の台本・'reject' で表示・エラーなし。スクリーンショット `31-settings-checklist.png` |
 | E29 | 旧データ・他劇場・狭い画面 | v1 fixture: `#legacyScores` に「39 / 50」・`j.interviewMode === 'legacy'`・`j.total === 39`／確認点を 1 つ入れると `interviewMode === 'checklist'`・`#legacyScores` の文言が「切り替わりました」・`#clPrintBtn` が出る（旧形式のあいだは Step3 でも非表示）／E19 の手法で checklist を取り除いた旧 v2 レコードも落ちずに読める／他劇場の旧プロファイル（v1-profile-other.json）を読むと toast「面接チェックリスト（新宿の台本…）を既定で追加」・Step3 に既定の台本／390px 幅の Step3 で横スクロールなし（`scrollWidth <= clientWidth`）／ダークモードのスクリーンショット `32-step3-checklist-dark.png` |
 
@@ -959,7 +987,7 @@ const rateAll = async (level = 'good', o = {}) => {
 | D14 | 「※短期求人のみ」の説明は、ヘッダーの「応募した求人」が短期求人のとき強調、それ以外は薄く表示（チェックは常に可能） | 台本の条件は「短期求人に応募した場合」で、本人の短期希望（消極属性）とは別 |
 | D15 | ③④⑤ の質問ブロックに「回答」欄（台本の「回答：」）。⑤ は台本どおり質問 1 件＋「※業務の大変な面も率直に伝える。」 | 台本 PPTX の各列にある「回答：」をそのまま入力欄にする（2026-10-13 修正: 当初「⑤ のメモ欄は台本に無い」としたのは抽出テキストの誤読） |
 | D16 | 担当は名簿の datalist から選ぶ自由入力。押印「面接対応者」とは初期値・表示を相互に補うだけで、自動押印はしない | 押印は本人の操作で行う（既存の押印の考え方を崩さない）。名簿にない担当者も書ける |
-| D17 | A4 報告は台本の 2 枚＝印刷 2 ページ（1 枚目 ①②、2 枚目 ③④⑤＋判定＋押印）。1 枚目があふれるとき、または 2 枚目だけがあふれるが全体なら 2 枚に収まるときは強制改ページを外す。質問文は既定で載せる（設定で外せる） | 報告書が台本の見た目に近く、紙の台本と対応づけやすい。3 ページになるのを防ぐ |
+| D17 | （**2026-10-14 に A4 1 枚の要約へ変更＝4-2・4-6**）A4 報告は台本の 2 枚＝印刷 2 ページ（1 枚目 ①②、2 枚目 ③④⑤＋判定＋押印）。1 枚目があふれるとき、または 2 枚目だけがあふれるが全体なら 2 枚に収まるときは強制改ページを外す。質問文は既定で載せる（設定で外せる） | 報告書が台本の見た目に近く、紙の台本と対応づけやすい。3 ページになるのを防ぐ |
 | D18 | 報告の HTML/CSS は storage.js の 1 関数で作り、アプリとレポートで共用（アプリは CSS を起動時に注入）。アプリは専用ホスト `#clSheet` に描画 | 入力 UI（ボタン・textarea）をそのまま印刷すると崩れる。2 か所の見た目のずれと二重保守を防ぐ。申し送りシートと同じ body クラス方式で既存の印刷と干渉しない |
 | D19 | Step3 の名称を「面接チェックリスト」、軸の名前は「面接評価」のまま。Step2 は文言 2 か所だけ合わせる | 画面と紙の台本を対応づけやすくしつつ、マトリクス・`texts.matrix` を変えずに済む |
 | D20 | 旧プロファイル（新宿・他劇場）には既定の台本を補い、他劇場には toast で設定の見直しを促す | 要件 1。normalize で補えるため版上げ不要。新宿固有の文言（歌舞伎町・交通費 500 円）が他劇場に入るのは案内で補う |
@@ -973,7 +1001,7 @@ const rateAll = async (level = 'good', o = {}) => {
 | R3 | 項目を削除するとその回答は判定・表示に使われない | データは残す（D10）。削除時の confirm で明示 |
 | R4 | 旧レコードでチェックリストに 1 つでも入力すると評価方式が切り替わり、点数の意味が変わる | `#legacyScores` の文言で切り替えを明示し、旧点数はレポートに参考として残す |
 | R5 | 自動の見込み（必須条件・タクシー・消極属性）を確認済みと誤解する | 「応募情報: … → 見込み」と表記し、必須条件の未回答は「未確認」バッジのまま。消極属性は手動で上書き可 |
-| R6 | メモが長いと A4 2 枚を超える | fit 計測で強制改ページを外す。e2e で重いサンプル ≤ 2 枚を固定。それでも超える極端なケースは 3 枚目に流れる（申し送りシートと同じ運用）。質問文は設定で外せる |
+| R6 | メモが長いと A4 2 枚を超える（2026-10-14〜: 1 枚の要約は `.cl-compact` → `.cl-compact-2` → 縮小で必ず 1 枚＝4-4） | fit 計測で強制改ページを外す。e2e で重いサンプル ≤ 2 枚を固定。それでも超える極端なケースは 3 枚目に流れる（申し送りシートと同じ運用）。質問文は設定で外せる |
 | R7 | レポートの全体印刷が 1 ページ増える（E24 の上限 5 → 6） | 章が増えたことによる正当な増加。印刷用 CSS で詰める |
 | R8 | 総合判断「不採用」→ 不採用推奨は面接者 1 人の判断が強く効く | 本文は調整後の文（点数上は○○ですが…）で理由を明示。設定で review / none に変更可 |
 | R9 | `type=date` / `type=month` の表示はブラウザのロケール依存 | 保存は ISO（YYYY-MM-DD / YYYY-MM）。レポート・A4 は「2026/11/01」「2026年12月」で表示 |

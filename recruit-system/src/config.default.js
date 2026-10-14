@@ -405,6 +405,7 @@
     //   判定に効くのは must・rating・総合判断（overall）だけ。○=2・△=1・×=0、総合判断 採用=2・保留=1・不採用=0 の得点率を
     //   面接評価として 2 軸判定に使う（境界は evaluation.thresholds）。
     //   auto: 応募情報からの自動表示（rules.js CHECKLIST_AUTO）。値は保存せず、空欄の表示・見込みのヒントにだけ使う。
+    //   short: A4「面接チェックリスト報告」（1 ページ）で使う短い名前（question・notify・fields。任意。無ければ文言の先頭 14 文字＋「…」）
     checklist: {
       title: 'スタッフ面接チェックリスト',
       version: '2026-10-08',
@@ -446,13 +447,13 @@
           { id: 'conditions_f2', type: 'fields', title: '質問', note: '', memo: false, memoLabel: '', items: [
             { id: 'term', label: '短期／長期の希望', kind: 'choice', options: [{ value: 'short', label: '短期希望' }, { value: 'long', label: '長期希望' }], auto: 'term' },
             { id: 'start_date', label: '契約開始日の希望', kind: 'date' },
-            { id: 'first_end', label: '初回契約終了（月末締）', kind: 'month', auto: 'firstEnd', autoParams: { monthsAfter: 1 } },
-            { id: 'open_late', label: 'OPEN／25時(タク〇のみ)までの可否', kind: 'text', auto: 'openLate' }
+            { id: 'first_end', label: '初回契約終了（月末締）', short: '初回契約終了', kind: 'month', auto: 'firstEnd', autoParams: { monthsAfter: 1 } },
+            { id: 'open_late', label: 'OPEN／25時(タク〇のみ)までの可否', short: 'OPEN／25時の可否', kind: 'text', auto: 'openLate' }
           ] },
           { id: 'conditions_q', type: 'question', title: '', note: '', memo: true, memoLabel: 'メモ', items: [
-            { id: 'q_term', label: '「いまのところ、短期希望ですか？長期希望ですか？」or「採用となった場合、希望としては、いつ頃まで勤務継続希望でしょうか？」' },
-            { id: 'q_two_months', label: '「最初の2か月で勤務条件が満たせない可能性は？（土日出せない、など）」' },
-            { id: 'q_family', label: '「歌舞伎町ですので、ご家族の反対などあれば遠慮なく辞退お願いします。」' }
+            { id: 'q_term', label: '「いまのところ、短期希望ですか？長期希望ですか？」or「採用となった場合、希望としては、いつ頃まで勤務継続希望でしょうか？」', short: '短期／長期の希望' },
+            { id: 'q_two_months', label: '「最初の2か月で勤務条件が満たせない可能性は？（土日出せない、など）」', short: '最初の2か月で条件を満たせない可能性' },
+            { id: 'q_family', label: '「歌舞伎町ですので、ご家族の反対などあれば遠慮なく辞退お願いします。」', short: '家族の反対' }
           ] },
           { id: 'conditions_rate', type: 'rating', title: '確認事項', note: '', memo: false, memoLabel: '', items: [
             { id: 'rt_concrete', label: '勤務条件の一致に「具体性」があるか', hint: '「大丈夫です」のみ連呼は特に要注意。' },
@@ -469,9 +470,9 @@
             { id: 'ex_absence', label: '欠勤・遅刻は分かった時点で連絡' }
           ] },
           { id: 'continuity_q', type: 'question', title: '質問', note: '', memo: true, memoLabel: 'メモ', items: [
-            { id: 'q_prev_job', label: '「前のアルバイトの期間と退職理由は？差し支えなければ退職理由は？」' },
-            { id: 'q_cant_3days', label: '「週3日出せないと事前に分かったら、どうするべきだと思いますか？」' },
-            { id: 'q_sudden_absence', label: '「当日、急に出勤できなくなったら、どうするべきだと思いますか？」' }
+            { id: 'q_prev_job', label: '「前のアルバイトの期間と退職理由は？差し支えなければ退職理由は？」', short: '前のバイトの期間・退職理由' },
+            { id: 'q_cant_3days', label: '「週3日出せないと事前に分かったら、どうするべきだと思いますか？」', short: '週3日出せないと分かったら' },
+            { id: 'q_sudden_absence', label: '「当日、急に出勤できなくなったら、どうするべきだと思いますか？」', short: '当日急に出られなくなったら' }
           ] },
           // 台本の「報連相できるか／離職要因はないか」を 2 行に分けて評価する
           { id: 'continuity_rate', type: 'rating', title: '確認事項', note: '', memo: false, memoLabel: '', items: [
@@ -488,9 +489,9 @@
             { id: 'ex_rules', label: '細かなルールや接客指導あり' }
           ] },
           { id: 'job_q', type: 'question', title: '質問', note: '', memo: true, memoLabel: '回答', items: [
-            { id: 'q_value', label: '「前職で大切にしていたことは？」' },
-            { id: 'q_failure', label: '「前職での失敗談はありますか？」' },
-            { id: 'q_unsure', label: '「説明した業務で自信がないことや、相談・不明点はありますか？」' }
+            { id: 'q_value', label: '「前職で大切にしていたことは？」', short: '前職で大切にしていたこと' },
+            { id: 'q_failure', label: '「前職での失敗談はありますか？」', short: '前職の失敗談' },
+            { id: 'q_unsure', label: '「説明した業務で自信がないことや、相談・不明点はありますか？」', short: '自信がない業務・不明点' }
           ] },
           { id: 'job_rate', type: 'rating', title: '確認点', note: '', memo: false, memoLabel: '', items: [
             { id: 'rt_understand', label: '業務理解と接客の実行可能性' }
@@ -503,9 +504,9 @@
             { id: 'ex_radio', label: '不明点・権限外の対応は無線で確認。' }
           ] },
           { id: 'teamwork_q', type: 'question', title: '質問', note: '', memo: true, memoLabel: '回答', items: [
-            { id: 'q_feedback', label: '「指摘を受けて行動を変えた経験はありますか？（仕事・部活動など）」' },
-            { id: 'q_unknown', label: '「お客様に質問されて答えがわからない時、どうしますか？」' },
-            { id: 'q_busy_mind', label: '「忙しいときこそ心掛けたいことは？」' }
+            { id: 'q_feedback', label: '「指摘を受けて行動を変えた経験はありますか？（仕事・部活動など）」', short: '指摘で行動を変えた経験' },
+            { id: 'q_unknown', label: '「お客様に質問されて答えがわからない時、どうしますか？」', short: '答えが分からない時' },
+            { id: 'q_busy_mind', label: '「忙しいときこそ心掛けたいことは？」', short: '忙しい時に心掛けること' }
           ] },
           { id: 'teamwork_rate', type: 'rating', title: '確認点', note: '', memo: false, memoLabel: '', items: [
             { id: 'rt_team', label: '自己判断せずチームで動けるか' }
@@ -513,11 +514,11 @@
         ] },
         { id: 'reverse', title: '逆質問', minutes: 10, minutesMax: true, page: 2, lead: 'ミスマッチを解消するための時間', blocks: [
           { id: 'reverse_q', type: 'question', title: '', note: '※業務の大変な面も率直に伝える。', memo: true, memoLabel: '回答', items: [
-            { id: 'q_concerns', label: '「条件・業務・映画館のことなど、何か気になる点はありますか？」' }
+            { id: 'q_concerns', label: '「条件・業務・映画館のことなど、何か気になる点はありますか？」', short: '気になる点（逆質問）' }
           ] },
           { id: 'reverse_notify', type: 'notify', title: '合否連絡', note: '面接の最後に伝えたらチェック', memo: false, memoLabel: '', items: [
-            { id: 'nt_hire', label: '採用時：数日中に電話連絡。ご家族の反対あればご辞退ください。同時に初日出勤日時を調整、もちものなど詳細はメールで送付。' },
-            { id: 'nt_reject', label: '不合格：メール連絡' }
+            { id: 'nt_hire', label: '採用時：数日中に電話連絡。ご家族の反対あればご辞退ください。同時に初日出勤日時を調整、もちものなど詳細はメールで送付。', short: '採用時' },
+            { id: 'nt_reject', label: '不合格：メール連絡', short: '不合格' }
           ] },
           { id: 'reverse_rate', type: 'rating', title: '確認点', note: '', memo: false, memoLabel: '', items: [
             { id: 'rt_mismatch', label: '採用後のミスマッチを低減', hint: '○＝不安・不明点を解消できた' }
