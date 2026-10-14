@@ -504,31 +504,39 @@ function exportHtml(){closePop(false);
 
 | # | 決定 |
 | --- | --- |
-| L1 | 対象は **押印欄 `management.decision.stampField`（既定 `'final'` 最終確認）の押印・取消**と **最終合否（採用／不採用）の決定・取消**。アプリ（③ の `#mgmtCard` の最終確認・`#decisionCard`）と保存 HTML（用紙の最終確認欄・最終合否欄の窓）の両方。面接対応者の押印には要らない。`stampField` が `''`（連動しない）なら最終合否だけ |
+| L1 | 対象は **押印欄 `management.decision.stampField`（既定 `'final'` 最終確認）の押印・取消**と **最終合否（採用／不採用）の決定・取消**（押印欄は L1b で拡げた）。アプリ（③ の `#mgmtCard` の最終確認・`#decisionCard`）と保存 HTML（用紙の最終確認欄・最終合否欄の窓）の両方。面接対応者の押印には要らない。`stampField` が `''`（連動しない）なら最終合否だけ |
+| L1b | （2026-10-14 追記・ロックの迂回を塞ぐ）押印のロック対象は「ロックを設定した時点の欄」でも `decision.stampField` だけでもなく、**常に既定の最終確認欄 id `'final'` と、そのときの `decision.stampField` の欄の両方**（重複は 1 つ。`storage.finalLockFields(profile)` → `['final']`・`['final', 'extra']`）。「押印欄と連動」を「連動しない」や別の欄に変えても、最終確認欄の押印・取消にはパスワードが要る（アプリ ③・保存 HTML とも）。L1 の「`stampField` が `''` なら最終合否だけ」は廃止 |
 | L2 | データは `profile.management.finalLock = { salt, hash }`。`hash = sha256Hex(salt + ':' + パスワード)`（16 進 64 文字・小文字）、`salt` は 16 進 32 文字の乱数（`crypto.getRandomValues`、無ければ `Math.random`）。`hash` が空＝パスワードなし（公開版の既定）。平文はどこにも持たない |
 | L3 | `src/lock.js` の `RecruitLock = { sha256Hex, hashPassword(salt, pw), verify(lock, pw), isLocked(lock), newSalt(), makeLock(pw), source() }`。`sha256Hex` は外部参照のない ES5 の純関数（Node の crypto と 310 ケースで一致を確認済みの実装）。`verify` はロックが無ければ true。`source()` は `sha256Hex`・`hashPassword`・`isLocked`・`verify` のソース（保存 HTML に埋め込む） |
 | L4 | ロックがあり、そのページでまだ解錠していないとき、対象の操作の前にパスワード欄（`type=password`・`autocomplete="off"`）と［確認］を出す（操作のボタンは出さない）。違えば「パスワードが違います」を 1 行出して何もしない。空なら「パスワードを入力してください」。Enter で確定。正しければ**そのページを閉じる／読み込み直すまで解錠**（変数だけ。localStorage・書き出すファイルには残さない）。解錠済みならパスワード欄を出さない。連続失敗の回数制限はしない |
 | L5 | 設定 `#s-mgmt` の「最終承認のパスワード」（`#s-finalLock`）: 状態 `#finalLockStatus`（設定済み／未設定、下書きが保存済みと違えば「未保存の変更です。「設定を保存」で確定します。」）・［変更］（未設定なら［設定する］）`#finalLockChange` → `#lockCur`（設定済みのとき）・`#lockNew`・`#lockNew2`・［変更する］`#finalLockApply`／［キャンセル］・［パスワードを外す］`#finalLockRemove` → `#lockCur`・［パスワードを外す］`#finalLockRemoveApply`。エラーは `#finalLockErr` の 1 行（「現在のパスワードを入力してください」「現在のパスワードが違います」「新しいパスワードを入力してください」「新しいパスワード（確認）が一致しません」）。新しいパスワードは 1 文字以上。入力欄は `data-bind` を持たない（下書きに平文を入れない）。変更は下書きの `management.finalLock` に入り、［設定を保存］で確定（［変更を破棄］で戻る） |
 | L5b | プロファイル JSON の読み込み・［初期設定に戻す］でロックが変わる（salt か hash が違う）・外れるときは、**現在のロックがあれば**現在のパスワードを小さなダイアログ（`#pwDialog`・`#pwDialogInput`・`#pwDialogErr`・［キャンセル］［確認］。Esc でキャンセル）で求める。違えば「パスワードが違います」でダイアログに留まり、キャンセルなら読み込まない／戻さない（toast「プロファイルを読み込みませんでした（最終承認のパスワードを確認できません）」「初期設定に戻しませんでした（…）」）。同じロックの JSON はそのまま読む |
+| L5c | （2026-10-14 追記・ロックの迂回を塞ぐ）ロックがあるとき、**ロックの対象を変える設定**＝`decision.stampField`（押印欄と連動）・`decision.enabled`（最終合否のスタンプの ON/OFF）・`management.fields` の構成（欄の追加・削除・id。id の並びで比べる）を変えて［設定を保存］するには、L5b と同じ「現在のパスワード」ダイアログ（`#pwDialog`）を通す。違えば「パスワードが違います」でダイアログに留まり、キャンセル・Esc なら保存しない（toast「設定を保存しませんでした（最終承認のパスワードを確認できません）」。下書きは残す）。プロファイル JSON の読み込みも同じ（パスワードが同じでも対象が変わればダイアログ。toast は L5b と同じ）。表示名・説明（label・hint）・名簿だけの変更は確認不要。比べるキーは `storage.finalLockScope(profile)`（正規化後の `decisionConfig` の enabled・stampField と fields の id の並び）。［初期設定に戻す］はロックが変わるときだけ（L5b。既定の対象は 最終確認欄＋連動 'final'＋合否 ON で、戻しても対象が狭まらない）。そのページで解錠済みでも求める |
+| L5d | （2026-10-14 追記・古いタブ）別のタブ（ウィンドウ）で設定が保存・初期化されたとき、古いタブが読み込み時のロックのまま ③ でパスワードなしに押せたり、表示名だけの保存で新しいロックを空・古いパスワードで上書きしたりしないよう、アプリは localStorage の設定（このタブが最後に読んだ・書いた `recruit.profile.v1` の文字列）と比べて、変わっていれば読み込み直す（`app.refreshProfileFromStorage`）。比べるのは `storage` イベント・タブに戻ったとき（`focus`・`visibilitychange`）と、**設定の保存・JSON の読み込み・初期化・③ の押印／取消・合否の決定／取消・解錠の直前**（`storage` イベントが届かなくても古い値で上書きしない）。読み込み直したら toast（「別のタブ（ウィンドウ）で保存された最新の設定を読み込みました」など）。③ は描き直す（ロックが付いていればパスワード欄。押そうとした操作はしない）。設定画面は、未保存の変更が無ければ最新の設定で描き直す（［設定を保存］を押したときは保存しない）。変更があれば下書きを残し、ロックが変わっていたときだけ下書きのロックを最新にする（下書きでパスワードを変えていた＝古いロックで確かめた変更なら取り消して保存しない。toast「…このタブでのパスワードの変更を取り消しました…」）。パスワードのダイアログ（L5b・L5c）を出しているあいだに別のタブでロックが変わったら、（古いロックの）正しいパスワードを入れても保存・読み込み・初期化をやめる（`app.lockMovedSince`。toast「…パスワードが変わったため、やめました…」）。ロック以外の項目は従来どおり保存したタブの内容（最後に保存したものが残る） |
 | L6 | `node build.js --local [dir]` は `<dir>/final-password.txt` の 1 行目（前後の空白・BOM を除く）があれば、build のたびに salt を作って hash を計算し、`config.default.js` の `finalLock: { salt: '', hash: '' }` を差し込む（平文は出力しない。ログは「最終承認のパスワード」とだけ出す）。テスト用は `tests/fixtures/local-sample/final-password.txt`（架空の値） |
-| L6b | ブラウザに保存済みの設定（localStorage）に `management.finalLock` のキーが**無ければ**既定（ローカル版ならローカルのロック）を使う。キーが無いだけでは `report.stripped` を立てない＝開いただけでは既定のロックを localStorage に固定しない（`local/final-password.txt` を変えて build し直すと、設定を保存していない端末では新しい初期パスワードになる）。キーがあって空なら「外した」状態のまま |
-| L7 | 保存 HTML の `#recruit-mgmt-config` に保存時の `finalLock`（ロックが無ければ `null`）と `lockField`（`decision.stampField`）を入れ、保存 HTML はそれで照合する（保存後にアプリでパスワードを変えても、出したファイルは出した時点のパスワード）。書き出すファイルに解錠状態・パスワード欄を残さない |
+| L6b | ブラウザに保存済みの設定（localStorage）に `management.finalLock` のキーが**無ければ**既定（ローカル版ならローカルのロック）を使う。キーが無いだけでは `report.stripped` を立てない＝開いただけでは既定のロックを localStorage に固定しない（`local/final-password.txt` を変えて build し直すと、設定を保存していない端末では新しい初期パスワードになる）。キーがあって空なら「外した」状態のまま（→ L6c で変更: 空も未設定。外した状態は「外した」印） |
+| L6c | （2026-10-14 追記・公開版との localStorage の共有）Chrome などは file:// の localStorage を全ファイルで共有するので、ローカル版で設定を一度も保存していない端末で公開版（ロックなし）の［設定を保存］を押すと、空のロック `{ salt: '', hash: '' }` が書かれ、L6b の「キーがあって空なら外した状態」でローカル版のロックが外れていた。**空のロック・形の違うロックは未設定**（キーが無いのと同じ＝既定のロック。`storage.lockUnset`・`resolveLock`）とし、［パスワードを外す］は **「外した」印 `{ salt: '', hash: '', off: true }`** を書く（`normalizeLock` が印を残す。`isLocked` は false＝ロックなし）。印があるときだけ既定のロックを使わない。未設定なだけでは保存し直さない（`report.stripped` を立てない＝既定のロックを localStorage に固定しない。L6b と同じ）。印を書けるのは、有効なロックを外すとき（現在のパスワードを確かめる）か、すでに外してあるときだけ（`app.keepLockOff`: 設定の保存・JSON の読み込みで、ロックも印も無い状態から印を書こうとしたら未設定に戻す＝公開版で印の入った JSON を読み込んでもローカル版のロックは外れない）。JSON にロックも印も無ければ（公開版が書き出した空のロック・キーなし）、読み込んでも**いまのロックのまま**（ダイアログなし）。旧い版（c7c3a4f）で外した設定（空のロック）は既定のロック（ローカル版の初期パスワード）に戻る（設定で外し直す） |
+| L7 | 保存 HTML の `#recruit-mgmt-config` に保存時の `finalLock`（ロックが無ければ `null`）と `lockField`（`decision.stampField`。互換のため残す）・`lockFields`（L1b の対象の欄。`finalLockFields`）を入れ、保存 HTML はそれで照合する（保存後にアプリでパスワードを変えても、出したファイルは出した時点のパスワード）。書き出すファイルに解錠状態・パスワード欄を残さない |
 | L8 | README・HANDOFF・使い方（`#helpFinalLock`）に「誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げない」「平文は保存しない」「ローカル版の初期パスワードは `local/final-password.txt`（実際の値は書かない）」 |
 
 ### 11-1. 正規化・検証（storage.js）
-- `fillManagement` の戻り値に `finalLock: normalizeLock(mg.finalLock === undefined ? bm.finalLock : mg.finalLock)`。`normalizeLock` は salt（16 進 32 文字）と hash（16 進 64 文字）を小文字にして返し、どちらかが形に合わなければ `{ salt: '', hash: '' }`（余分なキーは落とす）
+- `fillManagement` の戻り値に `finalLock: resolveLock(mg.finalLock, bm.finalLock)`（L6c。未設定＝キーなし・空・形が違う → 既定のロック、それ以外 → `normalizeLock(mg.finalLock)`）。`normalizeLock` は salt（16 進 32 文字）と hash（16 進 64 文字）を小文字にして返し、どちらかが形に合わなければ、`off: true` なら `{ salt: '', hash: '', off: true }`、それ以外は `{ salt: '', hash: '' }`（余分なキーは落とす）。`lockUnset(l)`（ロックも印も無い）は公開 API
 - `validateProfile`: `finalLock.hash` が空でないのに hash が 16 進 64 文字でない・salt が 16 進 32 文字でない、または `finalLock` がオブジェクトでないときエラー「最終承認のパスワードの設定が壊れています。パスワードを設定し直してください。」
 - プロファイル JSON の書き出し・読み込みに `finalLock`（salt・hash）を含める
 
 ### 11-2. アプリ（app.js）
-- `finalLockNow()`（ロックがあればそれ）・`finalNeedsPw(fid)`（`fid === ''` は最終合否、それ以外は `fid === decisionConfig().stampField` のとき。解錠済み＝`finalUnlockedKey === salt + ':' + hash` なら false）。ロックが変わる（設定の保存・JSON・初期化）とキーが合わなくなり、また求める
+- `finalLockNow()`（ロックがあればそれ）・`finalNeedsPw(fid)`（`fid === ''` は最終合否、それ以外は `S.finalLockFields(profile)` に `fid` があるとき＝`'final'` と `decisionConfig().stampField`。解錠済み＝`finalUnlockedKey === salt + ':' + hash` なら false）。ロックが変わる（設定の保存・JSON・初期化）とキーが合わなくなり、また求める
 - ③ の `#mgmtCard` の対象の欄と `#decisionCard` は、`finalNeedsPw` のとき操作（担当者の select・押印／取消・採用／不採用／取消）の代わりに `.final-lock`（「🔒 最終承認にはパスワードが必要です」・`.final-lock-pw`・［確認］`data-action="unlock-final"`・`.final-lock-err`）を出す。正しければ両方のカードを描き直し、押そうとしたカードの担当者の select にフォーカス、toast「最終承認のパスワードを確認しました（このページを閉じるまで有効）」
 - `stamp`／`unstamp`／`decide`／`undecide` の処理の入口でも `finalNeedsPw` なら何もしない（念のため）
 - ③ の紙（`#appPaper`）は従来どおりクリックしても何もしない
+- （L5c）設定の `onSave(p)`: `next = normalizeProfile(p)`。`finalScopeChanges(next)`（現在のロックがあり `S.finalLockScope(next) !== S.finalLockScope(state.profile)`）なら `askFinalPassword('「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えると、最終承認のパスワードで守る欄が変わります。保存するには現在のパスワードを入力してください。')` → 正しければ保存、だめなら toast だけ。`onSave` は保存したかどうか（ダイアログのときは Promise）を返し、settings.js の `doSave` は保存したときだけ注意（warnings）の toast を出す。`importProfileText` は `finalLockChanges(p)`（ロックが変わる）か `finalScopeChanges(p)` ならダイアログ（文言はロックが変わるときは L5b のまま、対象だけが変わるときは「読み込むプロファイルでは「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成が変わり、最終承認のパスワードで守る欄が変わります。…」）
+- 設定画面の説明: 「押印欄と連動」の説明と「最終承認のパスワード」の説明、使い方の `#helpFinalLock` に L1b・L5c を 1 文ずつ
+- （L5d）`storedRaw`（このタブが最後に読んだ・書いた設定の文字列。設定の保存は `persistProfile` で行い、書いた値を覚える）・`refreshProfileFromStorage()`（変わっていれば `S.loadProfile()` で読み込み直して描き直し、`{ prev, lockMoved, draftClean, lockReverted }` を返す。変わっていなければ null）。`storage`（キー `recruit.profile.v1`・`null`）・`focus`・`visibilitychange` で呼ぶ。`onSave` の最初（`draftClean`・`lockReverted` なら保存しない。`lockMoved` なら下書きのロックを最新に）・`importProfileText`・`onReset`・`onContentClick` の `stamp`／`unstamp`／`decide`／`undecide`／`unlock-final`（変わっていれば操作しない）でも呼ぶ。`lockMovedSince(sig)`: 保存の `commit`・JSON の `apply`・初期化の `doReset` の直前に読み込み直し、始めたときのロック（`lockSig`）と違えばやめる。settings.js に `isDraftOf(p)`（下書きが p と同じ）・`syncLock(prev, fresh)`（ロックが変わっていれば下書きのロックを最新にして描き直す。下書きで変えていたら true）
+- （L6c）`keepLockOff(next)`: 次の設定のロックが「外した」印で、いまロックが無く印も無ければ `{ salt: '', hash: '' }` に戻す（`onSave`・`importProfileText`）。`importProfileText` は JSON の生の `management.finalLock` が `S.lockUnset` ならいまのロックをそのまま使う。settings.js の［パスワードを外す］は `{ salt: '', hash: '', off: true }`
 
 ### 11-3. 保存 HTML（a4PageScript）
 - 埋め込みスクリプトは `clFitSheet` → stamp.js の関数 → `RecruitLock.source()`（`sha256Hex`・`hashPassword`・`isLocked`・`verify`）→ `a4PageScript` の順の 1 本の IIFE
-- `LK = cfg.finalLock`・`lockF = cfg.lockField`・`locked = !!LK && isLocked(LK)`・`unlocked = false`。`needPw(kind, id)` は `locked && !unlocked && (kind === "decision" || (kind === "stamp" && id === lockF))`
+- `LK = cfg.finalLock`・`lockF = cfg.lockField`・`lockFs = cfg.lockFields（配列）に "final" を足したもの`（`lockFields` の無い設定は `["final", lockF]`）・`locked = !!LK && isLocked(LK)`・`unlocked = false`。`needPw(kind, id)` は `locked && !unlocked && (kind === "decision" || (kind === "stamp" && !!id && lockFs.indexOf(id) >= 0))`（L1b）
 - 窓（`#a4Pop`）: `needPw` のとき本文は「最終承認にはパスワードが必要です」・`.pop-pw`（`type=password`・`autocomplete=off`）・`.pop-err`、フッターは［確認］`data-act="unlock"`・［閉じる］。フォーカスは `.pop-pw`。Enter・［確認］で `verify(LK, 値)` → 正しければ `unlocked = true` で同じ欄の窓を開き直す（担当者の select にフォーカス）。違えば `.pop-err` に「パスワードが違います」
 - `onPopClick` でも `needPw` なら押印・合否の操作をしない（念のため）
 - 書き出しは従来どおり窓を閉じてから複製するので、パスワード欄・解錠状態は残らない。開き直すとまたロック
@@ -536,6 +544,8 @@ function exportHtml(){closePop(false);
 ### 11-4. テスト
 - 単体 #91（sha256Hex の既知ベクタ ''・'abc'・'あ'・Node の crypto と一致・hashPassword・verify・isLocked・newSalt・makeLock・source を新しい vm で実行）・#92（finalLock の正規化〔大文字→小文字・不正→空・キーが無ければ既定・stripped を立てない〕・validateProfile・JSON・保存 HTML の `#recruit-mgmt-config`〔保存時のロック・lockField・平文なし・スクリプトの構文〕）。#81 は 12 章のゆったりを足した
 - e2e E15（公開版はロックなし・dist にテスト用／local のパスワードもハッシュも無い〔local の値は出力しない〕・`build.js --local` の差し込み・③ の最終確認と最終合否・面接対応者は不要・違うと押せない・Enter で解錠して続けて押せる・localStorage に平文なし・保存 HTML の窓・開き直すとまたロック・設定の変更／外す・変えた後の保存 HTML は新しいパスワード／先に出したファイルは前のパスワード・JSON の読み込み・初期化）。E10 は設定の data-action に `lock-change`、使い方の `#helpFinalLock` を足した
+- （L1b・L5c）単体 #92 に `lockFields`（既定 `["final"]`・「連動しない」でも `["final"]`・別の欄なら `["final","extra"]`）・`finalLockFields`・`finalLockScope`（表示名・説明・名簿では変わらず、連動・ON/OFF・欄の追加／削除／id／並びで変わる）・保存 HTML の `lockFs` を足した。e2e E15 (9)（ローカル版）: 「連動しない」に変えて保存 → ダイアログ（違うと「パスワードが違います」・キャンセルで保存しない・下書きは残る）→ 正しいと保存 → 表示名だけの変更はダイアログなし → 最終合否 OFF もダイアログ（Esc で保存しない）→ 押印欄の構成が変わる JSON（同じロック）もダイアログ → ③ の最終確認欄・最終合否はパスワード欄のまま → 保存 HTML の `lockFields` は `["final"]`・最終確認欄の窓はパスワード欄（正しいと解錠）。E15 (4) に `lockFields` を足した
+- （L5d・L6c）単体 #92 に、空のロック・形の違うロック（`{ salt: lock.salt, hash: '' }`・文字列・null・`{ off: 'true' }`）は未設定＝既定のロックで `report.stripped` を立てない・「外した」印は外したまま（冪等・`validateProfile` は通る・保存 HTML の `finalLock` は null）・印があってもロックが正しければロック・公開版は空も印もロックなし、を足した。e2e E15 (6) の「ロックを外す JSON」は「外した」印の JSON に変え、ロックの無い JSON（空のロック・キーなし）はダイアログなしでいまのパスワードのまま、を足した。E15 (7) は外して保存すると印（`off: true`）。E15 (10) 公開版と localStorage を共有（ローカル版を開いたまま公開版で［設定を保存］→ 空のロックが書かれてもローカル版はパスワード欄・公開版で印の入った JSON を読み込んでも外れない・ローカル版で外した印は公開版で保存しても外れたまま）。E15 (11) 古いタブ（A でパスワードを付けると B は読み込み直して ③ はパスワード欄・B で表示名だけ保存しても A のロックのまま・B の下書きのパスワードの変更は A でロックが変わると取り消し、ほかの下書きは残る・ロック以外だけが変わったときは B の変更は残る・B でパスワードのダイアログを出しているあいだに A でパスワードが変わると、B で前のパスワードを入れても保存しない・B のページで localStorage を書き換えて storage イベントが届かない場合も保存と ③ の押印の直前に比べる）
 
 ## 12. 用紙を埋めるレイアウト（2026-10-14 追記）
 
@@ -548,22 +558,56 @@ function exportHtml(){closePop(false);
 | F2 | 押印行の上に「**面接メモ・所見**」の枠（`.cl-blk-notes` の見出しを「面接メモ・所見」に、中身を `.cl-nm-box` の枠に）。**常に出し**、残りの高さいっぱいに広げる（`.cl-blk-notes`・`.cl-nm-box` が `flex:1 1 auto`）。記入があれば `.cl-nm`（行）→ `.cl-nm-ref`（案内）を上から、その下は手書き用の罫線 `.cl-nm-lines`（`<i>` 38 本・高さ 7.5mm・`border-bottom:1px dotted #b8c2cf`・`flex:1 1 0;min-height:0;overflow:hidden`＝内容の高さに入らない）。記入が無ければ `.cl-nm-box.is-empty`（罫線 1 本分 7.5mm を最低の高さ）。説明・連絡の 1 行（`.cl-exline`）は枠の下・押印行の直前 |
 | F3 | 内容が少ないときは **`.cl-roomy`**（本文 10.5px・行の高さ 1.5・確認点の行 上下 6px と ○△× 19px・ラベル 9.5px・見出し 11.5px・ブロックの間隔 13px）。ゆったりは面接メモ・所見の枠に罫線 38mm を残せるときだけ（`.cl-roomy.cl-measure .cl-nm-box .cl-nm-lines{min-height:38mm}`＝計測中だけ最低 38mm にして計る。表示中は最低の高さを付けないので、狭い画面の `--a4-zoom`〔0.45 前後〕で行の高さが丸められて内容が 3% ほど伸びても罫線の部分が縮んで吸収し、押印行は用紙の内寸の下端のまま） |
 | F3b | 計測 `clFitSheet(sheet, limit)`: `.cl-measure`（`min-height:0 !important`＝用紙いっぱいに伸ばさない）を付けて内容の高さを測る。順は **`.cl-roomy` → 通常 → `.cl-compact` → `.cl-compact-q1` → `.cl-compact-2` → 縮小**。戻り値は `'cl-roomy'`・`''`・`'cl-compact'`…・`'zoom'`。各段階で「…」の判定（`.cl-cut`・`.cl-nm-cut`）をやり直す。印刷のときに計測し直さない（画面と印刷が同じ）。上限は従来どおり `CL_SHEET_LIMIT_PX = 1052` |
-| F4 | 1 ページ・画面と印刷の一致・重いサンプルで 1 ページ（E8／E14）は維持。アプリ ③ の紙・アプリの印刷も同じ部品・同じ計測。面接所見の行数の上限（`.cl-compact` 10 行…）は変えない（詰めた段階では枠の下に罫線の余白が残ることがある） |
+| F4 | 1 ページ・画面と印刷の一致・重いサンプルで 1 ページ（E8／E14）は維持。アプリ ③ の紙・アプリの印刷も同じ部品・同じ計測。段階ごとの面接所見の行数の上限（`.cl-compact` 10 行…）は段階を決めるための値で、決めたあとに残った罫線の空きは F5 で切れたメモに回す（F4 の「罫線の余白が残ることがある」は F5 で解消） |
+| F5 | （2026-10-14 追記・長いメモが空き罫線を残して切れる）`clFitSheet` で段階を決めたあと（縮小〔`'zoom'`〕のときを除く）、「…」で切れた面接メモ（`.cl-nm-v.cl-cut`）が残り、面接メモ・所見の枠に空き（罫線の部分）があれば、**切れたメモの行数の上限を広げて空きを使う**。順は **面接所見（`.cl-nm-iv`）→ ① のメモ（`.cl-nm-memo`）→ 質問の回答・ブロックのメモ（`.cl-nm-q`・`.cl-nm-b`。用紙の順）**、それぞれ要素のインラインの `-webkit-line-clamp`（`style.setProperty`）で。行数は「見えていない行数」と「空きの行数〔(limit − 内容の高さ) ÷ 行の高さ〕」の小さい方をまず試し、上限を超えたら +1 行だけ試し、それも超えたら戻して次の要素へ（上限 `limit`＝1052px を超えない＝押印行は下端のまま・1 ページ）。罫線の空きは 0 行まで使う（計測中は `.cl-grow` を付け、`.cl-roomy` の罫線 38mm〔`.cl-roomy.cl-measure:not(.cl-grow)`〕を外す。ゆったりの段階でも広げる）。全部入りきれば `.cl-cut` が外れ、ほかに切れたもの（確認点のメモ `.cl-rt-nt` を含む）が無ければ `.cl-nm-cut`（「…」の案内 `.cl-nm-ref`）も外れる（案内 1 行が消える分も使う）。`clFitSheet` は最初に `.cl-nm-v` のインラインの行数を外してから測るので、書き出したファイル（インラインの行数が残る）を開き直しても・アプリで描き直しても同じ結果。計測は従来どおり読み込み時・押印／合否の変更後（保存 HTML）とアプリの再描画時だけで、印刷のときにやり直さない（画面と印刷が同じ）。`getComputedStyle` の無い環境では広げない。**広げるのは縦のはみ出し（`scrollHeight − clientHeight`）があるあいだだけ**（2026-10-14 追記）: `.cl-cut` は横のはみ出し（折り返せない幅広の書記素。ZWJ でつながった絵文字など）でも付くので、`.cl-cut` を条件に繰り返すと縦に全部見えたあとも止まらず固まっていた。縦に全部見えたら次の要素へ、行数の上限を上げても見えない高さが減らなければ戻してやめる、1 要素 200 回まで（横のはみ出しの `.cl-cut` と案内は残る） |
+| F6 | （F5 に伴う）シートは用紙の内寸より高くならない（`.cl-sheet.cl-mode-sheet{…;min-height:100%;max-height:100%}`・`.cl-measure{min-height:0 !important;max-height:none !important}`）。面接メモ・所見の枠の `.cl-blk-notes`・`.cl-nm-box`・`.cl-nm` に `min-height:0`、`.cl-nm` に `overflow:hidden`。F5 で罫線の空きを使い切ると、狭い画面の `--a4-zoom`（0.41〜0.45）で行の高さ・折り返しが変わって内容が 3% ほど伸びた分を罫線が吸収できないため、枠（記入の部分）が縮んで吸収し、押印行は用紙の内寸の下端のまま（記入の最後の行が画面で少し隠れることがある。印刷・1440px では縮まない）。スクリプトが動かず段階が付かないファイルでも、長い記入は枠の中で切れて押印行は用紙の中に残る。（F7 で狭い画面の縮小を transform にしたので、保存 HTML では縮小で内容は伸びず、枠は縮まない。`max-height`・`overflow:hidden` は安全策として残す） |
+| F7 | （2026-10-14 追記・狭い画面で記入が切れる）F5 で罫線の空きを使い切ると、保存 HTML を約 540px 以下で開いたとき、`.a4{zoom:var(--a4-zoom)}` の縮小で行の高さ・折り返しが変わって内容が伸びた分（390px で 18px・320px で 34px）を F6 の `.cl-nm{overflow:hidden}` が黙って切っていた（「メモ」の行・「…」が見えない。印刷と一致しない）。狭い画面の縮小は **`transform:scale(var(--a4-zoom))`（`transform-origin:0 0`）** にする（描画だけを縮め、レイアウトは計測した原寸のまま＝画面と印刷の行・折り返しが同じ）。用紙の箱は原寸のまま流れに残るので、`body>.a4` の余白で縮小後の大きさに合わせる: 上 `24px×倍率`、下 `24px×倍率 − 297mm×(1 − 倍率)`、左 `max(0px, (100% − 210mm×倍率) / 2)`（旧い zoom のときと同じ位置・同じ大きさ。`--a4-zoom` が無ければ transform は無効〔none〕で、余白は従来の中央寄せと同じ）。`@media screen` だけ。計測（fit）の前に `--a4-zoom` を外すのは従来どおり（transform ではレイアウトが変わらないので外さなくても同じ値）。アプリ ③ の紙は従来どおり zoom 0.95〜1（それより狭いと横スクロール）で、重いサンプルでも切れないことを E16 で確かめる |
 
 ### 12-1. 実測（Chromium 141・1440px。tests/shots）
 | 記録 | 段階 | 内容の高さ | 押印行の下端と内寸の下端の差 | 面接メモ・所見の枠 | PDF |
 | --- | --- | --- | --- | --- | --- |
 | 通常（E3 の採用・押印済み。`a4-form.png`・`a4-form-print.png`） | `.cl-roomy` | 890px | 0mm | 90.9mm（罫線 11 本） | 1 ページ |
 | 記入なし（`a4-form-empty.html`） | `.cl-roomy` | 863px | 0mm | 91.4mm（罫線 12 本） | — |
-| 重い（全メモ 300 字・面接所見 1,500 字。`a4-form-heavy.png`） | `.cl-compact` | 891px | 0mm | 133mm | 1 ページ |
+| 重い（全メモ 300 字・面接所見 1,500 字。`a4-form-heavy.png`） | `.cl-compact` | 891px → F5 で 1049px | 0mm | 133mm（罫線の空き 46mm → F5 で 3.5mm。面接所見 10 行 → 23 行） | 1 ページ |
+| 面接所見 4,000 字・全メモ 300 字（E16 `a4-form-iv4000.html`） | `.cl-compact` | 1047px（F5） | 0mm | 罫線の空き 4.0mm・面接所見 23 行 | 1 ページ |
 | 確認点 +65 件（E8） | `.cl-compact-2`＋縮小 0.499 | ≤ 1052px | 0mm | — | 1 ページ |
 
 面接所見の長さによる段階（アプリの印刷ホスト・回答なしの記録）: 0 字・300 字 → `.cl-roomy`、1,000 字 → 通常、3,000 字 → `.cl-compact`
+
+F5 の実測（Chromium・1440px。scratchpad の生成記録・保存 HTML。段階は F5 の前後で同じ）:
+
+| 記録 | 段階 | F5 の前 | F5 の後 | 390px（`--a4-zoom` 0.451） |
+| --- | --- | --- | --- | --- |
+| 重い（全メモ 300 字＋面接所見 1,500 字） | `.cl-compact` | 面接所見 10 行「…」・罫線の空き 45.8mm | 面接所見 23 行「…」・罫線の空き 4.0mm・内容 1047px | 同じ 23 行・押印行は下端（差 −0.01mm。F6 が無いと −4.1mm）。ただし zoom の縮小で記入が 18px 切れていた → F7（transform）で切れなし・差 0mm |
+| 面接所見 3,000 字だけ | `.cl-compact` | 10 行「…」・空き 95.5mm | 38 行「…」・空き 5.6mm | 押印行は下端 |
+| 質問の回答 300 字×5 だけ | 通常 | 各 2 行「…」・空き 74.2mm・案内あり | 各 6 行（全文）・空き 7.7mm・案内なし（「…」なし） | 押印行は下端 |
+| 質問の回答 1 問だけ 600 字 | `.cl-roomy` | 2 行「…」・空き 75.7mm | 14 行（全文）・空き 29.9mm | 押印行は下端 |
+| 確認点 +65 件（縮小） | `.cl-compact-2`＋縮小 0.49 | F5 なし（縮小の段階は広げない） | 同じ | 押印行の位置は F6 で −58.9mm → −32.9mm（縮小の段階は従来どおり狭い画面で下にはみ出す） |
+
+計測の時間（保存 HTML の `__a4Fit()`・1440px）: 重い 72ms → 66ms、面接所見 3,000 字 42ms → 54ms（行数は見積もってから確かめるので、1 行ずつ測り直さない）
+
+F7 の実測（保存 HTML・Chromium。`.cl-nm` の `scrollHeight − clientHeight`＝記入が隠れている高さ。zoom → transform）:
+
+| 記録 | 540px | 480px | 430px | 390px | 375px | 360px | 320px |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 重い（全メモ 300 字＋面接所見 1,500 字・押印あり） | 3 → 0 | 5 → 0 | 13 → 0 | 18 → 0 | 27 → 0 | 30 → 0 | 34 → 0 |
+| 質問の回答 600 字×5 | 0 → 0 | 3 → 0 | 10 → 0 | 11 → 0 | 15 → 0 | 21 → 0 | 27 → 0 |
+| 面接所見 4,000 字＋全メモ 300 字 | 1 → 0 | 3 → 0 | 11 → 0 | 16 → 0 | 25 → 0 | 28 → 0 | 32 → 0 |
+| 押印欄 4 件 | 2 → 0 | 5 → 0 | 12 → 0 | 17 → 0 | 27 → 0 | 29 → 0 | 34 → 0 |
+
+transform では罫線の部分の高さ・行数（インラインの行数）・各行の高さ（縮小前）が 1440px と同じ（通常の記録の罫線は zoom のとき 320px で 79.8 → 68.3mm に縮んでいたが、transform では 79.8mm のまま）。押印行は内寸の下端（差 0mm）・横スクロールなし・用紙の位置と大きさ（左右 16px・上 24px×倍率）は zoom のときと同じ。アプリ ③ の紙（zoom 0.962〜0.997）は 3px 刻みで 790〜1110px を測って切れなし
+
+F5 の固まり（2026-10-14 追記）: 質問のメモに折り返せない幅広の書記素（`'メモ' + '👨' + '‍👨'.repeat(60)`）があると、旧い `grow()` は保存 HTML・アプリ ③ の読み込みで 10 秒以上応答しなかった。縦のはみ出しだけを見るようにして 0.3 秒で開く（`.cl-cut` は付く）。面接所見 800 字＋同じ書記素（`.cl-compact`）は面接所見を 17 行まで広げて縦に全部見え、横のはみ出しの `.cl-cut` が残る
 
 ### 12-2. テストの変更
 - 内容の高さで計っていた確認（E8 の `paperOf`・境界の記録・E14 (5)）は `.cl-measure` を付けて測る（`getBoundingClientRect().height` は用紙いっぱいの 1062px になるため）。境界の記録と E14 (5) には「押印行の下端が内寸の下端から 2mm 以内」を足した
 - 単体 #76（並びの確認を `<section class="cl-blk cl-blk-notes">` で）・#80（記入なしでも空の枠と罫線 38 本・枠 → 説明・連絡 → 押印行・CSS）・#81（ゆったり → 通常 → 詰める段階・`.cl-measure` で測る・表示されていない用紙）
 - e2e E16（通常の記録: ゆったり・押印行の下端 2mm 以内・枠 30mm 以上・罫線 7.5mm 間隔の点線・枠 → 説明・連絡 → 押印行・画面と PDF の画像が同じで下端 95% まで使う／重いサンプル: `.cl-compact`・1 ページ・押印行は下端／記入なし: 空の枠／ゆったりの付け外し／アプリ ③ の紙・アプリの印刷も同じ）
+- （F5・F6）単体 #80（CSS: `max-height:100%`・`.cl-measure` の `max-height:none`・枠の `min-height:0`・`.cl-nm{min-height:0;overflow:hidden}`・`.cl-roomy.cl-measure:not(.cl-grow)`。保存 HTML の計測に広げる処理〔`setProperty('-webkit-line-clamp'`・`cl-grow`〕。旧い「`webkitLineClamp` を含まない」は削除）・#93（追加: 疑似 DOM で 面接所見 → メモ → 質問の回答の順・上限を超えず 1 行分の空きも残さない・全部入れば `.cl-cut`・`.cl-nm-cut` を外す・案内 1 行が消える分も使う・空きが無ければ広げない〔インラインを付けない〕・測り直すと同じ・`getComputedStyle` が無ければ広げない・見積もりで測る回数を抑える）
+- e2e E8 の「面接所見は 10 行まで（紙の 2 割未満）」を「罫線の空きまで広げる（10 行より多い・まだ切れているので罫線の空き 7mm 未満・1052px 以内）」に変えた。E14 の `a4State` にインラインの行数を足した（390px で開いても 1440px と同じ）。E16 (2) に 面接所見の行数（> 10）・罫線の空き（切れたメモが残るとき 7mm 未満）・案内が残る・画面と印刷の画像が同じ（`a4-form-heavy-print.png`）・390px でも同じ行数で押印行は下端・押印を変えて書き出したファイルを開き直しても・`__a4Fit()` で測り直しても同じ行数・面接所見 4,000 字＋全メモ 300 字でも 1 ページ（`a4-form-iv4000.pdf`）を足した
+- （F5 の固まり・F7）単体 #90 は reportCss の縮小を `transform:scale(var(--a4-zoom))`・余白の式・`zoom:var(--a4-zoom` が無いこと・transform は `@media print` より前（画面だけ）に変えた。#93 に、横にはみ出す面接所見（縦は全部見えたら止まる・`.cl-cut` は残る・続けてメモ・質問の回答も広げる）と、行数を上げても見える行が増えない要素（戻してやめる）を足した（疑似 DOM は 3,000 回測ったら「無限ループ」で止める）。e2e E16 に、狭い画面（540・430・390・360・320px）で重いサンプル・質問の回答 600 字×5・面接所見 4,000 字・押印欄 4 件の `.cl-nm` が切れない（`scrollHeight ≦ clientHeight + 1`）・行数と各行の高さが 1440px と同じ・`zoom` は 1・押印行は下端・横スクロールなし、と、幅広の書記素のメモで保存 HTML・アプリ ③ が 10 秒以内に開く（`.cl-cut` は付く・面接所見は縦に全部見えて止まる）、アプリ ③ の紙を 0.95〜1 に縮めた幅（1080・800px）でも重いサンプルが切れない、を足した
+- 変異の確認（2 回目のレビュー修正）: `grow()` のループを `.cl-cut` の条件に戻す・縮小を zoom に戻す・`resolveLock` を「キーが無ければ既定」に戻す・`refreshProfileFromStorage`／`keepLockOff`／JSON のロックの引き継ぎを外す、をまとめて戻した版で、e2e の E15 の追加 5 件（JSON の読み込み・公開版と共有・古いタブ 3 件）と E16 の追加 2 件（狭い画面・幅広の書記素。10 秒で打ち切って続ける）が FAIL になることを確かめた。単体 #93 は `grow()` のループを戻すと「無限ループ」で FAIL。`lockMovedSince` だけを外した版では、E15 の「ダイアログを出しているあいだに A でパスワードが変わる」が FAIL（B が A の新しいロックを前のロックと「連動しない」で上書きした）
+- 変異の確認: `grow()` を呼ばない・`finalNeedsPw`／`needPw` を `stampField` だけに戻す・保存／JSON のダイアログを外す、をまとめて戻した版で、単体 #92・#93 と e2e の E8（面接所見の行数）・E15 (9) の 4 件・E16 の追加 4 件が FAIL になることを確かめた。`max-height:100%` を外した版は、重いサンプルを 390px で開くと押印行が内寸の下端から −4.1mm（E16 の 390px の確認〔−0.1mm 以上〕で落ちる値）になることを計測で確かめた
 
 ---
 

@@ -67,7 +67,8 @@
     bindGlobal();
     showView('judge');
     // 正規化した設定を保存し直す（削除した機能のキーを localStorage から消す。毎回 toast を出さないため）
-    if (rep.v1Reset || rep.fullModeRemoved || rep.stripped) S.saveProfile(state.profile);
+    if (rep.v1Reset || rep.fullModeRemoved || rep.stripped) persistProfile(state.profile);
+    else storedRaw = readStoredRaw();
     const notice = profileNotice(rep);
     if (notice) toast(notice);
   }
@@ -120,6 +121,11 @@
     window.addEventListener('beforeunload', function (e) {
       if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
     });
+    // 別のタブ（ウィンドウ）で設定が保存・初期化されたら読み込み直す（古いタブのまま最終承認のパスワードを迂回・上書きしない。docs/SPEC-a4.md 11 章 L5d）。
+    //   storage イベントが届かない環境のため、タブに戻ったとき・保存や押印の直前にも localStorage と比べる（refreshProfileFromStorage）
+    window.addEventListener('storage', function (e) { if (e.key === null || e.key === S.PROFILE_KEY) refreshProfileFromStorage(); });
+    window.addEventListener('focus', function () { refreshProfileFromStorage(); });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshProfileFromStorage(); });
 
     // ブラウザの印刷（Ctrl+P）も A4 面接チェックリスト報告にする（③ の紙と同じ用紙 1 枚。保存 HTML の印刷と同じ様式）
     let autoClPrint = false;
@@ -181,6 +187,119 @@
     invalidateJudgment();
   }
 
+  // ---------- 設定の保存（localStorage）と、別のタブ（ウィンドウ）での変更の取り込み（docs/SPEC-a4.md 11 章 L5d） ----------
+  //   storedRaw: このタブが最後に見た（読んだ・書いた）localStorage の設定の文字列。違っていれば別のタブで保存・初期化された
+  let storedRaw = null;
+  function readStoredRaw() { try { return localStorage.getItem(S.PROFILE_KEY); } catch (e) { return null; } }
+  function persistProfile(p) { S.saveProfile(p); storedRaw = readStoredRaw(); }
+  function lockSig(p) {
+    const l = ((p || {}).management || {}).finalLock;
+    return Lock && Lock.isLocked(l) ? l.salt + ':' + l.hash : (U.isObj(l) && l.off === true ? 'off' : '');
+  }
+  // 別のタブで保存された設定を読み込み、画面を描き直す。変わっていなければ null。
+  //   変わっていれば { prev, lockMoved（最終承認のロックが変わった）, draftClean（設定画面に未保存の変更が無かった）, lockReverted（設定画面の下書きで変えていたパスワードを取り消した） }。
+  //   ③ は描き直す（最終確認・最終合否のパスワード欄は最新のロックで出す）。設定画面は、未保存の変更が無ければ最新の設定で描き直し、
+  //   あれば下書きを残して最終承認のロックだけ最新に合わせる（下書きでパスワードを変えていたら取り消す）
+  function refreshProfileFromStorage() {
+    const raw = readStoredRaw();
+    if (raw === storedRaw) return null;
+    storedRaw = raw;
+    const fresh = S.loadProfile();
+    if (JSON.stringify(fresh) === JSON.stringify(state.profile)) return null;
+    const prev = state.profile;
+    const out = { prev: prev, lockMoved: lockSig(prev) !== lockSig(fresh), draftClean: false, lockReverted: false };
+    state.profile = fresh;
+    onProfileChanged();
+    let msg = '別のタブ（ウィンドウ）で保存された最新の設定を読み込みました';
+    if (state.view === 'judge') {
+      if (state.step === 4) { renderStepNav(); renderStep(); }
+      renderSummary();
+    } else if (state.view === 'settings') {
+      out.draftClean = Settings.isDraftOf(prev);
+      if (out.draftClean) renderSettings();
+      else {
+        out.lockReverted = Settings.syncLock(prev, fresh);
+        msg = out.lockReverted
+          ? '別のタブ（ウィンドウ）で最終承認のパスワードが変わったため、このタブでのパスワードの変更を取り消しました。必要ならもう一度変更してください'
+          : '別のタブ（ウィンドウ）で設定が保存されました' + (out.lockMoved ? '（最終承認のパスワードは最新のものを使います）' : '') + '。このタブの変更を保存すると、ほかの項目はこのタブの内容になります';
+      }
+    }
+    toast(msg, out.lockReverted ? 'error' : 'warn');
+    return out;
+  }
+  // パスワードのダイアログを出しているあいだに別のタブでロックが変わったら（sig は始めたときのロック）、保存・読み込み・初期化をやめる（古いロックで確かめたため）
+  function lockMovedSince(sig) {
+    refreshProfileFromStorage();
+    if (lockSig(state.profile) === sig) return false;
+    toast('別のタブ（ウィンドウ）で最終承認のパスワードが変わったため、やめました（最新の設定を読み込みました）。もう一度操作してください', 'error');
+    return true;
+  }
+  // 「外した」印（finalLock.off）を書けるのは、いま有効なロックを外すとき（現在のパスワードを確かめる）か、すでに外してあるときだけ。
+  //   ロックの無い版（公開版）で off の入った JSON を読み込んでも、同じ localStorage を使うローカル版のロックを外せないよう未設定に戻す（docs/SPEC-a4.md 11 章 L6c）
+  function keepLockOff(next) {
+    const nx = ((next || {}).management || {}).finalLock;
+    if (!U.isObj(nx) || nx.off !== true || finalLockNow() || lockSig(state.profile) === 'off') return next;
+    next.management.finalLock = { salt: '', hash: '' };
+    return next;
+  }
+
+  // 設定画面（settings.js）に渡す処理。onSave の戻り値: 保存したら true、やめたら false（パスワードを確かめるときは Promise。settings.js が注意の toast をこのあとに出す）
+  const settingsHandlers = {
+    current: function () { return state.profile; },
+    onSave: function (p) {
+      // 別のタブ（ウィンドウ）で設定が保存されていたら、先に最新の設定を読み込む（古いタブの保存で最新のロックを上書きしない。docs/SPEC-a4.md 11 章 L5d）
+      //   このタブで変更していなければ最新の設定を表示し直すだけ（保存しない）。別のタブでロックが変わっていて、このタブでもパスワードを変えていたら
+      //   （古いロックで確かめた変更なので）取り消して保存しない。それ以外は保存する（別のタブでロックが変わっていればロックは最新のもの）
+      const moved = refreshProfileFromStorage();
+      if (moved && (moved.draftClean || moved.lockReverted)) return false;
+      if (moved && moved.lockMoved && U.isObj(p.management)) p.management.finalLock = U.deepClone(state.profile.management.finalLock);
+      const next = keepLockOff(S.normalizeProfile(p));
+      const sig0 = lockSig(state.profile);
+      const commit = function () {
+        if (lockMovedSince(sig0)) return false;
+        state.profile = next;
+        persistProfile(state.profile);
+        onProfileChanged();
+        toast('設定を保存しました', 'ok');
+        renderSettings();
+        return true;
+      };
+      // 最終承認のパスワードがあるとき、ロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の構成）を変える保存は現在のパスワードを求める
+      //   （違えば・キャンセルなら保存しない。下書きはそのまま残す。表示名・説明だけの変更は求めない。docs/SPEC-a4.md 11 章 L5c）
+      if (!finalScopeChanges(next)) return commit();
+      return askFinalPassword('「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えると、最終承認のパスワードで守る欄が変わります。保存するには現在のパスワードを入力してください。')
+        .then(function (ok) {
+          if (ok) return commit();
+          toast('設定を保存しませんでした（最終承認のパスワードを確認できません）', 'error');
+          return false;
+        });
+    },
+    onExport: function (p) {
+      S.download('劇場プロファイル_' + S.safeName(p.meta.theaterName) + '_' + U.fmtDate(new Date()) + '.json', JSON.stringify(p, null, 2), 'application/json');
+      toast('プロファイルを書き出しました');
+    },
+    onImport: function () { const f = $('#profileFileInput'); f.value = ''; f.click(); },
+    onReset: function () {
+      let sig0 = '';
+      const doReset = function () {
+        if (lockMovedSince(sig0)) return;
+        state.profile = S.resetProfile();
+        persistProfile(state.profile);
+        onProfileChanged();
+        toast('初期設定に戻しました', 'ok');
+        showView('settings');
+      };
+      refreshProfileFromStorage();
+      sig0 = lockSig(state.profile);
+      // 初期設定で最終承認のパスワードが変わる／外れるときは、現在のパスワードを求める（違えば・キャンセルなら初期化しない）
+      if (!finalLockChanges(S.normalizeProfile(S.defaults()))) { doReset(); return; }
+      askFinalPassword('初期設定に戻すと最終承認のパスワードが' + (Lock.isLocked(S.normalizeProfile(S.defaults()).management.finalLock) ? '初期のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。')
+        .then(function (ok) { if (ok) doReset(); else toast('初期設定に戻しませんでした（最終承認のパスワードを確認できません）', 'error'); });
+    },
+    onToast: toast
+  };
+  function renderSettings() { Settings.render($('#view-settings'), state.profile, settingsHandlers); }
+
   function showView(view) {
     state.view = view;
     $$('.nav-item').forEach(function (b) { b.classList.toggle('active', b.dataset.view === view); });
@@ -193,35 +312,7 @@
     if (view === 'judge') {
       renderStepNav(); renderStep(); renderSummary();
     } else if (view === 'settings') {
-      Settings.render($('#view-settings'), state.profile, {
-        current: function () { return state.profile; },
-        onSave: function (p) {
-          state.profile = S.normalizeProfile(p);
-          S.saveProfile(state.profile);
-          onProfileChanged();
-          toast('設定を保存しました', 'ok');
-          Settings.render($('#view-settings'), state.profile, this);
-        },
-        onExport: function (p) {
-          S.download('劇場プロファイル_' + S.safeName(p.meta.theaterName) + '_' + U.fmtDate(new Date()) + '.json', JSON.stringify(p, null, 2), 'application/json');
-          toast('プロファイルを書き出しました');
-        },
-        onImport: function () { const f = $('#profileFileInput'); f.value = ''; f.click(); },
-        onReset: function () {
-          const doReset = function () {
-            state.profile = S.resetProfile();
-            S.saveProfile(state.profile);
-            onProfileChanged();
-            toast('初期設定に戻しました', 'ok');
-            showView('settings');
-          };
-          // 初期設定で最終承認のパスワードが変わる／外れるときは、現在のパスワードを求める（違えば・キャンセルなら初期化しない）
-          if (!finalLockChanges(S.normalizeProfile(S.defaults()))) { doReset(); return; }
-          askFinalPassword('初期設定に戻すと最終承認のパスワードが' + (Lock.isLocked(S.normalizeProfile(S.defaults()).management.finalLock) ? '初期のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。')
-            .then(function (ok) { if (ok) doReset(); else toast('初期設定に戻しませんでした（最終承認のパスワードを確認できません）', 'error'); });
-        },
-        onToast: toast
-      });
+      renderSettings();
     } else if (view === 'help') {
       $('#view-help').innerHTML = helpHtml();
     }
@@ -537,9 +628,12 @@
         saveRecord();
         break;
       case 'unlock-final':
+        if (refreshProfileFromStorage()) break;
         unlockFinal(b.closest('.final-lock'));
         break;
       case 'stamp': {
+        // 別のタブで設定（最終承認のパスワード）が変わっていたら、最新の設定で描き直すだけ（押さない）
+        if (refreshProfileFromStorage()) break;
         const box = b.closest('.stamp-box');
         const fid = box && box.dataset.fieldId;
         if (!fid || finalNeedsPw(fid)) break;
@@ -565,16 +659,18 @@
         break;
       }
       case 'unstamp': {
+        if (refreshProfileFromStorage()) break;
         const box = b.closest('.stamp-box');
         const fid = box && box.dataset.fieldId;
         if (fid && state.management[fid] && !finalNeedsPw(fid)) { delete state.management[fid]; state.dirty = true; rerenderManagementCard(); rerenderReportPaper(); renderSummary(); }
         break;
       }
       case 'decide':
+        if (refreshProfileFromStorage()) break;
         decide(b.dataset.value);
         break;
       case 'undecide':
-        if (finalNeedsPw('')) break;
+        if (refreshProfileFromStorage() || finalNeedsPw('')) break;
         state.decision = null;
         state.dirty = true;
         rerenderDecisionCard();
@@ -592,6 +688,7 @@
     const t = e.target;
     if (e.key !== 'Enter' || !t || !t.classList || !t.classList.contains('final-lock-pw')) return;
     e.preventDefault();
+    if (refreshProfileFromStorage()) return;
     unlockFinal(t.closest('.final-lock'));
   }
 
@@ -1195,16 +1292,29 @@
     const rep = {};
     try { p = S.parseProfileJSON(text, rep); } catch (err) { toast('読み込めません: ' + err.message, 'error'); return; }
     if (!window.confirm('「' + p.meta.theaterName + '」のプロファイルを読み込み、現在の設定を置き換えます。よろしいですか？')) return;
+    // 別のタブで保存された最新のロックと比べる（docs/SPEC-a4.md 11 章 L5d）。JSON に最終承認のロック（salt・hash）も「外した」印も無ければ
+    //   （公開版が書き出した空のロック・キーなし）、いまのロックのまま（読み込んでもパスワードは変わらない）。「外した」印は有効なロックを外すときだけ（L6c）
+    refreshProfileFromStorage();
+    let rawLock;
+    try { rawLock = ((JSON.parse(text) || {}).management || {}).finalLock; } catch (err) { rawLock = undefined; }
+    if (S.lockUnset(rawLock)) p.management.finalLock = U.deepClone(state.profile.management.finalLock);
+    p = keepLockOff(p);
+    const sig0 = lockSig(state.profile);
     const apply = function () {
+      if (lockMovedSince(sig0)) return;
       state.profile = p;
-      S.saveProfile(p);
+      persistProfile(p);
       onProfileChanged();
       toast(profileNotice(rep) || 'プロファイルを読み込みました', 'ok');
       showView('settings');
     };
-    // 読み込むと最終承認のパスワードが変わる／外れるときは、現在のパスワードを求める（違えば・キャンセルなら読み込まない。docs/SPEC-a4.md 11 章）
-    if (!finalLockChanges(p)) { apply(); return; }
-    askFinalPassword('読み込むプロファイルでは最終承認のパスワードが' + (Lock.isLocked(p.management.finalLock) ? '別のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。')
+    // 読み込むと最終承認のパスワードが変わる／外れるとき、またはロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の構成）が変わるときは、
+    //   現在のパスワードを求める（違えば・キャンセルなら読み込まない。docs/SPEC-a4.md 11 章 L5b・L5c）
+    const lockCh = finalLockChanges(p);
+    if (!lockCh && !finalScopeChanges(p)) { apply(); return; }
+    askFinalPassword(lockCh
+      ? '読み込むプロファイルでは最終承認のパスワードが' + (Lock.isLocked(p.management.finalLock) ? '別のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。'
+      : '読み込むプロファイルでは「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成が変わり、最終承認のパスワードで守る欄が変わります。現在のパスワードを入力してください。')
       .then(function (ok) { if (ok) apply(); else toast('プロファイルを読み込みませんでした（最終承認のパスワードを確認できません）', 'error'); });
   }
 
@@ -1264,7 +1374,9 @@
 
   // =====================================================================
   // 最終承認のパスワード（docs/SPEC-a4.md 11 章）
-  //   最終確認（decision.stampField の押印欄）の押印・取消と最終合否の決定・取消の前に求める（面接対応者の押印には要らない）。
+  //   最終確認（既定の最終確認欄 'final' と decision.stampField の押印欄。storage.finalLockFields）の押印・取消と最終合否の決定・取消の前に求める（面接対応者の押印には要らない）。
+  //   「押印欄と連動」を「連動しない」や別の欄に変えても最終確認欄はロックの対象のまま。ロックの対象を変える設定（押印欄と連動・最終合否の ON/OFF・押印欄の構成）の
+  //   保存・JSON の読み込みには現在のパスワードが要る（finalScopeChanges）
   //   ロック（profile.management.finalLock = { salt, hash }）があり、このページでまだ解錠していないとき、③ のカードの操作の代わりにパスワード欄と［確認］を出す。
   //   正しければこのページを閉じる／読み込み直すまで解錠（変数だけ。localStorage・書き出すファイルには残さない）。ロックが変わったら（設定の保存・JSON・初期化）また求める
   // =====================================================================
@@ -1275,11 +1387,11 @@
     return Lock && Lock.isLocked(lk) ? lk : null;
   }
   function lockKey(lk) { return lk ? lk.salt + ':' + lk.hash : ''; }
-  // fid: 押印欄の id（'' = 最終合否）。パスワードが要るのは最終合否と decision.stampField の欄だけ
+  // fid: 押印欄の id（'' = 最終合否）。パスワードが要るのは最終合否と、最終確認欄 'final'・decision.stampField の欄だけ
   function finalNeedsPw(fid) {
     const lk = finalLockNow();
     if (!lk || finalUnlockedKey === lockKey(lk)) return false;
-    return fid === '' || (!!fid && fid === S.decisionConfig(state.profile).stampField);
+    return fid === '' || (!!fid && S.finalLockFields(state.profile).indexOf(fid) >= 0);
   }
   function finalLockRowHtml(where) {
     return '<div class="final-lock no-print" data-lock-for="' + esc(where) + '">' +
@@ -1310,6 +1422,11 @@
     if (!cur) return false;
     const nx = ((nextProfile || {}).management || {}).finalLock;
     return !(Lock.isLocked(nx) && nx.salt === cur.salt && nx.hash === cur.hash);
+  }
+  // 設定の保存・JSON の読み込みでロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の追加・削除・id）が変わるとき（現在のロックがあれば）。
+  //   表示名・説明（label・hint）だけの変更は含めない。nextProfile は正規化したもの
+  function finalScopeChanges(nextProfile) {
+    return !!finalLockNow() && S.finalLockScope(nextProfile) !== S.finalLockScope(state.profile);
   }
   function askFinalPassword(msg) {
     const lk = finalLockNow();
@@ -1537,7 +1654,8 @@
         '<li>設定の「応募者の管理（押印）」でパスワードを決めると、最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（③ 報告書と保存した HTML の両方。面接対応者の押印には要りません）。一度正しく入れると、そのページを閉じる（読み込み直す）まで続けて押せます。</li>' +
         '<li>誤操作を防ぐための鍵です。HTML をテキストで開いて書き換える人までは防げません。</li>' +
         '<li>パスワードそのものは保存しません（照合用の値〔ハッシュ〕だけを設定と保存した HTML に入れます）。保存した HTML は保存した時点のパスワードで照合します。</li>' +
-        '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは <code>local/final-password.txt</code> で決めます。</li></ul></div>' +
+        '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは <code>local/final-password.txt</code> で決めます。</li>' +
+        '<li>最終確認の欄は「押印欄と連動」を「連動しない」や別の欄に変えてもパスワードの対象のままです（連動する欄もパスワードの対象）。パスワードがあるときに「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えて保存（JSON の読み込みを含む）するには、現在のパスワードが必要です。表示名・説明だけの変更には要りません。</li></ul></div>' +
       '<div class="view-footer">' + esc(m.footer) + '</div>';
   }
 

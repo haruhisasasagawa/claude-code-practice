@@ -478,7 +478,7 @@
     return '<h3 class="sub" id="s-finalLock">最終承認のパスワード</h3>' +
       '<div class="hint">最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（' + stepRef(4) + ' 報告書と保存した HTML の両方。面接対応者の押印には要りません）。' +
         '誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げません。パスワードそのものは保存せず、照合用の値（ハッシュ）だけを設定に持ちます。' +
-        '保存した HTML は保存した時点のパスワードで照合します。</div>' +
+        '保存した HTML は保存した時点のパスワードで照合します。パスワードがあるとき、「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えて保存するには現在のパスワードが要ります（表示名・説明だけなら不要）。</div>' +
       '<div class="lock-status" id="finalLockStatus"><span class="badge ' + (on ? 'ok' : 'muted') + '">' + (on ? '設定済み' : '未設定') + '</span>' +
         (pending ? '<span class="hint">未保存の変更です。「設定を保存」で確定します。</span>' : '') + '</div>' + body;
   }
@@ -502,7 +502,8 @@
     if (on && !L.verify(lk, v('lockCur'))) { err('現在のパスワードが違います', 'lockCur'); return; }
     if (!U.isObj(draft.management)) draft.management = {};
     if (kind === 'remove') {
-      draft.management.finalLock = { salt: '', hash: '' };
+      // 「外した」印（off）。空のロック（{ salt: '', hash: '' }）は未設定＝既定のロック（ローカル版の初期パスワード）に戻る扱い（docs/SPEC-a4.md 11 章 L6c）
+      draft.management.finalLock = { salt: '', hash: '', off: true };
     } else {
       if (!v('lockNew')) { err('新しいパスワードを入力してください', 'lockNew'); return; }
       if (v('lockNew') !== v('lockNew2')) { err('新しいパスワード（確認）が一致しません', 'lockNew2'); return; }
@@ -540,7 +541,7 @@
           '<div class="hint">採用は朱、不採用は藍。日付と劇場名が入ります。</div></div></div>' +
       '</div>' +
       sSelect('management.decision.stampField', '押印欄と連動', fields.filter(function (fl) { return fl && fl.id; }).map(function (fl) { return { value: fl.id, label: fl.label + '（' + fl.id + '）' }; }).concat([{ value: '', label: '連動しない' }]),
-        '合否を押したとき、この押印欄にも同じ担当者の印を押せます。') +
+        '合否を押したとき、この押印欄にも同じ担当者の印を押せます。最終承認のパスワードがあるときは、最終確認の欄（final）とこの欄の押印にパスワードが要り、ここ・最終合否のスタンプの ON/OFF を変えて保存するには現在のパスワードが要ります。') +
       sCheck('management.decision.autoStampFinal', '合否を押すと、連動する押印欄にも同じ担当者の印を押す（未押印のときだけ）') +
       sCheck('management.decision.filenameSuffix', '合否を付けて保存するとき、ファイル名の末尾に「_採用」「_不採用」を付ける');
   }
@@ -644,8 +645,10 @@
       return;
     }
     issues = null;
-    handlers.onSave(U.deepClone(draft));
-    if (res.warnings.length && handlers.onToast) handlers.onToast('設定を保存しました。注意: ' + res.warnings.join(' / '));
+    // onSave は保存したかどうか（最終承認のパスワードを確かめるときは Promise）を返す。保存しなかったときは下書きを残し、注意の toast も出さない
+    const warn = function (ok) { if (ok !== false && res.warnings.length && handlers.onToast) handlers.onToast('設定を保存しました。注意: ' + res.warnings.join(' / ')); };
+    const r = handlers.onSave(U.deepClone(draft));
+    if (r && typeof r.then === 'function') r.then(warn); else warn(r);
   }
 
   function onClick(e) {
@@ -719,5 +722,20 @@
     paint();
   }
 
-  global.RecruitSettings = { render: render };
+  // 下書きが p と同じ（未保存の変更が無い）か。別のタブで設定が保存されたとき、描き直してよいかの判定に使う（app.js）
+  function isDraftOf(p) { return !!draft && JSON.stringify(draft) === JSON.stringify(p); }
+  // 別のタブで設定が保存されたとき（下書きに未保存の変更があるとき。app.js）: 最終承認のロックが変わっていれば（prev → fresh）、下書きのロックを最新に合わせて描き直す。
+  //   下書きでロックを変えていた（prev と違う）なら、古いロックで確かめた変更なので取り消す（true を返す）。ロックが変わっていなければ下書きはそのまま。docs/SPEC-a4.md 11 章 L5d
+  function lockSig(l) { return lockIsOn(l) ? l.salt + ':' + l.hash : (U.isObj(l) && l.off === true ? 'off' : ''); }
+  function syncLock(prev, fresh) {
+    if (!draft || !root || lockSig(lockOf(fresh)) === lockSig(lockOf(prev))) return false;
+    const touched = lockSig(lockOf(draft)) !== lockSig(lockOf(prev));
+    if (!U.isObj(draft.management)) draft.management = {};
+    draft.management.finalLock = U.deepClone(lockOf(fresh) || { salt: '', hash: '' });
+    lockForm = '';
+    paint(window.scrollY);
+    return touched;
+  }
+
+  global.RecruitSettings = { render: render, isDraftOf: isDraftOf, syncLock: syncLock };
 })(window);

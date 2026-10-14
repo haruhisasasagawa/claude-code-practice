@@ -2070,20 +2070,47 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       managers: managers,
       allowFreeName: mg.allowFreeName !== false,
       decision: Object.assign({}, U.deepClone(dsrc), decisionFields(dsrc, fields, bm.decision)),
-      // 最終承認のパスワード（docs/SPEC-a4.md 11 章）。キーが無ければ既定（ローカル版ならローカルのロック）。形が正しくなければ空（パスワードなし）
-      finalLock: normalizeLock(mg.finalLock === undefined ? bm.finalLock : mg.finalLock)
+      // 最終承認のパスワード（docs/SPEC-a4.md 11 章 L6b・L6c）。ロック（salt・hash）か「外した」印（off: true）があればそれ、
+      //   キーが無い・空（{ salt: '', hash: '' }）・形が正しくなければ既定（ローカル版ならローカルのロック、公開版はパスワードなし）。
+      //   空のロックはロックを持たない版（公開版）も書くので「外した」とは見なさない（同じ file:// の localStorage を公開版と共有しても外れない）
+      finalLock: resolveLock(mg.finalLock, bm.finalLock)
     };
   }
-  // management.finalLock の正規化: { salt: 16 進 32 文字, hash: 16 進 64 文字 }（小文字）。それ以外は { salt: '', hash: '' }
+  // management.finalLock の正規化: { salt: 16 進 32 文字, hash: 16 進 64 文字 }（小文字）。形が違えば、off: true（パスワードを外した印）なら
+  //   { salt: '', hash: '', off: true }、それ以外は { salt: '', hash: '' }（未設定）
   function normalizeLock(l) {
     const salt = U.isObj(l) && typeof l.salt === 'string' ? l.salt.trim().toLowerCase() : '';
     const hash = U.isObj(l) && typeof l.hash === 'string' ? l.hash.trim().toLowerCase() : '';
-    return /^[0-9a-f]{32}$/.test(salt) && /^[0-9a-f]{64}$/.test(hash) ? { salt: salt, hash: hash } : { salt: '', hash: '' };
+    if (/^[0-9a-f]{32}$/.test(salt) && /^[0-9a-f]{64}$/.test(hash)) return { salt: salt, hash: hash };
+    return U.isObj(l) && l.off === true ? { salt: '', hash: '', off: true } : { salt: '', hash: '' };
+  }
+  // ロックも「外した」印も無い（未設定）か
+  function lockUnset(l) {
+    const n = normalizeLock(l);
+    return !lockOn(n) && !n.off;
+  }
+  // 保存値 l（未設定なら既定 def）を正規化したロック
+  function resolveLock(l, def) {
+    return lockUnset(l) ? normalizeLock(def) : normalizeLock(l);
   }
   // 最終承認のロックがあるか（RecruitLock.isLocked。lock.js が無い環境でも形で判定する）
   function lockOn(l) {
     const L = global.RecruitLock;
     return L && typeof L.isLocked === 'function' ? L.isLocked(l) : !!(U.isObj(l) && /^[0-9a-f]{64}$/.test(asStr(l.hash)) && /^[0-9a-f]{32}$/.test(asStr(l.salt)));
+  }
+  // 最終承認のパスワードで守る押印欄（docs/SPEC-a4.md 11 章 L1b）: 既定の最終確認欄 'final' と、そのときの decision.stampField の欄（重複は 1 つ）。
+  //   「押印欄と連動」を「連動しない」や別の欄に変えても、最終確認欄の押印・取消にはパスワードが要る（アプリ ③・保存 HTML の lockFields）
+  const FINAL_FIELD_ID = 'final';
+  function finalLockFields(profile) {
+    const sf = decisionConfig(profile).stampField;
+    return sf && sf !== FINAL_FIELD_ID ? [FINAL_FIELD_ID, sf] : [FINAL_FIELD_ID];
+  }
+  // ロックの対象を変える設定（押印欄と連動・最終合否の ON/OFF・押印欄の構成〔id の並び〕）を比べるためのキー。
+  //   ロックがあるとき、これが変わる設定の保存・JSON の読み込みには現在のパスワードが要る（app.js）。表示名・説明（label・hint）は含めない
+  function finalLockScope(profile) {
+    const mg = U.isObj((profile || {}).management) ? profile.management : {};
+    const d = decisionConfig(profile);
+    return JSON.stringify({ enabled: d.enabled, stampField: d.stampField, fields: (Array.isArray(mg.fields) ? mg.fields : []).map(function (f) { return U.isObj(f) ? asStr(f.id) : ''; }) });
   }
 
   // ---------- 面接チェックリスト（docs/SPEC-checklist.md 6-1） ----------
@@ -2330,10 +2357,14 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     TEXT_SCRIPT_KEYS.forEach(function (k) { out.texts.script[k] = str(rs[k], bt.script[k]); });
     if (report) {
       if (raw.mode === 'full') report.fullModeRemoved = true;
-      // 最終承認のロックのキーが無いだけの保存済みの設定は保存し直さない（既定のロック＝ローカル版のロックを localStorage に固定しない。docs/SPEC-a4.md 11 章）
-      let cmp = out;
-      if (U.isObj(raw.management) && raw.management.finalLock === undefined) { cmp = U.deepClone(out); delete cmp.management.finalLock; }
-      if (REMOVED_KEYS.some(function (k) { return raw[k] !== undefined; }) || (Object.keys(raw).length && JSON.stringify(cmp) !== JSON.stringify(raw))) report.stripped = true;
+      // 最終承認のロックが未設定（キーが無い・空）なだけの保存済みの設定は保存し直さない（既定のロック＝ローカル版のロックを localStorage に固定しない。
+      //   docs/SPEC-a4.md 11 章 L6b）
+      let cmp = out, rawCmp = raw;
+      if (U.isObj(raw.management) && lockUnset(raw.management.finalLock)) {
+        cmp = U.deepClone(out); delete cmp.management.finalLock;
+        rawCmp = U.deepClone(raw); delete rawCmp.management.finalLock;
+      }
+      if (REMOVED_KEYS.some(function (k) { return raw[k] !== undefined; }) || (Object.keys(raw).length && JSON.stringify(cmp) !== JSON.stringify(rawCmp))) report.stripped = true;
     }
     return out;
   }
@@ -2514,7 +2545,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   }
 
   // ---------- 保存 HTML のページのスタイル（docs/SPEC-a4.md 2-2）。用紙そのもの（.a4・.cl-sheet）は checklistSheetCss ----------
-  //   画面: 灰色の背景に用紙を中央寄せ（上下 24px・影）。狭い画面は --a4-zoom（スクリプトが <html> に置く）で用紙ごと縮小（@media screen だけ）。
+  //   画面: 灰色の背景に用紙を中央寄せ（上下 24px・影）。狭い画面は --a4-zoom（スクリプトが <html> に置く）で用紙ごと縮小（@media screen だけ。transform:scale）。
   //   印刷: @page の余白 0・背景白・影なしで用紙をそのまま 1 ページに出す（画面と同じ要素・寸法・文字組み。印刷のための切替はしない）。
   //   押せる欄のホバーは outline と position:absolute の ::after だけ（用紙の寸法・文字組みを変えない）。窓（.pop）・保存バー（.savebar）は印刷しない
   function reportCss() {
@@ -2526,7 +2557,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       'body>.a4{margin:24px auto}',
       '.a4-foot{width:210mm;max-width:calc(100% - 32px);margin:0 auto 24px;font-size:11px;line-height:1.5;color:#5b6675;text-align:center}',
       '@media screen{',
-      '.a4{zoom:var(--a4-zoom,1)}',
+      //   狭い画面の縮小は zoom ではなく transform:scale（描画だけを縮める。レイアウト＝行の高さ・折り返しは計測したときの原寸のまま。docs/SPEC-a4.md 12 章 F7）。
+      //   --a4-zoom が無ければ transform は無効（none）。用紙の箱は原寸のまま流れに残るので、余白で縮小後の大きさに合わせる
+      //   （上下の余白も縮小に合わせて 24px×倍率、下はさらに縮んだ高さの分を引く。左は縮小後の幅で中央寄せ。スクリプトが動かず縮小しないときは従来の中央寄せと同じ）
+      '.a4{transform:scale(var(--a4-zoom));transform-origin:0 0}',
+      'body>.a4{margin:calc(24px * var(--a4-zoom,1)) 0 calc(24px * var(--a4-zoom,1) - 297mm * (1 - var(--a4-zoom,1))) max(0px,calc((100% - 210mm * var(--a4-zoom,1)) / 2))}',
       'body.a4-live .a4 [data-a4-t]{cursor:pointer}',
       'body.a4-live .a4 [data-a4-t="stamp"]:hover,body.a4-live .a4 [data-a4-t="decision"]:hover,body.a4-live .a4 [aria-expanded="true"]{outline:2px solid rgba(31,95,191,.4);outline-offset:1px}',
       'body.a4-live .a4 [data-a4-t]:focus-visible{outline:2px solid #1f5fbf;outline-offset:1px}',
@@ -2611,6 +2646,12 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   //   .cl-compact-q1（質問の回答・メモを 1 行、面接所見は 6 行まで）→ .cl-compact-2（質問の回答を省いて案内 1 行、面接所見は 4 行まで）→
   //   縮小（zoom。縮小後の高さを測り直し、上限に収まるまで下げる）。戻り値は付けた段階（'cl-roomy'・''・'cl-compact'…・'zoom'）。
   //   「…」で切れたメモ（.cl-nm-v・.cl-rt-nt）に .cl-cut を付け（保存 HTML ではクリックで全文）、1 つでもあれば .cl-nm-cut で案内 1 行を出す（案内の高さも含めて計る）。
+  //   段階を決めたあと（縮小のときを除く）、「…」で切れた面接メモ（.cl-nm-v）が残っていれば、面接メモ・所見の枠の空き（罫線の部分）を使って
+  //   行数の上限を広げる（docs/SPEC-a4.md 12 章 F5。面接所見 → ① のメモ → 質問の回答・ブロックのメモ〔用紙の順〕の順に、要素のインラインの
+  //   -webkit-line-clamp で。内容の高さが limit を超えない範囲。罫線の空きは 0 行まで使う〔計測中も .cl-grow で .cl-roomy の罫線 38mm を外す〕）。
+  //   全部入りきれば .cl-cut・.cl-nm-cut（「…」の案内）も外れる。最初にインラインの行数を外してから測り直すので、書き出したファイルを開き直しても同じ結果。
+  //   広げるのは縦のはみ出し（scrollHeight − clientHeight）があるあいだだけ（.cl-cut は横のはみ出し＝折り返せない幅広の書記素でも付くので条件にしない）。
+  //   行数を上げても見えない高さが減らなければ戻してやめ、1 要素 200 回まで（固まらない。12 章 F5）。
   //   アプリ ③ の紙（#appPaper）・アプリの印刷（#clSheet）・保存 HTML の用紙（#a4）に使う。祖先に zoom が掛かった状態で呼ばない（高さ・折り返しが変わる）。
   //   計測のあとは用紙いっぱいに伸びる（押印行は用紙の内寸の下端）。印刷のときに計測し直さない（画面と印刷で同じ）。
   //   保存 HTML にソースをそのまま埋め込むため、外部参照なしの ES5 で書く（関数内にコメントを書かない）
@@ -2618,7 +2659,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (!sheet || !sheet.getBoundingClientRect) return '';
     var cls = sheet.classList;
     var lv = ['cl-compact', 'cl-compact-q1', 'cl-compact-2'];
-    var i, h, z, n;
+    var i, h, z, n, mode = 'zoom', vs;
     var hOf = function () {
       cls.add('cl-measure');
       var r = sheet.getBoundingClientRect().height;
@@ -2635,21 +2676,61 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       }
       if (c) cls.add('cl-nm-cut'); else cls.remove('cl-nm-cut');
     };
+    var clampTo = function (v, n) {
+      if (n) v.style.setProperty('-webkit-line-clamp', String(n));
+      else {
+        v.style.removeProperty('-webkit-line-clamp');
+        if (v.getAttribute && v.removeAttribute && !v.getAttribute('style')) v.removeAttribute('style');
+      }
+    };
+    var hidOf = function (v) { return v.scrollHeight - v.clientHeight; };
+    var grow = function () {
+      var qs = ['.cl-nm-iv .cl-nm-v', '.cl-nm-memo .cl-nm-v', '.cl-nm-q .cl-nm-v,.cl-nm-b .cl-nm-v'], list = [], k, j, a, v, cs, n0, m, lh, add, h2, hid, t;
+      if (typeof getComputedStyle !== 'function') return;
+      for (k = 0; k < qs.length; k++) { a = sheet.querySelectorAll(qs[k]); for (j = 0; j < a.length; j++) list.push(a[j]); }
+      cls.add('cl-grow');
+      for (k = 0; k < list.length; k++) {
+        v = list[k];
+        if (!v.style || !v.classList || !v.classList.contains('cl-cut')) continue;
+        cs = getComputedStyle(v);
+        n0 = m = parseInt(cs.getPropertyValue('-webkit-line-clamp'), 10);
+        lh = parseFloat(cs.lineHeight);
+        if (!(m > 0) || !(lh > 0)) continue;
+        for (t = 0; t < 200; t++) {
+          hid = hidOf(v);
+          if (!(hid > 1)) break;
+          add = Math.max(1, Math.min(Math.ceil(hid / lh), Math.floor((limit - h) / lh)));
+          clampTo(v, m + add); cut(); h2 = hOf();
+          if (h2 > limit && add > 1) { add = 1; clampTo(v, m + 1); cut(); h2 = hOf(); }
+          if (h2 > limit || !(hidOf(v) < hid)) { clampTo(v, m === n0 ? 0 : m); cut(); break; }
+          m += add; h = h2;
+        }
+      }
+      cls.remove('cl-grow');
+    };
+    vs = sheet.querySelectorAll('.cl-nm-v');
+    for (i = 0; i < vs.length; i++) { if (vs[i] && vs[i].style && vs[i].style.removeProperty) clampTo(vs[i], 0); }
     for (i = 0; i < lv.length; i++) cls.remove(lv[i]);
     sheet.style.zoom = '';
     cls.add('cl-roomy');
     cut();
     h = hOf();
-    if (h && h <= limit) return 'cl-roomy';
-    cls.remove('cl-roomy');
-    cut();
-    h = hOf();
-    if (!h || h <= limit) return '';
-    for (i = 0; i < lv.length; i++) {
-      cls.add(lv[i]);
+    if (h && h <= limit) mode = 'cl-roomy';
+    else {
+      cls.remove('cl-roomy');
       cut();
       h = hOf();
-      if (h <= limit) return lv[i];
+      if (!h || h <= limit) mode = '';
+      for (i = 0; i < lv.length && mode === 'zoom'; i++) {
+        cls.add(lv[i]);
+        cut();
+        h = hOf();
+        if (h <= limit) mode = lv[i];
+      }
+    }
+    if (mode !== 'zoom') {
+      if (h) grow();
+      return mode;
     }
     z = 1;
     for (n = 0; n < 12 && h > limit && z > 0.3; n++) {
@@ -2889,10 +2970,12 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.cl-sheet .cl-blank{color:#8a94a3}',
       // ---- sheet（A4 報告・1 ページの要約）。本文 9.5px・ラベル 8.5px・見出し 10.5px。画面でも同じ寸法にして計測する ----
       //   用紙を埋める（docs/SPEC-a4.md 12 章）: シートは縦の flex で用紙の内寸の高さ（.a4 の 100%）まで伸ばし、「面接メモ・所見」の枠が残りの高さを取る
-      //   ＝押印行は用紙の内寸の下端。高さの計測（clFitSheet）は .cl-measure（min-height:0）で内容そのものの高さを測る
+      //   ＝押印行は用紙の内寸の下端。高さの計測（clFitSheet）は .cl-measure（min-height:0・max-height:none）で内容そのものの高さを測る。
+      //   シートは用紙の内寸より高くならない（max-height:100%）: 狭い画面の --a4-zoom で行の高さが丸められて内容が数 % 伸びても、面接メモ・所見の枠
+      //   （.cl-blk-notes・.cl-nm-box・.cl-nm が min-height:0。.cl-nm は overflow:hidden）が縮んで吸収し、押印行は用紙の内寸の下端のまま（F5 で罫線の空きを使い切ったときのため）
       '.cl-sheet.cl-mode-sheet{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:9.5px;line-height:1.4;background:#fff;color:#111;' +
-        'display:flex;flex-direction:column;min-height:100%}',
-      '.cl-sheet.cl-mode-sheet.cl-measure{min-height:0 !important}',
+        'display:flex;flex-direction:column;min-height:100%;max-height:100%}',
+      '.cl-sheet.cl-mode-sheet.cl-measure{min-height:0 !important;max-height:none !important}',
       '.cl-mode-sheet .cl-blank{color:#8a94a3;font-weight:400}',
       // 1. 見出し（白地＋濃紺 2px の下線。左にロゴ・題、右に版／劇場／作成日）
       '.cl-mode-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #24324a}',
@@ -2961,8 +3044,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       // 6. 面接メモ・所見の枠（質問の回答は 2 行まで。面接所見・メモは全文）。名前の列は「1 問目の短い名前 ほか n 問」が 1 行に入る幅。
       //   枠は残りの高さいっぱい（flex）。記入の下は手書き用の薄い点線の罫線（7.5mm 間隔。flex-basis 0・overflow:hidden で内容の高さに入れない）。
       //   記入が無い枠は罫線 1 本分（7.5mm）を最低の高さにする
-      '.cl-mode-sheet .cl-blk-notes{flex:1 1 auto;display:flex;flex-direction:column}',
-      '.cl-mode-sheet .cl-nm-box{flex:1 1 auto;display:flex;flex-direction:column;padding:0 8px 1px;border:1px solid #c9d2dd;border-radius:4px;background:#fff}',
+      '.cl-mode-sheet .cl-blk-notes{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}',
+      '.cl-mode-sheet .cl-nm-box{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;padding:0 8px 1px;border:1px solid #c9d2dd;border-radius:4px;background:#fff}',
+      '.cl-mode-sheet .cl-nm{min-height:0;overflow:hidden}',
       '.cl-mode-sheet .cl-nm-lines{flex:1 1 0;min-height:0;overflow:hidden}',
       '.cl-mode-sheet .cl-nm-box.is-empty .cl-nm-lines{min-height:7.5mm}',
       '.cl-mode-sheet .cl-nm-lines i{display:block;height:7.5mm;border-bottom:1px dotted #b8c2cf}',
@@ -2994,7 +3078,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.cl-sheet .hanko,.cl-sheet .verdict-stamp{filter:none !important}',
       // 1 ページ保証（clFitSheet）: 高さが A4 を超えたら .cl-compact（本文 9px・余白を詰める。質問の回答は 2 行のまま・面接所見 10 行・メモ 3 行まで）→
       //   .cl-compact-q1（質問の回答 1 行・面接所見 6 行・メモ 2 行）→ .cl-compact-2（質問の回答を省いて 1 行の案内・面接所見 4 行・メモ 1 行）。
-      //   面接所見は行数の上限を固定（残りの高さまで広げない。所見が紙を占めて結果・確認点より目立たないように）
+      //   段階ごとの行数の上限はここで決め、段階を決めたあとで「…」で切れたメモが残り、面接メモ・所見の枠に空き（罫線の部分）があれば、clFitSheet が
+      //   要素のインラインの -webkit-line-clamp で 1 行ずつ広げる（面接所見 → メモ → 質問の回答。docs/SPEC-a4.md 12 章 F5）
       '.cl-mode-sheet.cl-compact{font-size:9px;line-height:1.35}',
       '.cl-mode-sheet.cl-compact .cl-blk,.cl-mode-sheet.cl-compact .cl-cols,.cl-mode-sheet.cl-compact .cl-exline,.cl-mode-sheet.cl-compact .cl-stamps{margin-top:7px}',
       '.cl-mode-sheet.cl-compact .cl-mtab td,.cl-mode-sheet.cl-compact .cl-rt td,.cl-mode-sheet.cl-compact dl.cl-kv>div,.cl-mode-sheet.cl-compact .cl-nm-row{padding-top:2px;padding-bottom:2px}',
@@ -3018,7 +3103,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.cl-mode-sheet.cl-roomy dl.cl-kv dt,.cl-mode-sheet.cl-roomy .cl-nm-k,.cl-mode-sheet.cl-roomy .cl-rt-no,.cl-mode-sheet.cl-roomy .cl-ex-k{font-size:9.5px}',
       '.cl-mode-sheet.cl-roomy .cl-mark{width:19px;height:19px;font-size:11px}',
       '.cl-mode-sheet.cl-roomy .cl-exline{padding:5px 10px}',
-      '.cl-mode-sheet.cl-roomy.cl-measure .cl-nm-box .cl-nm-lines{min-height:38mm}',
+      //   切れたメモを広げる計測（.cl-grow）では 38mm を外す（罫線の空きは 0 行まで使う。F5）
+      '.cl-mode-sheet.cl-roomy.cl-measure:not(.cl-grow) .cl-nm-box .cl-nm-lines{min-height:38mm}',
       '.cl-sheet .cl-title-logo,.cl-sheet .cl-tile,.cl-sheet .hanko,.cl-sheet .stamp-empty,.cl-sheet .cl-judge,.cl-sheet .cl-mark,.cl-sheet .cl-mm,.cl-sheet .cl-exline,.cl-sheet .cl-decision,.cl-sheet .verdict-stamp,.cl-sheet .cl-dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
     ].join('\n');
   }
@@ -3044,7 +3130,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     // 窓で使う設定（押印欄・名簿・手入力の可否・担当と連動する押印欄・最終合否）。押印欄 0・合否 OFF でも出す（長いメモの窓は常に使う）
     const mg = profile.management || {};
     const clDef = normalizeChecklistDef(record.checklistDef || profile.checklist, defaults().checklist);
-    //   最終承認のパスワード（docs/SPEC-a4.md 11 章）: 保存時のロック（salt・hash だけ。平文は持たない）と、パスワードが要る押印欄（decision.stampField）。
+    //   最終承認のパスワード（docs/SPEC-a4.md 11 章）: 保存時のロック（salt・hash だけ。平文は持たない）と、パスワードが要る押印欄
+    //   （lockFields = 既定の最終確認欄 'final' と decision.stampField の欄。lockField は decision.stampField そのもの〔互換のため残す〕）。
     //   保存 HTML はこのロックで照合する（保存後にアプリでパスワードを変えても、出したファイルは出した時点のパスワード）
     const flk = normalizeLock(mg.finalLock);
     const mgmtConfig = jsonForScript({
@@ -3053,7 +3140,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       decision: dcfg.enabled ? { label: dcfg.label, hireLabel: dcfg.hireLabel, rejectLabel: dcfg.rejectLabel, hireColor: dcfg.hireColor, rejectColor: dcfg.rejectColor,
         stampField: dcfg.stampField, autoStampFinal: dcfg.autoStampFinal, filenameSuffix: dcfg.filenameSuffix, hint: dcfg.hint, sub: dcfg.sub } : null,
       finalLock: lockOn(flk) ? flk : null,
-      lockField: asStr(dcfg.stampField)
+      lockField: asStr(dcfg.stampField),
+      lockFields: finalLockFields(profile)
     });
     const foot = [asStr(meta.footer).trim(), 'このファイルはアプリの「読み込み」で再度開けます。埋め込みデータは編集しないでください。'].filter(Boolean).join('　');
     // スクリプトは 1 本: 1 ページ保証（clFitSheet）・ハンコと合否スタンプ（stamp.js の純関数）・最終承認のパスワードの照合（lock.js の純関数）・用紙の操作（a4PageScript）
@@ -3076,10 +3164,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
   // 保存 HTML の用紙の操作（docs/SPEC-a4.md 3 章・11 章）。generateReportHTML がソースをそのまま埋め込み、clFitSheet と stamp.js の関数
   //   （stampSvg・shortName・verdictSvg・decisionSheetHtml・decisionFilename）・lock.js の関数（sha256Hex・hashPassword・isLocked・verify）と同じ IIFE の中で呼ぶ。アプリでは呼ばない。
-  //   最終承認のパスワード: cfg.finalLock があり未解錠なら、最終確認（cfg.lockField）と最終合否の窓はパスワード欄と［確認］だけ（正しければ unlocked。変数だけで書き出しに残さない）。
+  //   最終承認のパスワード: cfg.finalLock があり未解錠なら、最終確認（cfg.lockFields＝'final' と decision.stampField の欄。無い旧い設定は 'final' と cfg.lockField）と
+  //   最終合否の窓はパスワード欄と［確認］だけ（正しければ unlocked。変数だけで書き出しに残さない）。
   //   外部参照はそれらの関数と DOM だけの ES5 で書く（関数内にコメント・閉じタグを書かない）。文字列は旧い埋め込みスクリプトと同じ二重引用符。
   //   計測（fit）は読み込み時・load・フォントの読み込み後・押印／合否の変更後だけ。印刷のための切替（beforeprint）はしない。
-  //   狭い画面の縮小（--a4-zoom）は計測の前に外し、計測のあとで付け直す（祖先の zoom で高さ・折り返しが変わるため）
+  //   狭い画面の縮小（--a4-zoom。transform:scale なのでレイアウトは変わらない。12 章 F7）は従来どおり計測の前に外し、計測のあとで付け直す
   function a4PageScript(LIMIT, PAPER_W) {
     var de = document.documentElement, a4 = document.getElementById("a4"), sheet = a4 && a4.querySelector(".cl-sheet");
     if (!sheet) return;
@@ -3096,6 +3185,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (!rec.management || typeof rec.management !== "object") rec.management = {};
     var D = cfg.decision && typeof cfg.decision === "object" ? cfg.decision : null;
     var LK = cfg.finalLock && typeof cfg.finalLock === "object" ? cfg.finalLock : null, lockF = typeof cfg.lockField === "string" ? cfg.lockField : "";
+    var lockFs = Array.isArray(cfg.lockFields) ? cfg.lockFields.concat(["final"]) : ["final", lockF];
     var locked = !!LK && (typeof isLocked !== "function" || isLocked(LK)), unlocked = false;
     var canStamp = recOk && typeof stampSvg === "function" && typeof shortName === "function" && cfg.fields.length > 0;
     var canDecide = recOk && !!D && typeof decisionSheetHtml === "function" && typeof decisionFilename === "function" && typeof shortName === "function";
@@ -3229,7 +3319,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       return "<button type=\"button\" class=\"pop-dec pop-" + r + (on ? " on" : "") + "\" data-act=\"decide\" data-value=\"" + r + "\" aria-pressed=\"" + (on ? "true" : "false") + "\">" + esc(label) + "</button>";
     }
     function popErr(msg) { var e = pop && pop.querySelector(".pop-err"); if (e) e.textContent = msg; }
-    function needPw(kind, id) { return locked && !unlocked && (kind === "decision" || (kind === "stamp" && !!lockF && id === lockF)); }
+    function needPw(kind, id) { return locked && !unlocked && (kind === "decision" || (kind === "stamp" && !!id && lockFs.indexOf(id) >= 0)); }
     function pwHtml() {
       return "<div class=\"pop-lock\">最終承認にはパスワードが必要です</div>" +
         "<label class=\"pop-l\"><span>パスワード</span><input class=\"pop-pw\" type=\"password\" autocomplete=\"off\" aria-label=\"最終承認のパスワード\"></label>" +
@@ -3438,6 +3528,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     reportCss: reportCss,
     normalizeDecision: normalizeDecision,
     decisionConfig: decisionConfig,
+    finalLockFields: finalLockFields,
+    finalLockScope: finalLockScope,
+    lockUnset: lockUnset,
     loadProfile: loadProfile,
     saveProfile: saveProfile,
     resetProfile: resetProfile,
@@ -3936,7 +4029,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     return '<h3 class="sub" id="s-finalLock">最終承認のパスワード</h3>' +
       '<div class="hint">最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（' + stepRef(4) + ' 報告書と保存した HTML の両方。面接対応者の押印には要りません）。' +
         '誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げません。パスワードそのものは保存せず、照合用の値（ハッシュ）だけを設定に持ちます。' +
-        '保存した HTML は保存した時点のパスワードで照合します。</div>' +
+        '保存した HTML は保存した時点のパスワードで照合します。パスワードがあるとき、「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えて保存するには現在のパスワードが要ります（表示名・説明だけなら不要）。</div>' +
       '<div class="lock-status" id="finalLockStatus"><span class="badge ' + (on ? 'ok' : 'muted') + '">' + (on ? '設定済み' : '未設定') + '</span>' +
         (pending ? '<span class="hint">未保存の変更です。「設定を保存」で確定します。</span>' : '') + '</div>' + body;
   }
@@ -3960,7 +4053,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (on && !L.verify(lk, v('lockCur'))) { err('現在のパスワードが違います', 'lockCur'); return; }
     if (!U.isObj(draft.management)) draft.management = {};
     if (kind === 'remove') {
-      draft.management.finalLock = { salt: '', hash: '' };
+      // 「外した」印（off）。空のロック（{ salt: '', hash: '' }）は未設定＝既定のロック（ローカル版の初期パスワード）に戻る扱い（docs/SPEC-a4.md 11 章 L6c）
+      draft.management.finalLock = { salt: '', hash: '', off: true };
     } else {
       if (!v('lockNew')) { err('新しいパスワードを入力してください', 'lockNew'); return; }
       if (v('lockNew') !== v('lockNew2')) { err('新しいパスワード（確認）が一致しません', 'lockNew2'); return; }
@@ -3998,7 +4092,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
           '<div class="hint">採用は朱、不採用は藍。日付と劇場名が入ります。</div></div></div>' +
       '</div>' +
       sSelect('management.decision.stampField', '押印欄と連動', fields.filter(function (fl) { return fl && fl.id; }).map(function (fl) { return { value: fl.id, label: fl.label + '（' + fl.id + '）' }; }).concat([{ value: '', label: '連動しない' }]),
-        '合否を押したとき、この押印欄にも同じ担当者の印を押せます。') +
+        '合否を押したとき、この押印欄にも同じ担当者の印を押せます。最終承認のパスワードがあるときは、最終確認の欄（final）とこの欄の押印にパスワードが要り、ここ・最終合否のスタンプの ON/OFF を変えて保存するには現在のパスワードが要ります。') +
       sCheck('management.decision.autoStampFinal', '合否を押すと、連動する押印欄にも同じ担当者の印を押す（未押印のときだけ）') +
       sCheck('management.decision.filenameSuffix', '合否を付けて保存するとき、ファイル名の末尾に「_採用」「_不採用」を付ける');
   }
@@ -4102,8 +4196,10 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       return;
     }
     issues = null;
-    handlers.onSave(U.deepClone(draft));
-    if (res.warnings.length && handlers.onToast) handlers.onToast('設定を保存しました。注意: ' + res.warnings.join(' / '));
+    // onSave は保存したかどうか（最終承認のパスワードを確かめるときは Promise）を返す。保存しなかったときは下書きを残し、注意の toast も出さない
+    const warn = function (ok) { if (ok !== false && res.warnings.length && handlers.onToast) handlers.onToast('設定を保存しました。注意: ' + res.warnings.join(' / ')); };
+    const r = handlers.onSave(U.deepClone(draft));
+    if (r && typeof r.then === 'function') r.then(warn); else warn(r);
   }
 
   function onClick(e) {
@@ -4177,7 +4273,22 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     paint();
   }
 
-  global.RecruitSettings = { render: render };
+  // 下書きが p と同じ（未保存の変更が無い）か。別のタブで設定が保存されたとき、描き直してよいかの判定に使う（app.js）
+  function isDraftOf(p) { return !!draft && JSON.stringify(draft) === JSON.stringify(p); }
+  // 別のタブで設定が保存されたとき（下書きに未保存の変更があるとき。app.js）: 最終承認のロックが変わっていれば（prev → fresh）、下書きのロックを最新に合わせて描き直す。
+  //   下書きでロックを変えていた（prev と違う）なら、古いロックで確かめた変更なので取り消す（true を返す）。ロックが変わっていなければ下書きはそのまま。docs/SPEC-a4.md 11 章 L5d
+  function lockSig(l) { return lockIsOn(l) ? l.salt + ':' + l.hash : (U.isObj(l) && l.off === true ? 'off' : ''); }
+  function syncLock(prev, fresh) {
+    if (!draft || !root || lockSig(lockOf(fresh)) === lockSig(lockOf(prev))) return false;
+    const touched = lockSig(lockOf(draft)) !== lockSig(lockOf(prev));
+    if (!U.isObj(draft.management)) draft.management = {};
+    draft.management.finalLock = U.deepClone(lockOf(fresh) || { salt: '', hash: '' });
+    lockForm = '';
+    paint(window.scrollY);
+    return touched;
+  }
+
+  global.RecruitSettings = { render: render, isDraftOf: isDraftOf, syncLock: syncLock };
 })(window);
 
 </script>
@@ -4252,7 +4363,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     bindGlobal();
     showView('judge');
     // 正規化した設定を保存し直す（削除した機能のキーを localStorage から消す。毎回 toast を出さないため）
-    if (rep.v1Reset || rep.fullModeRemoved || rep.stripped) S.saveProfile(state.profile);
+    if (rep.v1Reset || rep.fullModeRemoved || rep.stripped) persistProfile(state.profile);
+    else storedRaw = readStoredRaw();
     const notice = profileNotice(rep);
     if (notice) toast(notice);
   }
@@ -4305,6 +4417,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     window.addEventListener('beforeunload', function (e) {
       if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
     });
+    // 別のタブ（ウィンドウ）で設定が保存・初期化されたら読み込み直す（古いタブのまま最終承認のパスワードを迂回・上書きしない。docs/SPEC-a4.md 11 章 L5d）。
+    //   storage イベントが届かない環境のため、タブに戻ったとき・保存や押印の直前にも localStorage と比べる（refreshProfileFromStorage）
+    window.addEventListener('storage', function (e) { if (e.key === null || e.key === S.PROFILE_KEY) refreshProfileFromStorage(); });
+    window.addEventListener('focus', function () { refreshProfileFromStorage(); });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshProfileFromStorage(); });
 
     // ブラウザの印刷（Ctrl+P）も A4 面接チェックリスト報告にする（③ の紙と同じ用紙 1 枚。保存 HTML の印刷と同じ様式）
     let autoClPrint = false;
@@ -4366,6 +4483,119 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     invalidateJudgment();
   }
 
+  // ---------- 設定の保存（localStorage）と、別のタブ（ウィンドウ）での変更の取り込み（docs/SPEC-a4.md 11 章 L5d） ----------
+  //   storedRaw: このタブが最後に見た（読んだ・書いた）localStorage の設定の文字列。違っていれば別のタブで保存・初期化された
+  let storedRaw = null;
+  function readStoredRaw() { try { return localStorage.getItem(S.PROFILE_KEY); } catch (e) { return null; } }
+  function persistProfile(p) { S.saveProfile(p); storedRaw = readStoredRaw(); }
+  function lockSig(p) {
+    const l = ((p || {}).management || {}).finalLock;
+    return Lock && Lock.isLocked(l) ? l.salt + ':' + l.hash : (U.isObj(l) && l.off === true ? 'off' : '');
+  }
+  // 別のタブで保存された設定を読み込み、画面を描き直す。変わっていなければ null。
+  //   変わっていれば { prev, lockMoved（最終承認のロックが変わった）, draftClean（設定画面に未保存の変更が無かった）, lockReverted（設定画面の下書きで変えていたパスワードを取り消した） }。
+  //   ③ は描き直す（最終確認・最終合否のパスワード欄は最新のロックで出す）。設定画面は、未保存の変更が無ければ最新の設定で描き直し、
+  //   あれば下書きを残して最終承認のロックだけ最新に合わせる（下書きでパスワードを変えていたら取り消す）
+  function refreshProfileFromStorage() {
+    const raw = readStoredRaw();
+    if (raw === storedRaw) return null;
+    storedRaw = raw;
+    const fresh = S.loadProfile();
+    if (JSON.stringify(fresh) === JSON.stringify(state.profile)) return null;
+    const prev = state.profile;
+    const out = { prev: prev, lockMoved: lockSig(prev) !== lockSig(fresh), draftClean: false, lockReverted: false };
+    state.profile = fresh;
+    onProfileChanged();
+    let msg = '別のタブ（ウィンドウ）で保存された最新の設定を読み込みました';
+    if (state.view === 'judge') {
+      if (state.step === 4) { renderStepNav(); renderStep(); }
+      renderSummary();
+    } else if (state.view === 'settings') {
+      out.draftClean = Settings.isDraftOf(prev);
+      if (out.draftClean) renderSettings();
+      else {
+        out.lockReverted = Settings.syncLock(prev, fresh);
+        msg = out.lockReverted
+          ? '別のタブ（ウィンドウ）で最終承認のパスワードが変わったため、このタブでのパスワードの変更を取り消しました。必要ならもう一度変更してください'
+          : '別のタブ（ウィンドウ）で設定が保存されました' + (out.lockMoved ? '（最終承認のパスワードは最新のものを使います）' : '') + '。このタブの変更を保存すると、ほかの項目はこのタブの内容になります';
+      }
+    }
+    toast(msg, out.lockReverted ? 'error' : 'warn');
+    return out;
+  }
+  // パスワードのダイアログを出しているあいだに別のタブでロックが変わったら（sig は始めたときのロック）、保存・読み込み・初期化をやめる（古いロックで確かめたため）
+  function lockMovedSince(sig) {
+    refreshProfileFromStorage();
+    if (lockSig(state.profile) === sig) return false;
+    toast('別のタブ（ウィンドウ）で最終承認のパスワードが変わったため、やめました（最新の設定を読み込みました）。もう一度操作してください', 'error');
+    return true;
+  }
+  // 「外した」印（finalLock.off）を書けるのは、いま有効なロックを外すとき（現在のパスワードを確かめる）か、すでに外してあるときだけ。
+  //   ロックの無い版（公開版）で off の入った JSON を読み込んでも、同じ localStorage を使うローカル版のロックを外せないよう未設定に戻す（docs/SPEC-a4.md 11 章 L6c）
+  function keepLockOff(next) {
+    const nx = ((next || {}).management || {}).finalLock;
+    if (!U.isObj(nx) || nx.off !== true || finalLockNow() || lockSig(state.profile) === 'off') return next;
+    next.management.finalLock = { salt: '', hash: '' };
+    return next;
+  }
+
+  // 設定画面（settings.js）に渡す処理。onSave の戻り値: 保存したら true、やめたら false（パスワードを確かめるときは Promise。settings.js が注意の toast をこのあとに出す）
+  const settingsHandlers = {
+    current: function () { return state.profile; },
+    onSave: function (p) {
+      // 別のタブ（ウィンドウ）で設定が保存されていたら、先に最新の設定を読み込む（古いタブの保存で最新のロックを上書きしない。docs/SPEC-a4.md 11 章 L5d）
+      //   このタブで変更していなければ最新の設定を表示し直すだけ（保存しない）。別のタブでロックが変わっていて、このタブでもパスワードを変えていたら
+      //   （古いロックで確かめた変更なので）取り消して保存しない。それ以外は保存する（別のタブでロックが変わっていればロックは最新のもの）
+      const moved = refreshProfileFromStorage();
+      if (moved && (moved.draftClean || moved.lockReverted)) return false;
+      if (moved && moved.lockMoved && U.isObj(p.management)) p.management.finalLock = U.deepClone(state.profile.management.finalLock);
+      const next = keepLockOff(S.normalizeProfile(p));
+      const sig0 = lockSig(state.profile);
+      const commit = function () {
+        if (lockMovedSince(sig0)) return false;
+        state.profile = next;
+        persistProfile(state.profile);
+        onProfileChanged();
+        toast('設定を保存しました', 'ok');
+        renderSettings();
+        return true;
+      };
+      // 最終承認のパスワードがあるとき、ロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の構成）を変える保存は現在のパスワードを求める
+      //   （違えば・キャンセルなら保存しない。下書きはそのまま残す。表示名・説明だけの変更は求めない。docs/SPEC-a4.md 11 章 L5c）
+      if (!finalScopeChanges(next)) return commit();
+      return askFinalPassword('「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えると、最終承認のパスワードで守る欄が変わります。保存するには現在のパスワードを入力してください。')
+        .then(function (ok) {
+          if (ok) return commit();
+          toast('設定を保存しませんでした（最終承認のパスワードを確認できません）', 'error');
+          return false;
+        });
+    },
+    onExport: function (p) {
+      S.download('劇場プロファイル_' + S.safeName(p.meta.theaterName) + '_' + U.fmtDate(new Date()) + '.json', JSON.stringify(p, null, 2), 'application/json');
+      toast('プロファイルを書き出しました');
+    },
+    onImport: function () { const f = $('#profileFileInput'); f.value = ''; f.click(); },
+    onReset: function () {
+      let sig0 = '';
+      const doReset = function () {
+        if (lockMovedSince(sig0)) return;
+        state.profile = S.resetProfile();
+        persistProfile(state.profile);
+        onProfileChanged();
+        toast('初期設定に戻しました', 'ok');
+        showView('settings');
+      };
+      refreshProfileFromStorage();
+      sig0 = lockSig(state.profile);
+      // 初期設定で最終承認のパスワードが変わる／外れるときは、現在のパスワードを求める（違えば・キャンセルなら初期化しない）
+      if (!finalLockChanges(S.normalizeProfile(S.defaults()))) { doReset(); return; }
+      askFinalPassword('初期設定に戻すと最終承認のパスワードが' + (Lock.isLocked(S.normalizeProfile(S.defaults()).management.finalLock) ? '初期のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。')
+        .then(function (ok) { if (ok) doReset(); else toast('初期設定に戻しませんでした（最終承認のパスワードを確認できません）', 'error'); });
+    },
+    onToast: toast
+  };
+  function renderSettings() { Settings.render($('#view-settings'), state.profile, settingsHandlers); }
+
   function showView(view) {
     state.view = view;
     $$('.nav-item').forEach(function (b) { b.classList.toggle('active', b.dataset.view === view); });
@@ -4378,35 +4608,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (view === 'judge') {
       renderStepNav(); renderStep(); renderSummary();
     } else if (view === 'settings') {
-      Settings.render($('#view-settings'), state.profile, {
-        current: function () { return state.profile; },
-        onSave: function (p) {
-          state.profile = S.normalizeProfile(p);
-          S.saveProfile(state.profile);
-          onProfileChanged();
-          toast('設定を保存しました', 'ok');
-          Settings.render($('#view-settings'), state.profile, this);
-        },
-        onExport: function (p) {
-          S.download('劇場プロファイル_' + S.safeName(p.meta.theaterName) + '_' + U.fmtDate(new Date()) + '.json', JSON.stringify(p, null, 2), 'application/json');
-          toast('プロファイルを書き出しました');
-        },
-        onImport: function () { const f = $('#profileFileInput'); f.value = ''; f.click(); },
-        onReset: function () {
-          const doReset = function () {
-            state.profile = S.resetProfile();
-            S.saveProfile(state.profile);
-            onProfileChanged();
-            toast('初期設定に戻しました', 'ok');
-            showView('settings');
-          };
-          // 初期設定で最終承認のパスワードが変わる／外れるときは、現在のパスワードを求める（違えば・キャンセルなら初期化しない）
-          if (!finalLockChanges(S.normalizeProfile(S.defaults()))) { doReset(); return; }
-          askFinalPassword('初期設定に戻すと最終承認のパスワードが' + (Lock.isLocked(S.normalizeProfile(S.defaults()).management.finalLock) ? '初期のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。')
-            .then(function (ok) { if (ok) doReset(); else toast('初期設定に戻しませんでした（最終承認のパスワードを確認できません）', 'error'); });
-        },
-        onToast: toast
-      });
+      renderSettings();
     } else if (view === 'help') {
       $('#view-help').innerHTML = helpHtml();
     }
@@ -4722,9 +4924,12 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         saveRecord();
         break;
       case 'unlock-final':
+        if (refreshProfileFromStorage()) break;
         unlockFinal(b.closest('.final-lock'));
         break;
       case 'stamp': {
+        // 別のタブで設定（最終承認のパスワード）が変わっていたら、最新の設定で描き直すだけ（押さない）
+        if (refreshProfileFromStorage()) break;
         const box = b.closest('.stamp-box');
         const fid = box && box.dataset.fieldId;
         if (!fid || finalNeedsPw(fid)) break;
@@ -4750,16 +4955,18 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         break;
       }
       case 'unstamp': {
+        if (refreshProfileFromStorage()) break;
         const box = b.closest('.stamp-box');
         const fid = box && box.dataset.fieldId;
         if (fid && state.management[fid] && !finalNeedsPw(fid)) { delete state.management[fid]; state.dirty = true; rerenderManagementCard(); rerenderReportPaper(); renderSummary(); }
         break;
       }
       case 'decide':
+        if (refreshProfileFromStorage()) break;
         decide(b.dataset.value);
         break;
       case 'undecide':
-        if (finalNeedsPw('')) break;
+        if (refreshProfileFromStorage() || finalNeedsPw('')) break;
         state.decision = null;
         state.dirty = true;
         rerenderDecisionCard();
@@ -4777,6 +4984,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const t = e.target;
     if (e.key !== 'Enter' || !t || !t.classList || !t.classList.contains('final-lock-pw')) return;
     e.preventDefault();
+    if (refreshProfileFromStorage()) return;
     unlockFinal(t.closest('.final-lock'));
   }
 
@@ -5380,16 +5588,29 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const rep = {};
     try { p = S.parseProfileJSON(text, rep); } catch (err) { toast('読み込めません: ' + err.message, 'error'); return; }
     if (!window.confirm('「' + p.meta.theaterName + '」のプロファイルを読み込み、現在の設定を置き換えます。よろしいですか？')) return;
+    // 別のタブで保存された最新のロックと比べる（docs/SPEC-a4.md 11 章 L5d）。JSON に最終承認のロック（salt・hash）も「外した」印も無ければ
+    //   （公開版が書き出した空のロック・キーなし）、いまのロックのまま（読み込んでもパスワードは変わらない）。「外した」印は有効なロックを外すときだけ（L6c）
+    refreshProfileFromStorage();
+    let rawLock;
+    try { rawLock = ((JSON.parse(text) || {}).management || {}).finalLock; } catch (err) { rawLock = undefined; }
+    if (S.lockUnset(rawLock)) p.management.finalLock = U.deepClone(state.profile.management.finalLock);
+    p = keepLockOff(p);
+    const sig0 = lockSig(state.profile);
     const apply = function () {
+      if (lockMovedSince(sig0)) return;
       state.profile = p;
-      S.saveProfile(p);
+      persistProfile(p);
       onProfileChanged();
       toast(profileNotice(rep) || 'プロファイルを読み込みました', 'ok');
       showView('settings');
     };
-    // 読み込むと最終承認のパスワードが変わる／外れるときは、現在のパスワードを求める（違えば・キャンセルなら読み込まない。docs/SPEC-a4.md 11 章）
-    if (!finalLockChanges(p)) { apply(); return; }
-    askFinalPassword('読み込むプロファイルでは最終承認のパスワードが' + (Lock.isLocked(p.management.finalLock) ? '別のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。')
+    // 読み込むと最終承認のパスワードが変わる／外れるとき、またはロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の構成）が変わるときは、
+    //   現在のパスワードを求める（違えば・キャンセルなら読み込まない。docs/SPEC-a4.md 11 章 L5b・L5c）
+    const lockCh = finalLockChanges(p);
+    if (!lockCh && !finalScopeChanges(p)) { apply(); return; }
+    askFinalPassword(lockCh
+      ? '読み込むプロファイルでは最終承認のパスワードが' + (Lock.isLocked(p.management.finalLock) ? '別のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。'
+      : '読み込むプロファイルでは「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成が変わり、最終承認のパスワードで守る欄が変わります。現在のパスワードを入力してください。')
       .then(function (ok) { if (ok) apply(); else toast('プロファイルを読み込みませんでした（最終承認のパスワードを確認できません）', 'error'); });
   }
 
@@ -5449,7 +5670,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
   // =====================================================================
   // 最終承認のパスワード（docs/SPEC-a4.md 11 章）
-  //   最終確認（decision.stampField の押印欄）の押印・取消と最終合否の決定・取消の前に求める（面接対応者の押印には要らない）。
+  //   最終確認（既定の最終確認欄 'final' と decision.stampField の押印欄。storage.finalLockFields）の押印・取消と最終合否の決定・取消の前に求める（面接対応者の押印には要らない）。
+  //   「押印欄と連動」を「連動しない」や別の欄に変えても最終確認欄はロックの対象のまま。ロックの対象を変える設定（押印欄と連動・最終合否の ON/OFF・押印欄の構成）の
+  //   保存・JSON の読み込みには現在のパスワードが要る（finalScopeChanges）
   //   ロック（profile.management.finalLock = { salt, hash }）があり、このページでまだ解錠していないとき、③ のカードの操作の代わりにパスワード欄と［確認］を出す。
   //   正しければこのページを閉じる／読み込み直すまで解錠（変数だけ。localStorage・書き出すファイルには残さない）。ロックが変わったら（設定の保存・JSON・初期化）また求める
   // =====================================================================
@@ -5460,11 +5683,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     return Lock && Lock.isLocked(lk) ? lk : null;
   }
   function lockKey(lk) { return lk ? lk.salt + ':' + lk.hash : ''; }
-  // fid: 押印欄の id（'' = 最終合否）。パスワードが要るのは最終合否と decision.stampField の欄だけ
+  // fid: 押印欄の id（'' = 最終合否）。パスワードが要るのは最終合否と、最終確認欄 'final'・decision.stampField の欄だけ
   function finalNeedsPw(fid) {
     const lk = finalLockNow();
     if (!lk || finalUnlockedKey === lockKey(lk)) return false;
-    return fid === '' || (!!fid && fid === S.decisionConfig(state.profile).stampField);
+    return fid === '' || (!!fid && S.finalLockFields(state.profile).indexOf(fid) >= 0);
   }
   function finalLockRowHtml(where) {
     return '<div class="final-lock no-print" data-lock-for="' + esc(where) + '">' +
@@ -5495,6 +5718,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (!cur) return false;
     const nx = ((nextProfile || {}).management || {}).finalLock;
     return !(Lock.isLocked(nx) && nx.salt === cur.salt && nx.hash === cur.hash);
+  }
+  // 設定の保存・JSON の読み込みでロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の追加・削除・id）が変わるとき（現在のロックがあれば）。
+  //   表示名・説明（label・hint）だけの変更は含めない。nextProfile は正規化したもの
+  function finalScopeChanges(nextProfile) {
+    return !!finalLockNow() && S.finalLockScope(nextProfile) !== S.finalLockScope(state.profile);
   }
   function askFinalPassword(msg) {
     const lk = finalLockNow();
@@ -5722,7 +5950,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         '<li>設定の「応募者の管理（押印）」でパスワードを決めると、最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（③ 報告書と保存した HTML の両方。面接対応者の押印には要りません）。一度正しく入れると、そのページを閉じる（読み込み直す）まで続けて押せます。</li>' +
         '<li>誤操作を防ぐための鍵です。HTML をテキストで開いて書き換える人までは防げません。</li>' +
         '<li>パスワードそのものは保存しません（照合用の値〔ハッシュ〕だけを設定と保存した HTML に入れます）。保存した HTML は保存した時点のパスワードで照合します。</li>' +
-        '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは <code>local/final-password.txt</code> で決めます。</li></ul></div>' +
+        '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは <code>local/final-password.txt</code> で決めます。</li>' +
+        '<li>最終確認の欄は「押印欄と連動」を「連動しない」や別の欄に変えてもパスワードの対象のままです（連動する欄もパスワードの対象）。パスワードがあるときに「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えて保存（JSON の読み込みを含む）するには、現在のパスワードが必要です。表示名・説明だけの変更には要りません。</li></ul></div>' +
       '<div class="view-footer">' + esc(m.footer) + '</div>';
   }
 

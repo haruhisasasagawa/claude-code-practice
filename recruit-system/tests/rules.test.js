@@ -1153,11 +1153,14 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
     '.cl-mode-sheet.cl-compact .cl-nm-iv .cl-nm-v,.cl-mode-sheet.cl-compact .cl-nm-memo .cl-nm-v{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:10;overflow:hidden}',
     '.cl-mode-sheet.cl-compact-q1 .cl-nm-q .cl-nm-v,.cl-mode-sheet.cl-compact-q1 .cl-nm-b .cl-nm-v{-webkit-line-clamp:1}', '.cl-mode-sheet.cl-compact-q1 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:6}', '.cl-mode-sheet.cl-compact-2 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:4}',
     // 用紙を埋める（docs/SPEC-a4.md 12 章）: シートは用紙の内寸いっぱい（計測は .cl-measure で内容の高さ）・面接メモ・所見の枠が残りの高さ・罫線 7.5mm・ゆったり（.cl-roomy 本文 10.5px）
-    'display:flex;flex-direction:column;min-height:100%}', '.cl-sheet.cl-mode-sheet.cl-measure{min-height:0 !important}', '.cl-mode-sheet .cl-blk-notes{flex:1 1 auto;',
+    'display:flex;flex-direction:column;min-height:100%;max-height:100%}', '.cl-sheet.cl-mode-sheet.cl-measure{min-height:0 !important;max-height:none !important}', '.cl-mode-sheet .cl-blk-notes{flex:1 1 auto;',
+    // 用紙の内寸より高くならない（12 章 F6。狭い画面の縮小は transform なので内容は伸びないが、スクリプトが動かないファイルなどで内容が多すぎても押印行を用紙の中に残す）
+    'display:flex;flex-direction:column;min-height:0}', '.cl-mode-sheet .cl-nm-box{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;', '.cl-mode-sheet .cl-nm{min-height:0;overflow:hidden}',
     '.cl-mode-sheet .cl-nm-lines{flex:1 1 0;min-height:0;overflow:hidden}', '.cl-mode-sheet .cl-nm-lines i{display:block;height:7.5mm;border-bottom:1px dotted', '.cl-mode-sheet.cl-roomy{font-size:10.5px;',
-    '.cl-mode-sheet.cl-roomy.cl-measure .cl-nm-box .cl-nm-lines{min-height:38mm}'
+    // 罫線の 38mm は段階を決める計測だけ（切れたメモを広げる計測〔.cl-grow〕では外す＝罫線の空きは 0 行まで使う）
+    '.cl-mode-sheet.cl-roomy.cl-measure:not(.cl-grow) .cl-nm-box .cl-nm-lines{min-height:38mm}'
   ].forEach(function (t) { assert.ok(css.indexOf(t) >= 0, 'CSS に ' + t); });
-  // 罫線の最低 38mm は計測中（.cl-measure）だけ。表示中も付けると、狭い画面の --a4-zoom で内容が数 % 伸びたとき押印行が用紙の下端より下に押し出される
+  // 罫線の最低 38mm は計測中（.cl-measure）だけ。表示中も付けると、内容が上限近くのとき押印行が用紙の下端より下に押し出される
   assert.ok(css.indexOf('.cl-mode-sheet.cl-roomy .cl-nm-box .cl-nm-lines{min-height:38mm}') < 0, '表示中は罫線に最低の高さ 38mm を付けない');
   assert.ok(css.indexOf('.cl-mode-sheet.cl-compact .cl-nm-q .cl-nm-v') < 0, '.cl-compact では質問の回答を 1 行にしない（面接所見から先に削る）');
   assert.ok(css.indexOf('cl-fit') < 0 && css.indexOf('break-before:page') < 0, '2 ページ用の規則なし');
@@ -1165,7 +1168,8 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
   // 保存 HTML の計測: アプリと同じ関数のソース・上限は用紙の内寸の高さ（押印行込み）。印刷のための切替なし
   const html = S.generateReportHTML(rec, p);
   assert.ok(html.indexOf('function clFitSheet(sheet, limit)') > 0 && html.indexOf('var LIMIT=1052,') > 0 && html.indexOf('window.__a4Fit = fit;') > 0 && html.indexOf('cl-fit') < 0);
-  assert.ok(html.indexOf('webkitLineClamp') < 0, '面接所見を残りの高さまで広げない（行数の上限は CSS で固定）');
+  // 段階を決めたあと、「…」で切れたメモは罫線の空きまで行数の上限を広げる（要素のインラインの -webkit-line-clamp。12 章 F5。#93）
+  assert.ok(html.indexOf("v.style.setProperty('-webkit-line-clamp', String(n))") > 0 && html.indexOf("cls.add('cl-grow')") > 0, '保存 HTML の計測にも切れたメモを広げる処理（アプリと同じ関数のソース）');
   assert.ok(S.CL_SHEET_LIMIT_PX === 1052 && S.checklistSheetLimit === undefined && S.CL_SHEET_BODY_PX === undefined, '上限は定数 1 つ（押印欄の件数による見積もりは無い）');
   const p4 = P(); p4.management.fields.push({ id: 'extra3', label: '追加確認3', hint: '' }, { id: 'extra4', label: '追加確認4', hint: '' });
   const n4 = S.normalizeProfile(p4);
@@ -1563,8 +1567,11 @@ test('90 保存 HTML の構成（A4 縦の用紙 1 枚。docs/SPEC-a4.md 1-1）'
   ['class="pop', 'id="a4Pop"', 'class="savebar', 'id="saveBar"', 'data-a4-t=', 'a4-live', '--a4-zoom', 'tabindex=', 'role="button"'].forEach(function (t) { assert.ok(shown.indexOf(t) < 0, '生成 HTML に無い: ' + t); });
   // CSS: 印刷は用紙そのもの（@page の余白 0）。狭い画面の縮小は画面だけ
   const css = S.reportCss();
-  ['@page{size:A4 portrait;margin:0}', '@media screen{\n.a4{zoom:var(--a4-zoom,1)}', 'body>.a4{margin:24px auto}', 'body>.a4{margin:0;box-shadow:none}', '.a4-foot,.pop,.savebar{display:none !important}',
+  //   狭い画面の縮小は transform:scale（レイアウト＝行の高さ・折り返しは計測した原寸のまま。zoom は使わない。12 章 F7）。余白で縮小後の大きさに合わせる
+  ['@page{size:A4 portrait;margin:0}', '@media screen{\n.a4{transform:scale(var(--a4-zoom));transform-origin:0 0}', 'body>.a4{margin:24px auto}', 'body>.a4{margin:0;box-shadow:none}', '.a4-foot,.pop,.savebar{display:none !important}',
+    'body>.a4{margin:calc(24px * var(--a4-zoom,1)) 0 calc(24px * var(--a4-zoom,1) - 297mm * (1 - var(--a4-zoom,1))) max(0px,calc((100% - 210mm * var(--a4-zoom,1)) / 2))}',
     'body.a4-live .a4 [data-a4-t="stamp"]:hover::after{content:"クリックで押印"}'].forEach(function (t) { assert.ok(css.indexOf(t) >= 0, 'reportCss に ' + t); });
+  assert.ok(!/zoom:\s*var\(--a4-zoom/.test(css) && css.indexOf('transform:scale(var(--a4-zoom))') < css.indexOf('@media print{'), '縮小に zoom を使わない・transform は画面だけ');
   assert.ok(html.indexOf('</' + 'script') === html.indexOf('</script>') && (html.match(/<\/script/gi) || []).length === 3, 'script の閉じタグは 3 つだけ');
   assert.ok(S.reportCss().indexOf('</' + 'script') < 0);
   // 押印欄 0・合否 OFF でも押印設定は出す（長いメモの窓は常に使う）
@@ -1635,9 +1642,32 @@ test('92 プロファイルの finalLock（normalizeProfile・validateProfile・
     const rep = {};
     assert.deepStrictEqual(plain(S.normalizeProfile(raw, rep).management.finalLock), plain(lock), '保存済みの設定に finalLock が無ければ既定のロック');
     assert.deepStrictEqual(plain(rep), {}, 'finalLock が無いだけでは report.stripped を立てない（既定のロックを localStorage に固定しない）');
-    raw.management.finalLock = { salt: '', hash: '' };
-    assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.finalLock), { salt: '', hash: '' }, '明示的に外した設定は外したまま');
+    // 空のロック（{ salt: '', hash: '' }）・形の違うロックは未設定＝既定のロック（ロックを持たない公開版が同じ localStorage に書いても、ローカル版のロックは外れない。11 章 L6c）。
+    //   これも保存し直さない（既定のロックを localStorage に固定しない）
+    [{ salt: '', hash: '' }, { salt: lock.salt, hash: '' }, 'x', null, { off: 'true' }].forEach(function (l) {
+      raw.management.finalLock = l;
+      const rp = {};
+      assert.deepStrictEqual(plain(S.normalizeProfile(raw, rp).management.finalLock), plain(lock), '未設定は既定のロック: ' + JSON.stringify(l));
+      assert.ok(!rp.stripped, '未設定のロックだけでは保存し直さない: ' + JSON.stringify(l));
+    });
+    // 明示的に外した設定（「パスワードを外す」が書く off: true の印）は外したまま。冪等・正規化しても印は残る
+    raw.management.finalLock = { salt: '', hash: '', off: true };
+    const offN = S.normalizeProfile(raw);
+    assert.deepStrictEqual(plain(offN.management.finalLock), { salt: '', hash: '', off: true }, '明示的に外した設定は外したまま');
+    assert.deepStrictEqual(plain(S.normalizeProfile(offN)), plain(offN));
+    assert.ok(!L.isLocked(offN.management.finalLock) && S.validateProfile(offN).errors.length === 0);
+    raw.management.finalLock = { off: true };
+    assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.finalLock), { salt: '', hash: '', off: true });
+    // 印があってもロック（salt・hash）が正しければロック
+    raw.management.finalLock = { salt: lock.salt, hash: lock.hash, off: true };
+    assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.finalLock), plain(lock));
+    // 「外した」印の入った設定の保存 HTML はロックなし
+    const cfgOff = JSON.parse(S.generateReportHTML(S.buildRecord(scriptState({ profile: offN })), offN).match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
+    assert.strictEqual(cfgOff.finalLock, null);
   } finally { D.finalLock = keep; }
+  // 公開版（既定のロックなし）: 空のロックも「外した」印もロックなし
+  assert.deepStrictEqual(plain(S.normalizeProfile(withLock({ salt: '', hash: '' })).management.finalLock), { salt: '', hash: '' });
+  assert.deepStrictEqual(plain(S.normalizeProfile(withLock({ salt: '', hash: '', off: true })).management.finalLock), { salt: '', hash: '', off: true });
   // 冪等・JSON の書き出し／読み込みに含める（平文は持たない）
   const n1 = S.normalizeProfile(withLock(lock));
   assert.deepStrictEqual(plain(S.normalizeProfile(n1)), plain(n1));
@@ -1658,6 +1688,7 @@ test('92 プロファイルの finalLock（normalizeProfile・validateProfile・
   const cfg = JSON.parse(html.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
   assert.deepStrictEqual(plain(cfg.finalLock), plain(lock));
   assert.strictEqual(cfg.lockField, 'final');
+  assert.deepStrictEqual(plain(cfg.lockFields), ['final'], 'パスワードが要る押印欄（既定の最終確認欄と連動する欄。重複は 1 つ）');
   assert.ok(html.indexOf('sample-pass') < 0, '保存 HTML に平文が無い');
   ['function sha256Hex(str)', 'function hashPassword(salt, pw)', 'function isLocked(lock)', 'function verify(lock, pw)', '最終承認にはパスワードが必要です', 'パスワードが違います', 'type=\\"password\\" autocomplete=\\"off\\"'].forEach(function (t) {
     assert.ok(html.indexOf(t) > 0, '保存 HTML のスクリプトに ' + t);
@@ -1672,12 +1703,125 @@ test('92 プロファイルの finalLock（normalizeProfile・validateProfile・
   const n2 = S.normalizeProfile(withLock(lock2));
   const cfg2 = JSON.parse(S.generateReportHTML(S.buildRecord(scriptState({ profile: n2 })), n2).match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
   assert.ok(cfg2.finalLock.hash === lock2.hash && cfg2.finalLock.hash !== cfg.finalLock.hash);
-  // 連動する押印欄を「連動しない」にすると、パスワードが要るのは最終合否だけ（lockField が空）
+  // 連動する押印欄を「連動しない」・別の欄に変えても、最終確認欄（final）はパスワードの対象のまま（迂回にならない。docs/SPEC-a4.md 11 章 L1b）
   const n3 = S.normalizeProfile(withLock(lock)); n3.management.decision.stampField = '';
   const cfg3 = JSON.parse(S.generateReportHTML(S.buildRecord(scriptState({ profile: n3 })), n3).match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
-  assert.ok(cfg3.lockField === '' && cfg3.finalLock.hash === lock.hash);
+  assert.ok(cfg3.lockField === '' && JSON.stringify(cfg3.lockFields) === '["final"]' && cfg3.finalLock.hash === lock.hash, JSON.stringify(cfg3.lockFields));
+  const p4 = withLock(lock); p4.management.fields.push({ id: 'extra', label: '追加確認', hint: '' }); p4.management.decision.stampField = 'extra';
+  const n4 = S.normalizeProfile(p4);
+  assert.deepStrictEqual(plain(S.finalLockFields(n4)), ['final', 'extra'], '連動する欄を別の欄に変えると、最終確認欄とその欄の両方');
+  const cfg4 = JSON.parse(S.generateReportHTML(S.buildRecord(scriptState({ profile: n4 })), n4).match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
+  assert.ok(cfg4.lockField === 'extra' && JSON.stringify(cfg4.lockFields) === '["final","extra"]', JSON.stringify(cfg4));
+  assert.deepStrictEqual(plain(S.finalLockFields(P())), ['final']);
+  assert.ok(html.indexOf('lockFs.indexOf(id) >= 0') > 0, '保存 HTML の窓は lockFields で判定する');
+  // ロックの対象を変える設定のキー（finalLockScope）: 押印欄と連動・最終合否の ON/OFF・押印欄の追加・削除・id で変わり、表示名・説明では変わらない
+  const sc0 = S.finalLockScope(n1);
+  const scOf = function (f) { const q = S.normalizeProfile(withLock(lock)); f(q.management); return S.finalLockScope(S.normalizeProfile(q)); };
+  assert.strictEqual(scOf(function (m) { m.fields[1].label = '最終確認（店長）'; m.fields[0].hint = 'x'; m.decision.label = '合否'; m.decision.hireLabel = '可'; m.managers = []; }), sc0, '表示名・説明・名簿では変わらない');
+  [function (m) { m.decision.stampField = ''; }, function (m) { m.decision.enabled = false; }, function (m) { m.fields.push({ id: 'extra', label: '追加', hint: '' }); },
+    function (m) { m.fields.splice(1, 1); }, function (m) { m.fields[1].id = 'final2'; }, function (m) { m.fields.reverse(); }].forEach(function (f, i) {
+    assert.notStrictEqual(scOf(f), sc0, 'ロックの対象を変える設定 #' + i);
+  });
   // 公開 API
   assert.ok(typeof L.sha256Hex === 'function' && typeof L.hashPassword === 'function' && typeof L.verify === 'function' && typeof L.isLocked === 'function' && typeof L.newSalt === 'function' && typeof L.source === 'function');
+});
+
+// ======================================================================
+// 用紙を埋めるレイアウト: 切れたメモを罫線の空きまで広げる（docs/SPEC-a4.md 12 章 F5。#93）
+test('93 切れたメモを面接メモ・所見の枠の空きまで広げる（fitChecklistSheet: 面接所見 → メモ → 質問の回答・上限を超えない・全部入れば「…」の案内を外す・測り直すと同じ）', function () {
+  // 疑似 DOM（.cl-compact の段階）: 行の高さ 12px。メモの行数の上限は CSS（段階）かインラインの -webkit-line-clamp。シートの高さ = 固定分 + 見えている行数 × 12 + 案内 1 行
+  function mk(o) {
+    const cls = {};
+    const clsList = { add: function (x) { cls[x] = true; }, remove: function (x) { delete cls[x]; }, contains: function (x) { return !!cls[x]; } };
+    const el = function (kind, lines) {
+      const c = {}, st = {};
+      const e = {
+        kind: kind, lines: lines,
+        classList: { add: function (x) { c[x] = true; }, remove: function (x) { delete c[x]; }, contains: function (x) { return !!c[x]; } },
+        style: { setProperty: function (k, v) { st[k] = String(v); }, removeProperty: function (k) { delete st[k]; }, getPropertyValue: function (k) { return st[k] || ''; } },
+        getAttribute: function (k) { return k === 'style' && Object.keys(st).length ? '-webkit-line-clamp: ' + st['-webkit-line-clamp'] : null; },
+        removeAttribute: function () { e.__styleRemoved = (e.__styleRemoved || 0) + 1; },
+        getClientRects: function () { return [1]; },
+        clamp: function () { return st['-webkit-line-clamp'] ? Number(st['-webkit-line-clamp']) : (cls['cl-compact'] ? o.css[kind] : 0); },
+        shown: function () { const n = e.clamp(); return n ? Math.min(n, lines) : lines; },
+        get scrollHeight() { return lines * 12; }, get clientHeight() { return (o.stuck === kind ? Math.min(lines, 10) : e.shown()) * 12; },
+        scrollWidth: o.wide === kind ? 200 : 100, clientWidth: 100,
+        __c: c, __st: st
+      };
+      return e;
+    };
+    const q = el('q', o.q), iv = el('iv', o.iv), memo = el('memo', o.memo);
+    const rt = { classList: clsList, getClientRects: function () { return [1]; }, scrollHeight: 10, clientHeight: 10, scrollWidth: 100, clientWidth: o.rtCut ? 50 : 100 };
+    const rtC = {}; rt.classList = { add: function (x) { rtC[x] = true; }, remove: function (x) { delete rtC[x]; }, contains: function (x) { return !!rtC[x]; } };
+    const sel = {
+      '.cl-nm-v,.cl-rt-nt': [q, iv, memo, rt], '.cl-nm-v': [q, iv, memo],
+      '.cl-nm-iv .cl-nm-v': [iv], '.cl-nm-memo .cl-nm-v': [memo], '.cl-nm-q .cl-nm-v,.cl-nm-b .cl-nm-v': [q]
+    };
+    let layouts = 0;
+    const sheet = {
+      style: { zoom: '' }, classList: clsList,
+      querySelector: function () { return null; },
+      querySelectorAll: function (x) { if (!sel[x]) throw new Error('selector ' + x); return sel[x]; },
+      getBoundingClientRect: function () {
+        layouts++;
+        if (layouts > 3000) throw new Error('計測が終わらない（無限ループ）');
+        // 段階: ゆったり・通常は収まらない（面接所見が全文）。.cl-compact で固定分 o.base ＋ 行
+        let h = o.base + (q.shown() + iv.shown() + memo.shown()) * 12 + (cls['cl-nm-cut'] ? 12 : 0);
+        if (!cls['cl-compact']) h += 2000;
+        return { top: 0, height: h, bottom: h };
+      }
+    };
+    return { sheet: sheet, cls: cls, q: q, iv: iv, memo: memo, rtC: rtC, layouts: function () { return layouts; }, h: function () { cls['cl-measure'] = true; const h = sheet.getBoundingClientRect().height; delete cls['cl-measure']; return h; } };
+  }
+  const css = { q: 2, iv: 10, memo: 3 };
+  const L = 1052;
+  const keep = ctx.getComputedStyle;
+  ctx.getComputedStyle = function (e) { return { getPropertyValue: function (k) { return k === '-webkit-line-clamp' ? (e.clamp() ? String(e.clamp()) : 'none') : ''; }, lineHeight: '12px' }; };
+  try {
+    // (1) 面接所見 30 行・メモ 5 行・質問の回答 6 行。.cl-compact で 600px＋(2+10+3)×12＋案内 12 = 792px → 空き 260px（21 行分）
+    //     → 面接所見を 30 行まで（+20 行）→ メモ 5 行（+1 行で上限。案内は確認点のメモが切れているので残る）
+    let m = mk({ css: css, q: 6, iv: 30, memo: 5, base: 600, rtCut: true });
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
+    const h1 = m.h();
+    assert.ok(h1 <= L && h1 + 12 > L, '上限を超えない・1 行分の空きも残さない: ' + h1);
+    assert.deepStrictEqual([m.iv.shown(), m.memo.shown(), m.q.shown()], [30, 4, 2], '面接所見 → メモ → 質問の回答の順に広げる');
+    assert.ok(!m.iv.__c['cl-cut'] && m.memo.__c['cl-cut'] && m.q.__c['cl-cut'] && m.cls['cl-nm-cut'], '全文が入った面接所見は .cl-cut を外す・残りは「…」のまま（案内も残す）');
+    assert.ok(!m.cls['cl-grow'] && !m.cls['cl-measure'], '計測用のクラスを残さない');
+    assert.strictEqual(m.iv.__st['-webkit-line-clamp'], '30');
+    assert.strictEqual(m.q.__st['-webkit-line-clamp'], undefined, '広げられなかった要素にはインラインの行数を残さない（CSS の上限のまま）');
+    // (2) 測り直すと（書き出したファイルを開き直す・アプリの再描画）同じ結果（最初にインラインの行数を外してから測る）
+    m.iv.__st['-webkit-line-clamp'] = '3';
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
+    assert.deepStrictEqual([m.iv.shown(), m.memo.shown(), m.q.shown(), m.h()], [30, 4, 2, h1]);
+    // (3) 空きが大きければ全部入る → .cl-cut・「…」の案内（.cl-nm-cut）を外す。質問の回答も最後に広げる
+    m = mk({ css: css, q: 6, iv: 30, memo: 5, base: 300 });
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
+    assert.deepStrictEqual([m.iv.shown(), m.memo.shown(), m.q.shown()], [30, 5, 6]);
+    assert.ok(!m.cls['cl-nm-cut'] && !m.iv.__c['cl-cut'] && !m.memo.__c['cl-cut'] && !m.q.__c['cl-cut'], '全部入れば「…」の案内を外す');
+    assert.ok(m.layouts() < 40, '1 行ずつ測り直さず、空きの行数で見積もってから確かめる: ' + m.layouts());
+    // (4) 案内 1 行が消える分も使う: 最後の 1 行は案内（12px）が消えれば入る
+    m = mk({ css: css, q: 2, iv: 12, memo: 3, base: 1052 - (2 + 10 + 3) * 12 - 12 - 12 });
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
+    assert.ok(m.iv.shown() === 12 && !m.cls['cl-nm-cut'] && m.h() <= L, JSON.stringify([m.iv.shown(), m.h()]));
+    // (5) 空きが 1 行分も無ければ広げない（インラインの行数を付けない）
+    m = mk({ css: css, q: 6, iv: 30, memo: 5, base: 1052 - (2 + 10 + 3) * 12 - 12 - 5 });
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
+    assert.ok(m.iv.shown() === 10 && m.iv.__st['-webkit-line-clamp'] === undefined && m.cls['cl-nm-cut'], JSON.stringify(m.iv.__st));
+    // (5b) 横にはみ出す（折り返せない幅広の書記素）面接所見: 縦に全部見えたら広げるのをやめる（横のはみ出しの .cl-cut は残る。固まらない）
+    m = mk({ css: css, q: 6, iv: 14, memo: 5, base: 300, wide: 'iv' });
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
+    assert.ok(m.iv.shown() === 14 && m.iv.__st['-webkit-line-clamp'] === '14' && m.iv.__c['cl-cut'] && m.cls['cl-nm-cut'] && m.memo.shown() === 5 && m.q.shown() === 6 && m.layouts() < 40,
+      '縦は全部・横のはみ出しの印は残す・続けてメモ・質問の回答も広げる: ' + JSON.stringify([m.iv.shown(), m.iv.__st, m.layouts()]));
+    // (5c) 行数の上限を上げても見える行が増えない要素は、そこで戻してやめる（固まらない）
+    m = mk({ css: css, q: 6, iv: 30, memo: 5, base: 300, stuck: 'iv' });
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
+    assert.ok(m.iv.__st['-webkit-line-clamp'] === undefined && m.memo.shown() === 5 && m.layouts() < 40, JSON.stringify([m.iv.__st, m.layouts()]));
+    // (6) getComputedStyle の無い環境では広げない（段階だけ。インラインの行数を付けない）
+    delete ctx.getComputedStyle;
+    m = mk({ css: css, q: 6, iv: 30, memo: 5, base: 300 });
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
+    assert.ok(m.iv.shown() === 10 && m.iv.__st['-webkit-line-clamp'] === undefined && m.cls['cl-nm-cut']);
+  } finally { if (keep === undefined) delete ctx.getComputedStyle; else ctx.getComputedStyle = keep; }
 });
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
