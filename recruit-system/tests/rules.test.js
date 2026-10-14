@@ -1635,39 +1635,63 @@ test('92 プロファイルの finalLock（normalizeProfile・validateProfile・
   // キーが無ければ既定（ローカル版ならローカルのロック）。キーが無いだけでは保存し直さない（report.stripped なし）
   const D = ctx.RECRUIT_DEFAULT_PROFILE.management;
   const keep = D.finalLock;
+  const chained = function (l) { return Object.assign(plain(l), { chain: true }); };
   try {
     D.finalLock = plain(lock);
+    // 既定のロックは「既定のロックからつながっている」印 chain の根（11 章 L6d）
+    assert.deepStrictEqual(plain(S.defaults().management.finalLock), chained(lock), '既定のロックは chain: true');
     const raw = plain(S.normalizeProfile(P()));
+    assert.deepStrictEqual(plain(raw.management.finalLock), chained(lock));
     delete raw.management.finalLock;
     const rep = {};
-    assert.deepStrictEqual(plain(S.normalizeProfile(raw, rep).management.finalLock), plain(lock), '保存済みの設定に finalLock が無ければ既定のロック');
+    assert.deepStrictEqual(plain(S.normalizeProfile(raw, rep).management.finalLock), chained(lock), '保存済みの設定に finalLock が無ければ既定のロック');
     assert.deepStrictEqual(plain(rep), {}, 'finalLock が無いだけでは report.stripped を立てない（既定のロックを localStorage に固定しない）');
     // 空のロック（{ salt: '', hash: '' }）・形の違うロックは未設定＝既定のロック（ロックを持たない公開版が同じ localStorage に書いても、ローカル版のロックは外れない。11 章 L6c）。
     //   これも保存し直さない（既定のロックを localStorage に固定しない）
-    [{ salt: '', hash: '' }, { salt: lock.salt, hash: '' }, 'x', null, { off: 'true' }].forEach(function (l) {
+    [{ salt: '', hash: '' }, { salt: lock.salt, hash: '' }, 'x', null, { off: 'true' }, { salt: '', hash: '', chain: true }].forEach(function (l) {
       raw.management.finalLock = l;
       const rp = {};
-      assert.deepStrictEqual(plain(S.normalizeProfile(raw, rp).management.finalLock), plain(lock), '未設定は既定のロック: ' + JSON.stringify(l));
+      assert.deepStrictEqual(plain(S.normalizeProfile(raw, rp).management.finalLock), chained(lock), '未設定は既定のロック: ' + JSON.stringify(l));
       assert.ok(!rp.stripped, '未設定のロックだけでは保存し直さない: ' + JSON.stringify(l));
     });
-    // 明示的に外した設定（「パスワードを外す」が書く off: true の印）は外したまま。冪等・正規化しても印は残る
-    raw.management.finalLock = { salt: '', hash: '', off: true };
+    // chain の無いロック・「外した」印（公開版でロックの無い状態から、現在のパスワードなしに付けた・外したもの）は使わない＝既定のロック（11 章 L6d）。
+    //   開いただけでは保存し直さない（公開版のロックを消さない）。chain が true（真偽値）でなければ同じ
+    const other = L.makeLock('chosen-by-public');
+    [plain(other), { salt: '', hash: '', off: true }, { off: true }, Object.assign(plain(other), { chain: 'true' }), { salt: '', hash: '', off: true, chain: 1 }, { salt: lock.salt, hash: lock.hash }].forEach(function (l) {
+      raw.management.finalLock = l;
+      const rp = {};
+      assert.deepStrictEqual(plain(S.normalizeProfile(raw, rp).management.finalLock), chained(lock), 'chain の無いロック・印は既定のロック: ' + JSON.stringify(l));
+      assert.ok(!rp.stripped, 'chain の無いロック・印だけでは保存し直さない: ' + JSON.stringify(l));
+    });
+    // chain のあるロック（ローカル版で現在のパスワードを確かめて変えたもの）はそのロック
+    raw.management.finalLock = chained(other);
+    assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.finalLock), chained(other), 'chain のあるロックはそのロック');
+    // 明示的に外した設定（「パスワードを外す」が書く off: true の印。chain つき）は外したまま。冪等・正規化しても印は残る
+    raw.management.finalLock = { salt: '', hash: '', off: true, chain: true };
     const offN = S.normalizeProfile(raw);
-    assert.deepStrictEqual(plain(offN.management.finalLock), { salt: '', hash: '', off: true }, '明示的に外した設定は外したまま');
+    assert.deepStrictEqual(plain(offN.management.finalLock), { salt: '', hash: '', off: true, chain: true }, '明示的に外した設定は外したまま');
     assert.deepStrictEqual(plain(S.normalizeProfile(offN)), plain(offN));
     assert.ok(!L.isLocked(offN.management.finalLock) && S.validateProfile(offN).errors.length === 0);
-    raw.management.finalLock = { off: true };
-    assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.finalLock), { salt: '', hash: '', off: true });
+    raw.management.finalLock = { off: true, chain: true };
+    assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.finalLock), { salt: '', hash: '', off: true, chain: true });
     // 印があってもロック（salt・hash）が正しければロック
-    raw.management.finalLock = { salt: lock.salt, hash: lock.hash, off: true };
-    assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.finalLock), plain(lock));
-    // 「外した」印の入った設定の保存 HTML はロックなし
+    raw.management.finalLock = { salt: other.salt, hash: other.hash, off: true, chain: true };
+    assert.deepStrictEqual(plain(S.normalizeProfile(raw).management.finalLock), chained(other));
+    // 「外した」印の入った設定の保存 HTML はロックなし。ロックのある設定の保存 HTML は salt と hash だけ（chain は入れない）
     const cfgOff = JSON.parse(S.generateReportHTML(S.buildRecord(scriptState({ profile: offN })), offN).match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
     assert.strictEqual(cfgOff.finalLock, null);
+    const nL = S.normalizeProfile(P());
+    const cfgL = JSON.parse(S.generateReportHTML(S.buildRecord(scriptState({ profile: nL })), nL).match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
+    assert.deepStrictEqual(plain(cfgL.finalLock), plain(lock), '保存 HTML のロックは salt と hash だけ');
   } finally { D.finalLock = keep; }
-  // 公開版（既定のロックなし）: 空のロックも「外した」印もロックなし
+  // 公開版（既定のロックなし）: 空のロックも「外した」印もロックなし。chain の無いロック（公開版で付けたもの）もそのロック。chain は残す
+  assert.ok(S.defaults().management.finalLock.chain === undefined, '公開版の既定（ロックなし）に chain は付けない');
   assert.deepStrictEqual(plain(S.normalizeProfile(withLock({ salt: '', hash: '' })).management.finalLock), { salt: '', hash: '' });
+  assert.deepStrictEqual(plain(S.normalizeProfile(withLock({ salt: '', hash: '', chain: true })).management.finalLock), { salt: '', hash: '' }, '未設定に chain は残さない');
   assert.deepStrictEqual(plain(S.normalizeProfile(withLock({ salt: '', hash: '', off: true })).management.finalLock), { salt: '', hash: '', off: true });
+  assert.deepStrictEqual(plain(S.normalizeProfile(withLock({ salt: '', hash: '', off: true, chain: true })).management.finalLock), { salt: '', hash: '', off: true, chain: true });
+  assert.deepStrictEqual(plain(S.normalizeProfile(withLock(Object.assign(plain(lock), { chain: true }))).management.finalLock), Object.assign(plain(lock), { chain: true }));
+  assert.deepStrictEqual(plain(S.normalizeLock(Object.assign(plain(lock), { chain: 'yes', x: 1 }))), plain(lock), 'normalizeLock: chain は true だけ・余分なキーは落とす');
   // 冪等・JSON の書き出し／読み込みに含める（平文は持たない）
   const n1 = S.normalizeProfile(withLock(lock));
   assert.deepStrictEqual(plain(S.normalizeProfile(n1)), plain(n1));
@@ -1714,12 +1738,14 @@ test('92 プロファイルの finalLock（normalizeProfile・validateProfile・
   assert.ok(cfg4.lockField === 'extra' && JSON.stringify(cfg4.lockFields) === '["final","extra"]', JSON.stringify(cfg4));
   assert.deepStrictEqual(plain(S.finalLockFields(P())), ['final']);
   assert.ok(html.indexOf('lockFs.indexOf(id) >= 0') > 0, '保存 HTML の窓は lockFields で判定する');
-  // ロックの対象を変える設定のキー（finalLockScope）: 押印欄と連動・最終合否の ON/OFF・押印欄の追加・削除・id で変わり、表示名・説明では変わらない
+  // ロックの対象を変える設定のキー（finalLockScope）: 押印欄と連動・最終合否の ON/OFF・押印欄の追加・削除・id・押印欄の表示名で変わり、
+  //   押印欄の説明・最終合否の表示名・名簿では変わらない（押印欄の表示名: 面接対応者の欄を「最終確認」と表示して、パスワードなしに押した印を最終確認に見せない）
   const sc0 = S.finalLockScope(n1);
   const scOf = function (f) { const q = S.normalizeProfile(withLock(lock)); f(q.management); return S.finalLockScope(S.normalizeProfile(q)); };
-  assert.strictEqual(scOf(function (m) { m.fields[1].label = '最終確認（店長）'; m.fields[0].hint = 'x'; m.decision.label = '合否'; m.decision.hireLabel = '可'; m.managers = []; }), sc0, '表示名・説明・名簿では変わらない');
+  assert.strictEqual(scOf(function (m) { m.fields[0].hint = 'x'; m.fields[1].hint = 'y'; m.decision.label = '合否'; m.decision.hireLabel = '可'; m.managers = []; }), sc0, '押印欄の説明・最終合否の表示名・名簿では変わらない');
   [function (m) { m.decision.stampField = ''; }, function (m) { m.decision.enabled = false; }, function (m) { m.fields.push({ id: 'extra', label: '追加', hint: '' }); },
-    function (m) { m.fields.splice(1, 1); }, function (m) { m.fields[1].id = 'final2'; }, function (m) { m.fields.reverse(); }].forEach(function (f, i) {
+    function (m) { m.fields.splice(1, 1); }, function (m) { m.fields[1].id = 'final2'; }, function (m) { m.fields.reverse(); },
+    function (m) { m.fields[0].label = '最終確認'; m.fields[1].label = '面接対応者'; }, function (m) { m.fields[0].label = '最終確認'; }, function (m) { m.fields[1].label = '最終確認（店長）'; }].forEach(function (f, i) {
     assert.notStrictEqual(scOf(f), sc0, 'ロックの対象を変える設定 #' + i);
   });
   // 公開 API
@@ -1768,6 +1794,9 @@ test('93 切れたメモを面接メモ・所見の枠の空きまで広げる�
         // 段階: ゆったり・通常は収まらない（面接所見が全文）。.cl-compact で固定分 o.base ＋ 行
         let h = o.base + (q.shown() + iv.shown() + memo.shown()) * 12 + (cls['cl-nm-cut'] ? 12 : 0);
         if (!cls['cl-compact']) h += 2000;
+        // 縮小（style.zoom）の段階: 固定分 o.fixed は縮まない（比例しないので、縮小の測り直しのあとに空きが残ることがある）
+        const z = parseFloat(sheet.style.zoom || '1');
+        if (z !== 1) h = (o.fixed || 0) + (h - (o.fixed || 0)) * z;
         return { top: 0, height: h, bottom: h };
       }
     };
@@ -1816,6 +1845,12 @@ test('93 切れたメモを面接メモ・所見の枠の空きまで広げる�
     m = mk({ css: css, q: 6, iv: 30, memo: 5, base: 300, stuck: 'iv' });
     assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
     assert.ok(m.iv.__st['-webkit-line-clamp'] === undefined && m.memo.shown() === 5 && m.layouts() < 40, JSON.stringify([m.iv.__st, m.layouts()]));
+    // (5d) 縮小（'zoom'）の段階でも、縮小のあとに残った空きまで広げる（行の高さは縮小後の 12px × 倍率で見積もる。上限を超えない・1 行分の空きも残さない。12 章 F5）
+    m = mk({ css: css, q: 6, iv: 60, memo: 5, base: 2295, fixed: 100, rtCut: true });
+    assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'zoom');
+    const zz = parseFloat(m.sheet.style.zoom), hz = m.h();
+    assert.ok(zz < 0.5 && m.iv.shown() === 11 && m.iv.__st['-webkit-line-clamp'] === '11' && hz <= L && hz + 12 * zz > L && m.memo.shown() === 3 && m.q.shown() === 2 && m.cls['cl-nm-cut'],
+      '縮小の段階でも面接所見を空きまで広げる: ' + JSON.stringify({ zz: zz, iv: m.iv.shown(), hz: hz }));
     // (6) getComputedStyle の無い環境では広げない（段階だけ。インラインの行数を付けない）
     delete ctx.getComputedStyle;
     m = mk({ css: css, q: 6, iv: 30, memo: 5, base: 300 });

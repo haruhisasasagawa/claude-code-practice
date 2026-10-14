@@ -37,6 +37,7 @@
     judgmentStale: false,  // 判定後に入力・設定が変わり、判定のやり直しが必要（state.judgment は null）
     management: {},        // 応募者の管理（押印）: { interviewer: { name, short, title, date, at }, final: { ... } }
     decision: null,        // 最終合否（人の決定）: { result, label, date, at, by }。判定とは独立。再判定で消さない（「取消」でだけ消える）
+    fileLock: null,        // 読み込んだ保存 HTML の最終承認のロック（{ salt, hash }）。アプリにロックが無いとき、この記録の最終確認・最終合否と保存し直すファイルに使う（docs/SPEC-a4.md 11 章 L7b）
     savedAt: null,
     dirty: false
   };
@@ -216,8 +217,10 @@
       renderSummary();
     } else if (state.view === 'settings') {
       out.draftClean = Settings.isDraftOf(prev);
-      if (out.draftClean) renderSettings();
-      else {
+      // 未保存の変更が無ければ最新の設定で描き直す。最終承認のロックが変わっていなければ、入力中のパスワードの欄（［変更］［パスワードを外す］。下書きには入らない）は残す
+      if (out.draftClean) {
+        if (Settings.reload(fresh, !out.lockMoved)) msg = '別のタブ（ウィンドウ）で最終承認のパスワードが変わったため、最新の設定を読み込み、入力中のパスワードの欄を閉じました';
+      } else {
         out.lockReverted = Settings.syncLock(prev, fresh);
         msg = out.lockReverted
           ? '別のタブ（ウィンドウ）で最終承認のパスワードが変わったため、このタブでのパスワードの変更を取り消しました。必要ならもう一度変更してください'
@@ -242,6 +245,16 @@
     next.management.finalLock = { salt: '', hash: '' };
     return next;
   }
+  // 書き込むロック・「外した」印の chain（既定のロックから、現在のパスワードを確かめてつながっている印）は、いまのロックのものを引き継ぐ
+  //   （同じロック・現在のパスワードを確かめた変更・すでに外してある状態からの設定）。ロックの無い状態（公開版の未設定）から付けた・外したもの、
+  //   JSON から読んだものには chain を付けない＝既定のロックを持つ版（ローカル版）はそれを使わない（docs/SPEC-a4.md 11 章 L6d）。p は正規化の前でも後でもよい
+  function inheritChain(p) {
+    const l = ((p || {}).management || {}).finalLock;
+    if (!U.isObj(l)) return p;
+    const cur = ((state.profile || {}).management || {}).finalLock;
+    if (U.isObj(cur) && cur.chain === true) l.chain = true; else delete l.chain;
+    return p;
+  }
 
   // 設定画面（settings.js）に渡す処理。onSave の戻り値: 保存したら true、やめたら false（パスワードを確かめるときは Promise。settings.js が注意の toast をこのあとに出す）
   const settingsHandlers = {
@@ -253,7 +266,7 @@
       const moved = refreshProfileFromStorage();
       if (moved && (moved.draftClean || moved.lockReverted)) return false;
       if (moved && moved.lockMoved && U.isObj(p.management)) p.management.finalLock = U.deepClone(state.profile.management.finalLock);
-      const next = keepLockOff(S.normalizeProfile(p));
+      const next = keepLockOff(S.normalizeProfile(inheritChain(p)));
       const sig0 = lockSig(state.profile);
       const commit = function () {
         if (lockMovedSince(sig0)) return false;
@@ -265,9 +278,9 @@
         return true;
       };
       // 最終承認のパスワードがあるとき、ロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の構成）を変える保存は現在のパスワードを求める
-      //   （違えば・キャンセルなら保存しない。下書きはそのまま残す。表示名・説明だけの変更は求めない。docs/SPEC-a4.md 11 章 L5c）
+      //   （違えば・キャンセルなら保存しない。下書きはそのまま残す。押印欄の説明・名簿だけの変更は求めない。docs/SPEC-a4.md 11 章 L5c）
       if (!finalScopeChanges(next)) return commit();
-      return askFinalPassword('「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えると、最終承認のパスワードで守る欄が変わります。保存するには現在のパスワードを入力してください。')
+      return askFinalPassword('「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えると、最終承認のパスワードで守る欄が変わります。保存するには現在のパスワードを入力してください。')
         .then(function (ok) {
           if (ok) return commit();
           toast('設定を保存しませんでした（最終承認のパスワードを確認できません）', 'error');
@@ -1197,11 +1210,16 @@
   function saveRecord() {
     const a = state.applicant;
     if (!a.name) { toast('応募者名を入力してから保存してください', 'error'); return; }
+    // 別のタブ（ウィンドウ）で保存された設定を先に読み込む（storage イベントが届かなくても、書き出すファイルに古いロック〔ロックなし・前のパスワード〕を入れない。
+    //   docs/SPEC-a4.md 11 章 L5d）。読み込み直したら判定もやり直す（下の rejudged）
+    refreshProfileFromStorage();
     // 判定後に入力・設定が変わっていたら、古い判定を記録に残さず現在の内容で再判定する。③ を開かずに保存しても判定を記録する
     const rejudged = state.judgmentStale && !state.judgment;
     ensureJudgment();
     const rec = S.buildRecord(state);
-    const html = S.generateReportHTML(rec, state.profile);
+    // アプリにロックが無く、読み込んだファイルにロックがあれば、書き出すファイルにもそのロックを入れる（パスワードで押した承認の保護を外さない。11 章 L7b）
+    const fl = finalLockNow() ? null : stepLockNow();
+    const html = S.generateReportHTML(rec, fl ? Object.assign({}, state.profile, { management: Object.assign({}, state.profile.management, { finalLock: fl }) }) : state.profile);
     // 合否ありのときはファイル名の末尾に _採用 / _不採用（設定 management.decision.filenameSuffix）
     const dcfg = decisionCfg();
     const fname = Stamp.decisionFilename('応募者_' + S.safeName(a.name) + '_' + U.fmtDate(new Date()) + '.html', dcfg.enabled ? S.normalizeDecision(state.decision) : null, dcfg);
@@ -1224,18 +1242,21 @@
     reader.onload = function (ev) {
       const text = String(ev.target.result || '');
       if (/\.json$/i.test(file.name)) { importProfileText(text); return; }
-      const rec = S.parseRecordFromHTML(text);
+      const info = {};
+      const rec = S.parseRecordFromHTML(text, info);
       if (!rec) { toast('このアプリで保存したファイルではないか、データが見つかりません', 'error'); return; }
       if (state.dirty && !window.confirm('入力中の内容を破棄して読み込みますか？')) return;
-      applyRecord(rec);
+      applyRecord(rec, info.finalLock);
     };
     reader.readAsText(file, 'utf-8');
   }
 
-  // 保存した HTML の記録を読み込む（旧い形式の記録も S.normalizeRecord で読む。docs/SPEC-slim.md 3-2）
-  function applyRecord(rec) {
+  // 保存した HTML の記録を読み込む（旧い形式の記録も S.normalizeRecord で読む。docs/SPEC-slim.md 3-2）。
+  //   fileLock: そのファイルの保存時の最終承認のロック（無ければ null）。アプリにロックが無いとき（公開版・外した設定）はこの記録にそのロックを使う（11 章 L7b）
+  function applyRecord(rec, fileLock) {
     const p = state.profile;
     const n = S.normalizeRecord(rec);
+    state.fileLock = fileLock && Lock && Lock.isLocked(fileLock) ? { salt: fileLock.salt, hash: fileLock.hash } : null;
     state.applicant = n.applicant;
     state.checklist = n.checklist;
     ensureChecklist();
@@ -1255,8 +1276,9 @@
     else target = hasCl ? 3 : 1;   // ② で保存した記録は ② から再開（判定が入っていても ③ に飛ばない）
     state.step = target;
     state.maxStepReached = target;
+    // 判定は goStep(4) と同じく読み込んだ内容でやり直す。描画は showView の 1 回だけ（③ の紙の計測〔fitReportPaper〕を 2 回続けて行わない。docs/SPEC-a4.md 12 章 F8）
+    if (target === 4) { state.judgment = evaluateNow(); state.judgmentStale = false; }
     showView('judge');
-    goStep(target);
 
     const msgs = [];
     if (n.theaterName && n.theaterName !== p.meta.theaterName) msgs.push('このファイルは「' + n.theaterName + '」の設定で保存されています。現在の設定で判定し直します');
@@ -1264,6 +1286,7 @@
     if (n.legacy.full) msgs.push('詳細モードで保存された記録です。面接前の詳細（勤務条件・留意点・シフト貢献度など）は読み込みません（元のファイルはそのまま残ります）');
     if (n.legacy.scores) msgs.push('旧形式の面接評価（10 項目×5 点）は読み込みません。面接チェックリストで評価し直してください');
     if (n.legacy.initial) msgs.push('初期対応者の押印欄は廃止したため表示しません');
+    if (state.fileLock && !finalLockNow()) msgs.push('このファイルは最終承認のパスワード付きで保存されています。最終確認・最終合否はそのパスワードで押せます（保存し直したファイルにも引き継ぎます）');
     const old = n.legacy.full || n.legacy.v1 || n.legacy.scores;
     if (!old && target === 4 && sj && state.judgment && sj.result !== state.judgment.result) {
       msgs[0] = '保存時の判定（' + (sj.title || resultTitle(sj.result)) + '）と現在の設定での再判定（' + state.judgment.title + '）が異なります';
@@ -1297,7 +1320,9 @@
     refreshProfileFromStorage();
     let rawLock;
     try { rawLock = ((JSON.parse(text) || {}).management || {}).finalLock; } catch (err) { rawLock = undefined; }
+    //   JSON の chain は使わず、いまのロックのものを引き継ぐ（ロックの無い状態で読み込んだロックは、既定のロックを持つ版〔ローカル版〕では使わない。L6d）
     if (S.lockUnset(rawLock)) p.management.finalLock = U.deepClone(state.profile.management.finalLock);
+    else { p.management.finalLock = S.normalizeLock(rawLock); inheritChain(p); }
     p = keepLockOff(p);
     const sig0 = lockSig(state.profile);
     const apply = function () {
@@ -1314,7 +1339,7 @@
     if (!lockCh && !finalScopeChanges(p)) { apply(); return; }
     askFinalPassword(lockCh
       ? '読み込むプロファイルでは最終承認のパスワードが' + (Lock.isLocked(p.management.finalLock) ? '別のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。'
-      : '読み込むプロファイルでは「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成が変わり、最終承認のパスワードで守る欄が変わります。現在のパスワードを入力してください。')
+      : '読み込むプロファイルでは「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名が変わり、最終承認のパスワードで守る欄が変わります。現在のパスワードを入力してください。')
       .then(function (ok) { if (ok) apply(); else toast('プロファイルを読み込みませんでした（最終承認のパスワードを確認できません）', 'error'); });
   }
 
@@ -1324,6 +1349,7 @@
     state.checklist = R.emptyChecklist(); state.interviewNotes = ''; state.judgment = null; state.judgmentStale = false;
     state.management = {};
     state.decision = null;
+    state.fileLock = null;
     state.savedAt = null; state.dirty = false;
     state.step = 1; state.maxStepReached = 1;
     showView('judge');
@@ -1386,10 +1412,15 @@
     const lk = ((state.profile || {}).management || {}).finalLock;
     return Lock && Lock.isLocked(lk) ? lk : null;
   }
+  // ③ の最終確認・最終合否で照合するロック: アプリのロック。無ければ（公開版・外した設定）読み込んだファイルの保存時のロック（state.fileLock。11 章 L7b）。
+  //   設定の変更・JSON・初期化で確かめるのはアプリのロックだけ（finalLockNow）
+  function stepLockNow() {
+    return finalLockNow() || (state.fileLock && Lock && Lock.isLocked(state.fileLock) ? state.fileLock : null);
+  }
   function lockKey(lk) { return lk ? lk.salt + ':' + lk.hash : ''; }
   // fid: 押印欄の id（'' = 最終合否）。パスワードが要るのは最終合否と、最終確認欄 'final'・decision.stampField の欄だけ
   function finalNeedsPw(fid) {
-    const lk = finalLockNow();
+    const lk = stepLockNow();
     if (!lk || finalUnlockedKey === lockKey(lk)) return false;
     return fid === '' || (!!fid && S.finalLockFields(state.profile).indexOf(fid) >= 0);
   }
@@ -1402,7 +1433,7 @@
   }
   // ［確認］・Enter: 正しければ解錠して ③ のカードを描き直す（パスワード欄が消え、担当者の選択と押印・合否のボタンが出る）。違えば 1 行出して何もしない
   function unlockFinal(row) {
-    const lk = finalLockNow();
+    const lk = stepLockNow();
     if (!row || !lk) return;
     const inp = row.querySelector('.final-lock-pw'), err = row.querySelector('.final-lock-err');
     const fail = function (msg) { if (err) err.textContent = msg; if (inp) { inp.focus(); inp.select(); } };
@@ -1423,8 +1454,8 @@
     const nx = ((nextProfile || {}).management || {}).finalLock;
     return !(Lock.isLocked(nx) && nx.salt === cur.salt && nx.hash === cur.hash);
   }
-  // 設定の保存・JSON の読み込みでロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の追加・削除・id）が変わるとき（現在のロックがあれば）。
-  //   表示名・説明（label・hint）だけの変更は含めない。nextProfile は正規化したもの
+  // 設定の保存・JSON の読み込みでロックの対象（押印欄と連動・最終合否の ON/OFF・押印欄の追加・削除・id・表示名）が変わるとき（現在のロックがあれば）。
+  //   押印欄の説明（hint）・最終合否の表示名・名簿だけの変更は含めない。nextProfile は正規化したもの
   function finalScopeChanges(nextProfile) {
     return !!finalLockNow() && S.finalLockScope(nextProfile) !== S.finalLockScope(state.profile);
   }
@@ -1564,7 +1595,8 @@
             btn('hire', dcfg.hireLabel, dcfg.hireColor) + btn('reject', dcfg.rejectLabel, dcfg.rejectColor) +
             (d ? '<button type="button" class="btn sm ghost" data-action="undecide">取消</button>' : '') +
           '</div>') +
-          (linked ? '<div class="hint no-print">「' + esc(dcfg.hireLabel) + '」「' + esc(dcfg.rejectLabel) + '」を押すと、押印欄「' + esc(linked.label) + '」が未押印なら同じ担当者の印も押します。</div>' : '') +
+          // 連動の案内は「採用」「不採用」のボタンを出しているときだけ（パスワード欄のときはボタンが無い）
+          (linked && !finalNeedsPw('') ? '<div class="hint no-print">「' + esc(dcfg.hireLabel) + '」「' + esc(dcfg.rejectLabel) + '」を押すと、押印欄「' + esc(linked.label) + '」が未押印なら同じ担当者の印も押します。</div>' : '') +
         '</div>' +
       '</div></div>';
   }
@@ -1633,12 +1665,12 @@
       '<div class="help-steps">' +
         '<div class="help-step"><span class="n">1</span><h3>応募者</h3><p>1 枚のカードに 3 行だけ。氏名（必須）・年齢・性別・区分（学生は卒業予定年月）、面接日・面接担当者・応募した求人（通常／短期）、タクシー可否・料金とメモを、分かる範囲で入力します。</p></div>' +
         '<div class="help-step"><span class="n">2</span><h3>面接チェックリスト</h3><p>①勤務条件 → ②継続性・報連相 → ③仕事内容の説明 → ④集団行動特性 → ⑤逆質問 の順に、必須条件（一致／不一致）・説明のチェック・質問のメモ・確認点の ○△×・総合判断（採用／保留／不採用）を入力します。必須条件が 1 つでも不一致なら不採用推奨です。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（面接対応者／最終確認）に電子印を押して「報告書を保存（HTML）」します。「A4 で印刷」で 1 枚（結果・必須条件・確認点・面接メモ・押印）に印刷できます。保存した HTML も同じ A4 縦の用紙 1 枚です。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（面接対応者／最終確認）の「面接対応者」に電子印を押して「報告書を保存（HTML）」します（最終確認と最終合否は、副支配人が保存した HTML で押します。最終承認のパスワードがあるときはその入力が必要です）。「A4 で印刷」で 1 枚（結果・必須条件・確認点・面接メモ・押印）に印刷できます。保存した HTML も同じ A4 縦の用紙 1 枚です。</p></div>' +
       '</div></div>' +
       '<div class="card" id="helpScriptFlow"><div class="card-head"><h3>報告書（HTML）の流れ</h3></div><ol class="list-plain">' +
         '<li>面接者が「面接対応者」に押印して保存し、社内スレッドに添付します。</li>' +
         '<li>副支配人がファイルをブラウザで開きます（A4 縦の用紙 1 枚。そのまま印刷しても同じ 1 枚です。「…」で切れたメモはクリックすると全文を表示）。</li>' +
-        '<li><b>最終合否</b>：用紙の「最終合否」の欄をクリックし、担当者を選んで「採用」または「不採用」を押します（最終確認の印も自動で押されます）。押印欄もクリックで押せます。右下の「押印を保存」で再出力します（ファイル名の末尾に _採用 / _不採用）。</li>' +
+        '<li><b>最終合否</b>：用紙の「最終合否」の欄をクリックし（最終承認のパスワードがあるときは、最初にパスワードを入力します）、担当者を選んで「採用」または「不採用」を押します（最終確認の印も自動で押されます）。押印欄もクリックで押せます。右下の「押印を保存」で再出力します（ファイル名の末尾に _採用 / _不採用）。</li>' +
         '<li>再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。</li></ol></div>' +
       '<div class="card"><div class="card-head"><h3>結果（推奨）の決まり方</h3></div><ul class="list-plain">' +
         '<li>必須条件に不一致がある → 不採用推奨（設定で上長最終判断要に変更可）。</li>' +
@@ -1654,8 +1686,8 @@
         '<li>設定の「応募者の管理（押印）」でパスワードを決めると、最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（③ 報告書と保存した HTML の両方。面接対応者の押印には要りません）。一度正しく入れると、そのページを閉じる（読み込み直す）まで続けて押せます。</li>' +
         '<li>誤操作を防ぐための鍵です。HTML をテキストで開いて書き換える人までは防げません。</li>' +
         '<li>パスワードそのものは保存しません（照合用の値〔ハッシュ〕だけを設定と保存した HTML に入れます）。保存した HTML は保存した時点のパスワードで照合します。</li>' +
-        '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは <code>local/final-password.txt</code> で決めます。</li>' +
-        '<li>最終確認の欄は「押印欄と連動」を「連動しない」や別の欄に変えてもパスワードの対象のままです（連動する欄もパスワードの対象）。パスワードがあるときに「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えて保存（JSON の読み込みを含む）するには、現在のパスワードが必要です。表示名・説明だけの変更には要りません。</li></ul></div>' +
+        '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは管理者に確認してください（公開版には初期パスワードはありません）。</li>' +
+        '<li>最終確認の欄は「押印欄と連動」を「連動しない」や別の欄に変えてもパスワードの対象のままです（連動する欄もパスワードの対象）。パスワードがあるときに「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えて保存（JSON の読み込みを含む）するには、現在のパスワードが必要です。押印欄の説明・名簿だけの変更には要りません。</li></ul></div>' +
       '<div class="view-footer">' + esc(m.footer) + '</div>';
   }
 

@@ -478,7 +478,7 @@
     return '<h3 class="sub" id="s-finalLock">最終承認のパスワード</h3>' +
       '<div class="hint">最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（' + stepRef(4) + ' 報告書と保存した HTML の両方。面接対応者の押印には要りません）。' +
         '誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げません。パスワードそのものは保存せず、照合用の値（ハッシュ）だけを設定に持ちます。' +
-        '保存した HTML は保存した時点のパスワードで照合します。パスワードがあるとき、「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成を変えて保存するには現在のパスワードが要ります（表示名・説明だけなら不要）。</div>' +
+        '保存した HTML は保存した時点のパスワードで照合します。パスワードがあるとき、「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えて保存するには現在のパスワードが要ります（押印欄の説明・名簿だけなら不要）。</div>' +
       '<div class="lock-status" id="finalLockStatus"><span class="badge ' + (on ? 'ok' : 'muted') + '">' + (on ? '設定済み' : '未設定') + '</span>' +
         (pending ? '<span class="hint">未保存の変更です。「設定を保存」で確定します。</span>' : '') + '</div>' + body;
   }
@@ -541,7 +541,7 @@
           '<div class="hint">採用は朱、不採用は藍。日付と劇場名が入ります。</div></div></div>' +
       '</div>' +
       sSelect('management.decision.stampField', '押印欄と連動', fields.filter(function (fl) { return fl && fl.id; }).map(function (fl) { return { value: fl.id, label: fl.label + '（' + fl.id + '）' }; }).concat([{ value: '', label: '連動しない' }]),
-        '合否を押したとき、この押印欄にも同じ担当者の印を押せます。最終承認のパスワードがあるときは、最終確認の欄（final）とこの欄の押印にパスワードが要り、ここ・最終合否のスタンプの ON/OFF を変えて保存するには現在のパスワードが要ります。') +
+        '合否を押したとき、この押印欄にも同じ担当者の印を押せます。最終承認のパスワードがあるときは、最終確認の欄（final）とこの欄の押印にパスワードが要ります。また、この「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成（追加・削除）・押印欄の表示名を変えて保存するには、現在のパスワードが要ります。') +
       sCheck('management.decision.autoStampFinal', '合否を押すと、連動する押印欄にも同じ担当者の印を押す（未押印のときだけ）') +
       sCheck('management.decision.filenameSuffix', '合否を付けて保存するとき、ファイル名の末尾に「_採用」「_不採用」を付ける');
   }
@@ -724,6 +724,23 @@
 
   // 下書きが p と同じ（未保存の変更が無い）か。別のタブで設定が保存されたとき、描き直してよいかの判定に使う（app.js）
   function isDraftOf(p) { return !!draft && JSON.stringify(draft) === JSON.stringify(p); }
+  // 別のタブで設定が保存されたとき（未保存の変更が無いとき。app.js）: 最新の設定 p で描き直す（スクロール位置・台本の節の開閉は残す）。
+  //   keepLock なら開いているパスワードの入力欄と入力中の値を残す（最終承認のロックが変わっていないとき。docs/SPEC-a4.md 11 章 L5d）。
+  //   入力欄を開いていたのに閉じたら true
+  function reload(p, keepLock) {
+    if (!root) return false;
+    const form = lockForm, vals = {};
+    const act = document.activeElement && root.contains(document.activeElement) ? document.activeElement.id : '';
+    if (form && keepLock) ['lockCur', 'lockNew', 'lockNew2'].forEach(function (id) { const el = root.querySelector('#' + id); if (el) vals[id] = el.value; });
+    draft = U.deepClone(p);
+    issues = null;
+    lockForm = keepLock ? form : '';
+    paint(window.scrollY);
+    Object.keys(vals).forEach(function (id) { const el = root.querySelector('#' + id); if (el) el.value = vals[id]; });
+    const f = act && vals.hasOwnProperty(act) ? root.querySelector('#' + act) : null;
+    if (f) f.focus();
+    return !!form && !keepLock;
+  }
   // 別のタブで設定が保存されたとき（下書きに未保存の変更があるとき。app.js）: 最終承認のロックが変わっていれば（prev → fresh）、下書きのロックを最新に合わせて描き直す。
   //   下書きでロックを変えていた（prev と違う）なら、古いロックで確かめた変更なので取り消す（true を返す）。ロックが変わっていなければ下書きはそのまま。docs/SPEC-a4.md 11 章 L5d
   function lockSig(l) { return lockIsOn(l) ? l.salt + ':' + l.hash : (U.isObj(l) && l.off === true ? 'off' : ''); }
@@ -737,5 +754,5 @@
     return touched;
   }
 
-  global.RecruitSettings = { render: render, isDraftOf: isDraftOf, syncLock: syncLock };
+  global.RecruitSettings = { render: render, isDraftOf: isDraftOf, reload: reload, syncLock: syncLock };
 })(window);

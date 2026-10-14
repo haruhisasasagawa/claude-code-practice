@@ -961,6 +961,7 @@ const pdfTextOf = (f) => {
     cl.notes = {};
     // o.qRaw・o.ivTail: そのままの文字列（折り返せない幅広の書記素など。E16）
     if (o.q || o.qRaw) R.checklistItems(prof.checklist, 'question').forEach(x => { cl.notes[x.block.id] = o.qRaw != null ? o.qRaw : Lx(o.q); });
+    if (o.rn) R.checklistItems(prof.checklist, 'rating').forEach(x => { cl.notes[x.item.id] = Lx(o.rn); });   // 確認点のメモ
     const applicant = { name: '台本 五郎', age: '21', gender: '男性', category: '大学3年生', reviewerNotes: o.memo ? Lx(o.memo) : '' };
     // o.stamp: 全欄に押印済み／o.dec: 最終合否（'hire'・'reject'）
     const who = { name: '笹川 晴央', short: '笹川', title: '副支配人', date: '2026/10/10', at: '2026-10-10T00:00:00.000Z' };
@@ -972,20 +973,37 @@ const pdfTextOf = (f) => {
     return S.generateReportHTML(rec, prof);
   };
   const fit39 = [];
-  for (const c of [{ key: 'iv4000', iv: 4000 }, { key: 'stamps4', fields: 4, q: 300, memo: 500, iv: 1600 }, { key: 'zoom', extra: 65 }]) {
+  //   zoomNotes: 確認点 +40 件＋長いメモ（縮小の段階でも、切れたメモを縮小後の空きまで広げる。12 章 F5）
+  for (const c of [{ key: 'iv4000', iv: 4000 }, { key: 'stamps4', fields: 4, q: 300, memo: 500, iv: 1600 }, { key: 'zoom', extra: 65 }, { key: 'zoomNotes', extra: 40, q: 100, memo: 100, iv: 400, rn: 50 }]) {
     const f39 = path.join(OUT, 'script-report-fit-' + c.key + '.html');
     fs.writeFileSync(f39, await page.evaluate(mk39, c));
     const rp = await newReportPage(rp39Err);
+    //   開いたときの計測（clFitSheet。始めに用紙へ .cl-roomy を付ける）の回数を数える
+    await rp.addInitScript(() => {
+      window.__fitN = 0;
+      const add = DOMTokenList.prototype.add;
+      DOMTokenList.prototype.add = function () { if (arguments[0] === 'cl-roomy' && this.contains('cl-sheet')) window.__fitN++; return add.apply(this, arguments); };
+    });
     await rp.goto('file://' + f39);
     await rp.waitForTimeout(300);
+    await rp.evaluate(() => document.fonts.ready.then(() => 0));
+    await rp.waitForTimeout(100);
+    const fitN = await rp.evaluate(() => window.__fitN);
     await rp.mouse.move(0, 0);
     const m = await rp.evaluate(() => {
       const a4 = document.getElementById('a4'), sh = a4.querySelector('.cl-sheet'), st = a4.querySelector('.cl-stamps'), top = a4.getBoundingClientRect().top;
       const mm = 96 / 25.4;
       sh.classList.add('cl-measure'); const nat = sh.getBoundingClientRect().height; sh.classList.remove('cl-measure');
+      // 縦に切れたまま残ったメモ（面接メモ・所見の枠）と、その縮小後の 1 行の高さ
+      const z = parseFloat(sh.style.zoom) || 1;
+      const cutV = Array.from(sh.querySelectorAll('.cl-nm-v')).filter(e => e.getClientRects().length && e.scrollHeight > e.clientHeight + 1);
+      const iv = sh.querySelector('.cl-nm-iv .cl-nm-v');
       return { cls: sh.className.replace('cl-sheet cl-mode-sheet', '').trim(), zoom: sh.style.zoom, h: Math.round(nat), boxes: a4.querySelectorAll('.cl-stamps .stamp-box').length,
-        stampsBottom: st ? Math.round(st.getBoundingClientRect().bottom - top) : -1, innerBottom: Math.round((8 + 281) * mm) };
+        stampsBottom: st ? Math.round(st.getBoundingClientRect().bottom - top) : -1, innerBottom: Math.round((8 + 281) * mm),
+        room: +(1052 - nat).toFixed(1), cutLineH: cutV.length ? +Math.min.apply(null, cutV.map(e => parseFloat(getComputedStyle(e).lineHeight) * z)).toFixed(1) : 0,
+        ivInline: iv ? iv.style.getPropertyValue('-webkit-line-clamp') : '' };
     });
+    m.fitN = fitN;
     const pdf = path.join(OUT, 'script-report-fit-' + c.key + '.pdf');
     await rp.pdf({ path: pdf, format: 'A4', preferCSSPageSize: true, printBackground: true });
     const t = pdfTextOf(pdf);
@@ -1000,6 +1018,44 @@ const pdfTextOf = (f) => {
   expect(fit39k('stamps4').boxes === 4 && fit39k('stamps4').h <= 1052, 'E8 押印欄 4 件（押印行 2 段）も押印行込みの上限（1052px）で詰める: ' + JSON.stringify(fit39k('stamps4')));
   const z39 = fit39k('zoom');
   expect(z39.cls.includes('cl-compact-2') && parseFloat(z39.zoom) > 0 && parseFloat(z39.zoom) < 1 && z39.h <= 1052, 'E8 確認点 +65 件: 縮小後の高さを測り直して上限（1052px）以内: ' + JSON.stringify(z39));
+  const zn39 = fit39k('zoomNotes');
+  expect(zn39.cls.includes('cl-compact-2') && parseFloat(zn39.zoom) < 1 && zn39.ivInline !== '' && zn39.h <= 1052 && (zn39.cutLineH === 0 || zn39.room < zn39.cutLineH),
+    'E8 縮小の段階（確認点 +40 件＋長いメモ）でも、切れたメモを縮小後の空きまで広げる（面接所見の行数を広げる・切れたメモが残るなら空きは 1 行未満・上限 1052px 以内）: ' + JSON.stringify(zn39));
+  expect(fit39.every(x => x.fitN === 1),
+    'E8 保存 HTML を開いたときの計測は 1 回（load・フォントの読み込み後に同じ計測を繰り返さない）: ' + JSON.stringify(fit39.map(x => [x.key, x.fitN])));
+  //   アプリで読み込んだときも ③ の紙の計測は 1 回（読み込みで ③ を 2 回描かない）
+  await page.evaluate(() => { const S = window.RecruitStorage; window.__fitOrig = S.fitChecklistSheet; window.__fitApp = 0; S.fitChecklistSheet = function () { window.__fitApp++; return window.__fitOrig.apply(this, arguments); }; });
+  await page.setInputFiles('#fileInput', path.join(OUT, 'script-report-fit-zoom.html'));
+  await wait(600);
+  const app39n = await page.evaluate(() => { const n = window.__fitApp; window.RecruitStorage.fitChecklistSheet = window.__fitOrig; return { n: n, step: window.RecruitApp.state.step, paper: !!document.querySelector('#appPaper .cl-sheet') }; });
+  expect(app39n.step === 4 && app39n.paper && app39n.n === 1, 'E8 アプリで保存 HTML を読み込むと ③ の紙の計測は 1 回: ' + JSON.stringify(app39n));
+  //   最終合否の担当者名が改行できない長い文字列でも、最終合否欄は結果ストリップの 48% まで（左の 4 枚のタイルを「…」で潰さない・用紙からはみ出さない）
+  const dec39 = await page.evaluate(() => {
+    const S = window.RecruitStorage, R = window.RecruitRules;
+    const prof = S.normalizeProfile(S.defaults());
+    const cl = R.emptyChecklist();
+    cl.header = { date: '2026-10-10', interviewer: '笹川 晴央', posting: 'short', taxi: '可' };
+    R.checklistItems(prof.checklist, 'rating').forEach(x => { cl.values[x.item.id] = 'good'; });
+    R.checklistItems(prof.checklist, 'must').forEach(x => { cl.values[x.item.id] = 'match'; });
+    cl.overall = 'hire';
+    const applicant = { name: '台本 五郎', age: '21', gender: '男性', category: '大学3年生', reviewerNotes: '' };
+    const out = [];
+    for (const nm of ['笹川 晴央', 'https://example.com/recruit/abcdefghij0123456789abcdefghij0123456789abcdefghij01', '笹川' + '\u{1F468}' + '\u200D\u{1F468}'.repeat(60)]) {
+      const decision = { result: 'hire', label: '採用', date: '2026.10.10', at: '2026-10-10T00:00:00.000Z', by: { name: nm, short: '笹川', title: '' } };
+      const rec = { applicant, checklist: cl, checklistDef: prof.checklist, interviewNotes: '', management: {}, decision, judgment: R.evaluateScript(applicant, cl, prof, {}) };
+      const host = document.createElement('div'); host.className = 'a4'; host.style.cssText = 'position:absolute;left:0;top:0';
+      host.innerHTML = S.checklistSheetHtml(rec, prof, {}); document.body.appendChild(host);
+      S.fitChecklistSheet(host.querySelector('.cl-sheet'));
+      const padR = host.getBoundingClientRect().right - parseFloat(getComputedStyle(host).paddingRight);
+      const d = host.querySelector('.cl-decision').getBoundingClientRect(), row = host.querySelector('.cl-judge-row').getBoundingClientRect();
+      out.push({ decW: Math.round(d.width), rowW: Math.round(row.width), over: Math.round(d.right - padR),
+        trunc: Array.from(host.querySelectorAll('.cl-tile-v,.cl-tile-s')).filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent) });
+      host.remove();
+    }
+    return out;
+  });
+  expect(dec39.every(x => x.trunc.length === 0 && x.over <= 0 && x.decW <= x.rowW * 0.48 + 1) && dec39[0].decW < dec39[1].decW,
+    'E8 最終合否の担当者名が改行できない長い文字列（URL 80 字・ZWJ でつながった絵文字）でも、最終合否欄は結果ストリップの 48% まで・タイルは切れない・用紙からはみ出さない: ' + JSON.stringify(dec39));
   expect(rp39Err.length === 0, 'E8 保存 HTML のページエラーなし: ' + (rp39Err.join(' / ') || 'none'));
 
   // =====================================================================
@@ -1212,8 +1268,14 @@ const pdfTextOf = (f) => {
     !['詳細モード', '初期対応者', '2軸', '貢献度', '留意点', '申し送り'].some(t => help10.includes(t)) && !(await page.$('#helpFullMode')),
     'E10 使い方は 3 ステップ（押印欄は 面接対応者／最終確認。詳細モード・初期対応者・2軸の記述なし）');
   const helpLock10 = await page.textContent('#helpFinalLock').catch(() => '');
-  expect(['最終承認のパスワード', '誤操作を防ぐための鍵', 'HTML をテキストで開いて書き換える人までは防げません', 'パスワードそのものは保存しません', 'local/final-password.txt'].every(t => helpLock10.includes(t)),
-    'E10 使い方に最終承認のパスワード（誤操作を防ぐ鍵・書き換えは防げない・平文は保存しない・ローカル版の初期パスワードは local/final-password.txt）');
+  expect(['最終承認のパスワード', '誤操作を防ぐための鍵', 'HTML をテキストで開いて書き換える人までは防げません', 'パスワードそのものは保存しません', '初期パスワードは管理者に確認してください', '押印欄の表示名'].every(t => helpLock10.includes(t)) &&
+    !helpLock10.includes('local/') && !helpLock10.includes('final-password'),
+    'E10 使い方に最終承認のパスワード（誤操作を防ぐ鍵・書き換えは防げない・平文は保存しない・ローカル版の初期パスワードは管理者に確認〔リポジトリ内のパスは出さない〕・押印欄の表示名の変更にも要る）');
+  //   報告書（HTML）の流れ・ステップ 3 にパスワードの手順（最終合否の欄はパスワードの入力から・最終確認と最終合否は副支配人が保存した HTML で）
+  const helpFlow10 = await page.textContent('#helpScriptFlow').catch(() => '');
+  const helpStep3 = await page.evaluate(() => { const s = document.querySelectorAll('#view-help .help-step'); return s[2] ? s[2].textContent : ''; });
+  expect(helpFlow10.includes('パスワードがあるときは、最初にパスワードを入力します') && helpStep3.includes('最終確認と最終合否は、副支配人が保存した HTML で押します'),
+    'E10 使い方の「報告書（HTML）の流れ」とステップ 3 にパスワードの手順: ' + JSON.stringify({ flow: helpFlow10.length, step3: helpStep3.length }));
   await toView('judge');
   await fresh();
 
@@ -2045,7 +2107,8 @@ const pdfTextOf = (f) => {
       decLock: !!document.querySelector('#decisionCard .final-lock'), decBtn: !!document.querySelector('#decisionCard [data-action="decide"]'),
       pwType: Array.from(document.querySelectorAll('.final-lock-pw')).map(i => i.type + '/' + i.autocomplete).join(','),
       err: Array.from(document.querySelectorAll('.final-lock-err')).map(e => e.textContent).join('|'),
-      mg: Object.keys(window.RecruitApp.state.management).sort().join(','), finName: (window.RecruitApp.state.management.final || {}).name || '', dec: (window.RecruitApp.state.decision || {}).result || '' }));
+      mg: Object.keys(window.RecruitApp.state.management).sort().join(','), finName: (window.RecruitApp.state.management.final || {}).name || '', dec: (window.RecruitApp.state.decision || {}).result || '',
+      linkHint: Array.from(document.querySelectorAll('#decisionCard .hint')).some(h => h.textContent.includes('同じ担当者の印も押します')) }));
     const c0 = await cards();
     expect(c0.ivSel && c0.finLock && !c0.finBtn && c0.decLock && !c0.decBtn && c0.pwType === 'password/off,password/off',
       'E15 ローカル版の ③: 最終確認の押印欄と最終合否はパスワード欄（type=password・autocomplete=off）と［確認］だけ・面接対応者は従来どおり: ' + JSON.stringify(c0));
@@ -2077,6 +2140,8 @@ const pdfTextOf = (f) => {
     const ls4 = await lp.evaluate(() => JSON.stringify(Object.assign({}, localStorage)));
     expect(!c2.finLock && !c2.decLock && c2.decBtn && c2.finBtn && foc2 === 'decisionManager' && c3.dec === 'hire' && c3.mg === 'final,interviewer' && c4.finName === '試験 花子' && !ls4.includes(PW),
       'E15 正しいパスワード（Enter）で解錠: パスワード欄が消え、最終合否・最終確認の押印・取消を続けて押せる（localStorage に平文なし）: ' + JSON.stringify({ c2, foc2, c3, c4 }));
+    expect(!c0.linkHint && !c1.linkHint && c2.linkHint,
+      'E15 ③ の最終合否カード: パスワード欄のあいだは「採用」「不採用」の連動の案内を出さない（ボタンが無い）・解錠すると出す: ' + JSON.stringify({ c0: c0.linkHint, c1: c1.linkHint, c2: c2.linkHint }));
     // (4) 保存 HTML: 保存時のロックで照合。最終確認・最終合否の窓はパスワード欄だけ（面接対応者は不要）→ 正しいと解錠され、続けて押せる
     const [dlA] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
     const fA = path.join(OUT, 'lock-local-a.html');
@@ -2305,10 +2370,26 @@ const pdfTextOf = (f) => {
     await lp.waitForTimeout(300);
     if (await lp.$('#pwDialogInput')) { await lp.fill('#pwDialogInput', PW); await lp.press('#pwDialogInput', 'Enter'); await lp.waitForTimeout(300); }
     const g4 = { sf: await sfOf(), open: !!(await lp.$('#pwDialog')), toast: await lp.textContent('#toast') };
+    await lp.fill('[data-bind="management.fields[1].hint"]', '店長が確認');
+    await lp.click('#view-settings [data-action="save"]');
+    await lp.waitForTimeout(300);
+    const g5 = { open: !!(await lp.$('#pwDialog')), hint: await lp.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.fields[1].hint) };
+    //   押印欄の表示名を変える保存（面接対応者の欄を「最終確認」・最終確認の欄を「面接対応者」に入れ替える）もパスワードを求める（パスワードなしに押した印を最終確認に見せない。11 章 L5c）
+    await lp.fill('[data-bind="management.fields[0].label"]', '最終確認');
+    await lp.fill('[data-bind="management.fields[1].label"]', '面接対応者');
+    await lp.click('#view-settings [data-action="save"]');
+    await lp.waitForTimeout(300);
+    const g5b = await lp.evaluate(() => { const d = document.getElementById('pwDialog'); return d ? d.textContent : ''; });
+    if (g5b) await lp.click('#pwDialog [data-pw="cancel"]');
+    await lp.waitForTimeout(200);
+    g5.swap = { dlg: g5b.includes('押印欄の表示名'), labels: await lp.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.fields.map(f => f.label).join(',')) };
+    await lp.fill('[data-bind="management.fields[0].label"]', '面接対応者');
     await lp.fill('[data-bind="management.fields[1].label"]', '最終確認（店長）');
     await lp.click('#view-settings [data-action="save"]');
     await lp.waitForTimeout(300);
-    const g5 = { open: !!(await lp.$('#pwDialog')), label: await lp.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.fields[1].label) };
+    g5.relabel = !!(await lp.$('#pwDialog'));
+    if (g5.relabel) { await lp.fill('#pwDialogInput', PW); await lp.press('#pwDialogInput', 'Enter'); await lp.waitForTimeout(300); }
+    g5.label = await lp.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.fields[1].label);
     await lp.uncheck('[data-bind="management.decision.enabled"]');
     await lp.click('#view-settings [data-action="save"]');
     await lp.waitForTimeout(300);
@@ -2316,8 +2397,9 @@ const pdfTextOf = (f) => {
     if (g6) await lp.keyboard.press('Escape');
     await lp.waitForTimeout(200);
     const g7 = await lp.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.decision.enabled);
-    expect(g4.sf === '' && !g4.open && g4.toast.includes('設定を保存しました') && !g5.open && g5.label === '最終確認（店長）' && g6 && g7 === true,
-      'E15 ロックの迂回: 正しいパスワードなら「連動しない」を保存できる・表示名だけの変更はパスワード不要・最終合否の ON/OFF も求める（Esc でやめると保存しない）: ' + JSON.stringify({ g4, g5, g6, g7 }));
+    expect(g4.sf === '' && !g4.open && g4.toast.includes('設定を保存しました') && !g5.open && g5.hint === '店長が確認' && g5.swap.dlg && g5.swap.labels === '面接対応者,最終確認' &&
+      g5.relabel && g5.label === '最終確認（店長）' && g6 && g7 === true,
+      'E15 ロックの迂回: 正しいパスワードなら「連動しない」を保存できる・押印欄の説明だけの変更はパスワード不要・押印欄の表示名の変更（入れ替え）は求める（キャンセルで保存しない・正しければ保存）・最終合否の ON/OFF も求める（Esc でやめると保存しない）: ' + JSON.stringify({ g4, g5, g6, g7 }));
     const profG = await lp.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')));
     profG.management.fields.push({ id: 'extra', label: '追加確認', hint: '' });
     await lp.setInputFiles('#profileFileInput', { name: 'profile-scope.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(profG)) });
@@ -2393,6 +2475,55 @@ const pdfTextOf = (f) => {
     expect(k0.cards.finLock && k0.cards.decLock && k0.stored === '(なし)' && !!k1 && k1.hash === '' && !k1.off && !k2.dlg && k2.footer === 'off JSON' && !(k2.stored || {}).off &&
       k3.finLock && k3.decLock && !k3.finBtn && !k3.decBtn,
       'E15 公開版と localStorage を共有: 公開版で設定を保存しても（空のロック）・公開版で「外した」印の JSON を読み込んでも、ローカル版の最終確認・最終合否はパスワード欄のまま: ' + JSON.stringify({ k0, k1, k2, k3 }));
+    //   公開版でロックの無い状態から（現在のパスワードなしに）付けたパスワード・読み込んだ JSON のパスワードは、ローカル版では使わない（初期パスワードのまま。11 章 L6d）。
+    //   公開版は自分で付けたパスワードで施錠される。ローカル版は開いただけでは公開版のロックを消さない
+    const unlock15 = async (pg, pw) => {
+      if (!(await pg.$('#mgmtCard .final-lock-pw'))) return 'no-field';
+      await pg.fill('#mgmtCard .final-lock-pw', pw);
+      await pg.press('#mgmtCard .final-lock-pw', 'Enter');
+      await pg.waitForTimeout(200);
+      return (await pg.$('#mgmtCard .final-lock-pw')) ? await pg.textContent('#mgmtCard .final-lock-err') : 'unlocked';
+    };
+    const isPw15 = (l, pw) => !!l && /^[0-9a-f]{64}$/.test(l.hash || '') && l.hash === require('crypto').createHash('sha256').update(l.salt + ':' + pw, 'utf8').digest('hex');
+    await pubP.click('#finalLockChange');
+    await pubP.waitForTimeout(100);
+    const m0 = { cur: !!(await pubP.$('#lockCur')) };
+    await pubP.fill('#lockNew', 'e2e-pub-pass');
+    await pubP.fill('#lockNew2', 'e2e-pub-pass');
+    await pubP.click('#finalLockApply');
+    await pubP.waitForTimeout(100);
+    await save15(pubP);
+    m0.dlg = !!(await pubP.$('#pwDialog'));
+    m0.stored = await storedLock(pubP);
+    await toJ15(pubP, '共有 公開');
+    const m1 = { pubCards: await cardsOf(pubP), pubOwn: await unlock15(pubP, 'e2e-pub-pass') };
+    await lp.reload();
+    await lp.waitForTimeout(300);
+    await toJ15(lp, '共有 四郎');
+    m1.cards = await cardsOf(lp);
+    m1.pubPw = await unlock15(lp, 'e2e-pub-pass');
+    m1.localPw = await unlock15(lp, PW);
+    m1.kept = isPw15(await storedLock(lp), 'e2e-pub-pass');
+    await lp.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await pubP.reload();
+    await pubP.waitForTimeout(300);
+    await toSet15(pubP);
+    const jP = await pubP.evaluate(() => JSON.parse(JSON.stringify(window.RecruitApp.state.profile)));
+    jP.management.finalLock = { salt: '0123456789abcdef0123456789abcdef', hash: 'ccba4209d4c619c1c04b48ed3af6126fedf36100a746aa78aed32d96b3d9ead0', chain: true };
+    await pubP.setInputFiles('#profileFileInput', { name: 'profile-pub-lock.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(jP)) });
+    await pubP.waitForTimeout(300);
+    const m2 = { dlg: !!(await pubP.$('#pwDialog')), stored: await storedLock(pubP) };
+    await lp.reload();
+    await lp.waitForTimeout(300);
+    await toJ15(lp, '共有 五郎');
+    m2.cards = await cardsOf(lp);
+    m2.jsonPw = await unlock15(lp, 'e2e-json-pass');
+    m2.localPw = await unlock15(lp, PW);
+    expect(!m0.cur && !m0.dlg && isPw15(m0.stored, 'e2e-pub-pass') && !m0.stored.chain && m1.pubCards.finLock && m1.pubOwn === 'unlocked' &&
+      m1.cards.finLock && m1.cards.decLock && m1.pubPw === 'パスワードが違います' && m1.localPw === 'unlocked' && m1.kept &&
+      !m2.dlg && isPw15(m2.stored, 'e2e-json-pass') && !m2.stored.chain && m2.cards.finLock && m2.jsonPw === 'パスワードが違います' && m2.localPw === 'unlocked',
+      'E15 公開版と localStorage を共有: 公開版でロックの無い状態から付けたパスワード・読み込んだ JSON のパスワードでは、ローカル版は解錠できない（初期パスワードのまま。公開版は自分のパスワードで施錠）: ' +
+      JSON.stringify({ m0: { cur: m0.cur, dlg: m0.dlg }, m1, m2: { dlg: m2.dlg, cards: m2.cards, jsonPw: m2.jsonPw, localPw: m2.localPw } }));
     await toSet15(lp);
     if (await lp.$('#finalLockRemove')) {   // （ロックが外れてしまっていると［パスワードを外す］は無い。上の確認が FAIL になる）
       await lp.click('#finalLockRemove');
@@ -2435,12 +2566,12 @@ const pdfTextOf = (f) => {
     await tabB.waitForTimeout(300);
     const t1 = { cards: await cardsOf(tabB), toast: await tabB.textContent('#toast') };
     await toSet15(tabB);
-    await tabB.fill('[data-bind="management.fields[0].label"]', '面接対応者（B）');
+    await tabB.fill('[data-bind="management.fields[0].hint"]', '面接対応者（B）');
     await save15(tabB);
-    const t2 = { dlg: !!(await tabB.$('#pwDialog')), stored: await storedLock(tabB), label: await tabB.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.fields[0].label) };
+    const t2 = { dlg: !!(await tabB.$('#pwDialog')), stored: await storedLock(tabB), label: await tabB.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.fields[0].hint) };
     expect(!t0.finLock && t0.finBtn && !!lkA && /^[0-9a-f]{64}$/.test(lkA.hash) && t1.cards.finLock && t1.cards.decLock && !t1.cards.finBtn && !t1.cards.decBtn && t1.toast.includes('別のタブ') &&
       !t2.dlg && t2.stored.hash === lkA.hash && t2.label === '面接対応者（B）',
-      'E15 古いタブ: A でパスワードを付けると B は読み込み直して ③ はパスワード欄・B で表示名だけ変えて保存しても A のパスワードは外れない: ' + JSON.stringify({ t0, t1, t2: { dlg: t2.dlg, same: t2.stored.hash === lkA.hash, label: t2.label } }));
+      'E15 古いタブ: A でパスワードを付けると B は読み込み直して ③ はパスワード欄・B で押印欄の説明だけ変えて保存しても A のパスワードは外れない: ' + JSON.stringify({ t0, t1, t2: { dlg: t2.dlg, same: t2.stored.hash === lkA.hash, label: t2.label } }));
     //   B の下書きでパスワードを変えている間に、A で別のパスワード（NEWPW）に変えて保存 → B の下書きのパスワードの変更は取り消す（ほかの下書きは残る）→ B で保存しても A のパスワードのまま
     await tabB.click('#finalLockChange');
     await tabB.waitForTimeout(100);
@@ -2471,8 +2602,10 @@ const pdfTextOf = (f) => {
       !t4.dlg && t4.stored.hash === lkA2.hash && t4.footer === 'B の変更',
       'E15 古いタブ: B の下書きで変えていたパスワードは、A でパスワードが変わると取り消す（ほかの下書きは残る）・B で保存しても A のパスワードのまま: ' + JSON.stringify({ t3a, t3, t4: { dlg: t4.dlg, same: t4.stored.hash === lkA2.hash, footer: t4.footer } }));
     //   storage イベントが届かない場合（B 自身のページで localStorage を書き換えて再現。B には storage イベントが来ない）: 保存の直前に比べて最新のロックを上書きしない
+    //   （別のタブのローカル版が書くロック・「外した」印には chain: true が付く。11 章 L6d）
     const putLock = (pg, l) => pg.evaluate((lk) => { const p = JSON.parse(localStorage.getItem('recruit.profile.v1')); p.management.finalLock = lk; localStorage.setItem('recruit.profile.v1', JSON.stringify(p)); }, l);
-    await putLock(tabB, lockL);
+    const lockLc = Object.assign({}, lockL, { chain: true });
+    await putLock(tabB, lockLc);
     await tabB.fill('[data-bind="meta.footer"]', 'B の変更 2');
     await save15(tabB);
     const t5 = { dlg: !!(await tabB.$('#pwDialog')), stored: await storedLock(tabB), footer: await tabB.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).meta.footer) };
@@ -2516,19 +2649,110 @@ const pdfTextOf = (f) => {
     expect(d0 && !!lkA3 && lkA3.hash !== lkB.hash && !d1.open && d1.same && d1.sf === 'final' && d1.toast.includes('やめました'),
       'E15 古いタブ: B でパスワードのダイアログを出しているあいだに A でパスワードが変わると、B で前のパスワードを入れても保存しない（A のロックのまま）: ' + JSON.stringify({ d0, d1 }));
     //   ③ の押印の直前にも比べる: B を「外した」状態で開き直して ③ を出したあと、B のページで localStorage にロックを書く → 最終確認の［押印］は押さずに描き直す（パスワード欄）
-    await putLock(tabB, { salt: '', hash: '', off: true });
+    await putLock(tabB, { salt: '', hash: '', off: true, chain: true });
     await tabB.reload();
     await tabB.waitForTimeout(300);
     await toJ15(tabB, '古い タブ');
     const t6 = await cardsOf(tabB);
     await tabB.selectOption('#mgmtCard .stamp-box[data-field-id="final"] select', { index: 1 });
-    await putLock(tabB, lockL);
+    await putLock(tabB, lockLc);
     await tabB.click('#mgmtCard .stamp-box[data-field-id="final"] [data-action="stamp"]');
     await tabB.waitForTimeout(300);
     const t7 = await cardsOf(tabB);
+    //   ③ の［報告書を保存（HTML）］の直前にも比べる: 「外した」状態で開いた B のページで localStorage にロックを書いてから（storage イベントなし）保存すると、
+    //   書き出したファイルは最新のロック（ロックなし〔null〕で書き出さない）
+    await putLock(tabB, { salt: '', hash: '', off: true, chain: true });
+    await tabB.reload();
+    await tabB.waitForTimeout(300);
+    await toJ15(tabB, '古い 保存');
+    const t8 = { cards: await cardsOf(tabB) };
+    await putLock(tabB, lockLc);
+    const [dl8] = await Promise.all([tabB.waitForEvent('download'), tabB.click('#reportSaveBtn')]);
+    const f8 = path.join(OUT, 'lock-stale-save.html');
+    await dl8.saveAs(f8);
+    t8.cfg = cfgOf(fs.readFileSync(f8, 'utf8')).finalLock;
+    t8.after = await cardsOf(tabB);
+    expect(!t8.cards.finLock && t8.cards.finBtn && !!t8.cfg && t8.cfg.hash === lockL.hash && t8.cfg.salt === lockL.salt && t8.after.finLock && t8.after.decLock,
+      'E15 古いタブ: storage イベントが届かなくても、③ の保存（HTML）の直前に比べて最新のロックで書き出す（③ もパスワード欄に描き直す）: ' + JSON.stringify({ cards: t8.cards, cfg: !!t8.cfg, after: t8.after }));
+    //   設定画面で入力中のパスワードの欄（［変更］。下書きには入らない）は、別のタブでロック以外だけが保存されても閉じず、入力も残る（下書きは最新の設定）。
+    //   別のタブでパスワードが変わったときは閉じる
+    await toSet15(tabB);
+    await tabB.click('#finalLockChange');
+    await tabB.waitForTimeout(100);
+    if (await tabB.$('#lockCur')) await tabB.fill('#lockCur', PW);   // （B が古いロックのままだと現在のパスワードの欄が無い。下の確認が FAIL になる）
+    await tabB.fill('#lockNew', 'e2e-b-form');
+    await tabB.fill('#lockNew2', 'e2e-b-form');
+    await toSet15(lp);
+    await lp.fill('[data-bind="meta.footer"]', 'A の変更 3');
+    await lp.locator('[data-bind="meta.footer"]').blur();
+    await save15(lp);
+    await tabB.waitForTimeout(300);
+    const t9 = await tabB.evaluate(() => ({ form: (document.getElementById('finalLockForm') || { getAttribute: () => '' }).getAttribute('data-lock-form'),
+      cur: (document.getElementById('lockCur') || {}).value || '', nw: (document.getElementById('lockNew') || {}).value || '', nw2: (document.getElementById('lockNew2') || {}).value || '',
+      footer: (document.querySelector('[data-bind="meta.footer"]') || {}).value || '', toast: document.getElementById('toast').textContent }));
+    if (await tabB.$('#finalLockApply')) await tabB.click('#finalLockApply');   // （入力欄が閉じてしまっていると無い。下の確認が FAIL になる）
+    await tabB.waitForTimeout(100);
+    await save15(tabB);
+    t9.saved = await tabB.evaluate(() => { const p = JSON.parse(localStorage.getItem('recruit.profile.v1')); return { footer: p.meta.footer, lock: p.management.finalLock }; });
+    t9.isB = isPw15(t9.saved.lock, 'e2e-b-form') && t9.saved.lock.chain === true;
+    await tabB.click('#finalLockChange');
+    await tabB.waitForTimeout(100);
+    if (await tabB.$('#lockCur')) await tabB.fill('#lockCur', 'e2e-b-form');
+    await toSet15(lp);
+    await lp.click('#finalLockChange');
+    await lp.waitForTimeout(100);
+    if (await lp.$('#lockCur')) await lp.fill('#lockCur', 'e2e-b-form');
+    await lp.fill('#lockNew', PW);
+    await lp.fill('#lockNew2', PW);
+    await lp.click('#finalLockApply');
+    await lp.waitForTimeout(100);
+    await save15(lp);
+    await tabB.waitForTimeout(300);
+    const t10 = await tabB.evaluate(() => ({ form: !!document.getElementById('finalLockForm'), toast: document.getElementById('toast').textContent }));
     await tabB.close();
+    expect(t9.form === 'change' && t9.cur === PW && t9.nw === 'e2e-b-form' && t9.nw2 === 'e2e-b-form' && t9.footer === 'A の変更 3' && t9.toast.includes('別のタブ') &&
+      t9.saved.footer === 'A の変更 3' && t9.isB && !t10.form && t10.toast.includes('入力中のパスワードの欄を閉じました'),
+      'E15 古いタブ: 入力中のパスワードの欄は、別のタブでロック以外だけが保存されても閉じない（入力が残り、下書きは最新・続けて変更して保存できる）・パスワードが変わったときは閉じる: ' +
+      JSON.stringify({ t9: { form: t9.form, footer: t9.footer, saved: t9.saved.footer, isB: t9.isB }, t10 }));
     expect(!t5.dlg && t5.stored.hash === lockL.hash && t5.footer === 'B の変更 2' && !t6.finLock && t6.finBtn && !t7.fin && t7.finLock && t7.decLock && !t7.finBtn,
       'E15 古いタブ: storage イベントが届かなくても、保存の直前に比べて最新のロックを上書きしない・③ の押印の直前にも比べる（押さずにパスワード欄で描き直す）: ' + JSON.stringify({ t5: { dlg: t5.dlg, same: t5.stored.hash === lockL.hash, footer: t5.footer }, t6, t7 }));
+    // (12) ロックの無いアプリ（公開版）で、ロック付きで保存した記録を読み込むと、その記録の最終確認・最終合否はファイルのロックで守り、保存し直すファイルにも入れる（11 章 L7b）。
+    //      fA（ローカル版で保存。面接対応者・最終確認の押印と最終合否「採用」入り）を、ロックの無い公開版で読み込む
+    const pubR = await newReportPage(e15);
+    await pubR.goto(FILE);
+    await pubR.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await pubR.reload();
+    await pubR.waitForTimeout(300);
+    await pubR.setInputFiles('#fileInput', fA);
+    await pubR.waitForTimeout(500);
+    const q0 = await cardsOf(pubR);
+    Object.assign(q0, await pubR.evaluate(() => ({ step: window.RecruitApp.state.step, toast: document.getElementById('toast').textContent,
+      unstamp: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="final"] [data-action="unstamp"]'), undecide: !!document.querySelector('#decisionCard [data-action="undecide"]'),
+      ivSel: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="interviewer"] select') })));
+    const [dlQ] = await Promise.all([pubR.waitForEvent('download'), pubR.click('#btnSave')]);
+    const fQ = path.join(OUT, 'lock-public-resave.html');
+    await dlQ.saveAs(fQ);
+    const cfgQ = cfgOf(fs.readFileSync(fQ, 'utf8'));
+    const q1 = { wrong: await unlock15(pubR, 'wrong-pass'), right: await unlock15(pubR, PW) };
+    if (await pubR.$('#decisionCard [data-action="undecide"]')) await pubR.click('#decisionCard [data-action="undecide"]');
+    await pubR.waitForTimeout(200);
+    q1.dec = await pubR.evaluate(() => (window.RecruitApp.state.decision || {}).result || '');
+    await pubR.click('#btnNew');
+    await pubR.waitForTimeout(200);
+    await toJ15(pubR, '公開 新規');
+    const q2 = await cardsOf(pubR);
+    await pubR.close();
+    const rQ = await newReportPage(e15);
+    await rQ.goto('file://' + fQ);
+    await rQ.waitForTimeout(300);
+    await openDecision(rQ);
+    const pQ = await popOf(rQ);
+    await rQ.close();
+    expect(q0.step === 4 && q0.fin && q0.finLock && q0.decLock && !q0.finBtn && !q0.decBtn && !q0.unstamp && !q0.undecide && q0.ivSel && q0.toast.includes('最終承認のパスワード付き') &&
+      !!cfgQ.finalLock && cfgQ.finalLock.hash === lockL.hash && cfgQ.finalLock.salt === lockL.salt && !!pQ && pQ.pw && !pQ.act &&
+      q1.wrong === 'パスワードが違います' && q1.right === 'unlocked' && q1.dec === '' && !q2.finLock && !q2.decLock && q2.finBtn && q2.decBtn,
+      'E15 ロックの無いアプリ（公開版）でロック付きの記録を読み込む: 最終確認・最終合否はファイルのパスワード欄（取消もできない）・保存し直したファイルにもそのロック・正しいパスワードで取消できる・新規にすると外れる: ' +
+      JSON.stringify({ q0, cfgQ: !!cfgQ.finalLock, pQ, q1, q2 }));
     await lp.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
     await lp.close();
     expect(e15.length === 0, 'E15 ページエラー・console error なし: ' + (e15.join(' / ') || 'none'));

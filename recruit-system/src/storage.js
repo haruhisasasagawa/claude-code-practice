@@ -15,7 +15,11 @@
   const RECORD_KIND = 'recruit-applicant-record';
 
   function defaults() {
-    return U.deepClone(global.RECRUIT_DEFAULT_PROFILE);
+    const d = U.deepClone(global.RECRUIT_DEFAULT_PROFILE);
+    // 既定のロック（ローカル版の初期パスワード）は「既定のロックからつながっている」印 chain の根（docs/SPEC-a4.md 11 章 L6d）
+    const dl = U.isObj(d.management) ? d.management.finalLock : null;
+    if (U.isObj(dl) && lockOn(dl)) dl.chain = true;
+    return d;
   }
 
   function isNum(v) { return v !== '' && v != null && typeof v !== 'boolean' && !isNaN(Number(v)); }
@@ -105,28 +109,41 @@
       managers: managers,
       allowFreeName: mg.allowFreeName !== false,
       decision: Object.assign({}, U.deepClone(dsrc), decisionFields(dsrc, fields, bm.decision)),
-      // 最終承認のパスワード（docs/SPEC-a4.md 11 章 L6b・L6c）。ロック（salt・hash）か「外した」印（off: true）があればそれ、
+      // 最終承認のパスワード（docs/SPEC-a4.md 11 章 L6b・L6c・L6d）。ロック（salt・hash）か「外した」印（off: true）があればそれ、
       //   キーが無い・空（{ salt: '', hash: '' }）・形が正しくなければ既定（ローカル版ならローカルのロック、公開版はパスワードなし）。
-      //   空のロックはロックを持たない版（公開版）も書くので「外した」とは見なさない（同じ file:// の localStorage を公開版と共有しても外れない）
+      //   空のロックはロックを持たない版（公開版）も書くので「外した」とは見なさない（同じ file:// の localStorage を公開版と共有しても外れない）。
+      //   既定のロックを持つ版（ローカル版）は、chain の無いロック・印（公開版でロックの無い状態から付けたもの）も使わない（L6d）
       finalLock: resolveLock(mg.finalLock, bm.finalLock)
     };
   }
   // management.finalLock の正規化: { salt: 16 進 32 文字, hash: 16 進 64 文字 }（小文字）。形が違えば、off: true（パスワードを外した印）なら
-  //   { salt: '', hash: '', off: true }、それ以外は { salt: '', hash: '' }（未設定）
+  //   { salt: '', hash: '', off: true }、それ以外は { salt: '', hash: '' }（未設定）。
+  //   chain: true（既定のロックから、現在のパスワードを確かめてつながっているロック・印。L6d）はロックと印にだけ残す
   function normalizeLock(l) {
     const salt = U.isObj(l) && typeof l.salt === 'string' ? l.salt.trim().toLowerCase() : '';
     const hash = U.isObj(l) && typeof l.hash === 'string' ? l.hash.trim().toLowerCase() : '';
-    if (/^[0-9a-f]{32}$/.test(salt) && /^[0-9a-f]{64}$/.test(hash)) return { salt: salt, hash: hash };
-    return U.isObj(l) && l.off === true ? { salt: '', hash: '', off: true } : { salt: '', hash: '' };
+    const out = /^[0-9a-f]{32}$/.test(salt) && /^[0-9a-f]{64}$/.test(hash) ? { salt: salt, hash: hash }
+      : U.isObj(l) && l.off === true ? { salt: '', hash: '', off: true } : null;
+    if (!out) return { salt: '', hash: '' };
+    if (l.chain === true) out.chain = true;
+    return out;
   }
   // ロックも「外した」印も無い（未設定）か
   function lockUnset(l) {
     const n = normalizeLock(l);
     return !lockOn(n) && !n.off;
   }
-  // 保存値 l（未設定なら既定 def）を正規化したロック
+  // 保存値 l を使わない（既定 def を使う）か: 未設定か、既定のロックを持つ版（ローカル版）で chain の無いロック・印
+  //   （ロックを持たない版〔公開版〕で、ロックの無い状態から現在のパスワードを確かめずに付けた・外したもの。docs/SPEC-a4.md 11 章 L6d）
+  function lockIgnored(l, def) {
+    return lockUnset(l) || (lockOn(normalizeLock(def)) && normalizeLock(l).chain !== true);
+  }
+  // 保存値 l（使わないなら既定 def）を正規化したロック。既定のロックは chain の根（chain: true）
   function resolveLock(l, def) {
-    return lockUnset(l) ? normalizeLock(def) : normalizeLock(l);
+    if (!lockIgnored(l, def)) return normalizeLock(l);
+    const d = normalizeLock(def);
+    if (lockOn(d)) d.chain = true;
+    return d;
   }
   // 最終承認のロックがあるか（RecruitLock.isLocked。lock.js が無い環境でも形で判定する）
   function lockOn(l) {
@@ -140,12 +157,16 @@
     const sf = decisionConfig(profile).stampField;
     return sf && sf !== FINAL_FIELD_ID ? [FINAL_FIELD_ID, sf] : [FINAL_FIELD_ID];
   }
-  // ロックの対象を変える設定（押印欄と連動・最終合否の ON/OFF・押印欄の構成〔id の並び〕）を比べるためのキー。
-  //   ロックがあるとき、これが変わる設定の保存・JSON の読み込みには現在のパスワードが要る（app.js）。表示名・説明（label・hint）は含めない
+  // ロックの対象を変える設定（押印欄と連動・最終合否の ON/OFF・押印欄の構成〔id の並び〕と押印欄の表示名）を比べるためのキー。
+  //   ロックがあるとき、これが変わる設定の保存・JSON の読み込みには現在のパスワードが要る（app.js）。押印欄の表示名を含めるのは、パスワードの要らない欄
+  //   （面接対応者）の表示名を「最終確認」にして、パスワードなしに押した印を最終確認の印に見せられないようにするため（docs/SPEC-a4.md 11 章 L5c）。
+  //   押印欄の説明（hint）・最終合否の表示名・名簿は含めない
   function finalLockScope(profile) {
     const mg = U.isObj((profile || {}).management) ? profile.management : {};
     const d = decisionConfig(profile);
-    return JSON.stringify({ enabled: d.enabled, stampField: d.stampField, fields: (Array.isArray(mg.fields) ? mg.fields : []).map(function (f) { return U.isObj(f) ? asStr(f.id) : ''; }) });
+    const flds = Array.isArray(mg.fields) ? mg.fields : [];
+    return JSON.stringify({ enabled: d.enabled, stampField: d.stampField, fields: flds.map(function (f) { return U.isObj(f) ? asStr(f.id) : ''; }),
+      labels: flds.map(function (f) { return U.isObj(f) ? asStr(f.label) : ''; }) });
   }
 
   // ---------- 面接チェックリスト（docs/SPEC-checklist.md 6-1） ----------
@@ -392,10 +413,10 @@
     TEXT_SCRIPT_KEYS.forEach(function (k) { out.texts.script[k] = str(rs[k], bt.script[k]); });
     if (report) {
       if (raw.mode === 'full') report.fullModeRemoved = true;
-      // 最終承認のロックが未設定（キーが無い・空）なだけの保存済みの設定は保存し直さない（既定のロック＝ローカル版のロックを localStorage に固定しない。
-      //   docs/SPEC-a4.md 11 章 L6b）
+      // 最終承認のロックが未設定（キーが無い・空）・使わない（chain の無いロック。L6d）だけの保存済みの設定は保存し直さない
+      //   （既定のロック＝ローカル版のロックを localStorage に固定しない・公開版が付けたロックを開いただけで消さない。docs/SPEC-a4.md 11 章 L6b）
       let cmp = out, rawCmp = raw;
-      if (U.isObj(raw.management) && lockUnset(raw.management.finalLock)) {
+      if (U.isObj(raw.management) && lockIgnored(raw.management.finalLock, base.management.finalLock)) {
         cmp = U.deepClone(out); delete cmp.management.finalLock;
         rawCmp = U.deepClone(raw); delete rawCmp.management.finalLock;
       }
@@ -524,7 +545,9 @@
     };
   }
 
-  function parseRecordFromHTML(html) {
+  //   info（任意のオブジェクト）を渡すと info.finalLock に保存時の最終承認のロック（#recruit-mgmt-config の finalLock。salt・hash だけ。無ければ null）を入れる
+  //   （ロックの無いアプリで読み込んだとき、その記録の最終確認・最終合否を守るため。docs/SPEC-a4.md 11 章 L7b）
+  function parseRecordFromHTML(html, info) {
     try {
       const doc = new DOMParser().parseFromString(html, 'text/html');
       const node = doc.querySelector('script#recruit-record[type="application/json"]');
@@ -533,6 +556,14 @@
       if (!rec || rec.kind !== RECORD_KIND) return null;
       // 最終合否は正規化して返す（キーの無い旧レコード・不正値は null）
       rec.decision = normalizeDecision(rec.decision);
+      if (U.isObj(info)) {
+        info.finalLock = null;
+        const cn = doc.querySelector('script#recruit-mgmt-config[type="application/json"]');
+        let cfg = null;
+        try { cfg = cn ? JSON.parse(cn.textContent) : null; } catch (e) { cfg = null; }
+        const l = normalizeLock(U.isObj(cfg) ? cfg.finalLock : null);
+        if (lockOn(l)) info.finalLock = { salt: l.salt, hash: l.hash };
+      }
       return rec;
     } catch (e) {
       return null;
@@ -694,7 +725,7 @@
     if (!sheet || !sheet.getBoundingClientRect) return '';
     var cls = sheet.classList;
     var lv = ['cl-compact', 'cl-compact-q1', 'cl-compact-2'];
-    var i, h, z, n, mode = 'zoom', vs;
+    var i, h, z = 1, n, mode = 'zoom', vs;
     var hOf = function () {
       cls.add('cl-measure');
       var r = sheet.getBoundingClientRect().height;
@@ -734,7 +765,7 @@
         for (t = 0; t < 200; t++) {
           hid = hidOf(v);
           if (!(hid > 1)) break;
-          add = Math.max(1, Math.min(Math.ceil(hid / lh), Math.floor((limit - h) / lh)));
+          add = Math.max(1, Math.min(Math.ceil(hid / lh), Math.floor((limit - h) / (lh * z))));
           clampTo(v, m + add); cut(); h2 = hOf();
           if (h2 > limit && add > 1) { add = 1; clampTo(v, m + 1); cut(); h2 = hOf(); }
           if (h2 > limit || !(hidOf(v) < hid)) { clampTo(v, m === n0 ? 0 : m); cut(); break; }
@@ -767,12 +798,12 @@
       if (h) grow();
       return mode;
     }
-    z = 1;
     for (n = 0; n < 12 && h > limit && z > 0.3; n++) {
       z = Math.max(0.3, Math.floor(z * limit / h * 1000) / 1000 - (n ? 0.005 : 0));
       sheet.style.zoom = String(z);
       h = hOf();
     }
+    if (h && h <= limit) grow();
     return 'zoom';
   }
   function fitChecklistSheet(sheet, limit) {
@@ -1046,11 +1077,12 @@
       '.cl-mode-sheet .cl-adj{list-style:none;margin:5px 2px 0;padding:0;font-size:9px;color:#3a4556}',
       '.cl-mode-sheet .cl-adj li{overflow-wrap:anywhere}.cl-mode-sheet .cl-adj li::before{content:"※ "}.cl-mode-sheet .cl-adj li b{color:#111}',
       // 最終合否（ストリップの右端）
-      '.cl-mode-sheet .cl-decision{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid #d5dbe3;border-radius:4px;background:#fff}',
+      //   幅は結果ストリップの 48% まで（担当者名が改行できない長い文字列でも、左の 4 枚のタイルを潰さない。担当者・日付は「…」で切る）
+      '.cl-mode-sheet .cl-decision{flex:0 0 auto;min-width:0;max-width:48%;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid #d5dbe3;border-radius:4px;background:#fff}',
       '.cl-mode-sheet .cl-dec-stamp{flex:none;display:grid;place-items:center}.cl-mode-sheet .cl-dec-stamp .verdict-stamp{width:64px;height:41px;mix-blend-mode:multiply;filter:none}',
       '.cl-mode-sheet .cl-dec-meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}',
       '.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#5b6675}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}',
-      '.cl-mode-sheet .cl-dec-by,.cl-mode-sheet .cl-dec-date{font-size:8.5px;color:#3a4556;white-space:nowrap}',
+      '.cl-mode-sheet .cl-dec-by,.cl-mode-sheet .cl-dec-date{font-size:8.5px;color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-decision.is-none{padding:3px 6px}',
       '.cl-mode-sheet .cl-dec-empty{width:72px;height:44px;border:1.5px dashed #b8c2cf;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.3;color:#5b6675;text-align:center}',
       // 見出し（左に濃紺のアクセント線）・ブロック
@@ -1174,7 +1206,7 @@
       interviewerField: asStr((clDef.header || {}).interviewerField),
       decision: dcfg.enabled ? { label: dcfg.label, hireLabel: dcfg.hireLabel, rejectLabel: dcfg.rejectLabel, hireColor: dcfg.hireColor, rejectColor: dcfg.rejectColor,
         stampField: dcfg.stampField, autoStampFinal: dcfg.autoStampFinal, filenameSuffix: dcfg.filenameSuffix, hint: dcfg.hint, sub: dcfg.sub } : null,
-      finalLock: lockOn(flk) ? flk : null,
+      finalLock: lockOn(flk) ? { salt: flk.salt, hash: flk.hash } : null,
       lockField: asStr(dcfg.stampField),
       lockFields: finalLockFields(profile)
     });
@@ -1202,7 +1234,8 @@
   //   最終承認のパスワード: cfg.finalLock があり未解錠なら、最終確認（cfg.lockFields＝'final' と decision.stampField の欄。無い旧い設定は 'final' と cfg.lockField）と
   //   最終合否の窓はパスワード欄と［確認］だけ（正しければ unlocked。変数だけで書き出しに残さない）。
   //   外部参照はそれらの関数と DOM だけの ES5 で書く（関数内にコメント・閉じタグを書かない）。文字列は旧い埋め込みスクリプトと同じ二重引用符。
-  //   計測（fit）は読み込み時・load・フォントの読み込み後・押印／合否の変更後だけ。印刷のための切替（beforeprint）はしない。
+  //   計測（fit）は読み込み時・押印／合否の変更後だけ。load・フォントの読み込み後は、前の計測のあとでフォント（document.fonts.status）か画像（ロゴ）の
+  //   読み込みの状態が変わったときだけ測り直す（同じ計測を続けて行わない。docs/SPEC-a4.md 12 章 F8）。印刷のための切替（beforeprint）はしない。
   //   狭い画面の縮小（--a4-zoom。transform:scale なのでレイアウトは変わらない。12 章 F7）は従来どおり計測の前に外し、計測のあとで付け直す
   function a4PageScript(LIMIT, PAPER_W) {
     var de = document.documentElement, a4 = document.getElementById("a4"), sheet = a4 && a4.querySelector(".cl-sheet");
@@ -1224,7 +1257,7 @@
     var locked = !!LK && (typeof isLocked !== "function" || isLocked(LK)), unlocked = false;
     var canStamp = recOk && typeof stampSvg === "function" && typeof shortName === "function" && cfg.fields.length > 0;
     var canDecide = recOk && !!D && typeof decisionSheetHtml === "function" && typeof decisionFilename === "function" && typeof shortName === "function";
-    var dirty = false, saved = false, pop = null, anchor = null, bar = null, rz = 0;
+    var dirty = false, saved = false, pop = null, anchor = null, bar = null, rz = 0, fitKey = "";
     var ATTRS = ["data-a4-t", "tabindex", "role", "aria-haspopup", "aria-label", "aria-expanded"];
 
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]; }); }
@@ -1249,14 +1282,21 @@
       if (z < 1) de.style.setProperty("--a4-zoom", String(z)); else de.style.removeProperty("--a4-zoom");
       if (!de.getAttribute("style")) de.removeAttribute("style");
     }
+    function layoutKey() {
+      var k = document.fonts && document.fonts.status ? String(document.fonts.status) : "";
+      each(document.images, function (im) { k += im.complete ? "1" : "0"; });
+      return k;
+    }
     function fit() {
       de.style.removeProperty("--a4-zoom");
       var lv = clFitSheet(sheet, LIMIT);
+      fitKey = layoutKey();
       markTargets();
       scale();
       if (pop) { if (anchor && de.contains(anchor) && anchor.getAttribute("data-a4-t")) place(); else closePop(false); }
       return lv;
     }
+    function refit() { if (layoutKey() !== fitKey) fit(); }
     function mark(el, t, label) {
       el.setAttribute("data-a4-t", t); el.setAttribute("tabindex", "0"); el.setAttribute("role", "button");
       el.setAttribute("aria-haspopup", "dialog"); el.setAttribute("aria-label", label);
@@ -1541,8 +1581,8 @@
       if (rz) return;
       rz = window.requestAnimationFrame(function () { rz = 0; scale(); if (pop) place(); if (bar) barSpace(); });
     });
-    window.addEventListener("load", function () { fit(); });
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fit(); });
+    window.addEventListener("load", refit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
     window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
     window.__a4Fit = fit;
     render();
@@ -1566,6 +1606,7 @@
     finalLockFields: finalLockFields,
     finalLockScope: finalLockScope,
     lockUnset: lockUnset,
+    normalizeLock: normalizeLock,
     loadProfile: loadProfile,
     saveProfile: saveProfile,
     resetProfile: resetProfile,
