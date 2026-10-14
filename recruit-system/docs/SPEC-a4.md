@@ -15,7 +15,7 @@
 - 押印と最終合否は**用紙の欄を直接クリック**。小さな窓（ポップオーバー）で担当者を選んで押す。用紙の外に常設の操作パネルは置かない（窓は印刷されない）
 
 ### 0-3. オーケストレータの設計（A1〜A13。要約。本書はこれを具体化する）
-A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内側の余白 8mm／10mm）そのもの。画面と印刷で同じ要素・寸法・文字組み。印刷専用の複製・詳細表示・操作カード類は削除 ／ A2 中身は現行の 1 ページ要約＋押印行（最下段） ／ A3 見出しは白地＋濃紺 2px の下線・左にロゴ＋題・右に版／劇場／作成日 ／ A4 押印行込みの用紙を内寸の高さで計測（読み込み時に確定し、印刷時に切り替えない） ／ A5 押印は欄クリックの窓 ／ A6 最終合否は `.cl-decision` クリックの窓 ／ A7 右上の通知バーで保存 ／ A8 切れたメモはクリックで全文 ／ A9 狭い画面は縮小表示 ／ A10 アプリ ③ の紙と A4 印刷も同じ用紙 ／ A11 旧い保存 HTML の互換 ／ A12 テスト ／ A13 docs
+A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内側の余白 8mm／10mm）そのもの。画面と印刷で同じ要素・寸法・文字組み。印刷専用の複製・詳細表示・操作カード類は削除 ／ A2 中身は現行の 1 ページ要約＋押印行（最下段） ／ A3 見出しは白地＋濃紺 2px の下線・左にロゴ＋題・右に版／劇場／作成日 ／ A4 押印行込みの用紙を内寸の高さで計測（読み込み時に確定し、印刷時に切り替えない） ／ A5 押印は欄クリックの窓 ／ A6 最終合否は `.cl-decision` クリックの窓 ／ A7 右上の通知バーで保存（レビュー後に**右下**へ変更。11 章） ／ A8 切れたメモはクリックで全文 ／ A9 狭い画面は縮小表示 ／ A10 アプリ ③ の紙と A4 印刷も同じ用紙 ／ A11 旧い保存 HTML の互換 ／ A12 テスト ／ A13 docs
 
 ### 0-4. 本書の決定（S1〜S16。迷ったらここに従う）
 | # | 決定 |
@@ -97,6 +97,7 @@ A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内�
 - 見出し: 旧 `.cl-band`（濃紺の帯・3 つの span）を `.cl-title` に置き換える。`.cl-title-r` は `[版（def.version があれば「台本 {version} 版」）, meta.theaterName, '作成 ' + 作成日]` の空でないものを ` ／ ` で連結
 - 押印行: 押印欄が 0 件なら `.cl-stamps` を出さない。`cols-2` は 2 件のときだけ。ハンコは `Stamp.render(e, { size: 46, id: o.stampSvgPrefix + idx })`（既定 prefix `'cl'`）。`stamp-meta` は `name（title）　date`
 - 案内 1 行の文言（A8）: `.cl-nm-ref-c`「「…」で切れたメモは、画面でクリックすると全文を表示します」／ `.cl-nm-ref-q`「質問の回答は省略（画面でこの行をクリックすると、回答と「…」で切れたメモの全文を表示します）」
+  - アプリ ③ の紙（`#appPaper`）だけは `o.refWhere = '保存した HTML の画面で'` を渡し、「「…」で切れたメモは、保存した HTML の画面でクリックすると全文を表示します」「質問の回答は省略（保存した HTML の画面でこの行をクリックすると、…）」と言い換える（③ の紙はクリックしても窓を出さないため。アプリの印刷 `#clSheet` と保存 HTML は「画面で」のまま＝印刷物の文言は同じ）
 - id: 保存 HTML `a4Decision`/`vdA4`/`a4s{n}`、アプリ ③ `appPaperDecision`/`vdAppPaper`/`ap{n}`、アプリ印刷 `clDecision`/`vdSheet`/`cl{n}`（既定値）
 
 ### 1-3. スクリプトが付けるもの（生成 HTML には無い。書き出しの複製からは外す）
@@ -141,9 +142,12 @@ A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内�
 
 ### 1-5. 保存バー（`.savebar`。最初の変更で作る）
 ```html
-<div class="savebar" id="saveBar" role="status" aria-live="polite"><span class="savebar-msg" id="saveBarMsg">押印・合否を変更しました</span><button type="button" class="savebar-btn" id="saveBarBtn">押印を保存</button></div>
+<div class="savebar" id="saveBar" role="status" aria-live="polite"><span class="savebar-msg" id="saveBarMsg">押印・合否を変更しました</span><button type="button" class="savebar-btn" id="saveBarBtn">押印を保存</button>
+  <button type="button" class="savebar-x" id="saveBarClose" aria-label="閉じる" title="閉じる" hidden>×</button></div>
 ```
-- 変更あり（dirty）: 「押印・合否を変更しました」［押印を保存］／書き出し後（saved かつ !dirty）:「保存しました（保存できなかったときは再保存）」［再保存］。どちらでもないときは作らない
+- 変更あり（dirty）: 「押印・合否を変更しました」［押印を保存］（閉じられない）／書き出し後（saved かつ !dirty）:「保存しました（保存できなかったときは再保存）」［再保存］［×］。［×］でバーを外す（saved を下ろす）。どちらでもないときは作らない
+- 位置は**画面の右下**（`position:fixed; right:12px; bottom:12px`）。当初の右上（A7）は 1280／1366px で用紙の右上（見出しの右端・最終合否の欄）に重なり、390px では縮小した用紙の見出し・氏名を隠し続けた（縦にスクロールできない）ため、レビュー後に右下へ移した。右下なら 390px では縮小した用紙の下の余白に出る
+- バーが出ているあいだは `body.a4-sb`（`@media screen` で `padding-bottom: バーの高さ＋12px`。高さは `--a4-sbh` を body に置く）。いちばん下までスクロールすれば用紙と注記がバーに重ならない。印刷には効かない（`@media screen`。`--a4-sbh` は変数だけ）
 
 ### 1-6. 保存 HTML から削除するもの
 `.page`・`.rtool`（`#rtViewReport`/`#rtViewFull`/`#rtPrintChecklist`/`.rtool-hint`）・`body.view-report`/`view-full`/`has-cl`/`mode-script`・`.paper-wrap#reportPaper`/`.paper-cap`/`.paper#clPaper`/`#clPaperDecision`・印刷専用 `#clSheet.cl-sheet-print`/`#clDecision`・`body.print-checklist`・ヘッダー `header.rh`（`.rh-*`・`.rh-mark`・`.rh-logo`・`.verdict`・`#rhDecision`）・`section.sec[data-sec=applicant|checklist|judgment|mgmt]`（`table.kv`・`.script-judge`・`.result`・`.adj`・`.warn-list`・`.disclaimer`）・`#mgmt`（大きい押印カード・`.stamp-ctl`・`.stamp-hint`）・`#decision`（`.decision`/`.dec-*`）・`#mgmtSave`/`#mgmtSaveMsg`/`#mgmtSaveBtn`・`.mgmt-note`・`.foot`・`window.__prepareChecklistSheet`/`__fitChecklistPaper`/`__setReportView`・beforeprint/afterprint の処理・`checklistSheetHtml` の `'section'` モード
@@ -185,11 +189,13 @@ body>.a4{margin:24px auto}
   body.a4-live .a4 [data-a4-t]:focus-visible{outline:2px solid #1f5fbf;outline-offset:1px}
   body.a4-live .a4 [data-a4-t="stamp"]:hover::after{content:"クリックで押印"}
   body.a4-live .a4 [data-a4-t="decision"]:hover::after{content:"クリックで合否を押す"}
-  body.a4-live .a4 [data-a4-t="stamp"]:hover::after,body.a4-live .a4 [data-a4-t="decision"]:hover::after{position:absolute;right:3px;bottom:2px;padding:0 4px;border-radius:3px;background:#1f5fbf;color:#fff;font-size:8px;line-height:1.5;pointer-events:none}
+  body.a4-live .a4 [data-a4-t="stamp"]:hover::after,body.a4-live .a4 [data-a4-t="decision"]:hover::after{position:absolute;right:3px;bottom:2px;padding:0 4px;border-radius:3px;background:#1f5fbf;color:#fff;font-size:8px;line-height:1.5;white-space:nowrap;pointer-events:none}
+  body.a4-live .a4 [data-a4-t="decision"]:hover::after{right:-1px;bottom:100%;margin-bottom:3px}   /* 最終合否の欄（未押印で 86×58px）は欄の上の辺の外に 1 行 */
   body.a4-live .a4 [data-a4-t="memo"]:hover,body.a4-live .a4 [data-a4-t="memos"]:hover{color:#1f4e8c;text-decoration:underline dotted}
 }
 .pop{position:absolute;z-index:30;width:260px;max-width:calc(100vw - 16px);padding:10px 12px;background:#fff;color:#1a2233;border:1px solid #c9d2dd;border-radius:8px;box-shadow:0 8px 24px rgba(16,24,40,.18);font-size:13px;line-height:1.5}
-.pop[data-kind="memo"],.pop[data-kind="memos"]{width:380px;max-height:60vh;overflow:auto}
+.pop[data-kind="memo"],.pop[data-kind="memos"]{width:380px;max-height:60vh;display:flex;flex-direction:column}
+.pop[data-kind="memo"] .pop-b,.pop[data-kind="memos"] .pop-b{flex:1 1 auto;min-height:0;overflow:auto}   /* 本文だけスクロール。見出しと［閉じる］は常に見える */
 .pop-h{font-weight:800;font-size:13.5px}.pop-sub,.pop-ref{font-size:11.5px;color:#5b6675}
 .pop-b{display:flex;flex-direction:column;gap:6px;margin:8px 0}
 .pop-l{display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:700;color:#5b6675}
@@ -203,12 +209,15 @@ body>.a4{margin:24px auto}
 .pop-f button.primary,.savebar-btn{background:#1f5fbf;border-color:#1f5fbf;color:#fff}
 .pop-dec{color:var(--dec) !important;border:1.5px solid var(--dec) !important}.pop-hire{--dec:var(--dec-hire,#c8232c)}.pop-reject{--dec:var(--dec-reject,#1f4e8c)}
 .pop-dec:hover,.pop-dec.on{background:var(--dec) !important;color:#fff !important}
-.savebar{position:fixed;z-index:40;top:12px;right:12px;max-width:calc(100vw - 24px);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:8px;background:#fdf1dc;border:1px solid #f3cf8a;box-shadow:0 4px 14px rgba(16,24,40,.15);font-size:13px}
+.savebar{position:fixed;z-index:40;right:12px;bottom:12px;max-width:calc(100vw - 24px);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:8px;background:#fdf1dc;border:1px solid #f3cf8a;box-shadow:0 4px 14px rgba(16,24,40,.15);font-size:13px}
+.savebar-x{font:inherit;font-size:16px;line-height:1;padding:3px 6px;border:0;border-radius:6px;background:transparent;color:#5b6675;cursor:pointer}.savebar-x:hover{background:rgba(0,0,0,.06)}
+@media screen{body.a4-sb{padding-bottom:calc(var(--a4-sbh,49px) + 12px)}}
 @page{size:A4 portrait;margin:0}
 @media print{
   html,body{background:#fff}
   body>.a4{margin:0;box-shadow:none}
   .a4-foot,.pop,.savebar{display:none !important}
+  .a4 [data-a4-t],.a4 [data-a4-t]:focus,.a4 [data-a4-t]:focus-visible{outline:none !important}   /* 窓を閉じると欄にフォーカスが戻る。キーボード操作の直後に印刷してもフォーカス枠を紙に出さない */
 }
 ```
 - ホバーの案内・枠は **outline と position:absolute の ::after だけ**（用紙の寸法・文字組みを変えない）。`::after` の土台の `position:relative` は 2-1 で常時付けておく（ホバーで付け外ししない）
@@ -288,7 +297,7 @@ function fit(){de.style.removeProperty("--a4-zoom");var lv=clFitSheet(sheet,LIMI
 - 位置（document 座標の `position:absolute`）:
 ```js
 function place(){if(!pop||!anchor)return;var r=anchor.getBoundingClientRect(),pw=pop.offsetWidth,ph=pop.offsetHeight,vw=de.clientWidth,vh=window.innerHeight;
-  var top=r.bottom+6;if(top+ph>vh-8&&r.top-6-ph>=8)top=r.top-6-ph;
+  var top=r.bottom+6;if(top+ph>vh-8)top=r.top-6-ph>=8?r.top-6-ph:Math.max(8,vh-ph-8);   // 上にも下にも入らなければ画面の中に収める
   var left=Math.min(Math.max(8,r.left),Math.max(8,vw-pw-8));
   pop.style.left=(left+window.pageXOffset)+"px";pop.style.top=(top+window.pageYOffset)+"px";}
 ```
@@ -309,7 +318,7 @@ delete rec.management[id];closePop(true);changed();
 
 ### 3-6. 最終合否（data-kind="decision"。`D` があるときだけ）
 - 採用／不採用: `rec.decision={result:r,label:r==="hire"?D.hireLabel:D.rejectLabel,date:today(),at:…,by:{name,short,title}}`。`D.autoStampFinal` かつ `D.stampField` が `cfg.fields` にあり未押印なら同じ担当者・同じ日付で押印（現行どおり）。`changed()` のあと、`noteText(rec.decision)` が空でなければ窓を作り直して（ボタンの on・取消・注記を反映）開いたまま、空なら `closePop(true)`
-- 取消: `rec.decision=null`（押印は消さない）→ `closePop(true);changed();`
+- 取消: `rec.decision=null`（押印は消さない）→ `changed();closePop(true);`（この順。`changed()` → `renderDecision` が `#a4Decision` を outerHTML で置き換え、窓の anchor を新しい欄に付け替えてから `closePop(true)` がそこへフォーカスを戻す。逆順だとフォーカスしていた古い欄が DOM から消えて body に落ちる）
 - `renderDecision`: `#a4Decision` を `decisionSheetHtml(d,{id:"a4Decision",svgId:"vdA4",title:D.label,hireLabel,rejectLabel,hireColor,rejectColor,sub:D.sub||"",size:64})` の outerHTML で置き換え（印は markTargets が付け直す）、`body[data-filename]` を `decisionFilename(現在の名前,d,D)` に
 - `noteText` と `.pop-ref`・`.pop-note` の文言は 1-4。`D` が null なら欄も窓も出さない
 
@@ -326,15 +335,16 @@ function memoOf(el){var notes=(rec.checklist&&rec.checklist.notes)||{},row=el.cl
 
 ### 3-8. 保存バーと書き出し
 ```js
-function renderBar(){if(!dirty&&!saved){if(bar){bar.parentNode.removeChild(bar);bar=null;}return;}
-  if(!bar){…1-5 の要素を作って body に追加。ボタンは exportHtml…}
-  msg.textContent=dirty?"押印・合否を変更しました":"保存しました（保存できなかったときは再保存）";btn.textContent=dirty?"押印を保存":"再保存";}
+function barSpace(){…bar があれば body に class a4-sb と --a4-sbh（bar.offsetHeight+"px"）、無ければ外す（style が空なら属性ごと）…}
+function renderBar(){if(!dirty&&!saved){if(bar){bar.parentNode.removeChild(bar);bar=null;}barSpace();return;}
+  if(!bar){…1-5 の要素を作って body に追加。［押印を保存］は exportHtml、［×］は saved=false;renderBar()…}
+  msg.textContent=dirty?"押印・合否を変更しました":"保存しました（保存できなかったときは再保存）";btn.textContent=dirty?"押印を保存":"再保存";x.hidden=dirty;barSpace();}
 function exportHtml(){closePop(false);
   recNode.textContent=JSON.stringify(rec).replace(/[<>&  ]/g,function(c){return "\\u"+("000"+c.charCodeAt(0).toString(16)).slice(-4);});
   var root=de.cloneNode(true);
   Array.prototype.forEach.call(root.querySelectorAll(".pop,.savebar"),function(n){n.parentNode.removeChild(n);});
   Array.prototype.forEach.call(root.querySelectorAll("[data-a4-t]"),unmark);
-  var bd=root.querySelector("body");if(bd)bd.classList.remove("a4-live");
+  var bd=root.querySelector("body");if(bd){bd.classList.remove("a4-live");bd.classList.remove("a4-sb");bd.style.removeProperty("--a4-sbh");if(!bd.getAttribute("style"))bd.removeAttribute("style");}
   root.style.removeProperty("--a4-zoom");if(!root.getAttribute("style"))root.removeAttribute("style");
   var html="<!DOCTYPE html>\n"+root.outerHTML;
   …Blob＋a.download（document.body の data-filename。無ければ "applicant.html"）＋revoke（現行どおり）…
@@ -359,7 +369,7 @@ function exportHtml(){closePop(false);
 - 段階の順・縮小の測り直しは現行どおり
 
 ### 4-3. `checklistSheetHtml(record, profile, o)`
-- `o = { decisionId, decisionSvgId, stampSvgPrefix }`（`mode`・`stamps` は無視）。'section' の分岐とそのヘルパーを削除し、常に `clOnePageHtml`
+- `o = { decisionId, decisionSvgId, stampSvgPrefix, refWhere }`（`mode`・`stamps` は無視。`refWhere` は 1-2 の案内の言い換え）。'section' の分岐とそのヘルパーを削除し、常に `clOnePageHtml`
 - 見出し（1-2）・押印行（1-2）・案内の文言（1-2）
 
 ### 4-4. `generateReportHTML(record, profile)`
@@ -448,6 +458,7 @@ function exportHtml(){closePop(false);
 5. **390px**: `setViewportSize({width:390,height:844})` → `scrollWidth - innerWidth <= 1`・`--a4-zoom` ≈ 0.451・`#a4` の rect 幅が 358±2・縦横比 297/210±0.01・押印行は 2 列のまま。窓を開くと左右とも画面内（left ≥ 0・right ≤ 390）。この幅で `page.pdf` → 1 枚・`#a4 .cl-sheet` の class と zoom が PDF の前後で同じ（計測し直さない）
 6. **ロゴ**: E13（7-2）
 7. **アプリと保存 HTML の印刷**: 同じ記録（`saved9`）で、アプリ（③ で読み込み → `prepareChecklistSheet(true)` → print メディア → `page.pdf`）と保存 HTML（開いたまま `page.pdf`）がどちらも 1 ページ、pdftotext（空白を詰める）の見出しが同じ（「面接チェックリスト報告」と「台本2026-10-08版／TOHOシネマズ新宿／作成2026/10/10」がどちらにもある）。2 の方法で 2 つの PDF の画像の外接矩形も ±0.02 以内
+- レビュー後の追加（11 章）: キーボード操作の直後（Esc で欄に戻る・Shift+Tab で「最終合否」）に印刷の表示で `outlineStyle` が `none`・その状態の PDF の画像がフォーカスなしの印刷と画素単位で同じ／ホバーの案内は 1 行・最終合否の欄の案内は欄の上の辺の外（未押印・押した後）／保存バーは 1280×768 で右下・見出し・氏名・最終合否に重ならない（スクロール 0／120px）・いちばん下までスクロールすれば用紙・注記に重ならない・保存後は［×］で閉じる・書き出しに `a4-sb` が残らない、390×844 で用紙・見出し・氏名・最終合否に重ならない／1366×768 で全文の窓が欄の上下どちらにも入らないときは画面の中（本文だけスクロール・［閉じる］が見える）／重いサンプルを 390px で**最初から**開いても 1440px と同じ class・zoom・印刷の表示でシートが 1052px 以内で押印行が内寸に収まる・PDF 1 枚・この幅で書き出したファイルに `--a4-zoom` が無い。E8: ③ の紙の案内は「保存した HTML の画面で…」・③ の紙のクリックで窓は出ない・アプリの印刷の PDF は「画面でクリックすると全文」。E9: 採用×不採用推奨の注記。E12: 未押印の面接対応者の窓は台本の担当を名簿から初期選択・そのまま押印した名簿の値（役職つき）が書き出したファイルに入る・キーボードで合否を取り消すとフォーカスが新しい欄に戻る
 - そのほか: 各保存 HTML の pageerror・console error なし。`tests/fixtures/legacy-full-stamps3.html`・`legacy-full-checklist.html` を直接開いても pageerror なし（旧い保存 HTML は自分のスクリプトで動く。A11）
 - e2e 冒頭のシナリオ一覧に E14 を足し、E3・E9・E11・E12・E13 の説明を新しい内容に直す
 
@@ -480,3 +491,23 @@ function exportHtml(){closePop(false);
 - `docs/HANDOFF.md`: 冒頭の一覧に「2026-10-14: 保存 HTML を A4 縦 1 枚に」。1-1 ③ の紙プレビューに押印行・見出し。**1-4 を書き直す**（`body.a4-doc`・`main.a4#a4`・欄クリックの窓・保存バー・書き出しの掃除・詳細表示なし・印刷の切替なし・旧い保存 HTML の互換）。**1-5**（見出しは白地＋下線・ロゴ、押印行は用紙の中、上限 `CL_SHEET_LIMIT_PX` 1052 で押印行込み、案内の文言、アプリ ③・アプリの印刷・保存 HTML で同じ部品）。1-6 のテスト件数（単体 30 件〔#90 追加〕・e2e E1〜E14 の実数）。2 章の表に「K. A4 縦 1 枚（2026-10-14）: 保存 HTML は A4 縦の用紙 1 枚そのもの・詳細表示なし（切れたメモはクリックで全文）・押印と最終合否は用紙の欄を直接クリック（窓）・印刷は画面と同じ用紙 1 枚」。3-2 の既知の制限に 9-13。4 章の早見表（A4 報告の見た目・押印欄の行の場所名を新しい関数名に）
 - `README.md`: 「報告書（HTML）と最終合否」（2・3・4 を用紙の欄クリック・窓・右上の保存バーに）、「印刷」（保存 HTML はそのまま印刷＝画面と同じ 1 枚、詳細表示の記述を削除、見出しの説明、「…」の案内の文言、上限の説明）、テストの説明（E14・件数）、ロゴの節（「保存レポートの「詳細」表示のヘッダー」→「用紙の見出し（アプリ ③・印刷・保存 HTML）」）
 - `docs/SPEC-report.md`・`docs/SPEC-script-mode.md`・`docs/SPEC-checklist.md`（4 章）の冒頭の注記に 1 行:「> 2026-10-14 に保存 HTML を A4 縦 1 枚へ変更（docs/SPEC-a4.md）。報告書表示／詳細表示の切替・`#clPaper`／`#clSheet`（保存 HTML）・`#mgmt`／`#decision`・「A4 で印刷（1 ページ）」・'section' モードの記述は無効」
+
+---
+
+## 11. 実装メモ（実装時に決めたこと・本書からの差分）
+- 埋め込みスクリプトの本体は文字列連結ではなく、`storage.js` の ES5 の関数 `a4PageScript(LIMIT, PAPER_W)` を `toString()` で埋め込む（`clFitSheet`・`RecruitStamp.source()` と同じやり方。`node --check` で構文を確かめられる）。生成されるのは 3-1 と同じ 1 本の IIFE: `clFitSheet` → stamp.js の関数 → `var LIMIT=1052,PAPER_W=793.7;` → `(function a4PageScript(LIMIT, PAPER_W){…})(LIMIT,PAPER_W);`。関数内の文字列は旧い埋め込みスクリプトと同じ二重引用符（`addEventListener("beforeunload"`・`recNode.textContent=JSON.stringify(rec).replace(/[<>&` は従来の文字列のまま）。テスト用の公開名は `window.__a4Fit = fit;`
+- 埋め込み JSON（`#recruit-record`）が読めないときは押印・合否の欄に印を付けない（書き出しで記録を壊さない）。長いメモの窓は要素の `textContent` で出す
+- 合否の窓にも見出しの下に `D.hint`（「最終確認者が合否を決めて押します」）を `.pop-sub` で出す。手入力の氏名欄で Enter を押すと押印
+- `.pop input[hidden]{display:none}` を足した（`.pop input` に display を書いたときに hidden が効かなくならないよう）
+- 設定画面「面接チェックリスト」の「印刷」行（`checklist.print.showQuestions`＝保存 HTML の「詳細」に質問文を載せる）を削除した（「詳細」表示ごと無くなり効き先が無い）。キーは旧い設定・記録の互換のため `normalizeChecklistDef` で残す。e2e E10 の data-bind の許可リストからも外した
+- アプリの文言: ③ の紙の見出し（cap）・押印カードの説明・設定「応募者の管理（押印）」の説明・使い方の「報告書（HTML）の流れ」を、用紙の欄をクリックして押す流れに直した（「詳細」「レポート上で」の記述を削除）
+- 互換の fixture `tests/fixtures/legacy-report-view.html` を追加（a9e39cb の `generateReportHTML` の出力。報告書／詳細の切替つき）。e2e E14 (A11) で「そのまま開いて詳細へ切り替えられる」「アプリで読み込み → 保存し直すと A4 の用紙（押印を引き継ぐ）」を確かめる
+- 単体: #53・#66・#71・#76〜#81・#87〜#89 を書き換え、#90 を追加（30 件）。e2e: E2・E3・E5・E6・E8・E9・E10・E11・E12・E13 を書き換え、E14 を追加
+- レビュー修正（2026-10-14）:
+  - 印刷の `@media print` に `.a4 [data-a4-t]{outline:none !important}`（:focus・:focus-visible も）。Esc・Enter・Tab の直後に Ctrl+P を押すと、欄の既定のフォーカス枠（黒い角丸）が紙に出ていた
+  - 保存バーを右下へ（1-5）。保存後は［×］で閉じられる。出ているあいだは `body.a4-sb` で下に余白（画面だけ）。書き出しの複製からは `a4-sb`・`--a4-sbh` も外す
+  - 最終合否の欄のホバーの案内は 1 行（`white-space:nowrap`）で欄の上の辺の外に出す（未押印の欄では 2 行に折り返して「未押印」を隠していた。押した後は日付に重なっていた）
+  - アプリ ③ の紙の案内は「保存した HTML の画面で…」（`o.refWhere`。1-2）
+  - `place()`: 欄の上にも下にも入らないときは `top=max(8, vh-ph-8)`。メモの窓は本文（`.pop-b`）だけスクロールし、見出しと［閉じる］は常に見える
+  - 合否の取消は `changed()` → `closePop(true)` の順（3-6）。フォーカスが body に落ちていた
+  - テスト: 単体 #66（`print.showQuestions` は正規化で残るが用紙の出力は変わらない）・#71（食い違い注記は用紙に出ない＝noScript 側だけ）・#80（`refWhere`）を直した。e2e は 7-3 の「レビュー後の追加」（213 → 221 件）。直したコード（印刷の outline・保存バーの位置・案内の位置・`place()` の収め方・取消の順・食い違い注記の採用×不採用推奨・面接対応者の初期選択・`fit()` と書き出しの `--a4-zoom` の外し方）を元に戻した変異版で、対応する確認が FAIL になることを確かめた

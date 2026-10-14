@@ -1,6 +1,7 @@
 # 詳細仕様書（確定版）: 面接チェックリスト（面接台本 2026-10-08 版）への置き換えと A4 報告
 
 > 2026-10-14 の面接特化（docs/SPEC-slim.md）で、詳細モード・初期対応者・旧 10 項目評価・レポート全体印刷に関する記述は無効。
+> 2026-10-14 に保存 HTML を A4 縦 1 枚へ変更（docs/SPEC-a4.md）。報告書表示／詳細表示の切替・`#clPaper`／`#clSheet`（保存 HTML）・`#mgmt`／`#decision`・「A4 で印刷（1 ページ）」・'section' モード・押印欄の件数による上限（`checklistSheetLimit`）の記述は無効。保存 HTML は用紙 `main.a4#a4` 1 枚で、押印・最終合否は用紙の欄を直接クリックして押す。
 
 - 対象: `recruit-system/`（ブランチ `claude/toho-shinjuku-hiring-app-quhjtc`。**commit / push はしない**）
 - **2026-10-13 追記: 消極属性は削除した**（副支配人「消極属性って意味がわからないから削除でいいかも」）。本書の `CHECKLIST_AUTO.negatives`（shortTerm・morningOnly）、`checklist.header.negatives`・`morningOnlyEnd`、`record.checklist.header.negatives`、`checklistAuto` / `checklistSummary` の `negatives`、Step3 ヘッダーの 3 択 seg・`#clNeg-*`、A4 報告・レポートの消極属性のチップ、設定の消極属性の行・`cl-neg-add` / `cl-neg-del`、validate の終了時刻の記述は当時のもの。現行の扱い（旧データは読み飛ばす・台本の正規化で外す）は `docs/SPEC-script-mode.md` 12 章

@@ -508,7 +508,8 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .report-paper-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px 2px 14px; }
 .report-paper-cap { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; width: 210mm; max-width: 100%; margin: 0 auto 6px; font-size: 12px; color: var(--muted); }
 .report-paper-cap b { color: var(--text); }
-.report-paper { box-sizing: content-box; width: 190mm; margin: 0 auto; padding: 10mm; background: #fff; color: #111; border: 1px solid #d5dbe3; border-radius: 2px; box-shadow: 0 1px 2px rgba(16,24,40,.08), 0 12px 32px rgba(16,24,40,.12); color-scheme: light; }
+/* ③ の紙は保存 HTML と同じ A4 縦の用紙（210×297mm・余白・白地・影は共有の .a4。storage.checklistSheetCss）。docs/SPEC-a4.md 5 章 */
+#appPaper.a4 { margin: 0 auto; }
 .sum-stamps { font-size: 12px; font-weight: 600; text-align: right; }
 #sumStamps .sum-label { white-space: nowrap; }
 
@@ -660,13 +661,17 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
   .s-cl-item .row-actions { grid-column: 2; }
 }
 
-/* ---------- 面接チェックリスト報告（A4）の印刷ホスト（docs/SPEC-checklist.md 4-4。シートの見た目は storage.checklistSheetCss） ---------- */
+/* ---------- 面接チェックリスト報告（A4）の印刷ホスト（docs/SPEC-a4.md 2-3）。中身は ③ の紙と同じ用紙（div.a4。見た目は storage.checklistSheetCss）。
+   計測のあいだは画面外に置き、印刷では用紙そのものを余白 0 の 1 ページに出す ---------- */
 .cl-sheet-host { display: none; }
-body.print-checklist .cl-sheet-host { display: block; position: absolute; left: -10000px; top: 0; width: 190mm; }
+body.print-checklist .cl-sheet-host { display: block; position: absolute; left: -10000px; top: 0; }
+@page a4sheet { size: A4 portrait; margin: 0; }
 @media print {
-  /* ② の目次（.cl-nav 内の .cl-chip）だけ隠す。A4 報告のヘッダーは .cl-hchip で別クラス */
+  /* ② の目次（.cl-nav 内の .cl-chip）だけ隠す */
   .cl-nav, .cl-skip-note { display: none !important; }
+  body.print-checklist { page: a4sheet; background: #fff; }
   body.print-checklist .app, body.print-checklist .toast { display: none !important; }
-  body.print-checklist .cl-sheet-host { position: static; left: auto; width: auto; }
+  body.print-checklist .cl-sheet-host { position: static; left: auto; }
+  body.print-checklist .cl-sheet-host .a4 { margin: 0; box-shadow: none; }
   body:not(.print-checklist) .cl-sheet-host { display: none !important; }
 }

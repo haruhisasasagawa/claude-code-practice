@@ -5,20 +5,23 @@
  * スクリーンショットは tests/shots/ に出力（git 管理外）。
  * 失敗した確認（FAIL）が 1 つでもあれば exit 1。
  *
- * シナリオ（docs/SPEC-script-mode.md 7-3・docs/SPEC-slim.md 5-2。2026-10-14 の面接特化で E1〜E39 → E1〜E11 に振り直し、E12 を追加）
+ * シナリオ（docs/SPEC-script-mode.md 7-3・docs/SPEC-slim.md 5-2・docs/SPEC-a4.md 7 章。2026-10-14 の面接特化で E1〜E39 → E1〜E11 に振り直し、E12〜E14 を追加）
  *   E1  3 ステップ・① 応募者（詳細モードの保存済み設定は 3 ステップで開く・詳細項目なし・390px）
- *   E2  ② 面接チェックリスト（①〜⑤ のみ・読み取り専用ヘッダー）→ ③ 報告書（紙プレビュー・判定サマリー・必須条件・総合判断・押印 2 欄）
- *   E3  押印 → 保存 → 保存 HTML（報告書表示・詳細・最終合否・押印を保存・A4 印刷）→ アプリで読込
+ *   E2  ② 面接チェックリスト（①〜⑤ のみ・読み取り専用ヘッダー）→ ③ 報告書（A4 の紙・見出し・押印行・判定サマリー・必須条件・総合判断・押印 2 欄）
+ *   E3  押印 → 保存 → 保存 HTML（A4 縦の用紙 1 枚・用紙の「最終合否」をクリックして窓で採用・右下の保存バーで再出力・そのまま印刷で 1 枚）→ アプリで読込 → 再保存 → 開く
  *   E4  旧レコードの読み込み（詳細モードの記録・初期対応者の押印入り・v1）
- *   E5  ダークモードの紙・390px
+ *   E5  ダークモードの紙（白地・ハンコの明るさ補正なし）・390px
  *   E6  ③ を開かずに ② から保存・印刷しても判定が入る・② で保存した記録は ② から再開・印刷の経路（🖨・② の印刷ボタン・beforeprint）・総合判断未入力の保存
  *   E7  旧レコード（消極属性入り）の読み込み
- *   E8  A4 報告（1 ページの要約）: 紙プレビューに質問文なし・結果が上部・1280/1440px で横スクロールなし・重いサンプルでも 1 ページ（.cl-compact）・PDF の本文
- *   E9  押印欄 2 つ（初期対応者なし）: アプリ・紙・印刷用・保存 HTML・右サマリー・設定・旧い 3 欄の設定
+ *   E8  A4 報告（1 ページの要約）: 紙に質問文なし・結果が上部・1280/1440px で横スクロールなし・重いサンプルでも 1 ページ（.cl-compact。押印行込みで 1052px 以内）・PDF の本文
+ *   E9  押印欄 2 つ（初期対応者なし）: アプリ・紙・印刷用・保存 HTML の用紙（390px でも 2 列のまま用紙ごと縮小）・右サマリー・設定・旧い 3 欄の設定
  *   E10 設定画面（5 節・data-bind の許可リスト・保存／破棄／初期化・書き出し・v1／詳細モードの JSON の読み込み）・使い方
- *   E11 保存 HTML の印刷（A4 で印刷だけ・報告書表示の Ctrl+P は A4・詳細表示はブラウザ既定）・アプリの A4 印刷（押印 2 欄・1 ページ）
+ *   E11 保存 HTML の印刷（印刷のための切替なし・ボタンなし・そのまま A4 1 枚・台本の全文なし）・アプリの A4 印刷（押印 2 欄・1 ページ）
  *   E12 設定の反映（必須条件の不一致を上長最終判断要に・台本の文言と確認点の増減・満点・空の文言・既定に戻す・壊れた台本）・読み込みの toast（確認点の差・他劇場）・
- *       手入力の押印と最終合否・保存 HTML 上の取消・最終合否の ON/OFF（旧 E22・E26・E28・E31 のうち残した機能）
+ *       手入力の押印と最終合否・保存 HTML の用紙の窓での取消・手入力・未選択のエラー・最終合否の ON/OFF（旧 E22・E26・E28・E31 のうち残した機能）
+ *   E13 ロゴ（brand.js）と、ロゴ・名簿入りの版（node build.js --local）: サイドバー・③ の紙・保存 HTML の用紙の見出し
+ *   E14 A4 用紙（docs/SPEC-a4.md 7-3）: 寸法 210×297mm・画面と印刷が同じ様式（スクリーンショットと PDF の画像）・欄クリックの窓（Esc・外のクリック・印刷に出ない・書き出しに残らない）・
+ *       長いメモの全文・390px の縮小表示・アプリの印刷と保存 HTML の印刷が同じ見出しの 1 ページ
  *   必須条件の不一致の案内（⑤ 逆質問へ・省略可。旧 E26）は E2 で確かめる
  */
 const { chromium } = (function(){ try { return require('playwright'); } catch (e) { return require('/opt/node-tools/node_modules/playwright'); } })();
@@ -102,6 +105,13 @@ const pdfTextOf = (f) => {
   const txtIn = (pg, sel) => pg.evaluate(s => (document.querySelector(s) || {}).textContent || '', sel);
   const dispIn = (pg, sel) => pg.evaluate(s => { const el = document.querySelector(s); return el ? getComputedStyle(el).display : 'missing'; }, sel);
   const SASA = '笹川 晴央（副支配人）';
+  // 保存 HTML の用紙の操作（docs/SPEC-a4.md 7-2）: 用紙の欄をクリック → 窓（#a4Pop）で担当者を選んで押す → 右下の保存バー（#saveBarBtn）で書き出す
+  const openStamp = async (pg, id) => { await pg.click('#a4 .stamp-box[data-field-id="' + id + '"]'); await pg.waitForTimeout(80); };
+  const openDecision = async (pg) => { await pg.click('#a4Decision'); await pg.waitForTimeout(80); };
+  const popSel = (pg, label) => pg.selectOption('#a4Pop select', label === '__free' ? '__free' : { label });
+  const popAct = async (pg, act, v) => { await pg.click('#a4Pop [data-act="' + act + '"]' + (v ? '[data-value="' + v + '"]' : '')); await pg.waitForTimeout(150); };
+  // 書き出したファイルの「要素」部分（<style>・<script> の中の文字列を除く。CSS・スクリプトには .pop・savebar・data-a4-t の文字列があるため）
+  const shownHtml = (html) => html.replace(/<style>[\s\S]*?<\/style>/g, '').replace(/<script[\s\S]*?<\/script>/g, '');
   const newReportPage = async (errs) => {
     const p = await ctx.newPage();
     p.on('pageerror', e => errs.push(e.message));
@@ -367,6 +377,13 @@ const pdfTextOf = (f) => {
     judge: (document.querySelector('#appPaper .cl-judge') || {}).textContent || '', dec: !!document.querySelector('#appPaper .cl-decision.is-none#appPaperDecision') }));
   expect(paper33.sheet && JSON.stringify(paper33.tiles) === JSON.stringify(['結果', '総合判断', '必須条件', '確認点']) && paper33.judge.includes('採用推奨') && !paper33.judge.includes('シフト貢献度') && paper33.dec,
     'E2 報告書の紙プレビュー: 結果ストリップは 結果・総合判断・必須条件・確認点（貢献度タイルなし）＋最終合否（未押印）: ' + JSON.stringify(paper33.tiles));
+  // ③ の紙は保存 HTML と同じ A4 縦の用紙（210×297mm・白地＋下線の見出し・押印行は用紙の中。docs/SPEC-a4.md 5 章）。公開版はロゴなし
+  const a4p33 = await page.evaluate(() => { const p = document.getElementById('appPaper'), r = p.getBoundingClientRect(), z = parseFloat(p.style.zoom || '1');
+    return { a4: p.classList.contains('a4'), w: +(r.width / z).toFixed(1), h: +(r.height / z).toFixed(1), title: (document.querySelector('#appPaper .cl-title .cl-title-t') || {}).textContent, logo: !!document.querySelector('#appPaper .cl-title-logo'),
+      band: !!document.querySelector('#appPaper .cl-band'), stamps: Array.from(document.querySelectorAll('#appPaper .cl-stamps .stamp-box')).map(b => b.dataset.fieldId), cap: (document.querySelector('.report-paper-cap') || {}).textContent }; });
+  expect(a4p33.a4 && Math.abs(a4p33.w - 793.7) <= 1 && Math.abs(a4p33.h - 1122.5) <= 1 && a4p33.title === '面接チェックリスト報告' && !a4p33.logo && !a4p33.band && JSON.stringify(a4p33.stamps) === JSON.stringify(['interviewer', 'final']) &&
+    a4p33.cap.includes('保存した HTML はこの用紙 1 枚で開きます'),
+    'E2 ③ の紙は A4 縦の用紙（210×297mm・見出しは白地＋下線・公開版はロゴなし・押印行 2 欄は用紙の中）: ' + JSON.stringify(a4p33));
   const lay33 = await page.evaluate(() => { const t = (s) => { const el = document.querySelector(s); return el ? el.getBoundingClientRect().top : null; };
     return { paper: t('#appPaperWrap'), mgmt: t('#mgmtCard'), dec: t('#decisionCard'), boxes: Array.from(document.querySelectorAll('#mgmtCard .stamp-box')).map(b => b.dataset.fieldId),
       cols: document.querySelector('#mgmtCard .stamp-row').classList.contains('cols-2'), grid: getComputedStyle(document.querySelector('#mgmtCard .stamp-row')).gridTemplateColumns.split(' ').length,
@@ -432,8 +449,9 @@ const pdfTextOf = (f) => {
   console.log('\n== E3 押印 → 保存 HTML → 最終合否 → 読込 ==');
   await page.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
   await wait(150);
-  expect(!!(await page.$('#mgmtCard .stamp-box[data-field-id="interviewer"] svg.hanko')) && await st(() => (window.RecruitApp.state.management.interviewer || {}).name) === '笹川 晴央',
-    'E3 「面接対応者」に押印（初期選択のまま押せる）');
+  expect(!!(await page.$('#mgmtCard .stamp-box[data-field-id="interviewer"] svg.hanko')) && await st(() => (window.RecruitApp.state.management.interviewer || {}).name) === '笹川 晴央' &&
+    !!(await page.$('#appPaper .cl-stamps .stamp-box[data-field-id="interviewer"] svg.hanko')),
+    'E3 「面接対応者」に押印（初期選択のまま押せる）・③ の紙の押印行にもハンコ');
   await page.selectOption('#decisionManager', { label: SASA });
   await page.click('#decisionCard [data-action="decide"][data-value="hire"]');
   await wait(200);
@@ -448,14 +466,15 @@ const pdfTextOf = (f) => {
   const r34 = saved34.rec;
   expect(!('mode' in r34) && !('handoff' in r34) && !('scores' in r34) && !('contribution' in r34) && r34.decision == null && r34.step === 4 && r34.management.interviewer.name === '笹川 晴央' &&
     !('initial' in r34.management) && r34.checklist.header.taxi === '可・2,500円' && r34.judgment.mode === 'script' && Object.keys(r34.applicant).length === 6 &&
-    saved34.html.includes('<body class="view-report has-cl mode-script" data-filename="応募者_台本_花子_2026-10-10.html">'),
-    'E3 保存: 記録に mode・handoff・scores・contribution が無い・応募者 6 キー・判定（mode=script）・body.view-report.has-cl.mode-script: ' + Object.keys(r34).join(','));
-  const in34 = ['<h2>応募者情報</h2>', '<h2>面接チェックリスト</h2>', '<h2>採用可否判定</h2>', '<h2>応募者の管理</h2>', 'id="rtPrintChecklist"', 'id="clPaper"', 'id="clSheet"'].filter(t => !saved34.html.includes(t));
-  // 節（section.sec）は要素の形で調べる（reportCss のセレクタに data-sec="handoff" の文字列が残るため）
+    saved34.html.includes('<body class="a4-doc" data-filename="応募者_台本_花子_2026-10-10.html">'),
+    'E3 保存: 記録に mode・handoff・scores・contribution が無い・応募者 6 キー・判定（mode=script）・body.a4-doc: ' + Object.keys(r34).join(','));
+  // 保存 HTML は A4 縦の用紙 1 枚そのもの（docs/SPEC-a4.md 1 章）。詳細表示・印刷用の複製・押印カード・合否パネルは無い
+  const in34 = ['<main class="a4" id="a4">', 'class="cl-title"', 'id="a4Decision"', 'class="cl-stamps"'].filter(t => !saved34.html.includes(t));
   const out34 = ['<h2>面接者への申し送り（留意点）</h2>', '<h2>シフト貢献度</h2>', '<h2>面接で確認した情報</h2>', '<h2>面接前に分かっている情報（未確認）</h2>', '<h2>応募時の情報</h2>', '<h2>面接者への申し送りコメント</h2>',
-    'id="rtPrintSheet"', 'id="rtPrintAll"', 'class="dash"', 'data-tile=', '<section class="sec" data-sec="contrib"', '<section class="sec" data-sec="handoff"', '初期対応者', 'data-field-id="initial"'].filter(t => saved34.html.includes(t));
-  expect(!in34.length && !out34.length, 'E3 保存 HTML は 応募者情報・面接チェックリスト・採用可否判定・応募者の管理 の節だけ（留意点・シフト貢献度の節・申し送りシート・レポート全体の印刷ボタン・ダッシュ・初期対応者なし）: ' + JSON.stringify({ missing: in34, extra: out34 }));
-  // 消極属性は 2026-10-13 に削除: 保存 HTML（埋め込みの記録を含む）に「消極属性」「朝～12時のみ」が無い（「短期希望」は台本の質問文にだけ出るので、ヘッダー・応募者情報・A4 のヘッダーで調べる）
+    'id="rtPrintSheet"', 'id="rtPrintAll"', 'class="dash"', 'data-tile=', '<section class="sec" data-sec="contrib"', '<section class="sec" data-sec="handoff"', '初期対応者', 'data-field-id="initial"',
+    'id="rtViewFull"', 'id="rtPrintChecklist"', 'id="clPaper"', 'id="clSheet"', 'id="mgmt"', 'id="decision"', '<section class="sec"', 'class="rh"', '<h2>'].filter(t => saved34.html.includes(t));
+  expect(!in34.length && !out34.length, 'E3 保存 HTML は A4 の用紙 1 枚（見出し・最終合否・押印行は用紙の中。詳細表示・印刷用の複製・押印カード・合否パネル・留意点・申し送り・ダッシュ・初期対応者なし）: ' + JSON.stringify({ missing: in34, extra: out34 }));
+  // 消極属性は 2026-10-13 に削除: 保存 HTML（埋め込みの記録を含む）に「消極属性」「朝～12時のみ」が無い
   expect(!saved34.html.includes('消極属性') && !saved34.html.includes('朝～12時のみ') && r34.checklist.header.negatives === undefined && !('negatives' in r34.checklistDef.header),
     'E3 保存 HTML・記録に消極属性が無い');
   const rp34Err = [];
@@ -463,47 +482,43 @@ const pdfTextOf = (f) => {
   await rp34.goto('file://' + saved34.file);
   await rp34.waitForTimeout(300);
   const cls34 = await rp34.evaluate(() => document.body.className);
-  expect(cls34.includes('view-report') && cls34.includes('mode-script') && await shownIn(rp34, '#clPaper .cl-sheet') && !(await shownIn(rp34, '.rh')) && await shownIn(rp34, '#decision') && await shownIn(rp34, '#mgmt') && await dispIn(rp34, '#clSheet') === 'none',
-    'E3 保存 HTML は報告書表示で開く（紙プレビュー・最終合否・押印。印刷用 #clSheet は非表示）: ' + cls34);
-  const hd34 = await rp34.evaluate(() => ({ paper: (document.querySelector('#clPaper .cl-sheet-head') || {}).textContent || '', sheet: (document.querySelector('#clSheet .cl-sheet-head') || {}).textContent || '', rh: (document.querySelector('.rh') || {}).textContent || '' }));
-  expect(['台本 花子', '大学2年生・20歳・女性', '2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央'].every(t => hd34.paper.includes(t) && hd34.sheet.includes(t)) &&
-    [hd34.paper, hd34.sheet, hd34.rh].every(t => !t.includes('短期希望') && !t.includes('消極属性')) && !hd34.paper.includes('目安') && hd34.rh.includes('短期求人'),
-    'E3 A4 のヘッダーは 氏名・区分・年齢・性別・卒業予定・求人・タクシー・面接日・担当（消極属性・短期希望・目安なし）: ' + JSON.stringify(hd34));
-  const pj34 = await txtIn(rp34, '#clPaper .cl-judge');
-  expect(pj34.includes('総合判断') && pj34.includes('採用推奨') && !pj34.includes('シフト貢献度'), 'E3 紙プレビューの判定サマリー（総合判断・結果。貢献度なし）');
+  expect(cls34 === 'a4-doc a4-live' && await shownIn(rp34, '#a4 .cl-sheet') && await shownIn(rp34, '#a4Decision') && (await rp34.$$('#a4 .cl-stamps .stamp-box')).length === 2 &&
+    await shownIn(rp34, '#a4 .cl-stamps .stamp-box[data-field-id="final"]') && !(await rp34.$('.pop')) && !(await rp34.$('.savebar')) && rp34Err.length === 0,
+    'E3 保存 HTML は A4 の用紙 1 枚で開く（最終合否・押印行 2 欄は用紙の中。窓・保存バーなし・エラーなし）: ' + cls34);
+  const hd34 = await txtIn(rp34, '#a4 .cl-sheet-head');
+  expect(['面接チェックリスト報告', '台本 花子', '大学2年生・20歳・女性', '2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央'].every(t => hd34.includes(t)) &&
+    !hd34.includes('短期希望') && !hd34.includes('消極属性') && !hd34.includes('目安') && !(await rp34.$('#a4 .cl-title-logo')),
+    'E3 用紙の見出しは 題名・氏名・区分・年齢・性別・卒業予定・求人・タクシー・面接日・担当（消極属性・短期希望・目安なし。公開版はロゴなし）: ' + hd34);
+  const pj34 = await txtIn(rp34, '#a4 .cl-judge');
+  expect(['必須条件', '総合判断', '確認点', '採用推奨'].every(t => pj34.includes(t)) && !pj34.includes('シフト貢献度') && !pj34.includes('2軸'), 'E3 用紙の結果ストリップ（必須条件・総合判断・確認点・結果。貢献度・2軸なし）');
+  // 「詳細」表示は無い（2026-10-14）。① の項目は用紙の見出し、Step① の「メモ（任意）」は面接メモの「メモ」
+  const who34 = await txtIn(rp34, '#a4 .cl-who');
+  const memo34 = await rp34.evaluate(() => ({ keys: Array.from(document.querySelectorAll('#a4 .cl-nm-row .cl-nm-k')).map(e => e.textContent.trim()), memo: (document.querySelector('#a4 .cl-nm-memo .cl-nm-v') || {}).textContent }));
+  expect(!(await rp34.$('#rtViewFull')) && !(await rp34.$('section.sec')) && !(await rp34.$('.rh')) && !(await rp34.$('.rtool')) &&
+    ['台本 花子', '20歳', '女性', '大学2年生', '2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央'].every(t => who34.includes(t)) && !who34.includes('通勤') && !who34.includes('勤務期間') &&
+    memo34.memo === '電話の受け答えが丁寧。' && memo34.keys.includes('メモ') && !memo34.keys.some(t => t.includes('備考')),
+    'E3 「詳細」表示なし。応募者の項目は用紙の見出し・① のメモは面接メモの「メモ」（「備考」は出さない）: ' + JSON.stringify({ who34, memo34 }));
+  await rp34.mouse.move(0, 0);
   await rp34.screenshot({ path: path.join(OUT, '44-script-report.png'), fullPage: true });
-  await rp34.click('#rtViewFull');
-  await rp34.waitForTimeout(150);
-  const secs34 = await rp34.$$eval('section.sec', els => els.filter(el => getComputedStyle(el).display !== 'none').map(el => el.dataset.sec));
-  expect(JSON.stringify(secs34) === JSON.stringify(['applicant', 'checklist', 'judgment', 'mgmt']) && await shownIn(rp34, '.rh') && !(await rp34.$('.dash')),
-    'E3 「詳細」は ヘッダー・応募者情報・面接チェックリスト・採用可否判定・応募者の管理 だけ（ダッシュ .dash なし）: ' + secs34.join(','));
-  const app34 = await txtIn(rp34, 'section.sec[data-sec="applicant"]');
-  expect(['台本 花子', '20歳', '女性', '大学2年生', '2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央', '電話の受け答えが丁寧。'].every(t => app34.includes(t)) && !app34.includes('通勤') && !app34.includes('勤務期間') &&
-    !app34.includes('短期希望') && !app34.includes('消極属性'),
-    'E3 「応募者情報」は Step① の項目だけ（消極属性なし）');
-  const memo34 = await rp34.evaluate(() => Array.from(document.querySelectorAll('section.sec[data-sec="applicant"] th')).map(e => e.textContent.trim()));
-  const paperMemo34 = await rp34.evaluate(() => Array.from(document.querySelectorAll('#clSheet .cl-nm-row .cl-nm-k')).map(e => e.textContent.trim()));
-  expect(memo34.includes('メモ') && !memo34.some(t => t.includes('備考')) && paperMemo34.includes('メモ') && !paperMemo34.includes('備考'),
-    'E3 Step① の「メモ（任意）」は保存 HTML の応募者情報・A4 でも「メモ」（「備考」の見出しは出さない）: ' + JSON.stringify({ memo34, paperMemo34 }));
-  const jd34 = await txtIn(rp34, 'section.sec[data-sec="judgment"]');
-  expect(['必須条件', '面接評価（確認点）', '総合判断', '採用推奨'].every(t => jd34.includes(t)) && !jd34.includes('2軸') && !jd34.includes('シフト貢献度'), 'E3 「採用可否判定」は台本モードの要約（必須条件・採点・総合判断・結果）');
-  const pb34 = await rp34.$$eval('.rtool button[id^="rtPrint"]', els => els.map(e => e.id + ':' + e.textContent));
-  expect(JSON.stringify(pb34) === JSON.stringify(['rtPrintChecklist:A4 で印刷（1 ページ）']), 'E3 印刷ボタンは「A4 で印刷（1 ページ）」だけ: ' + pb34.join(','));
-  await rp34.screenshot({ path: path.join(OUT, '45-script-report-full.png'), fullPage: true });
-  await rp34.click('#rtViewReport');
-  await rp34.waitForTimeout(150);
-  await rp34.selectOption('#decision select', { label: SASA });
-  await rp34.click('#decision [data-act="decide"][data-value="hire"]');
-  await rp34.waitForTimeout(200);
+  // 最終合否: 用紙の欄をクリック → 窓で担当者を選んで「採用」（docs/SPEC-a4.md 3-6）
+  await openDecision(rp34);
+  const pop34 = await rp34.evaluate(() => { const p = document.getElementById('a4Pop'); return p && { h: p.querySelector('.pop-h').textContent, sel: p.querySelector('select').value, ref: (p.querySelector('.pop-ref') || {}).textContent || '',
+    btns: Array.from(p.querySelectorAll('[data-act]')).map(b => b.getAttribute('data-act') + (b.getAttribute('data-value') ? ':' + b.getAttribute('data-value') : '')) }; });
+  expect(!!pop34 && pop34.h === '最終合否' && pop34.sel === '' && pop34.ref === 'アプリの判定：採用推奨' && JSON.stringify(pop34.btns) === JSON.stringify(['decide:hire', 'decide:reject', 'close']),
+    'E3 用紙の「最終合否」をクリックすると窓（担当者・アプリの判定・採用／不採用・閉じる。合否が無いので取消なし）: ' + JSON.stringify(pop34));
+  await popSel(rp34, SASA);
+  await popAct(rp34, 'decide', 'hire');
   const fn34 = await rp34.evaluate(() => document.body.getAttribute('data-filename'));
-  expect(!!(await rp34.$('#clPaper .cl-decision svg.verdict-stamp')) && !!(await rp34.$('#mgmt .stamp-box[data-field-id="final"] svg.hanko')) && fn34 === '応募者_台本_花子_2026-10-10_採用.html',
-    'E3 保存 HTML で「採用」→ 紙に採用スタンプ・最終確認に自動押印・ファイル名 _採用: ' + fn34);
-  const [dl34] = await Promise.all([rp34.waitForEvent('download'), rp34.click('#mgmtSaveBtn')]);
+  expect(!(await rp34.$('#a4Pop')) && !!(await rp34.$('#a4Decision.is-hire svg.verdict-stamp')) && !!(await rp34.$('#a4 .stamp-box[data-field-id="final"] svg.hanko')) && fn34 === '応募者_台本_花子_2026-10-10_採用.html' &&
+    (await txtIn(rp34, '#saveBarMsg')) === '押印・合否を変更しました' && (await txtIn(rp34, '#saveBarBtn')) === '押印を保存',
+    'E3 「採用」→ 窓が閉じる（判定と一致するので注記なし）・用紙に採用スタンプ・最終確認に自動押印・ファイル名 _採用・右下に保存バー: ' + fn34);
+  const [dl34] = await Promise.all([rp34.waitForEvent('download'), rp34.click('#saveBarBtn')]);
   const file34b = path.join(OUT, 'script-report-hire.html');
   await dl34.saveAs(file34b);
   const r34b = parseRecord(fs.readFileSync(file34b, 'utf8'));
-  expect(!('mode' in r34b) && r34b.decision && r34b.decision.result === 'hire' && r34b.management.final && r34b.management.final.name === '笹川 晴央' && r34b.management.interviewer.name === '笹川 晴央',
-    'E3 押印を保存した再出力ファイルに decision（採用）・最終確認（mode は書かない）');
+  expect(!('mode' in r34b) && r34b.decision && r34b.decision.result === 'hire' && r34b.management.final && r34b.management.final.name === '笹川 晴央' && r34b.management.interviewer.name === '笹川 晴央' &&
+    (await txtIn(rp34, '#saveBarMsg')) === '保存しました（保存できなかったときは再保存）' && (await txtIn(rp34, '#saveBarBtn')) === '再保存',
+    'E3 「押印を保存」で再出力したファイルに decision（採用）・最終確認（mode は書かない）。バーは「保存しました…」「再保存」');
   await rp34.goto('file://' + file34b);
   await rp34.waitForTimeout(300);
   const pdf34 = path.join(OUT, 'script-report.pdf');
@@ -513,20 +528,26 @@ const pdfTextOf = (f) => {
   const t34 = pdfTextOf(pdf34);
   console.log('script-report.pdf pages:', n34);
   expect((n34 === -1 || n34 === 1) && (t34 === null || (t34.includes('面接チェックリスト報告') && !t34.includes('シフト貢献度') && !t34.includes('消極属性'))),
-    'E3 報告書表示のまま印刷すると面接チェックリスト報告（A4 1 枚・貢献度なし）: ' + n34);
+    'E3 保存 HTML をそのまま印刷すると面接チェックリスト報告（A4 1 枚・貢献度なし）: ' + n34);
   // PDF の本文に 結果・氏名・最終合否・押した人（笹川晴央）。説明文・質問文は載せない（pdftotext の空白は詰めて比べる）
-  expect(t34 === null || (['採用推奨', '台本花子', '最終合否', '笹川晴央', '確認点', '必須条件', '面接メモ'].every(t => t34.includes(t)) && !t34.includes('歌舞伎町ですので') && !t34.includes('シフト提出は木曜23時')),
-    'E3 A4 報告の PDF に 結果・氏名・最終合否・笹川晴央（質問文・説明文なし）: ' + (t34 === null ? 'pdftotext なし（省略）' : 'ok'));
+  expect(t34 === null || (['採用推奨', '台本花子', '最終合否', '笹川晴央', '確認点', '必須条件', '面接メモ', '面接対応者', '最終確認'].every(t => t34.includes(t)) && !t34.includes('歌舞伎町ですので') && !t34.includes('シフト提出は木曜23時')),
+    'E3 A4 報告の PDF に 結果・氏名・最終合否・笹川晴央・押印欄（質問文・説明文なし）: ' + (t34 === null ? 'pdftotext なし（省略）' : 'ok'));
   expect(rp34Err.length === 0, 'E3 保存 HTML のページエラー・console error なし: ' + (rp34Err.join(' / ') || 'none'));
-  await rp34.close();
   await page.click('#btnNew');
   await wait(200);
   await page.setInputFiles('#fileInput', file34b);
   await wait(500);
   const s34 = await st(() => { const s = window.RecruitApp.state; return { step: s.step, d: s.decision && s.decision.result, final: (s.management.final || {}).name }; });
   expect(s34.step === 4 && (await page.$$('#stepNav li')).length === 3 && s34.d === 'hire' && s34.final === '笹川 晴央' && !!(await page.$('#decisionCard svg.verdict-stamp')) &&
-    !!(await page.$('#appPaper .cl-decision svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('採用・笹川'),
-    'E3 アプリで読み込むと報告書（③）に合否・押印を引き継ぐ: ' + JSON.stringify(s34));
+    !!(await page.$('#appPaper .cl-decision svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('採用・笹川') && (await page.$$('#appPaper .cl-stamps svg.hanko')).length === 2,
+    'E3 アプリで読み込むと報告書（③）に合否・押印を引き継ぐ（紙の押印行にハンコ 2 つ）: ' + JSON.stringify(s34));
+  // 往復（docs/SPEC-a4.md A11）: 書き出したファイルをアプリで読み込み → 保存し直し → 開く
+  const saved34c = await saveRecord('script-report-hire-resaved.html');
+  await rp34.goto('file://' + saved34c.file);
+  await rp34.waitForTimeout(300);
+  expect(!!(await rp34.$('#a4Decision.is-hire svg.verdict-stamp')) && (await rp34.$$('#a4 .cl-stamps svg.hanko')).length === 2 && saved34c.html.includes('_採用.html">') && rp34Err.length === 0,
+    'E3 往復: 保存 HTML → アプリで読込 → 再保存 → 開くと採用スタンプ・押印 2 つ（エラーなし）');
+  await rp34.close();
   await st(() => window.RecruitApp.prepareChecklistSheet(true));
   await page.emulateMedia({ media: 'print' });
   const pdf34a = path.join(OUT, 'script-report-app.pdf');
@@ -603,8 +624,10 @@ const pdfTextOf = (f) => {
   await page.click('#btnTheme');
   await wait(200);
   const dk36 = await page.evaluate(() => ({ theme: document.documentElement.getAttribute('data-theme'), bg: getComputedStyle(document.getElementById('appPaper')).backgroundColor,
-    color: getComputedStyle(document.querySelector('#appPaper .cl-sheet')).color }));
+    color: getComputedStyle(document.querySelector('#appPaper .cl-sheet')).color,
+    hanko: Array.from(document.querySelectorAll('#appPaper .cl-stamps svg.hanko')).map(e => getComputedStyle(e).filter), card: getComputedStyle(document.querySelector('#mgmtCard svg.hanko')).filter }));
   expect(await step() === 4 && dk36.theme === 'dark' && dk36.bg === 'rgb(255, 255, 255)' && dk36.color === 'rgb(17, 17, 17)', 'E5 ダークモードでも報告書の紙プレビューは白地・黒字: ' + JSON.stringify(dk36));
+  expect(dk36.hanko.length === 2 && dk36.hanko.every(f => f === 'none') && dk36.card !== 'none', 'E5 ダークモードでも紙の押印行のハンコは明るさ補正なし（filter: none。押印カードのハンコは従来どおり補正）: ' + JSON.stringify({ hanko: dk36.hanko, card: dk36.card }));
   await sshot('43-script-step3-dark.png');
   await page.click('#btnTheme');
   await wait(150);
@@ -657,14 +680,10 @@ const pdfTextOf = (f) => {
   const rp37 = await newReportPage(rp37Err);
   await rp37.goto('file://' + saved37.file);
   await rp37.waitForTimeout(300);
-  const tile37 = await txtIn(rp37, '#clPaper .cl-tile-res');
-  await rp37.click('#rtViewFull');
-  await rp37.waitForTimeout(150);
-  const jd37 = await txtIn(rp37, 'section.sec[data-sec="judgment"]');
-  const vd37 = await txtIn(rp37, '.rh .verdict');
+  const tile37 = await txtIn(rp37, '#a4 .cl-tile-res');
   const dash37 = !!(await rp37.$('.dash'));
-  expect(tile37.includes('採用推奨') && jd37.includes('採用推奨') && !jd37.includes('未実施') && vd37.includes('採用推奨') && !dash37,
-    'E6 保存 HTML の紙に結果タイル（採用推奨）・「詳細」の採用可否判定・ヘッダーに結果（「未実施」なし。ダッシュ .dash は無い）: ' + JSON.stringify({ tile37, vd37, dash37 }));
+  expect(tile37.includes('採用推奨') && !tile37.includes('未実施') && !dash37,
+    'E6 保存 HTML の用紙の結果タイルに採用推奨（「未実施」なし。ダッシュ .dash は無い）: ' + JSON.stringify({ tile37, dash37 }));
   expect(rp37Err.length === 0, 'E6 保存 HTML のページエラー・console error なし: ' + (rp37Err.join(' / ') || 'none'));
   await rp37.close();
   // 2. 保存後に ③ を開いても同じ判定
@@ -793,11 +812,11 @@ const pdfTextOf = (f) => {
       order: Array.from(sh.children).map(el => el.className.split(' ').slice(0, 2).join('.')), res2: (sh.querySelector('.cl-tile-res .cl-tile-v') || {}).textContent };
   };
   const pv39 = await page.evaluate(paperOf, ['#appPaper', QS39]);
-  expect(await step() === 4 && pv39.qs.length === 0 && pv39.res >= 0 && pv39.res <= 160 && pv39.rows === 7 && pv39.must === 2 && pv39.res2 === '採用推奨' && !pv39.cls.includes('cl-compact') && pv39.h <= 950,
+  expect(await step() === 4 && pv39.qs.length === 0 && pv39.res >= 0 && pv39.res <= 160 && pv39.rows === 7 && pv39.must === 2 && pv39.res2 === '採用推奨' && !pv39.cls.includes('cl-compact') && pv39.h <= 1052,
     'E8 ③ の紙プレビュー: 質問文・説明文・補足・注記なし・結果バッジは紙の上端から 160px 以内・確認点 7 行・必須条件 2 行（標準のサンプルは .cl-compact なし）: ' + JSON.stringify(Object.assign({}, pv39, { order: undefined })));
-  expect(JSON.stringify(pv39.order) === JSON.stringify(['cl-sheet-head', 'cl-judge', 'cl-cols', 'cl-blk.cl-blk-rate', 'cl-blk.cl-blk-notes', 'cl-exline']),
-    'E8 紙の並び: ヘッダー → 結果ストリップ → 必須条件｜勤務条件の確認 → 確認点 → 面接メモ → 説明・連絡: ' + JSON.stringify(pv39.order));
-  // 2. 1280px・1366px・1440px で横スクロールなし（アプリ ③ の紙・保存 HTML の報告書表示）。
+  expect(JSON.stringify(pv39.order) === JSON.stringify(['cl-sheet-head', 'cl-judge', 'cl-cols', 'cl-blk.cl-blk-rate', 'cl-blk.cl-blk-notes', 'cl-exline', 'cl-stamps']),
+    'E8 紙の並び: 見出し → 結果ストリップ → 必須条件｜勤務条件の確認 → 確認点 → 面接メモ → 説明・連絡 → 押印行: ' + JSON.stringify(pv39.order));
+  // 2. 1280px・1366px・1440px で横スクロールなし（アプリ ③ の紙・保存 HTML の用紙。保存 HTML は 1280px 以上なら縮小しない）。
   //   アプリ ③ は紙を縮小しない（本文 9.5px のまま）: 右サマリーの横に紙が等倍で入らない幅は右サマリーを紙の下に回す（.judge-layout.paper-stack）
   const rp39Err = [];
   const rp39 = await newReportPage(rp39Err);
@@ -815,18 +834,19 @@ const pdfTextOf = (f) => {
       return { zoom: z, body: px('.cl-rt-lbl'), label: px('dl.cl-kv dt'), res: px('.cl-tile-res .cl-tile-v'), stack: document.querySelector('#view-judge .judge-layout').classList.contains('paper-stack'),
         below: document.getElementById('summaryPanel').getBoundingClientRect().top >= p.getBoundingClientRect().bottom };
     });
-    wide39.push({ w, app: await ov(page, '#appPaperWrap'), rep: await ov(rp39, '#reportPaper'), res: (await page.evaluate(paperOf, ['#appPaper', QS39])).res, fz });
+    const rep = await rp39.evaluate(() => ({ doc: document.documentElement.scrollWidth - window.innerWidth, wrap: 0, zoom: getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom').trim() }));
+    wide39.push({ w, app: await ov(page, '#appPaperWrap'), rep, res: (await page.evaluate(paperOf, ['#appPaper', QS39])).res, fz });
     if (w === 1280) await sshot('49-script-step3-1280.png');
   }
-  expect(wide39.every(x => x.app.doc <= 1 && x.app.wrap <= 1 && x.rep.doc <= 1 && x.rep.wrap <= 1 && x.res <= 160), 'E8 1280px・1366px・1440px の紙プレビューで横スクロールなし（アプリ ③・保存 HTML）: ' + JSON.stringify(wide39.map(x => ({ w: x.w, app: x.app, rep: x.rep, res: x.res }))));
+  expect(wide39.every(x => x.app.doc <= 1 && x.app.wrap <= 1 && x.rep.doc <= 1 && x.rep.zoom === '' && x.res <= 160), 'E8 1280px・1366px・1440px で横スクロールなし（アプリ ③ の紙・保存 HTML の用紙は縮小しない）: ' + JSON.stringify(wide39.map(x => ({ w: x.w, app: x.app, rep: x.rep, res: x.res }))));
   expect(wide39.every(x => x.fz.zoom === 1 && x.fz.body >= 9.5 && x.fz.label >= 8.5 && x.fz.res >= 14 && x.fz.stack === (x.w < 1440) && x.fz.below === x.fz.stack),
     'E8 アプリ ③ の紙は 1280px・1366px でも等倍（本文 9.5px・ラベル 8.5px・結果 14px）。右サマリーの横に入らない幅は右サマリーを紙の下へ: ' + JSON.stringify(wide39.map(x => Object.assign({ w: x.w }, x.fz))));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await rp39.setViewportSize({ width: 1440, height: 1000 });
   await wait(200);
-  const rv39 = await rp39.evaluate(paperOf, ['#clPaper', QS39]);
-  expect(rv39.qs.length === 0 && rv39.res <= 160 && rv39.rows === 7 && rv39.res2 === '採用推奨' && !!(await rp39.$('#clPaper .cl-decision svg.verdict-stamp')),
-    'E8 保存 HTML の報告書表示も同じ 1 ページの要約（質問文なし・結果が上部・最終合否の採用スタンプ）: ' + JSON.stringify(Object.assign({}, rv39, { order: undefined })));
+  const rv39 = await rp39.evaluate(paperOf, ['#a4', QS39]);
+  expect(rv39.qs.length === 0 && rv39.res <= 160 && rv39.rows === 7 && rv39.res2 === '採用推奨' && !!(await rp39.$('#a4 .cl-decision svg.verdict-stamp')) && JSON.stringify(rv39.order) === JSON.stringify(pv39.order),
+    'E8 保存 HTML の用紙も同じ 1 ページの要約（質問文なし・結果が上部・最終合否の採用スタンプ・同じ並び）: ' + JSON.stringify(Object.assign({}, rv39, { order: undefined })));
   await rp39.close();
   // 3. 重いサンプル: 全メモ（質問の回答・確認点のメモ・Step① のメモ）に 300 字・面接所見 1,500 字 → .cl-compact で 1 ページ
   //   （質問の回答は 2 行・確認点のメモは 1 行で打ち切るので、本文が A4 を超えるのは際限なく長くなる面接所見が長いとき）
@@ -842,8 +862,8 @@ const pdfTextOf = (f) => {
   await rateAll('good');
   await judge();
   const hv39 = await page.evaluate(paperOf, ['#appPaper', QS39]);
-  expect(await step() === 4 && hv39.cls.includes('cl-compact') && hv39.h <= 950 && hv39.res <= 160 && hv39.rows === 7 && hv39.qs.length === 0,
-    'E8 重いサンプル（全メモ 300 字・面接所見 1,500 字）: 紙プレビューに .cl-compact・本文は上限（950px）以内・結果は上部: ' + JSON.stringify(Object.assign({}, hv39, { order: undefined })));
+  expect(await step() === 4 && hv39.cls.includes('cl-compact') && hv39.h <= 1052 && hv39.res <= 160 && hv39.rows === 7 && hv39.qs.length === 0,
+    'E8 重いサンプル（全メモ 300 字・面接所見 1,500 字）: 紙プレビューに .cl-compact・押印行込みで上限（1052px）以内・結果は上部: ' + JSON.stringify(Object.assign({}, hv39, { order: undefined })));
   const nm39 = await page.evaluate(() => {
     const sh = document.querySelector('#appPaper .cl-sheet'), q = sh.querySelector('.cl-nm-q .cl-nm-v'), iv = sh.querySelector('.cl-nm-iv .cl-nm-v'), ref = sh.querySelector('.cl-nm-ref');
     const cq = getComputedStyle(q), ci = getComputedStyle(iv);
@@ -851,7 +871,7 @@ const pdfTextOf = (f) => {
     const linesOf = (el) => { const r = document.createRange(); r.selectNodeContents(el); const tops = []; Array.from(r.getClientRects()).forEach(x => { if (!tops.some(t => Math.abs(t - x.top) < 4)) tops.push(x.top); }); return tops.length; };
     return { qClamp: cq.webkitLineClamp, qh: Math.round(q.getBoundingClientRect().height), qlh: parseFloat(cq.lineHeight),
       ivClamp: ci.webkitLineClamp, ivh: Math.round(iv.getBoundingClientRect().height), ivlh: parseFloat(ci.lineHeight), sheetH: Math.round(sh.getBoundingClientRect().height),
-      ref: ref && ref.getClientRects().length ? ref.textContent : '', cut: sh.classList.contains('cl-nm-cut'),
+      ref: ref && ref.getClientRects().length ? ref.innerText.trim() : '', cut: sh.classList.contains('cl-nm-cut'),
       keys: Array.from(sh.querySelectorAll('.cl-nm-q .cl-nm-k')).map(k => ({ t: k.textContent, lines: linesOf(k) })) };
   });
   expect(String(nm39.qClamp) === '2' && nm39.qh > nm39.qlh * 1.5 && nm39.qh <= nm39.qlh * 2.5,
@@ -860,7 +880,13 @@ const pdfTextOf = (f) => {
     'E8 面接所見は 10 行まで（残りの高さまで広げない。紙の 2 割未満）: ' + JSON.stringify({ ivClamp: nm39.ivClamp, ivh: nm39.ivh, ivlh: nm39.ivlh, sheetH: nm39.sheetH }));
   expect(nm39.keys.length === 5 && nm39.keys.every(k => k.lines === 1 && k.t.length <= 22) && nm39.keys[1].t === '②前のバイトの期間・退職理由 ほか2問' && nm39.keys[4].t === '⑤気になる点（逆質問）',
     'E8 質問の回答の名前は 1 行（1 問目の短い名前＋「ほか n 問」）: ' + JSON.stringify(nm39.keys));
-  expect(nm39.cut && nm39.ref.includes('「…」で切れたメモの全文は、保存 HTML の「詳細」表示にあります'), 'E8 「…」で切れたメモがあれば全文の場所の案内 1 行: ' + JSON.stringify({ cut: nm39.cut, ref: nm39.ref }));
+  // ③ の紙はクリックしても窓を出さないので「保存した HTML の画面で」（アプリの印刷・保存 HTML は「画面で」。下の PDF で確かめる）
+  const cut39 = await page.evaluate(() => document.querySelectorAll('#appPaper .cl-cut').length);
+  await page.click('#appPaper .cl-nm-iv .cl-nm-v');
+  await wait(100);
+  const pop39 = !!(await page.$('.pop,#a4Pop,[role="dialog"]:not([hidden])'));
+  expect(nm39.cut && nm39.ref === '「…」で切れたメモは、保存した HTML の画面でクリックすると全文を表示します' && cut39 >= 1 && !pop39,
+    'E8 「…」で切れたメモがあれば案内 1 行（③ の紙は「保存した HTML の画面でクリックすると全文」。③ の紙のクリックでは窓は出ない）: ' + JSON.stringify({ cut: nm39.cut, ref: nm39.ref, cut39, pop39 }));
   await page.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
   await wait(150);
   await sshot('48-script-report-heavy.png');
@@ -872,20 +898,22 @@ const pdfTextOf = (f) => {
   await page.emulateMedia({ media: null });
   await st(() => window.RecruitApp.prepareChecklistSheet(false));
   const n39a = pdfPagesOf(pdf39a);
-  expect(hp39.includes('cl-compact') && (n39a === -1 || n39a === 1), 'E8 重いサンプルのアプリの A4 印刷は 1 ページ（.cl-compact）: ' + JSON.stringify({ pages: n39a, cls: hp39 }));
+  const t39a = pdfTextOf(pdf39a);
+  expect(hp39.includes('cl-compact') && (n39a === -1 || n39a === 1) && (t39a === null || (t39a.includes('「…」で切れたメモは、画面でクリックすると全文を表示します') && !t39a.includes('保存したHTMLの画面で'))),
+    'E8 重いサンプルのアプリの A4 印刷は 1 ページ（.cl-compact）・案内は保存 HTML と同じ「画面でクリックすると全文」: ' + JSON.stringify({ pages: n39a, cls: hp39 }));
   const saved39 = await saveRecord('script-report-heavy.html');
   const rp39b = await newReportPage(rp39Err);
   await rp39b.goto('file://' + saved39.file);
   await rp39b.waitForTimeout(300);
-  const rh39 = await rp39b.evaluate(() => document.querySelector('#clPaper .cl-sheet').className);
+  const rh39 = await rp39b.evaluate(() => document.querySelector('#a4 .cl-sheet').className);
   const pdf39 = path.join(OUT, 'script-report-heavy.pdf');
   await rp39b.pdf({ path: pdf39, format: 'A4', preferCSSPageSize: true, printBackground: true });
   await rp39b.waitForTimeout(100);
   const n39 = pdfPagesOf(pdf39);
   const t39 = pdfTextOf(pdf39);
   console.log('script-report-heavy.pdf pages:', n39);
-  expect(rh39.includes('cl-compact') && (n39 === -1 || n39 === 1) && (t39 === null || ['採用推奨', '台本四郎', '最終合否', '笹川晴央', '面接所見', '「…」で切れたメモの全文は'].every(t => t39.includes(t))),
-    'E8 重いサンプルの保存 HTML: 紙プレビューに .cl-compact・報告書表示のまま印刷して A4 1 ページ（結果・氏名・最終合否・笹川晴央・「…」の案内）: ' + JSON.stringify({ pages: n39, cls: rh39 }));
+  expect(rh39.includes('cl-compact') && (n39 === -1 || n39 === 1) && (t39 === null || ['採用推奨', '台本四郎', '最終合否', '笹川晴央', '面接所見', '「…」で切れたメモは、画面でクリックすると全文を表示します'].every(t => t39.includes(t))),
+    'E8 重いサンプルの保存 HTML: 用紙に .cl-compact・そのまま印刷して A4 1 ページ（結果・氏名・最終合否・笹川晴央・「…」の案内）: ' + JSON.stringify({ pages: n39, cls: rh39 }));
   await rp39b.close();
   // アプリの印刷: 押印欄 4 件（既定の 2 件に 2 件足す。押印行が 2 段）でも 1 ページ（上限を押印欄の件数で決める）
   const app39s = await st(() => {
@@ -903,8 +931,8 @@ const pdfTextOf = (f) => {
   const n39s = pdfPagesOf(pdf39s);
   expect(app39s.boxes === 4 && (n39s === -1 || n39s === 1), 'E8 アプリの A4 印刷: 押印欄 4 件（2 段）でも 1 ページ: ' + JSON.stringify({ pages: n39s, app39s }));
 
-  // 4. 保存 HTML の 1 ページ保証の境界（記録を直接作って保存 HTML を開き、報告書表示のまま印刷）
-  //   面接所見 4,000 字（.cl-compact のまま所見が切れる → 案内 1 行）・押印欄 4 件（押印の節が 2 段）・確認点を 65 件追加（縮小。縮小後の高さを測り直す）
+  // 4. 保存 HTML の 1 ページ保証の境界（記録を直接作って保存 HTML を開き、読み込んだままの用紙を計り、そのまま印刷）
+  //   面接所見 4,000 字（.cl-compact のまま所見が切れる → 案内 1 行）・押印欄 4 件（押印行が 2 段）・確認点を 65 件追加（縮小。縮小後の高さを測り直す）
   const mk39 = (o) => {
     const Lx = (n) => 'あいうえおかきくけこさしすせそ'.repeat(Math.ceil(n / 15)).slice(0, n);
     const S = window.RecruitStorage, R = window.RecruitRules;
@@ -932,26 +960,27 @@ const pdfTextOf = (f) => {
     const rp = await newReportPage(rp39Err);
     await rp.goto('file://' + f39);
     await rp.waitForTimeout(300);
+    await rp.mouse.move(0, 0);
     const m = await rp.evaluate(() => {
-      window.__prepareChecklistSheet(true);
-      const sh = document.querySelector('#clSheet .cl-sheet');
-      const out = { cls: sh.className.replace('cl-sheet cl-mode-sheet', '').trim(), zoom: sh.style.zoom, h: Math.round(sh.getBoundingClientRect().height), boxes: document.querySelectorAll('section[data-sec="mgmt"] .stamp-box').length };
-      window.__prepareChecklistSheet(false);
-      return out;
+      const a4 = document.getElementById('a4'), sh = a4.querySelector('.cl-sheet'), st = a4.querySelector('.cl-stamps'), top = a4.getBoundingClientRect().top;
+      const mm = 96 / 25.4;
+      return { cls: sh.className.replace('cl-sheet cl-mode-sheet', '').trim(), zoom: sh.style.zoom, h: Math.round(sh.getBoundingClientRect().height), boxes: a4.querySelectorAll('.cl-stamps .stamp-box').length,
+        stampsBottom: st ? Math.round(st.getBoundingClientRect().bottom - top) : -1, innerBottom: Math.round((8 + 281) * mm) };
     });
     const pdf = path.join(OUT, 'script-report-fit-' + c.key + '.pdf');
     await rp.pdf({ path: pdf, format: 'A4', preferCSSPageSize: true, printBackground: true });
     const t = pdfTextOf(pdf);
-    fit39.push(Object.assign({ key: c.key, pages: pdfPagesOf(pdf), ref: t === null ? null : t.includes('「…」で切れたメモの全文は、保存HTMLの「詳細」表示にあります'), name: t === null ? null : t.includes('台本五郎') }, m));
+    fit39.push(Object.assign({ key: c.key, pages: pdfPagesOf(pdf), ref: t === null ? null : t.includes('「…」で切れたメモは、画面でクリックすると全文を表示します'), name: t === null ? null : t.includes('台本五郎') }, m));
     await rp.close();
   }
   const fit39k = (k) => fit39.find(x => x.key === k);
-  expect(fit39.every(x => x.pages === -1 || x.pages === 1) && fit39.every(x => x.name !== false), 'E8 保存 HTML の A4 印刷は境界の記録でも 1 ページ（面接所見 4,000 字・押印欄 4 件・確認点 +65 件）: ' + JSON.stringify(fit39));
+  expect(fit39.every(x => x.pages === -1 || x.pages === 1) && fit39.every(x => x.name !== false) && fit39.every(x => x.h <= 1052 && x.stampsBottom > 0 && x.stampsBottom <= x.innerBottom),
+    'E8 保存 HTML の用紙は境界の記録でも押印行込みで 1052px 以内・押印行の下端は用紙の内寸の下端より上・そのまま印刷して 1 ページ（面接所見 4,000 字・押印欄 4 件・確認点 +65 件）: ' + JSON.stringify(fit39));
   expect(/\bcl-compact\b/.test(fit39k('iv4000').cls) && !fit39k('iv4000').cls.includes('cl-compact-2') && fit39k('iv4000').ref !== false,
-    'E8 面接所見 4,000 字: .cl-compact で所見が切れても「…」の案内 1 行（全文は「詳細」）: ' + JSON.stringify(fit39k('iv4000')));
-  expect(fit39k('stamps4').boxes === 4 && fit39k('stamps4').h <= 890, 'E8 押印欄 4 件: 押印の節 2 段の分を除いた上限（890px）で詰める: ' + JSON.stringify(fit39k('stamps4')));
+    'E8 面接所見 4,000 字: .cl-compact で所見が切れても「…」の案内 1 行（画面でクリックすると全文）: ' + JSON.stringify(fit39k('iv4000')));
+  expect(fit39k('stamps4').boxes === 4 && fit39k('stamps4').h <= 1052, 'E8 押印欄 4 件（押印行 2 段）も押印行込みの上限（1052px）で詰める: ' + JSON.stringify(fit39k('stamps4')));
   const z39 = fit39k('zoom');
-  expect(z39.cls.includes('cl-compact-2') && parseFloat(z39.zoom) > 0 && parseFloat(z39.zoom) < 1 && z39.h <= 950, 'E8 確認点 +65 件: 縮小後の高さを測り直して上限（950px）以内: ' + JSON.stringify(z39));
+  expect(z39.cls.includes('cl-compact-2') && parseFloat(z39.zoom) > 0 && parseFloat(z39.zoom) < 1 && z39.h <= 1052, 'E8 確認点 +65 件: 縮小後の高さを測り直して上限（1052px）以内: ' + JSON.stringify(z39));
   expect(rp39Err.length === 0, 'E8 保存 HTML のページエラーなし: ' + (rp39Err.join(' / ') || 'none'));
 
   // =====================================================================
@@ -981,34 +1010,60 @@ const pdfTextOf = (f) => {
     'E9 最終合否で「最終確認」に自動押印: ' + t9);
   await page.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
   await wait(150);
-  // 印刷用（#clSheet）の押印行も 2 つ・2 列
-  const cs9 = await st(() => { window.RecruitApp.prepareChecklistSheet(true); const r = document.querySelector('#clSheet .cl-stamps .stamp-row');
-    const out = { ids: Array.from(document.querySelectorAll('#clSheet .cl-stamps .stamp-box')).map(b => b.dataset.fieldId), cols: !!r && r.classList.contains('cols-2'), grid: r ? getComputedStyle(r).gridTemplateColumns.split(' ').length : 0,
+  // 印刷用（#clSheet）の用紙の押印行も 2 つ・2 列
+  const cs9 = await st(() => { window.RecruitApp.prepareChecklistSheet(true); const r = document.querySelector('#clSheet .a4 .cl-stamps .stamp-row');
+    const out = { ids: Array.from(document.querySelectorAll('#clSheet .a4 .cl-stamps .stamp-box')).map(b => b.dataset.fieldId), cols: !!r && r.classList.contains('cols-2'), grid: r ? getComputedStyle(r).gridTemplateColumns.split(' ').length : 0,
       hanko: document.querySelectorAll('#clSheet .cl-stamps svg.hanko').length, txt: document.getElementById('clSheet').textContent.includes('初期対応者') };
     window.RecruitApp.prepareChecklistSheet(false); return out; });
-  expect(JSON.stringify(cs9.ids) === JSON.stringify(['interviewer', 'final']) && cs9.cols && cs9.grid === 2 && cs9.hanko === 2 && !cs9.txt, 'E9 A4 印刷用の押印行（.cl-stamps）も 2 つ・2 列・印 2 つ: ' + JSON.stringify(cs9));
-  // 保存 HTML の #mgmt
+  expect(JSON.stringify(cs9.ids) === JSON.stringify(['interviewer', 'final']) && cs9.cols && cs9.grid === 2 && cs9.hanko === 2 && !cs9.txt, 'E9 A4 印刷用の用紙の押印行（.cl-stamps）も 2 つ・2 列・印 2 つ: ' + JSON.stringify(cs9));
+  // 保存 HTML の用紙の押印行
   const saved9 = await saveRecord('stamps-2.html');
-  expect(saved9.html.includes('<div class="stamp-row cols-2" id="mgmt">') && !saved9.html.includes('初期対応者') && !saved9.html.includes('data-field-id="initial"') &&
+  expect(saved9.html.includes('<div class="cl-stamps"><div class="stamp-row cl-stamps-row cols-2">') && !saved9.html.includes('初期対応者') && !saved9.html.includes('data-field-id="initial"') &&
     JSON.stringify(Object.keys(saved9.rec.management)) === JSON.stringify(['final', 'interviewer']) && saved9.html.endsWith('</html>\n'),
-    'E9 保存 HTML の押印欄は 2 つ（#mgmt.stamp-row.cols-2・初期対応者なし）: ' + Object.keys(saved9.rec.management).join(','));
+    'E9 保存 HTML の押印欄は用紙の中の 2 つ（.cl-stamps .stamp-row.cols-2・初期対応者なし）: ' + Object.keys(saved9.rec.management).join(','));
   const rp9Err = [];
   const rp9 = await newReportPage(rp9Err);
   await rp9.goto('file://' + saved9.file);
   await rp9.waitForTimeout(300);
-  const g9 = async () => rp9.evaluate(() => { const r = document.getElementById('mgmt'); return { n: r.querySelectorAll('.stamp-box').length, cols: getComputedStyle(r).gridTemplateColumns.split(' ').length, ov: document.documentElement.scrollWidth - window.innerWidth }; });
+  const g9 = async () => rp9.evaluate(() => { const r = document.querySelector('#a4 .cl-stamps .stamp-row'); return { n: r.querySelectorAll('.stamp-box').length, cols: getComputedStyle(r).gridTemplateColumns.split(' ').length, ov: document.documentElement.scrollWidth - window.innerWidth,
+    zoom: getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom').trim() }; });
   const g9a = await g9();
   await rp9.setViewportSize({ width: 390, height: 900 });
   await rp9.waitForTimeout(200);
   const g9b = await g9();
-  expect(g9a.n === 2 && g9a.cols === 2 && g9b.cols === 1 && g9b.ov <= 1, 'E9 保存 HTML の押印欄は 2 列（390px では 1 列・横スクロールなし）: ' + JSON.stringify({ g9a, g9b }));
+  expect(g9a.n === 2 && g9a.cols === 2 && g9b.cols === 2 && g9b.ov <= 1 && g9a.zoom === '' && parseFloat(g9b.zoom) > 0.4 && parseFloat(g9b.zoom) < 0.5,
+    'E9 保存 HTML の用紙の押印行は 2 列（390px でも 2 列のまま用紙ごと縮小・横スクロールなし）: ' + JSON.stringify({ g9a, g9b }));
   await rp9.setViewportSize({ width: 1440, height: 1000 });
-  // 保存 HTML 上の押印・最終合否
-  await rp9.selectOption('#decision select', { label: SASA });
-  await rp9.click('#decision [data-act="decide"][data-value="reject"]');
   await rp9.waitForTimeout(150);
-  expect(rp9Err.length === 0 && !!(await rp9.$('#mgmt .stamp-box[data-field-id="final"] svg.hanko')) && (await rp9.evaluate(() => document.body.getAttribute('data-filename'))).endsWith('_不採用.html'),
-    'E9 保存 HTML で最終合否を変えられる（押印欄 2 つのまま・エラーなし）: ' + (rp9Err.join(' / ') || 'ok'));
+  // 保存 HTML の用紙で最終合否を「不採用」に（採用推奨と食い違うので窓は開いたまま注記を見せる。docs/SPEC-a4.md S11）
+  await openDecision(rp9);
+  const pre9 = await rp9.evaluate(() => { const p = document.getElementById('a4Pop'); return p && { sel: p.querySelector('select').selectedOptions[0].textContent, undo: !!p.querySelector('[data-act="undecide"]'), on: (p.querySelector('.pop-dec.on') || {}).textContent }; });
+  await popSel(rp9, SASA);
+  await popAct(rp9, 'decide', 'reject');
+  const note9 = await rp9.evaluate(() => { const p = document.getElementById('a4Pop'); return p && { note: (p.querySelector('.pop-note') || {}).textContent || '', on: (p.querySelector('.pop-dec.on') || {}).textContent, undo: !!p.querySelector('[data-act="undecide"]') }; });
+  expect(!!pre9 && pre9.sel === SASA && pre9.undo && pre9.on === '採用' && !!note9 && note9.note === '※ アプリの判定「採用推奨」と異なる最終合否です（記録はそのまま残ります）。' && note9.on === '不採用' && note9.undo,
+    'E9 窓の担当者は最終確認の押印者を初期選択・押された合否のボタンが on・不採用×採用推奨は窓を開いたまま注記: ' + JSON.stringify({ pre9, note9 }));
+  await popAct(rp9, 'close');
+  expect(rp9Err.length === 0 && !(await rp9.$('#a4Pop')) && !!(await rp9.$('#a4 .stamp-box[data-field-id="final"] svg.hanko')) && !!(await rp9.$('#a4Decision.is-reject')) &&
+    (await rp9.evaluate(() => document.body.getAttribute('data-filename'))).endsWith('_不採用.html'),
+    'E9 保存 HTML で最終合否を変えられる（［閉じる］で窓が閉じる・押印欄 2 つのまま・ファイル名 _不採用・エラーなし）: ' + (rp9Err.join(' / ') || 'ok'));
+  //   もう一方の食い違い（採用×不採用推奨）: 判定が不採用推奨の記録で「採用」→ 注記を出して窓は開いたまま。続けて「不採用」（一致）→ 注記なしで窓が閉じる
+  const recRj9 = Object.assign({}, saved9.rec, { judgment: Object.assign({}, saved9.rec.judgment, { result: 'reject', title: '不採用推奨' }), decision: null });
+  const fileRj9 = path.join(OUT, 'stamps-2-reject.html');
+  fs.writeFileSync(fileRj9, await st(r => window.RecruitStorage.generateReportHTML(r, window.RecruitApp.state.profile), recRj9));
+  await rp9.goto('file://' + fileRj9);
+  await rp9.waitForTimeout(300);
+  await openDecision(rp9);
+  await popSel(rp9, SASA);
+  await popAct(rp9, 'decide', 'hire');
+  const noteRj9 = await rp9.evaluate(() => { const p = document.getElementById('a4Pop'); return p && { note: (p.querySelector('.pop-note') || {}).textContent || '', ref: (p.querySelector('.pop-ref') || {}).textContent || '', on: (p.querySelector('.pop-dec.on') || {}).textContent }; });
+  const hireRj9 = !!(await rp9.$('#a4Decision.is-hire'));
+  if (!(await rp9.$('#a4Pop'))) await openDecision(rp9);   // 注記が出ず窓が閉じたときも先へ進める（確認は下の expect）
+  await popAct(rp9, 'decide', 'reject');
+  const okRj9 = { pop: !!(await rp9.$('#a4Pop')), reject: !!(await rp9.$('#a4Decision.is-reject')) };
+  expect(!!noteRj9 && noteRj9.note === '※ アプリの判定「不採用推奨」と異なる最終合否です（記録はそのまま残ります）。' && noteRj9.ref === 'アプリの判定：不採用推奨' && noteRj9.on === '採用' && hireRj9 &&
+    !okRj9.pop && okRj9.reject && rp9Err.length === 0,
+    'E9 採用×不採用推奨も窓を開いたまま注記・判定と同じ「不採用」なら注記なしで窓が閉じる: ' + JSON.stringify({ noteRj9, hireRj9, okRj9 }));
   await rp9.close();
   // アプリ ③ の 390px
   await page.setViewportSize({ width: 390, height: 900 });
@@ -1061,7 +1116,7 @@ const pdfTextOf = (f) => {
   const ALLOW = [
     /^meta\.(theaterName|appTitle|version|footer)$/, /^options\.(categories|genders)$/, /^features\.graduationDate$/,
     /^checklist\.(mustFailResult|mustUnknownResult|mustFailJumpTo|overallLabel|overallHint|version)$/, /^checklist\.overallCaps\.(hold|reject)$/, /^checklist\.overallOptions\.(hire|hold|reject)$/,
-    /^evaluation\.thresholds\.(recommendPct|reviewPct)$/, /^checklist\.header\.interviewerField$/, /^checklist\.header\.posting\.label$/, /^checklist\.header\.posting\.options\[\d+\]\.label$/, /^checklist\.print\.showQuestions$/,
+    /^evaluation\.thresholds\.(recommendPct|reviewPct)$/, /^checklist\.header\.interviewerField$/, /^checklist\.header\.posting\.label$/, /^checklist\.header\.posting\.options\[\d+\]\.label$/,
     /^checklist\.pages\[\d+\]\.(title|lead)$/, /^checklist\.sections\[\d+\]\.(title|minutes|minutesMax|page|lead)$/, /^checklist\.sections\[\d+\]\.blocks\[\d+\]\.(title|note|memo|memoLabel)$/,
     /^checklist\.sections\[\d+\]\.blocks\[\d+\]\.items\[\d+\]\.(label|hint|shortOnly|short|kind|options)$/,
     /^management\.fields\[\d+\]\.(label|hint)$/, /^management\.(managers|allowFreeName)$/, /^management\.decision\.(enabled|label|hireLabel|rejectLabel|hint|stampField|autoStampFinal|filenameSuffix)$/
@@ -1069,7 +1124,8 @@ const pdfTextOf = (f) => {
   const badBind10 = set10.binds.filter(b => !ALLOW.some(re => re.test(b)));
   const dup10 = set10.binds.filter((b, i) => set10.binds.indexOf(b) !== i);
   expect(set10.binds.length > 50 && !badBind10.length && !dup10.length, 'E10 data-bind は許可リストだけ・重複なし（' + set10.binds.length + ' 件）: ' + JSON.stringify({ bad: badBind10, dup: dup10 }));
-  const words10 = ['詳細モード', '2軸', '2 軸', '貢献度', '留意点', '初期対応者', '運用モード', '申し送り', '自動表示', 'Step3', 'Step4', '応募情報から', '旧形式'].filter(w => set10.txt.includes(w));
+  // 「詳細」表示（保存 HTML）は 2026-10-14 に削除（docs/SPEC-a4.md）。その表示だけに効いた「質問文も載せる」の行も無い
+  const words10 = ['詳細モード', '2軸', '2 軸', '貢献度', '留意点', '初期対応者', '運用モード', '申し送り', '自動表示', 'Step3', 'Step4', '応募情報から', '旧形式', '「詳細」', '質問文も載せる'].filter(w => set10.txt.includes(w));
   expect(!words10.length, 'E10 設定画面に削除した機能の文言が無い: ' + words10.join(','));
   expect(JSON.stringify(set10.actions) === JSON.stringify(['cl-block-add', 'cl-block-del', 'cl-block-down', 'cl-block-up', 'cl-default', 'cl-item-add', 'cl-item-del', 'cl-item-down', 'cl-item-up', 'cl-sec-add', 'cl-sec-del', 'cl-sec-down', 'cl-sec-up', 'discard', 'export', 'import', 'reset', 'save']),
     'E10 data-action は台本の編集・保存／破棄／書き出し／読み込み／初期化だけ: ' + set10.actions.join(','));
@@ -1146,37 +1202,26 @@ const pdfTextOf = (f) => {
   const rp11 = await newReportPage(rp11Err);
   await rp11.goto('file://' + saved9.file);
   await rp11.waitForTimeout(300);
-  const ui11 = await rp11.evaluate(() => ({ btns: Array.from(document.querySelectorAll('.rtool button[id^="rtPrint"]')).map(b => b.id + ':' + b.textContent),
-    gone: ['.dash', '#rtPrintSheet', '#rtPrintAll'].filter(s => !!document.querySelector(s)), handoff: typeof window.__prepareHandoffSheet, cl: typeof window.__prepareChecklistSheet,
-    hint: (document.querySelector('.rtool-hint') || {}).textContent || '' }));
-  expect(JSON.stringify(ui11.btns) === JSON.stringify(['rtPrintChecklist:A4 で印刷（1 ページ）']) && !ui11.gone.length && ui11.handoff === 'undefined' && ui11.cl === 'function' && !ui11.hint.includes('レポート全体'),
-    'E11 保存 HTML の印刷は「A4 で印刷（1 ページ）」だけ（.dash・#rtPrintSheet・#rtPrintAll・__prepareHandoffSheet なし）: ' + JSON.stringify(ui11));
-  // 報告書表示の Ctrl+P（beforeprint）→ A4 報告
-  const bp11 = async () => rp11.evaluate(() => { window.dispatchEvent(new Event('beforeprint')); const on = document.body.classList.contains('print-checklist'); window.dispatchEvent(new Event('afterprint')); return { on, after: document.body.classList.contains('print-checklist') }; });
-  const bp11a = await bp11();
-  expect(bp11a.on && !bp11a.after, 'E11 報告書表示のままブラウザで印刷すると A4 報告（print-checklist）・印刷後に外す: ' + JSON.stringify(bp11a));
+  // 保存 HTML は用紙そのものを印刷する（印刷ボタン・表示の切替・印刷用の複製・印刷のための切替なし。docs/SPEC-a4.md S8）
+  const ui11 = await rp11.evaluate(() => ({ gone: ['.rtool', '#rtPrintChecklist', '#rtViewFull', '#clSheet', '#clPaper', '.dash', '#rtPrintSheet', '#rtPrintAll'].filter(s => !!document.querySelector(s)),
+    handoff: typeof window.__prepareHandoffSheet, cl: typeof window.__prepareChecklistSheet, view: typeof window.__setReportView, fit: typeof window.__a4Fit }));
+  expect(!ui11.gone.length && ui11.handoff === 'undefined' && ui11.cl === 'undefined' && ui11.view === 'undefined' && ui11.fit === 'function',
+    'E11 保存 HTML に印刷ボタン・表示の切替・印刷用の複製が無い（.rtool・#rtPrintChecklist・__prepareChecklistSheet なし）: ' + JSON.stringify(ui11));
+  // beforeprint / afterprint を投げても body・用紙の class・縮小は変わらない（読み込み時に確定した状態のまま印刷する）
+  const snap11 = () => rp11.evaluate(() => { const sh = document.querySelector('#a4 .cl-sheet'); return [document.body.className, sh.className, sh.style.zoom, document.documentElement.getAttribute('style') || ''].join('|'); });
+  const s11a = await snap11();
+  const bp11 = await rp11.evaluate(() => { window.dispatchEvent(new Event('beforeprint')); return document.body.className + '|' + document.querySelector('#a4 .cl-sheet').className; });
+  await rp11.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  const s11b = await snap11();
+  expect(s11a === s11b && bp11 === s11a.split('|').slice(0, 2).join('|') && !s11a.includes('print-checklist'), 'E11 beforeprint／afterprint で切り替えない（印刷のための切替なし）: ' + JSON.stringify({ s11a, bp11, s11b }));
   const pdf11a = path.join(OUT, 'report-a4-1page.pdf');
   await rp11.pdf({ path: pdf11a, format: 'A4', preferCSSPageSize: true, printBackground: true });
   await rp11.waitForTimeout(100);
   const n11a = pdfPagesOf(pdf11a);
   const t11a = pdfTextOf(pdf11a);
-  expect((n11a === -1 || n11a === 1) && (t11a === null || (['面接チェックリスト報告', '押印二郎', '面接対応者', '最終確認'].every(t => t11a.includes(t)) && !t11a.includes('初期対応者'))),
-    'E11 報告書表示の印刷は A4 1 ページ（押印 2 欄・初期対応者なし）: ' + n11a);
-  // 詳細表示の Ctrl+P はブラウザの既定（A4 報告にしない）
-  await rp11.click('#rtViewFull');
-  await rp11.waitForTimeout(150);
-  const bp11b = await bp11();
-  expect(!bp11b.on, 'E11 詳細表示でブラウザの印刷をしても A4 報告にしない（全文を印刷）');
-  const pdf11b = path.join(OUT, 'report-full-view.pdf');
-  await rp11.pdf({ path: pdf11b, format: 'A4', preferCSSPageSize: true, printBackground: true });
-  const t11b = pdfTextOf(pdf11b);
-  expect(t11b === null || (t11b.includes('応募者情報') && t11b.includes('採用可否判定') && t11b.includes('歌舞伎町ですので')), 'E11 詳細表示の印刷は全文（応募者情報・台本の全文・採用可否判定）: ' + (t11b === null ? 'pdftotext なし（省略）' : 'ok'));
-  // 「A4 で印刷（1 ページ）」ボタン（window.print はスタブ）
-  await rp11.evaluate(() => { window.__p = []; window.print = function () { window.__p.push(document.body.classList.contains('print-checklist')); }; });
-  await rp11.click('#rtPrintChecklist');
-  await rp11.waitForTimeout(100);
-  expect(JSON.stringify(await rp11.evaluate(() => window.__p)) === '[true]', 'E11 「A4 で印刷（1 ページ）」は詳細表示からでも A4 報告を印刷');
-  await rp11.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  expect((n11a === -1 || n11a === 1) && (t11a === null || (['面接チェックリスト報告', '押印二郎', '面接対応者', '最終確認'].every(t => t11a.includes(t)) && !t11a.includes('初期対応者') && !t11a.includes('歌舞伎町ですので'))),
+    'E11 保存 HTML をそのまま印刷して A4 1 ページ（押印 2 欄・初期対応者なし・台本の全文なし）: ' + n11a);
+  expect((await snap11()) === s11a, 'E11 印刷（PDF）の前後で用紙の状態は変わらない');
   expect(rp11Err.length === 0, 'E11 保存 HTML のページエラーなし: ' + (rp11Err.join(' / ') || 'none'));
   await rp11.close();
   // アプリ ③ の「A4 で印刷」も 1 ページ（押印 2 欄）
@@ -1184,7 +1229,7 @@ const pdfTextOf = (f) => {
   await wait(500);
   expect(await step() === 4, 'E11 保存した記録を ③ で開く');
   await st(() => window.RecruitApp.prepareChecklistSheet(true));
-  const a11 = await st(() => document.querySelectorAll('#clSheet .cl-stamps .stamp-box').length);
+  const a11 = await st(() => document.querySelectorAll('#clSheet .a4 .cl-stamps .stamp-box').length);
   await page.emulateMedia({ media: 'print' });
   const pdf11c = path.join(OUT, 'app-a4-1page.pdf');
   await page.pdf({ path: pdf11c, format: 'A4', preferCSSPageSize: true, printBackground: true });
@@ -1336,21 +1381,58 @@ const pdfTextOf = (f) => {
   const rp12 = await newReportPage(rp12Err);
   await rp12.goto('file://' + saved12.file);
   await rp12.waitForTimeout(300);
-  const rbox12 = (id) => '#mgmt .stamp-box[data-field-id="' + id + '"]';
-  await rp12.click(rbox12('interviewer') + ' [data-act="unstamp"]');
-  await rp12.waitForTimeout(150);
-  expect(!(await rp12.$(rbox12('interviewer') + ' svg.hanko')) && await rp12.$eval('#mgmtSave', el => el.classList.contains('show')), 'E12 保存 HTML 上で押印を取り消せる（保存バーが出る）');
-  await rp12.selectOption(rbox12('interviewer') + ' select', '__free');
-  await rp12.fill(rbox12('interviewer') + ' input', '佐藤 次郎');
-  await rp12.click(rbox12('interviewer') + ' [data-act="stamp"]');
-  await rp12.waitForTimeout(150);
-  expect(!!(await rp12.$(rbox12('interviewer') + ' svg.hanko')) && (await txtIn(rp12, rbox12('interviewer') + ' .stamp-meta')).includes('佐藤 次郎'), 'E12 保存 HTML 上で手入力の担当者で押印');
-  await rp12.click('#decision [data-act="undecide"]');
+  const rbox12 = (id) => '#a4 .stamp-box[data-field-id="' + id + '"]';
+  const popErr12 = () => rp12.evaluate(() => { const e = document.querySelector('#a4Pop .pop-err'); return e ? e.textContent : null; });
+  // 押印の取消: 用紙の押印欄 → 窓の［取消］（docs/SPEC-a4.md 3-5）
+  await openStamp(rp12, 'interviewer');
+  await popAct(rp12, 'unstamp');
+  expect(!(await rp12.$(rbox12('interviewer') + ' svg.hanko')) && !(await rp12.$('#a4Pop')) && await shownIn(rp12, '#saveBar') && (await txtIn(rp12, '#saveBarMsg')) === '押印・合否を変更しました',
+    'E12 保存 HTML の用紙の押印欄 → 窓の「取消」で印が消える（窓は閉じ、右下に保存バー）');
+  // 未押印の「面接対応者」（担当と連動する押印欄 interviewerField）の窓は、台本の担当（header.interviewer）を名簿から初期選択（docs/SPEC-a4.md 1-4）。
+  //   そのまま［押印］で名簿の担当者の印（役職つき）→ 書き出したファイルにも名簿の値
+  await openStamp(rp12, 'interviewer');
+  const ini12 = await rp12.evaluate(() => { const s = document.querySelector('#a4Pop select'); return { v: s.value, t: s.selectedOptions[0].textContent, free: !!document.querySelector('#a4Pop .pop-free:not([hidden])') }; });
+  await popAct(rp12, 'stamp');
+  if (await rp12.$('#a4Pop')) await rp12.keyboard.press('Escape');   // 初期選択が無く押印できなかったときも先へ進める（確認は下の expect）
+  const mg12r = await txtIn(rp12, rbox12('interviewer') + ' .stamp-meta');
+  const [dl12r] = await Promise.all([rp12.waitForEvent('download'), rp12.click('#saveBarBtn')]);
+  const file12r = path.join(OUT, 'free-stamps-roster.html');
+  await dl12r.saveAs(file12r);
+  const r12r = parseRecord(fs.readFileSync(file12r, 'utf8')).management.interviewer;
+  expect(saved12.rec.checklist.header.interviewer === '笹川 晴央' && ini12.v === '0' && ini12.t === SASA && !ini12.free && !(await rp12.$('#a4Pop')) && mg12r.includes(SASA) &&
+    r12r.name === '笹川 晴央' && r12r.short === '笹川' && r12r.title === '副支配人' && r12r.date === '2026.10.10',
+    'E12 未押印の面接対応者の窓は台本の担当（笹川 晴央）を名簿から初期選択・そのまま押印すると名簿の担当者（役職つき）で、書き出したファイルにも入る: ' + JSON.stringify({ ini12, mg12r, r12r }));
+  // 担当者が未選択・手入力の氏名が空なら押印しない（窓の中に 1 行のエラー。alert は出さない）。もう一度取り消して未押印から確かめる
+  await openStamp(rp12, 'interviewer');
+  if (await rp12.$('#a4Pop [data-act="unstamp"]')) await popAct(rp12, 'unstamp'); else await rp12.keyboard.press('Escape');
+  await openStamp(rp12, 'interviewer');
+  await rp12.selectOption('#a4Pop select', '');
+  await popAct(rp12, 'stamp');
+  const e12a = await popErr12();
+  await popSel(rp12, '__free');
+  await rp12.waitForTimeout(80);
+  const free12 = await shownIn(rp12, '#a4Pop .pop-free');
+  await popAct(rp12, 'stamp');
+  const e12b = await popErr12();
+  expect(e12a === '担当者を選んでください' && free12 && e12b === '氏名を入力してください' && !!(await rp12.$('#a4Pop')) && !(await rp12.$(rbox12('interviewer') + ' svg.hanko')),
+    'E12 窓で担当者が未選択 →「担当者を選んでください」・手入力で氏名が空 →「氏名を入力してください」（どちらも押印しない・窓は開いたまま）: ' + JSON.stringify({ e12a, free12, e12b }));
+  await rp12.fill('#a4Pop .pop-free', '佐藤 次郎');
+  await popAct(rp12, 'stamp');
+  expect(!(await rp12.$('#a4Pop')) && !!(await rp12.$(rbox12('interviewer') + ' svg.hanko')) && (await txtIn(rp12, rbox12('interviewer') + ' .stamp-meta')).includes('佐藤 次郎'), 'E12 保存 HTML の窓で手入力の担当者で押印');
+  // 合否の取消: 用紙の「最終合否」→ 窓の［取消］（押印は消さない）。キーボード（Tab で欄 → Enter → Tab で［取消］→ Enter）でも、取消のあとはフォーカスが新しい欄に戻る
+  await rp12.focus('#a4Decision');
+  await rp12.keyboard.press('Enter');
+  await rp12.waitForTimeout(80);
+  const kb12 = await rp12.evaluate(() => Array.from(document.querySelectorAll('#a4Pop [data-act]')).map(b => b.getAttribute('data-act')));
+  await rp12.focus('#a4Pop [data-act="undecide"]');
+  await rp12.keyboard.press('Enter');
   await rp12.waitForTimeout(150);
   const fn12 = await rp12.evaluate(() => document.body.getAttribute('data-filename'));
-  expect(await rp12.$eval('#decision', el => el.classList.contains('is-none')) && !(await rp12.$('#clPaper .cl-decision svg.verdict-stamp')) && fn12 === '応募者_台本_花子_2026-10-10.html',
-    'E12 保存 HTML 上で合否を取り消すと紙の合否スタンプとファイル名の _不採用 が外れる: ' + fn12);
-  const [dl12] = await Promise.all([rp12.waitForEvent('download'), rp12.click('#mgmtSaveBtn')]);
+  const fc12 = await rp12.evaluate(() => ({ id: document.activeElement && document.activeElement.id, tag: document.activeElement && document.activeElement.tagName, exp: document.getElementById('a4Decision').getAttribute('aria-expanded') }));
+  expect(kb12.includes('undecide') && await rp12.$eval('#a4Decision', el => el.classList.contains('is-none')) && !(await rp12.$('#a4Pop')) && !(await rp12.$('#a4 .cl-decision svg.verdict-stamp')) && !!(await rp12.$(rbox12('final') + ' svg.hanko')) &&
+    fn12 === '応募者_台本_花子_2026-10-10.html' && fc12.id === 'a4Decision' && fc12.exp === null,
+    'E12 保存 HTML 上で合否を取り消すと用紙の合否スタンプとファイル名の _不採用 が外れる（最終確認の印は残る・フォーカスは描き直した「最終合否」の欄に戻る）: ' + JSON.stringify({ fn12, fc12 }));
+  const [dl12] = await Promise.all([rp12.waitForEvent('download'), rp12.click('#saveBarBtn')]);
   const file12b = path.join(OUT, 'free-stamps-resaved.html');
   await dl12.saveAs(file12b);
   const r12b = parseRecord(fs.readFileSync(file12b, 'utf8'));
@@ -1373,8 +1455,12 @@ const pdfTextOf = (f) => {
   const rp12c = await newReportPage(rp12Err);
   await rp12c.goto('file://' + saved12c.file);
   await rp12c.waitForTimeout(300);
-  expect(!(await rp12c.$('#decision')) && !(await rp12c.$('[data-act="decide"]')) && !!(await rp12c.$('#mgmt')) && rp12Err.length === 0,
-    'E12 最終合否 OFF で保存した HTML に合否パネルが無い（押印欄はある・エラーなし）: ' + (rp12Err.join(' / ') || 'ok'));
+  await rp12c.click('#a4 .cl-judge');
+  await rp12c.waitForTimeout(100);
+  const off12 = { dec: !!(await rp12c.$('#a4Decision')), cl: !!(await rp12c.$('.cl-decision')), pop: !!(await rp12c.$('#a4Pop')), stamps: (await rp12c.$$('#a4 .cl-stamps .stamp-box[data-a4-t="stamp"]')).length,
+    cfg: await rp12c.evaluate(() => JSON.parse(document.getElementById('recruit-mgmt-config').textContent).decision) };
+  expect(!off12.dec && !off12.cl && !off12.pop && off12.stamps === 2 && off12.cfg === null && rp12Err.length === 0,
+    'E12 最終合否 OFF で保存した HTML に合否の欄が無い（結果ストリップをクリックしても窓は出ない・押印欄は押せる・エラーなし）: ' + JSON.stringify(off12) + ' ' + (rp12Err.join(' / ') || 'ok'));
   await rp12c.close();
   await rp12.close();
   await toView('settings');
@@ -1392,6 +1478,8 @@ const pdfTextOf = (f) => {
   await fresh();
   expect(!(await visible('#brandLogo')) && await visible('#brandMark') && (await page.textContent('#brandMark')) === '新' && !(await page.$eval('#brand', el => el.classList.contains('has-logo'))),
     'E13 公開版（dist）はロゴなし・1 文字のマーク「新」');
+  expect(!saved34.html.includes('<img class="cl-title-logo"') && saved34.html.includes('<div class="cl-title"><span class="cl-title-t">面接チェックリスト報告</span>'),
+    'E13 公開版の保存 HTML の用紙の見出しはロゴなし（題名だけ）');
   {
     const cp = require('child_process');
     const ROOT13 = path.join(__dirname, '..');
@@ -1424,24 +1512,440 @@ const pdfTextOf = (f) => {
     const opts13 = await lp.$$eval('#saInterviewer option', els => els.map(e => e.textContent));
     expect(opts13.some(t => t.includes('見本 一郎')) && opts13.some(t => t.includes('試験 花子')) && !opts13.some(t => t.includes('笹川')),
       'E13 名簿は local の managers.txt に置き換わる: ' + JSON.stringify(opts13));
-    // 保存レポートのヘッダーにもロゴ
+    // 用紙の見出しにもロゴ（③ の紙・保存 HTML。高さ 7mm ≒ 26.5px。docs/SPEC-a4.md A3）
     await lp.fill('[data-field="name"]', 'ロゴ 確認');
     const [dl13] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
     const rf13 = path.join(OUT, 'local-build-report.html');
     await dl13.saveAs(rf13);
+    const logoOf = (sel) => ((s) => { const i = document.querySelector(s); if (!i) return null; const r = i.getBoundingClientRect(), z = r.width / (i.offsetWidth || 1) || 1;
+      return { alt: i.alt, natural: i.naturalWidth, h: +(r.height / z).toFixed(1), first: i.parentNode.firstElementChild === i, title: (i.parentNode.querySelector('.cl-title-t') || {}).textContent }; })(sel);
     const rp13 = await newReportPage(lerr13);
     await rp13.goto('file://' + rf13);
     await rp13.waitForTimeout(300);
-    await rp13.click('#rtViewFull');
-    await rp13.waitForTimeout(150);
-    const head13 = await rp13.evaluate(() => { const i = document.querySelector('.rh-logo'); return i ? { alt: i.alt, natural: i.naturalWidth, h: Math.round(i.getBoundingClientRect().height), mark: !!document.querySelector('.rh-mark') } : null; });
-    expect(!!head13 && head13.alt === 'SAMPLE LOGO' && head13.natural === 220 && head13.h === 28 && !head13.mark,
-      'E13 保存レポート（詳細表示）のヘッダーもロゴ（高さ 28px）: ' + JSON.stringify(head13));
+    const head13 = await rp13.evaluate(logoOf, '#a4 .cl-title-logo');
+    expect(!!head13 && head13.alt === 'SAMPLE LOGO' && head13.natural === 220 && Math.abs(head13.h - 26.5) <= 1 && head13.first && head13.title === '面接チェックリスト報告',
+      'E13 保存 HTML の用紙の見出しにロゴ（題名の左・高さ 7mm）: ' + JSON.stringify(head13));
+    await lp.click('[data-action="script-next"]');
+    await lp.waitForTimeout(300);
+    await lp.click('[data-action="judge"]');
+    await lp.waitForTimeout(400);
+    const app13 = await lp.evaluate(logoOf, '#appPaper .cl-title-logo');
+    expect(!!app13 && app13.alt === 'SAMPLE LOGO' && Math.abs(app13.h - 26.5) <= 1 && app13.first, 'E13 アプリ ③ の紙の見出しにも同じロゴ: ' + JSON.stringify(app13));
     expect(lerr13.length === 0, 'E13 ロゴ入りの版・保存レポートでページエラーなし: ' + (lerr13.join(' / ') || 'none'));
     await rp13.close();
     await lp.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
     await lp.close();
   }
+  await fresh();
+
+  // =====================================================================
+  // E14 A4 用紙（docs/SPEC-a4.md 7-3。指示「出力の HTML は A4 たてがた。その様式で印刷もしたい（別にしない）」）
+  //   (1) 寸法 (2) 画面と印刷が同じ様式 (3) 欄クリックの窓・印刷に出ない・書き出しに残らない・アプリの紙は押せない
+  //   (4) 長いメモの全文 (5) 390px の縮小表示 (6) ロゴは E13 (7) アプリの印刷と保存 HTML の印刷 (A11) 旧い保存 HTML
+  // =====================================================================
+  console.log('\n== E14 A4 用紙 ==');
+  const cp14 = require('child_process');
+  const hasPpm14 = (() => { try { cp14.execSync('pdftoppm -v', { stdio: 'ignore' }); return true; } catch (e) { return false; } })();
+  const png14 = (pdf, base) => { cp14.execSync('pdftoppm -r 96 -png -singlefile -f 1 -l 1 ' + JSON.stringify(pdf) + ' ' + JSON.stringify(base)); return base + '.png'; };
+  // 2 枚の画像を同じ大きさ（400×566）に縮め、灰度 < 235 の外接矩形（幅・高さで割った値）と 8×8 ブロックの平均差を出す
+  const cmp14 = async (fa, fb) => {
+    const cpg = await ctx.newPage();
+    const url = (f) => 'data:image/png;base64,' + fs.readFileSync(f).toString('base64');
+    const r = await cpg.evaluate(async ([ua, ub]) => {
+      const W = 400, H = 566;
+      const load = (u) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = u; });
+      const gray = async (u) => {
+        const i = await load(u), c = document.createElement('canvas'); c.width = W; c.height = H;
+        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.drawImage(i, 0, 0, W, H);
+        const d = x.getImageData(0, 0, W, H).data, g = new Float32Array(W * H);
+        for (let k = 0; k < W * H; k++) g[k] = 0.299 * d[k * 4] + 0.587 * d[k * 4 + 1] + 0.114 * d[k * 4 + 2];
+        return { g, size: [i.naturalWidth, i.naturalHeight] };
+      };
+      const box = (g) => { let x0 = W, y0 = H, x1 = -1, y1 = -1; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (g[y * W + x] < 235) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } return [x0 / W, y0 / H, (x1 + 1) / W, (y1 + 1) / H]; };
+      const A = await gray(ua), B = await gray(ub);
+      let sum = 0, n = 0, max = 0;
+      for (let by = 0; by + 8 <= H; by += 8) for (let bx = 0; bx + 8 <= W; bx += 8) {
+        let sa = 0, sb = 0;
+        for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { sa += A.g[(by + y) * W + bx + x]; sb += B.g[(by + y) * W + bx + x]; }
+        const df = Math.abs(sa - sb) / 64; sum += df; n++; max = Math.max(max, df);
+      }
+      return { sizeA: A.size, sizeB: B.size, a: box(A.g), b: box(B.g), mean: +(sum / n).toFixed(2), max: +max.toFixed(1) };
+    }, [url(fa), url(fb)]);
+    await cpg.close();
+    r.diff = r.a.map((v, i) => +Math.abs(v - r.b[i]).toFixed(4));
+    return r;
+  };
+  // 2 枚の PNG を原寸のまま比べ、どれかの色が 16 を超えて違う画素の数と外接矩形を出す（同じ用紙を同じ設定で印刷した 2 つの PDF の比較用）
+  const diff14 = async (fa, fb) => {
+    const cpg = await ctx.newPage();
+    const url = (f) => 'data:image/png;base64,' + fs.readFileSync(f).toString('base64');
+    const r = await cpg.evaluate(async ([ua, ub]) => {
+      const load = (u) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = u; });
+      const px = (i) => { const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight; const x = c.getContext('2d'); x.drawImage(i, 0, 0); return x.getImageData(0, 0, c.width, c.height).data; };
+      const A = await load(ua), B = await load(ub);
+      if (A.naturalWidth !== B.naturalWidth || A.naturalHeight !== B.naturalHeight) return { size: false, n: -1 };
+      const W = A.naturalWidth, da = px(A), db = px(B);
+      let n = 0, x0 = W, y0 = 1e9, x1 = -1, y1 = -1;
+      for (let k = 0; k < da.length; k += 4) {
+        if (Math.abs(da[k] - db[k]) > 16 || Math.abs(da[k + 1] - db[k + 1]) > 16 || Math.abs(da[k + 2] - db[k + 2]) > 16) {
+          const p = k / 4, x = p % W, y = (p - x) / W; n++; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+        }
+      }
+      return { size: true, n, box: n ? [x0, y0, x1, y1] : null };
+    }, [url(fa), url(fb)]);
+    await cpg.close();
+    return r;
+  };
+  const e14 = [];
+  const a4State = (pg) => pg.evaluate(() => { const sh = document.querySelector('#a4 .cl-sheet'); return { cls: sh.className, zoom: sh.style.zoom }; });
+  // (1) 寸法: 画面の用紙は 210×297mm（96dpi で 793.7×1122.5px）・内側の余白 8mm／10mm
+  const p14 = await newReportPage(e14);
+  await p14.setViewportSize({ width: 1440, height: 1300 });
+  await p14.goto('file://' + saved9.file);
+  await p14.waitForTimeout(300);
+  await p14.mouse.move(0, 0);
+  const dim14 = await p14.evaluate(() => { const a = document.getElementById('a4'), r = a.getBoundingClientRect(), cs = getComputedStyle(a);
+    return { w: +r.width.toFixed(2), h: +r.height.toFixed(2), zoom: getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom').trim(), pt: +parseFloat(cs.paddingTop).toFixed(2), pl: +parseFloat(cs.paddingLeft).toFixed(2),
+      live: document.body.classList.contains('a4-live'), first: document.body.firstElementChild === a, bg: getComputedStyle(document.body).backgroundColor, paper: cs.backgroundColor }; });
+  expect(Math.abs(dim14.w - 793.7) <= 1 && Math.abs(dim14.h - 1122.5) <= 1 && dim14.zoom === '' && Math.abs(dim14.pt - 30.24) <= 0.2 && Math.abs(dim14.pl - 37.8) <= 0.2 && dim14.live && dim14.first &&
+    dim14.bg === 'rgb(230, 233, 238)' && dim14.paper === 'rgb(255, 255, 255)',
+    'E14 (1) 画面の用紙は body の最初の要素・210×297mm（793.7×1122.5px）・内側の余白 8mm／10mm・灰色の背景に白い用紙・1440px では縮小なし: ' + JSON.stringify(dim14));
+  await p14.screenshot({ path: path.join(OUT, 'a4-screen.png') });
+  // (2) 画面と印刷が同じ様式: 用紙の要素のスクリーンショットと PDF の 1 ページ目の画像を同じ大きさに縮めて重ねる
+  const scr14 = path.join(OUT, 'a4-screen-paper.png');
+  await p14.locator('#a4').screenshot({ path: scr14 });
+  const st14a = await a4State(p14);
+  const pdf14 = path.join(OUT, 'a4-print.pdf');
+  await p14.pdf({ path: pdf14, format: 'A4', printBackground: true });
+  const n14 = pdfPagesOf(pdf14);
+  expect((n14 === -1 || n14 === 1) && JSON.stringify(await a4State(p14)) === JSON.stringify(st14a), 'E14 (2) 保存 HTML をそのまま印刷して 1 ページ（印刷の前後で用紙の状態は変わらない）: ' + n14);
+  let prn14 = null;
+  if (hasPpm14) {
+    prn14 = png14(pdf14, path.join(OUT, 'a4-print'));
+    const c14 = await cmp14(scr14, prn14);
+    expect(c14.diff.every(d => d <= 0.02) && c14.mean <= 4, 'E14 (2) 画面の用紙と印刷（PDF の画像）が同じ様式: 白以外の外接矩形の差が ±2% 以内・8×8 ブロックの平均差 4 以下: ' + JSON.stringify(c14));
+  } else console.log('SKIP pdftoppm が使えないため画面と印刷の画像の比較を省略');
+  // (3) 窓: 用紙の押印欄をクリック → 窓（role=dialog・欄名・担当者にフォーカス）→ Esc で閉じて欄にフォーカスが戻る
+  await openStamp(p14, 'final');
+  const pp14 = await p14.evaluate(() => { const p = document.getElementById('a4Pop'), b = document.querySelector('#a4 .stamp-box[data-field-id="final"]');
+    return p && { role: p.getAttribute('role'), h: document.getElementById('a4PopH').textContent, focus: document.activeElement === p.querySelector('select'), exp: b.getAttribute('aria-expanded'),
+      body: p.parentNode === document.body, shown: p.getClientRects().length > 0, label: b.getAttribute('aria-label') }; });
+  await p14.keyboard.press('Escape');
+  await p14.waitForTimeout(80);
+  const esc14 = await p14.evaluate(() => ({ pop: !!document.getElementById('a4Pop'), focus: document.activeElement && document.activeElement.getAttribute('data-field-id'), exp: document.querySelector('#a4 .stamp-box[data-field-id="final"]').getAttribute('aria-expanded') }));
+  expect(!!pp14 && pp14.role === 'dialog' && pp14.h === '最終確認' && pp14.focus && pp14.exp === 'true' && pp14.body && pp14.shown && pp14.label === '最終確認の押印' && !esc14.pop && esc14.focus === 'final' && esc14.exp === null,
+    'E14 (3) 用紙の押印欄をクリックすると窓（role=dialog・欄名・担当者にフォーカス・body 直下）・Esc で閉じて欄にフォーカスが戻る: ' + JSON.stringify({ pp14, esc14 }));
+  //   キーボード操作の直後（Esc で欄に戻った・Shift+Tab で「最終合否」に移った）に印刷しても、欄のフォーカス枠は紙に出ない（画面では青い枠）
+  const ring14 = async () => {
+    const scr = await p14.evaluate(() => { const a = document.activeElement, cs = getComputedStyle(a); return { id: a.id || a.getAttribute('data-field-id'), style: cs.outlineStyle, color: cs.outlineColor }; });
+    await p14.emulateMedia({ media: 'print' });
+    const prn = await p14.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
+    await p14.emulateMedia({ media: null });
+    return Object.assign(scr, { print: prn });
+  };
+  const ringF14 = await ring14();
+  await p14.keyboard.press('Shift+Tab');
+  await p14.keyboard.press('Shift+Tab');
+  await p14.waitForTimeout(50);
+  const ringD14 = await ring14();
+  let ringP14 = null;
+  if (hasPpm14 && prn14) {
+    const pdf = path.join(OUT, 'a4-print-focus.pdf');
+    await p14.pdf({ path: pdf, format: 'A4', printBackground: true });
+    ringP14 = await diff14(png14(pdf, path.join(OUT, 'a4-print-focus')), prn14);
+  }
+  expect(ringF14.id === 'final' && ringF14.style === 'solid' && ringF14.color === 'rgb(31, 95, 191)' && ringF14.print === 'none' &&
+    ringD14.id === 'a4Decision' && ringD14.style === 'solid' && ringD14.print === 'none' && (ringP14 === null || (ringP14.size && ringP14.n === 0)),
+    'E14 (3) キーボード操作の直後に印刷しても欄のフォーカス枠は出ない（画面は青い枠・印刷は outline なし・PDF の画像はフォーカスなしの印刷と画素単位で同じ）: ' + JSON.stringify({ ringF14, ringD14, ringP14 }));
+  await p14.focus('#a4 .stamp-box[data-field-id="final"]');
+  await p14.keyboard.press('Enter');
+  await p14.waitForTimeout(80);
+  const ent14 = !!(await p14.$('#a4Pop'));
+  await p14.keyboard.press('Escape');
+  await p14.waitForTimeout(80);
+  await p14.keyboard.press('Space');
+  await p14.waitForTimeout(80);
+  const spc14 = !!(await p14.$('#a4Pop'));
+  await p14.mouse.click(8, 8);
+  await p14.waitForTimeout(80);
+  expect(ent14 && spc14 && !(await p14.$('#a4Pop')), 'E14 (3) Enter・Space でも窓が開き、窓の外のクリックで閉じる: ' + JSON.stringify({ ent14, spc14 }));
+  // ホバーの案内（画面だけ。印刷では出ない。寸法を変えない）
+  const boxSz14 = () => p14.evaluate(() => { const r = document.querySelector('#a4 .stamp-box[data-field-id="final"]').getBoundingClientRect(); return r.width + 'x' + r.height + '|' + document.querySelector('#a4 .cl-sheet').getBoundingClientRect().height; });
+  const sz14a = await boxSz14();
+  await p14.hover('#a4 .stamp-box[data-field-id="final"]');
+  const hv14 = await p14.evaluate(() => { const b = document.querySelector('#a4 .stamp-box[data-field-id="final"]'); return { after: getComputedStyle(b, '::after').content, outline: getComputedStyle(b).outlineStyle, cursor: getComputedStyle(b).cursor }; });
+  const sz14b = await boxSz14();
+  await p14.emulateMedia({ media: 'print' });
+  const hp14 = await p14.evaluate(() => getComputedStyle(document.querySelector('#a4 .stamp-box[data-field-id="final"]'), '::after').content);
+  await p14.emulateMedia({ media: null });
+  expect(hv14.after.includes('クリックで押印') && hv14.outline === 'solid' && hv14.cursor === 'pointer' && !hp14.includes('クリックで押印') && sz14a === sz14b,
+    'E14 (3) ホバーで薄い枠と「クリックで押印」（印刷の表示では出ない・欄と用紙の寸法は変わらない）: ' + JSON.stringify({ hv14, hp14, sz14a, sz14b }));
+  //   案内は 1 行（折り返さない）。最終合否の欄（未押印で 86×58px と小さい）の案内は欄の上の辺の外に出し、「未押印」・押した日付を隠さない
+  const hint14 = async (pg, sel) => { await pg.hover(sel); return pg.evaluate((q) => { const el = document.querySelector(q), a = getComputedStyle(el, '::after');
+    return { c: a.content, ws: a.whiteSpace, h: parseFloat(a.height), bottom: parseFloat(a.bottom), ch: el.clientHeight, w: Math.round(el.getBoundingClientRect().width) }; }, sel); };
+  const hD14 = await hint14(p14, '#a4Decision');
+  const hS14 = await hint14(p14, '#a4 .stamp-box[data-field-id="final"]');
+  const p14h = await newReportPage(e14);
+  await p14h.goto('file://' + path.join(OUT, 'stamps-2-reject.html'));
+  await p14h.waitForTimeout(300);
+  const hN14 = await hint14(p14h, '#a4Decision.is-none');
+  await p14h.close();
+  const above14 = (x) => x.c.includes('クリックで合否を押す') && x.ws === 'nowrap' && x.h <= 13 && x.bottom >= x.ch - 0.5;
+  expect(above14(hD14) && above14(hN14) && hN14.w < 100 && hS14.c.includes('クリックで押印') && hS14.ws === 'nowrap' && hS14.h <= 13 && hS14.bottom < hS14.ch,
+    'E14 (3) 案内は 1 行。最終合否の欄（押した後・未押印）の案内は欄の上の辺の外（欄の中の文字を隠さない）・押印欄は欄の右下: ' + JSON.stringify({ hD14, hN14, hS14 }));
+  await p14.mouse.move(0, 0);
+  // 押印を 1 つ変えて保存バーを出し、窓も開いたまま印刷 → 窓・バー・案内は PDF に出ない
+  await openStamp(p14, 'interviewer');
+  await popAct(p14, 'unstamp');
+  await openStamp(p14, 'final');
+  await p14.hover('#a4 .stamp-box[data-field-id="interviewer"]');
+  await p14.screenshot({ path: path.join(OUT, 'a4-popover.png') });
+  const vis14 = { pop: await shownIn(p14, '#a4Pop'), bar: await shownIn(p14, '#saveBar') };
+  const pdf14b = path.join(OUT, 'a4-print-popover.pdf');
+  await p14.pdf({ path: pdf14b, format: 'A4', printBackground: true });
+  const n14b = pdfPagesOf(pdf14b);
+  const t14b = pdfTextOf(pdf14b);
+  const leak14 = t14b === null ? [] : ['閉じる', '押印を保存', '押印・合否を変更しました', 'クリックで押印', '担当者を選択', '名簿にない担当者'].filter(w => t14b.includes(w));
+  expect(vis14.pop && vis14.bar && (n14b === -1 || n14b === 1) && !leak14.length && (t14b === null || t14b.includes('押印二郎')),
+    'E14 (3) 窓と保存バーを出したまま印刷しても 1 ページ・窓・バー・ホバーの案内は印刷されない: ' + JSON.stringify({ vis14, pages: n14b, leak14 }));
+  // 書き出し: 窓・バー・押せる欄の印・縮小の変数を外した複製を書き出す（生きているページはそのまま）
+  const [dl14] = await Promise.all([p14.waitForEvent('download'), p14.click('#saveBarBtn')]);
+  const f14 = path.join(OUT, 'a4-exported.html');
+  await dl14.saveAs(f14);
+  const h14 = fs.readFileSync(f14, 'utf8');
+  const left14 = ['class="pop', 'id="a4Pop"', 'class="savebar', 'id="saveBar"', 'a4-live', 'data-a4-t=', '--a4-zoom', 'aria-expanded', 'tabindex=', 'role="button"'].filter(w => shownHtml(h14).includes(w));
+  const r14 = parseRecord(h14);
+  expect(!left14.length && h14.startsWith('<!DOCTYPE html>\n<html') && !r14.management.interviewer && !!r14.management.final && (await p14.evaluate(() => document.body.classList.contains('a4-live'))),
+    'E14 (3) 書き出したファイルに窓・保存バー・a4-live・押せる欄の印・--a4-zoom が残らない（埋め込みデータは変更どおり）: ' + JSON.stringify(left14));
+  const p14b = await newReportPage(e14);
+  await p14b.goto('file://' + f14);
+  await p14b.waitForTimeout(300);
+  const re14 = await p14b.evaluate(() => { const r = document.getElementById('a4').getBoundingClientRect(); return { pop: !!document.querySelector('.pop'), bar: !!document.querySelector('.savebar'), live: document.body.classList.contains('a4-live'),
+    w: +r.width.toFixed(1), h: +r.height.toFixed(1), hanko: document.querySelectorAll('#a4 svg.hanko').length, marks: document.querySelectorAll('#a4 [data-a4-t="stamp"]').length }; });
+  expect(!re14.pop && !re14.bar && re14.live && Math.abs(re14.w - 793.7) <= 1 && Math.abs(re14.h - 1122.5) <= 1 && re14.hanko === 1 && re14.marks === 2,
+    'E14 (3) 書き出したファイルを開くと窓・バーなし・同じ寸法の用紙・押せる欄はスクリプトが付け直す: ' + JSON.stringify(re14));
+  await p14b.close();
+  // 保存バーは右下（用紙の上部＝見出し・氏名・最終合否を隠さない）。出ているあいだは下に余白を足し、いちばん下までスクロールすれば用紙・注記に重ならない。
+  //   保存後は［×］で閉じられる（変更中は閉じられない）。1280×768 と 390×844（用紙が 1 画面に収まる幅）で確かめる
+  const bar14 = (pg) => pg.evaluate(() => {
+    const R = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom) }; };
+    const hit = (a, b) => !!a && !!b && a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+    const el = document.getElementById('saveBar'), bar = R(el), x = document.getElementById('saveBarClose');
+    return { bar, vh: window.innerHeight, vw: document.documentElement.clientWidth, cls: document.body.className, pad: parseFloat(getComputedStyle(document.body).paddingBottom), bh: el ? el.offsetHeight : 0,
+      x: !!x && !x.hidden && x.getClientRects().length > 0, msg: (document.getElementById('saveBarMsg') || {}).textContent || '',
+      hitDec: hit(bar, R(document.getElementById('a4Decision'))), hitTitle: hit(bar, R(document.querySelector('#a4 .cl-title'))), hitName: hit(bar, R(document.querySelector('#a4 .cl-sh-name'))),
+      hitPaper: hit(bar, R(document.getElementById('a4'))), hitFoot: hit(bar, R(document.getElementById('a4Foot'))) };
+  });
+  const scr14s = (pg, y) => pg.evaluate((v) => window.scrollTo(0, v === 'end' ? document.documentElement.scrollHeight : v), y);
+  const p14s = await newReportPage(e14);
+  await p14s.setViewportSize({ width: 1280, height: 768 });
+  await p14s.goto('file://' + saved9.file);
+  await p14s.waitForTimeout(300);
+  await openStamp(p14s, 'interviewer');
+  await popAct(p14s, 'unstamp');
+  const bs14 = {};
+  for (const y of [0, 120, 'end']) { await scr14s(p14s, y); bs14['dirty' + y] = await bar14(p14s); }
+  await scr14s(p14s, 0);
+  const [dl14s] = await Promise.all([p14s.waitForEvent('download'), p14s.click('#saveBarBtn')]);
+  const f14s = path.join(OUT, 'a4-exported-bar.html');
+  await dl14s.saveAs(f14s);
+  for (const y of [0, 120, 'end']) { await scr14s(p14s, y); bs14['saved' + y] = await bar14(p14s); }
+  const low14 = (b) => !!b.bar && Math.abs(b.bar.b - (b.vh - 12)) <= 1 && b.bar.r <= b.vw - 11 && b.cls.split(' ').includes('a4-sb') && Math.abs(b.pad - (b.bh + 12)) <= 1;
+  const top14 = (b) => !b.hitDec && !b.hitTitle && !b.hitName;
+  await p14s.click('#saveBarClose');
+  await p14s.waitForTimeout(80);
+  const cl14s = await p14s.evaluate(() => ({ bar: !!document.getElementById('saveBar'), cls: document.body.className, style: document.body.getAttribute('style'), pad: getComputedStyle(document.body).paddingBottom }));
+  const h14s = fs.readFileSync(f14s, 'utf8');
+  expect(['dirty0', 'dirty120', 'dirtyend', 'saved0', 'saved120', 'savedend'].every(k => low14(bs14[k])) &&
+    top14(bs14.dirty0) && top14(bs14.dirty120) && top14(bs14.saved0) && top14(bs14.saved120) &&
+    !bs14.dirtyend.hitPaper && !bs14.dirtyend.hitFoot && !bs14.savedend.hitPaper && !bs14.savedend.hitFoot &&
+    !bs14.dirty0.x && bs14.saved0.x && bs14.saved0.msg === '保存しました（保存できなかったときは再保存）' &&
+    !cl14s.bar && cl14s.cls === 'a4-doc a4-live' && cl14s.style === null && cl14s.pad === '0px' &&
+    /<body class="a4-doc" data-filename="[^"]+">/.test(h14s) && !shownHtml(h14s).includes('a4-sb') && !shownHtml(h14s).includes('saveBarClose'),
+    'E14 (3) 1280×768: 保存バーは右下で見出し・氏名・最終合否を隠さない（スクロール 0／120px）・いちばん下までスクロールすれば用紙と注記に重ならない・保存後は［×］で閉じる・書き出しに余白の印が残らない: ' +
+    JSON.stringify({ d0: bs14.dirty0.bar, dEnd: [bs14.dirtyend.hitPaper, bs14.dirtyend.hitFoot], s0: bs14.saved0.bar, pad: bs14.saved0.pad, bh: bs14.saved0.bh, cl14s }));
+  await p14s.setViewportSize({ width: 390, height: 844 });
+  await p14s.waitForTimeout(250);
+  await openStamp(p14s, 'final');
+  await popAct(p14s, 'unstamp');
+  const bn14 = await bar14(p14s);
+  await Promise.all([p14s.waitForEvent('download'), p14s.click('#saveBarBtn')]);
+  const bn14s = await bar14(p14s);
+  const in14 = (b) => !!b.bar && b.bar.l >= 0 && b.bar.r <= 390 && b.bar.b <= b.vh && !b.hitPaper && !b.hitTitle && !b.hitName && !b.hitDec;
+  expect(in14(bn14) && in14(bn14s) && bn14s.x && (await p14s.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 1,
+    'E14 (5) 390×844: 保存バー（変更中・保存後）は縮小した用紙の下に出て、見出し・氏名・最終合否・用紙に重ならない（保存後は［×］あり・横スクロールなし）: ' + JSON.stringify({ bn14: bn14.bar, bn14s: bn14s.bar }));
+  await p14s.close();
+  // アプリ ③ の紙の欄はクリックしても何もしない（操作は下のカード。docs/SPEC-a4.md A10）
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', saved9.file);
+  await wait(500);
+  const mg14 = () => st(() => JSON.stringify([window.RecruitApp.state.management, window.RecruitApp.state.decision]));
+  const mg14a = await mg14();
+  await page.click('#appPaper .stamp-box[data-field-id="final"]');
+  await page.click('#appPaperDecision');
+  await wait(150);
+  expect(await step() === 4 && !(await page.$('.pop')) && !(await page.$('#a4Pop')) && (await mg14()) === mg14a && !(await page.$('#appPaper [data-a4-t]')),
+    'E14 (3) アプリ ③ の紙の押印欄・最終合否をクリックしても窓は出ず、押印・合否は変わらない');
+  await sshot('a4-app.png');
+  // (7) アプリの A4 印刷と保存 HTML の印刷: どちらも 1 ページ・同じ見出し・同じ様式（同じ記録）
+  await st(() => window.RecruitApp.prepareChecklistSheet(true));
+  await page.emulateMedia({ media: 'print' });
+  const pdf14app = path.join(OUT, 'a4-app-print.pdf');
+  await page.pdf({ path: pdf14app, format: 'A4', printBackground: true });
+  await page.emulateMedia({ media: null });
+  await st(() => window.RecruitApp.prepareChecklistSheet(false));
+  const nA14 = pdfPagesOf(pdf14app), tA14 = pdfTextOf(pdf14app), tS14 = pdfTextOf(pdf14);
+  const HEAD14 = ['面接チェックリスト報告', '台本2026-10-08版／TOHOシネマズ新宿／作成2026/10/10'];
+  expect((nA14 === -1 || nA14 === 1) && (n14 === -1 || n14 === 1) && (tA14 === null || tS14 === null || HEAD14.every(h => tA14.includes(h) && tS14.includes(h))),
+    'E14 (7) アプリの A4 印刷と保存 HTML の印刷はどちらも 1 ページ・同じ見出し（題名・台本の版／劇場／作成日）: ' + JSON.stringify({ app: nA14, saved: n14 }));
+  if (hasPpm14 && prn14) {
+    const c14b = await cmp14(png14(pdf14app, path.join(OUT, 'a4-app-print')), prn14);
+    expect(c14b.diff.every(d => d <= 0.02) && c14b.mean <= 4, 'E14 (7) アプリの印刷と保存 HTML の印刷の画像が同じ様式（外接矩形 ±2%・平均差 4 以下）: ' + JSON.stringify(c14b));
+  }
+  // (4) 長いメモ: 「…」で切れたメモはクリックで全文（埋め込みの記録の値。textContent で入れる）
+  const p14c = await newReportPage(e14);
+  await p14c.goto('file://' + saved39.file);
+  await p14c.waitForTimeout(300);
+  const st14h = await a4State(p14c);
+  const rec14 = saved39.rec;
+  const nMemo14 = await p14c.evaluate(() => document.querySelectorAll('#a4 [data-a4-t="memo"]').length);
+  await p14c.hover('#a4 .cl-nm-iv .cl-nm-v.cl-cut');
+  const ul14 = await p14c.evaluate(() => getComputedStyle(document.querySelector('#a4 .cl-nm-iv .cl-nm-v')).textDecorationLine);
+  await p14c.click('#a4 .cl-nm-iv .cl-nm-v.cl-cut');
+  const iv14 = { h: await txtIn(p14c, '#a4PopH'), t: await txtIn(p14c, '#a4Pop .pop-text'), kind: await p14c.evaluate(() => document.getElementById('a4Pop').getAttribute('data-kind')) };
+  await p14c.keyboard.press('Escape');
+  const rtId14 = await p14c.evaluate(() => { const el = document.querySelector('#a4 .cl-rt-nt.cl-cut'); return el ? el.closest('tr').getAttribute('data-cl-item') : null; });
+  if (rtId14) await p14c.click('#a4 tr[data-cl-item="' + rtId14 + '"] .cl-rt-nt');
+  const rt14 = rtId14 ? { h: await txtIn(p14c, '#a4PopH'), t: await txtIn(p14c, '#a4Pop .pop-text') } : null;
+  await p14c.keyboard.press('Escape');
+  expect(nMemo14 >= 1 && ul14.includes('underline') && iv14.kind === 'memo' && iv14.h === '面接所見' && iv14.t === rec14.interviewNotes && iv14.t.length === 1500 && !!rt14 && rt14.t === rec14.checklist.notes[rtId14] && rt14.h.endsWith(' のメモ'),
+    'E14 (4) 「…」で切れた面接所見・確認点のメモはホバーで下線・クリックで窓に全文（記録の値と一致）: ' + JSON.stringify({ nMemo14, ul14, iv: [iv14.h, iv14.t.length], rt: rt14 && [rtId14, rt14.h, rt14.t.length] }));
+  //   窓が欄の上にも下にも入らないとき（1366×768 で欄が画面の上から 300px）は画面の中に収める（［閉じる］が見える）
+  await p14c.setViewportSize({ width: 1366, height: 768 });
+  await p14c.waitForTimeout(200);
+  await p14c.evaluate(() => { const r = document.querySelector('#a4 .cl-nm-iv .cl-nm-v').getBoundingClientRect(); window.scrollBy(0, r.top - 300); });
+  await p14c.waitForTimeout(80);
+  await p14c.click('#a4 .cl-nm-iv .cl-nm-v.cl-cut');
+  const pl14 = await p14c.evaluate(() => { const p = document.getElementById('a4Pop').getBoundingClientRect(), c = document.querySelector('#a4Pop [data-act="close"]').getBoundingClientRect(), f = document.querySelector('#a4 .cl-nm-iv .cl-nm-v').getBoundingClientRect();
+    const b = document.querySelector('#a4Pop .pop-b');
+    return { top: Math.round(p.top), bottom: Math.round(p.bottom), h: Math.round(p.height), closeB: Math.round(c.bottom), fieldT: Math.round(f.top), fieldB: Math.round(f.bottom), vh: window.innerHeight, scroll: b.scrollHeight > b.clientHeight + 1 }; });
+  await p14c.keyboard.press('Escape');
+  expect(pl14.fieldT - 6 - pl14.h < 8 && pl14.fieldB + 6 + pl14.h > pl14.vh - 8 && pl14.top >= 8 && pl14.bottom <= pl14.vh - 7 && pl14.closeB <= pl14.bottom && pl14.scroll,
+    'E14 (4) 全文の窓が欄の上にも下にも入らないときは画面の中に収める（本文だけがスクロールし、［閉じる］は窓の中に見えている）: ' + JSON.stringify(pl14));
+  await p14c.close();
+  //   質問の回答を省いた用紙（.cl-compact-2）: 案内の行をクリックすると全メモ（省いた質問の回答を含む）
+  let m14 = null;
+  for (const extra of [20, 30, 45]) {
+    const f = path.join(OUT, 'a4-memos.html');
+    fs.writeFileSync(f, await page.evaluate(mk39, { q: 300, iv: 2000, extra }));
+    const pg = await newReportPage(e14);
+    await pg.goto('file://' + f);
+    await pg.waitForTimeout(300);
+    if ((await a4State(pg)).cls.includes('cl-compact-2')) { m14 = { pg, f, extra }; break; }
+    await pg.close();
+  }
+  if (!m14) expect(false, 'E14 (4) .cl-compact-2 になる記録を作れない');
+  else {
+    const recM14 = parseRecord(fs.readFileSync(m14.f, 'utf8'));
+    const ref14 = await m14.pg.evaluate(() => { const r = document.querySelector('#a4 .cl-nm-ref'); return { t: r.innerText.trim(), mark: r.getAttribute('data-a4-t'), role: r.getAttribute('role') }; });
+    await m14.pg.click('#a4 .cl-nm-ref');
+    const ms14 = await m14.pg.evaluate(() => { const rows = Array.from(document.querySelectorAll('#a4 .cl-nm-row'));
+      return { rows: rows.map(r => r.getAttribute('data-cl-block') || (r.classList.contains('cl-nm-iv') ? 'iv' : 'memo')), hidden: rows.filter(r => !r.getClientRects().length).length,
+        dd: Array.from(document.querySelectorAll('#a4Pop .pop-memos dd')).map(e => e.textContent), dt: Array.from(document.querySelectorAll('#a4Pop .pop-memos dt')).map(e => e.textContent), h: document.getElementById('a4PopH').textContent }; });
+    const want14 = ms14.rows.map(k => k === 'iv' ? recM14.interviewNotes : k === 'memo' ? recM14.applicant.reviewerNotes : recM14.checklist.notes[k]);
+    expect(ref14.mark === 'memos' && ref14.role === 'button' && ref14.t === '質問の回答は省略（画面でこの行をクリックすると、回答と「…」で切れたメモの全文を表示します）' && ms14.h === '面接メモ（全文）' &&
+      ms14.hidden >= 1 && ms14.dd.length === ms14.rows.length && JSON.stringify(ms14.dd) === JSON.stringify(want14) && ms14.dt[ms14.dt.length - 1] === '面接所見',
+      'E14 (4) 質問の回答を省いた用紙（.cl-compact-2）は案内の行のクリックで全メモ（省いた回答を含む・記録の値と一致）: ' + JSON.stringify({ extra: m14.extra, ref14, rows: ms14.rows, hidden: ms14.hidden, dt: ms14.dt }));
+    await m14.pg.close();
+  }
+  // (5) 390px: 用紙ごと縮小（横スクロールなし・縦横比はそのまま・押印行は 2 列のまま）。窓は画面の中。印刷は変わらず 1 ページ
+  const p14e = await newReportPage(e14);
+  await p14e.goto('file://' + saved9.file);
+  await p14e.waitForTimeout(300);
+  await p14e.setViewportSize({ width: 390, height: 844 });
+  await p14e.waitForTimeout(250);
+  const nr14f = () => p14e.evaluate(() => { const a = document.getElementById('a4'), r = a.getBoundingClientRect(), row = document.querySelector('#a4 .cl-stamps .stamp-row');
+    return { ov: document.documentElement.scrollWidth - window.innerWidth, zoom: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom')), w: +r.width.toFixed(1), ratio: +(r.height / r.width).toFixed(4),
+      cols: getComputedStyle(row).gridTemplateColumns.split(' ').length }; });
+  const nr14 = await nr14f();
+  const st14n = await a4State(p14e);
+  expect(nr14.ov <= 1 && Math.abs(nr14.zoom - 0.451) <= 0.01 && Math.abs(nr14.w - 358) <= 2 && Math.abs(nr14.ratio - 297 / 210) <= 0.01 && nr14.cols === 2,
+    'E14 (5) 390px は用紙ごと縮小（--a4-zoom≒0.451・幅 358px・縦横比 297/210・押印行 2 列・横スクロールなし）: ' + JSON.stringify(nr14));
+  await p14e.mouse.move(0, 0);
+  await p14e.screenshot({ path: path.join(OUT, 'a4-narrow.png'), fullPage: true });
+  await openStamp(p14e, 'interviewer');
+  const pr14 = await p14e.evaluate(() => { const r = document.getElementById('a4Pop').getBoundingClientRect(); return { l: Math.round(r.left), r: Math.round(r.right) }; });
+  await p14e.keyboard.press('Escape');
+  await openDecision(p14e);
+  const pd14 = await p14e.evaluate(() => { const r = document.getElementById('a4Pop').getBoundingClientRect(); return { l: Math.round(r.left), r: Math.round(r.right) }; });
+  await p14e.keyboard.press('Escape');
+  expect(pr14.l >= 0 && pr14.r <= 390 && pd14.l >= 0 && pd14.r <= 390, 'E14 (5) 390px でも窓は画面の中（押印・最終合否）: ' + JSON.stringify({ pr14, pd14 }));
+  const pdf14n = path.join(OUT, 'a4-narrow.pdf');
+  await p14e.pdf({ path: pdf14n, format: 'A4', printBackground: true });
+  const n14n = pdfPagesOf(pdf14n);
+  expect((n14n === -1 || n14n === 1) && JSON.stringify(await a4State(p14e)) === JSON.stringify(st14n) && JSON.stringify(st14n) === JSON.stringify(st14a),
+    'E14 (5) 390px で印刷しても 1 ページ（計測し直さない・1440px と同じ詰め方）: ' + JSON.stringify({ pages: n14n, st14n }));
+  if (hasPpm14 && prn14) {
+    const c14n = await cmp14(png14(pdf14n, path.join(OUT, 'a4-narrow-print')), prn14);
+    expect(c14n.diff.every(d => d <= 0.02) && c14n.mean <= 4, 'E14 (5) 390px の画面から印刷しても 1440px と同じ用紙: ' + JSON.stringify(c14n));
+  }
+  await p14e.close();
+  //   重いサンプル（.cl-compact が付く）を 390px で最初から開く: 計測は縮小（--a4-zoom）を外して行うので、1440px で開いたときと同じ詰め方・同じ zoom。
+  //   印刷の表示でも用紙の内寸（押印行まで）に収まる。この幅で押印を変えて書き出したファイルに --a4-zoom が残らない（生きているページは縮小のまま）
+  const p14n = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP', acceptDownloads: true }).then(c => c.newPage());
+  p14n.on('pageerror', e => e14.push(e.message));
+  p14n.on('console', m => { if (m.type() === 'error') e14.push('console: ' + m.text()); });
+  await p14n.clock.setFixedTime(NOW);
+  await p14n.goto('file://' + saved39.file);
+  await p14n.waitForTimeout(400);
+  const st14w = await a4State(p14n);
+  const zw14 = await p14n.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom').trim());
+  await p14n.emulateMedia({ media: 'print' });
+  const fp14 = await p14n.evaluate(() => { const a = document.getElementById('a4').getBoundingClientRect(), sh = document.querySelector('#a4 .cl-sheet').getBoundingClientRect(), stp = document.querySelector('#a4 .cl-stamps').getBoundingClientRect(), pad = parseFloat(getComputedStyle(document.getElementById('a4')).paddingBottom);
+    return { sheetH: Math.round(sh.height), stampsB: Math.round(stp.bottom), innerB: Math.round(a.bottom - pad) }; });
+  const pdf14w = path.join(OUT, 'a4-narrow-heavy.pdf');
+  await p14n.pdf({ path: pdf14w, format: 'A4', printBackground: true });
+  await p14n.emulateMedia({ media: null });
+  const n14w = pdfPagesOf(pdf14w);
+  await openStamp(p14n, 'interviewer');
+  await popAct(p14n, 'unstamp');
+  const [dl14w] = await Promise.all([p14n.waitForEvent('download'), p14n.click('#saveBarBtn')]);
+  const f14w = path.join(OUT, 'a4-exported-narrow.html');
+  await dl14w.saveAs(f14w);
+  const h14w = fs.readFileSync(f14w, 'utf8');
+  const zw14b = await p14n.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom').trim());
+  await p14n.context().close();
+  expect(st14h.cls.includes('cl-compact') && JSON.stringify(st14w) === JSON.stringify(st14h) && Math.abs(parseFloat(zw14) - 0.451) <= 0.01 && fp14.sheetH <= 1052 && fp14.stampsB <= fp14.innerB + 1 &&
+    (n14w === -1 || n14w === 1) && !shownHtml(h14w).includes('--a4-zoom') && h14w.includes('<html lang="ja">') && zw14b === zw14,
+    'E14 (5) 重いサンプルを 390px で最初から開いても 1440px と同じ詰め方（縮小を外して計測）・印刷で押印行まで内寸に収まる・この幅で書き出したファイルに --a4-zoom が残らない: ' +
+    JSON.stringify({ st14h, st14w, zw14, fp14, pages: n14w }));
+  await p14.close();
+  // (A11) 旧い保存 HTML（A4 化の前に出力したもの）はそのまま開け（自分のスクリプトで動く）、アプリで読み込んで保存し直すと A4 の用紙になる
+  const fx14 = path.join(FIX, 'legacy-report-view.html');
+  const p14f = await newReportPage(e14);
+  await p14f.goto('file://' + fx14);
+  await p14f.waitForTimeout(300);
+  const old14 = await p14f.evaluate(() => ({ body: document.body.className, full: !!document.getElementById('rtViewFull'), paper: !!document.getElementById('clPaper') }));
+  await p14f.click('#rtViewFull');
+  await p14f.waitForTimeout(150);
+  const old14b = await p14f.evaluate(() => document.body.className);
+  await p14f.close();
+  expect(old14.body.includes('view-report') && old14.full && old14.paper && old14b.includes('view-full'), 'E14 (A11) 旧い保存 HTML（報告書／詳細の切替つき）はそのまま開いて動く: ' + JSON.stringify({ old14, old14b }));
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', fx14);
+  await wait(500);
+  const s14 = await st(() => { const s = window.RecruitApp.state; return { step: s.step, name: s.applicant.name, iv: (s.management.interviewer || {}).name }; });
+  const sv14 = await saveRecord('legacy-report-view-resaved.html');
+  const p14g = await newReportPage(e14);
+  await p14g.goto('file://' + sv14.file);
+  await p14g.waitForTimeout(300);
+  const new14 = await p14g.evaluate(() => ({ body: document.body.className, a4: !!document.getElementById('a4'), hanko: document.querySelectorAll('#a4 svg.hanko').length, name: (document.querySelector('#a4 .cl-sh-name') || {}).textContent }));
+  await p14g.close();
+  expect(s14.step === 4 && s14.name === '旧版 花子' && s14.iv === '笹川 晴央' && new14.body === 'a4-doc a4-live' && new14.a4 && new14.hanko === 1 && new14.name === '旧版 花子さん',
+    'E14 (A11) 旧い保存 HTML をアプリで読み込み → 保存し直すと A4 の用紙（押印を引き継ぐ）: ' + JSON.stringify({ s14, new14 }));
+  expect(e14.length === 0, 'E14 保存 HTML のページエラー・console error なし: ' + (e14.join(' / ') || 'none'));
   await fresh();
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));

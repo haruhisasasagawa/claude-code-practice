@@ -323,8 +323,8 @@
         }).join('') + '</div><div class="hint">値 short（短期求人）のとき「※短期求人のみ」の説明を強調します。</div></div>' +
       '</div>' +
 
-      '<h3 class="sub">印刷</h3>' +
-      sCheck('checklist.print.showQuestions', '保存レポートの「詳細」に質問文も載せる', 'A4 の面接チェックリスト報告（1 枚）には質問文・説明文を載せません（質問の回答は短い名前で載せます）。OFF にすると「詳細」の面接チェックリスト節もメモだけになります。') +
+      // 「印刷」の行（checklist.print.showQuestions＝保存 HTML の「詳細」に質問文を載せる）は 2026-10-14 に削除（「詳細」表示ごと削除。docs/SPEC-a4.md）。
+      //   報告書は常に A4 1 枚の要約（質問文・説明文は載せない）。キーは旧い設定・記録の互換のため正規化で残す
 
       '<h3 class="sub">台本</h3>' +
       '<div class="field-row">' + sInput('checklist.version', '版（例: 2026-10-08）', { hint: '報告書（A4）の「台本 … 版」に表示します。' }) + '</div>' +
@@ -432,7 +432,7 @@
     const mg = draft.management || {};
     const fields = Array.isArray(mg.fields) ? mg.fields : [];
     const preview = global.RecruitStamp ? global.RecruitStamp.svg({ name: ((mg.managers || [])[0] || {}).short || '笹川', title: ((mg.managers || [])[0] || {}).title || '副支配人', date: global.RecruitStamp.stampDate(new Date()), size: 76, id: 'stPreview' }) : '';
-    return section('s-mgmt', '応募者の管理（押印）', '保存レポートの末尾に押印欄を出します。名簿から担当者を選ぶと日付入りのハンコが押され、レポート上でも押印・保存できます。',
+    return section('s-mgmt', '応募者の管理（押印）', '報告書（A4 の用紙）の最下段に押印欄を出します。名簿から担当者を選ぶと日付入りのハンコが押され、保存した HTML でも用紙の欄をクリックして押印・保存できます。',
       '<div class="field-row">' +
         '<div>' + fields.map(function (fl, i) {
           return sInput('management.fields[' + i + '].label', '押印欄 ' + (i + 1) + '（' + esc(fl.id) + '）') +

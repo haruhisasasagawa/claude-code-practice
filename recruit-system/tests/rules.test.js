@@ -119,10 +119,11 @@ test('53 押印（ハンコSVG・名簿の正規化・レコードとレポー�
   const rec = S.buildRecord(state);
   assert.deepStrictEqual(plain(rec.management), plain(state.management));
   const html = S.generateReportHTML(rec, p);
-  const iMg = html.indexOf('<h2>応募者の管理</h2>');
-  assert.ok(iMg > html.indexOf('<h2>採用可否判定</h2>'), 'management section after judgment');
+  // 押印行は用紙（main.a4#a4）の中の最下段（docs/SPEC-a4.md 1-2）。保存バーはスクリプトが作る（生成 HTML には無い）
+  const iSt = html.indexOf('<div class="cl-stamps"><div class="stamp-row cl-stamps-row cols-2">');
+  assert.ok(iSt > html.indexOf('<main class="a4" id="a4">') && iSt < html.indexOf('</main>'), '押印行は用紙の中');
   assert.ok((noScript(html).match(/<svg class="hanko"/g) || []).length === 1, 'one stamp rendered');
-  assert.ok(html.indexOf('data-field-id="final"') > 0 && html.indexOf('id="recruit-mgmt-config"') > 0 && html.indexOf('id="mgmtSaveBtn"') > 0);
+  assert.ok(html.indexOf('data-field-id="final"') > 0 && html.indexOf('id="recruit-mgmt-config"') > 0 && html.indexOf('saveBarBtn') > 0 && noScript(html).indexOf('id="saveBarBtn"') < 0);
   assert.ok(html.indexOf('data-filename="応募者_') > 0);
   assert.ok(html.indexOf('function stampSvg(') > 0 && html.indexOf('function shortName(') > 0, 'stamp functions embedded');
   // 埋め込み JSON は </script> や <!--<script> を含む名前でも要素を閉じ損ねない（< > & は \\u 形式）
@@ -147,18 +148,19 @@ test('53 押印（ハンコSVG・名簿の正規化・レコードとレポー�
   const cfg = JSON.parse(html.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
   assert.ok(cfg.managers.some(function (m) { return m.short === '笹川'; }));
   assert.strictEqual(cfg.fields.length, 2);
-  assert.ok(html.indexOf('<div class="stamp-row cols-2" id="mgmt">') > 0, '押印欄 2 つは 2 列');
+  assert.strictEqual(cfg.interviewerField, 'interviewer', '担当と連動する押印欄（窓の担当者の初期選択）');
   // 埋め込みレコードは読み戻せる（JSON の </ エスケープを含めて）
   const back = JSON.parse(html.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1]);
   assert.strictEqual(back.management.interviewer.short, '笹川');
   // 旧レコード（management なし）でも例外を出さず、未押印で出る
   const old = plain(rec); delete old.management;
   const htmlOld = S.generateReportHTML(old, p);
-  assert.ok(htmlOld.indexOf('<h2>応募者の管理</h2>') > 0 && (noScript(htmlOld).match(/<svg class="hanko"/g) || []).length === 0 && htmlOld.indexOf('未押印') > 0);
-  // 名簿なし・手入力 OFF でも落ちない
+  assert.ok(htmlOld.indexOf('<div class="cl-stamps">') > 0 && (noScript(htmlOld).match(/<svg class="hanko"/g) || []).length === 0 && noScript(htmlOld).indexOf('<div class="stamp-empty">未押印</div>') > 0);
+  // 名簿なし・手入力 OFF でも落ちない（選択肢は窓を開いたときにスクリプトが作る）
   const p2 = P(); p2.management.managers = []; p2.management.allowFreeName = false;
   const html2 = S.generateReportHTML(rec, p2);
   assert.ok(noScript(html2).indexOf('__free') < 0 && html2.indexOf('担当者を選択') > 0);
+  assert.strictEqual(JSON.parse(html2.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]).allowFreeName, false);
 });
 
 test('54 既定の台本（面接チェックリスト 2026-10-08 版）', function () {
@@ -483,9 +485,10 @@ test('66 保存レコード（checklist・checklistDef・旧 scores の互換）
   assert.ok(!/[<>&]/.test(block));
   const back = JSON.parse(block);
   assert.deepStrictEqual(back.checklist, plain(cl));
-  // 旧レコード（scores のみ・checklist なし）でもレポートが作れる（旧形式の面接評価の節は出さない。K3）
-  const html2 = S.generateReportHTML(plain(Object.assign({}, recOld, { checklist: undefined, checklistDef: undefined, scores: { greeting: 4 } })), p);
-  assert.ok(html2.indexOf('data-sec="scores"') < 0 && html2.indexOf('面接評価（旧形式') < 0 && html2.indexOf('面接チェックリストは未入力です。') > 0);
+  // 旧レコード（scores のみ・checklist なし）でもレポートが作れる（旧形式の面接評価は出さない。K3）。用紙は白紙の台本（結果「未実施」）
+  const html2 = S.generateReportHTML(plain(Object.assign({}, recOld, { checklist: undefined, checklistDef: undefined, scores: { greeting: 4 }, judgment: null })), p);
+  assert.ok(html2.indexOf('data-sec="scores"') < 0 && html2.indexOf('面接評価（旧形式') < 0 && html2.indexOf('<main class="a4" id="a4"><div class="cl-sheet cl-mode-sheet">') > 0 &&
+    html2.indexOf('<span class="cl-tile-k">結果</span><span class="cl-tile-v">未実施</span>') > 0);
   // 旧プロファイル（checklist なし）で判定しても落ちない（normalize で既定の台本が入る）
   const pOld = P(); delete pOld.checklist;
   const jOld = R.evaluateScript(a, cl, pOld, OPTS);
@@ -493,17 +496,17 @@ test('66 保存レコード（checklist・checklistDef・旧 scores の互換）
   assert.strictEqual(jOld.max, 2);   // 台本が無い profile は確認点 0 ＋総合判断のみ
   assert.strictEqual(S.normalizeProfile(pOld).checklist.version, '2026-10-08');
 
-  // ---- レポートの「面接チェックリスト」節・A4 報告（SPEC-checklist 4-2〜4-4）----
-  assert.ok(html.indexOf('data-sec="checklist"') > 0 && html.indexOf('data-sec="scores"') < 0, '新形式は checklist 節だけ');
-  ['①', '②', '③', '④', '⑤'].forEach(function (c) { assert.ok(html.indexOf('cl-s-no">' + c + '</span>') > 0, c); });
-  ['勤務条件', '継続性・報連相', '仕事内容の説明', '集団行動特性', '逆質問', '合否連絡'].forEach(function (t) { assert.ok(html.indexOf(t) > 0, t); });
-  assert.ok(html.indexOf('長期希望 &lt;/script&gt;&lt;!--x') > 0, 'メモはエスケープして出す');
-  assert.ok(html.indexOf('○一致') > 0 && html.indexOf('cl-mk">○</td>') > 0 && html.indexOf('cl-mk">△</td>') > 0);
-  assert.ok(html.indexOf('id="clSheet"') > 0 && html.indexOf('id="rtPrintChecklist"') > 0 && html.indexOf('__prepareChecklistSheet') > 0);
-  assert.ok(html.indexOf('cl-mode-sheet') > 0 && html.indexOf('class="cl-judge"') > 0 && html.indexOf('面接チェックリスト報告') > 0);
+  // ---- 保存 HTML の用紙（A4 1 枚の要約。docs/SPEC-a4.md。台本の全文の節は 2026-10-14 に削除）----
+  assert.ok(html.indexOf('data-sec=') < 0 && html.indexOf('cl-mode-section') < 0, '節（section.sec）・台本の全文は無い');
+  ['①', '②', '③', '④', '⑤'].forEach(function (c) { assert.ok(html.indexOf('<td class="cl-rt-no">' + c + '</td>') > 0, c); });
+  ['勤務条件', '継続性・報連相', '合否連絡'].forEach(function (t) { assert.ok(html.indexOf(t) > 0, t); });
+  assert.ok(html.indexOf('長期希望 &lt;/script&gt;&lt;!--x') > 0, 'メモはエスケープして用紙に出す');
+  assert.ok(html.indexOf('○一致') > 0 && html.indexOf('<span class="cl-mark m-good">○</span>') > 0 && html.indexOf('<span class="cl-mark m-fair">△</span>') > 0);
+  assert.ok(html.indexOf('cl-mode-sheet') > 0 && html.indexOf('<div class="cl-judge" data-result="recommend">') > 0 && html.indexOf('面接チェックリスト報告') > 0);
   assert.ok(html.indexOf('受け答えが丁寧') > 0);
-  assert.ok(html.indexOf('<tr><th>必須条件</th><td>一致 2・不一致 0・未確認 0</td></tr>') > 0, '採用可否判定の表に必須条件の行');
-  // 閉じタグ・コメント開始を含むメモでも埋め込みスクリプトが壊れない（script 要素は 4 つ: record・印刷・押印設定・押印）
+  assert.ok(html.indexOf('<span class="cl-tile-k">必須条件</span><span class="cl-tile-v">すべて一致</span>') > 0, '結果ストリップに必須条件');
+  // 閉じタグ・コメント開始を含むメモでも埋め込みスクリプトが壊れない（script 要素は 3 つ: record・押印設定・用紙の操作）
+  assert.strictEqual((html.match(/<\/script>/g) || []).length, 3);
   assert.strictEqual((html.match(/<\/script>/g) || []).length, (html.match(/<script[ >]/g) || []).length);
   assert.strictEqual(S.checklistSheetCss().indexOf('</' + 'script'), -1);
   // 不一致 → 「×不一致」と結果
@@ -511,69 +514,64 @@ test('66 保存レコード（checklist・checklistDef・旧 scores の互換）
   clNg.header.date = '2026-10-10';
   const jNg = R.evaluateScript(a, clNg, p, OPTS);
   const recNg = S.buildRecord(Object.assign({}, state, { checklist: clNg, judgment: jNg }));
-  const sheetNg = S.checklistSheetHtml(recNg, p, { mode: 'sheet', stamps: '' });
+  const sheetNg = S.checklistSheetHtml(recNg, p, {});
   // 1 ページの A4（2026-10-14）: 旧 .cl-s-ng（不一致のセクション）の代わりに【必須条件】ブロックの .cl-must-ng と行の .m-mismatch
   assert.ok(sheetNg.indexOf('×不一致') > 0 && sheetNg.indexOf('cl-must-ng') > 0 && sheetNg.indexOf('class="m-mismatch" data-cl-item="must_weekly"') > 0 && sheetNg.indexOf('不採用推奨') > 0 && sheetNg.indexOf('不一致 1') > 0);
   // 必須条件の不一致の理由は A4 の判定サマリー（.cl-adj）にも出る
   assert.ok(/<ul class="cl-adj"><li><b>[^<]*<\/b>：必須条件が一致しないため（土日を含む週3日以上、5時間以上）、不採用推奨とします。/.test(sheetNg), 'cl-adj に必須条件の理由');
   // ヘッダーの「ラベル 値」は Step3 の目次（.cl-chip）と別クラス（アプリの印刷規則で消えない）。1 ページの A4 は dl.cl-sh-kv
   assert.ok(sheetNg.indexOf('<dl class="cl-sh-kv">') > 0 && sheetNg.indexOf('class="cl-chip') < 0 && sheetNg.indexOf('cl-flow') < 0);
-  // 【説明】ブロックのメモ欄を ON にしたときはメモも出力する（レポートの節・A4 とも）
+  // 【説明】ブロックのメモ欄を ON にしたときはメモも出力する
   const pm = P(); pm.checklist.sections[2].blocks[0].memo = true; pm.checklist.sections[2].blocks[0].memoLabel = '反応';
   const clM = clAll('good'); clM.notes.job_explain = 'EXPLAIN_MEMO 汚物清掃は難しいと回答';
   const recM = S.buildRecord(Object.assign({}, state, { checklist: clM, judgment: null }));
   const recMd = Object.assign({}, recM, { checklistDef: pm.checklist });
-  const hmSec = S.checklistSheetHtml(recMd, pm, { mode: 'section' });
-  assert.ok(hmSec.indexOf('<b>反応：</b><span class="cl-memo-t">EXPLAIN_MEMO 汚物清掃は難しいと回答</span>') > 0, 'section');
   // 1 ページの A4 は【面接メモ】の 1 行（セクション番号＋メモ欄の名前：本文）
-  const hmSheet = S.checklistSheetHtml(recMd, pm, { mode: 'sheet' });
+  const hmSheet = S.checklistSheetHtml(recMd, pm, {});
   assert.ok(hmSheet.indexOf('<div class="cl-nm-k"><span class="cl-nm-no">③</span>反応</div><div class="cl-nm-v">EXPLAIN_MEMO 汚物清掃は難しいと回答</div>') > 0, 'sheet');
   // 判定前（judgment なし）は未実施と書く（判定を走らせない）
-  const sheetNoJ = S.checklistSheetHtml(Object.assign({}, rec, { judgment: null }), p, { mode: 'sheet', stamps: '<div class="stamp-row">S</div>' });
-  //   1 ページの A4: 結果タイルに「未実施」、確認点タイルはその時点の点（15/16）
+  const sheetNoJ = S.checklistSheetHtml(Object.assign({}, rec, { judgment: null }), p, {});
+  //   1 ページの A4: 結果タイルに「未実施」、確認点タイルはその時点の点（15/16）。押印行は押印欄の設定から（押印なしなら未押印 2 つ）
   assert.ok(sheetNoJ.indexOf('<div class="cl-judge cl-judge-none">') > 0 && sheetNoJ.indexOf('<span class="cl-tile-k">結果</span><span class="cl-tile-v">未実施</span>') > 0 &&
-    sheetNoJ.indexOf('<span class="cl-tile-k">確認点</span><span class="cl-tile-v">15<small>/16点</small></span>') > 0 && sheetNoJ.indexOf('<div class="cl-stamps"><div class="stamp-row">S</div></div>') > 0);
-  // 'section' は判定サマリー・押印を含まない。台本ヘッダー（面接日・担当・タクシー・応募した求人）とページ題名・前書きは出す（消極属性は 2026-10-13 に削除）
-  const secOnly = S.checklistSheetHtml(rec, p, { mode: 'section' });
-  assert.ok(secOnly.indexOf('cl-mode-section') > 0 && secOnly.indexOf('cl-judge') < 0 && secOnly.indexOf('stamp-row') < 0);
-  assert.ok(secOnly.indexOf('cl-sheet-head cl-sec-head') > 0, 'section に台本ヘッダー');
-  ['<dt>面接日</dt><dd>2026/10/10</dd>', '<dt>担当</dt>', '<b>タクシー可否・料金</b>', '<b>応募した求人</b>'].forEach(function (t) { assert.ok(secOnly.indexOf(t) > 0, 'section ヘッダー: ' + t); });
-  assert.ok(secOnly.indexOf('消極属性') < 0 && secOnly.indexOf('朝～12時のみ') < 0, 'section ヘッダーに消極属性なし');
-  ['必須条件一致・継続性', '人物確認・逆質問', '最低限の話し方、敬語が可能か。必須条件が不一致なら不採用', '行動を確認。採用を検討できる人には不安解消の時間を取る。'].forEach(function (t) { assert.ok(secOnly.indexOf(t) > 0, 'section のページ題名・前書き: ' + t); });
-  assert.ok(secOnly.indexOf('台本1枚目') > 0 && secOnly.indexOf('台本2枚目') > 0 && secOnly.indexOf('cl-page-who') < 0);
+    sheetNoJ.indexOf('<span class="cl-tile-k">確認点</span><span class="cl-tile-v">15<small>/16点</small></span>') > 0 && (sheetNoJ.match(/<div class="stamp-empty">未押印<\/div>/g) || []).length === 2);
   // 担当は押印（面接対応者）から。タクシーは手入力の値だけ（「（手入力）」「（自動）」は付けない）。旧レコードの消極属性（header.negatives）は出さない
   const clH = plain(cl); clH.header.interviewer = ''; clH.header.taxi = '否（手入力）'; clH.header.negatives = { morningOnly: 'on' };
   const recH = Object.assign({}, rec, { checklist: clH, management: { interviewer: { name: '笹川 晴央' } } });
-  const secH = S.checklistSheetHtml(recH, p, { mode: 'section' });
-  assert.ok(secH.indexOf('笹川 晴央<small>（押印より）</small>') > 0, 'section の担当（押印より）');
-  assert.ok(secH.indexOf('<b>タクシー可否・料金</b>否（手入力）</span>') > 0 && secH.indexOf('<small>（手入力）</small>') < 0, 'section のタクシー');
-  assert.ok(secH.indexOf('消極属性') < 0 && secH.indexOf('朝～12時のみ') < 0, '旧レコードの消極属性（朝～12時のみ）は section に出さない');
-  // 確認事項／確認点の補足（hint。台本の「「大丈夫です」のみ連呼は特に要注意。」）はレポートの節と A4（質問文 ON）に出る
-  assert.ok(secOnly.indexOf('<small class="cl-hint">「大丈夫です」のみ連呼は特に要注意。</small>') > 0, 'section に hint');
-  assert.ok(html.indexOf('「大丈夫です」のみ連呼は特に要注意。') > 0);
-  //   1 ページの A4（2026-10-14）は確認点の名前だけ（補足＝説明文は「詳細」の節に残す）
-  const sheetH = S.checklistSheetHtml(rec, p, { mode: 'sheet' });
+  const shHd = S.checklistSheetHtml(recH, p, {});
+  assert.ok(shHd.indexOf('<dt>担当</dt><dd>笹川 晴央</dd>') > 0, '用紙の担当（押印より）');
+  assert.ok(shHd.indexOf('<dt>タクシー可否・料金</dt><dd>否（手入力）</dd>') > 0 && shHd.indexOf('<small>（手入力）</small>') < 0, '用紙のタクシー');
+  assert.ok(shHd.indexOf('消極属性') < 0 && shHd.indexOf('朝～12時のみ') < 0, '旧レコードの消極属性（朝～12時のみ）は用紙に出さない');
+  // {mode:'section'} を渡しても 1 ページの要約（台本の全文の描画は削除。docs/SPEC-a4.md S1）
+  const secOnly = S.checklistSheetHtml(rec, p, { mode: 'section' });
+  assert.strictEqual(secOnly, S.checklistSheetHtml(rec, p, {}));
+  assert.ok(secOnly.indexOf('cl-mode-section') < 0 && secOnly.indexOf('cl-mode-sheet') > 0 && secOnly.indexOf('台本1枚目') < 0);
+  //   1 ページの A4（2026-10-14）は確認点の名前だけ（補足＝説明文は載せない）
+  const sheetH = S.checklistSheetHtml(rec, p, {});
   assert.ok(sheetH.indexOf('cl-hint') < 0 && sheetH.indexOf('「大丈夫です」のみ連呼は特に要注意。') < 0 && sheetH.indexOf('○＝不安・不明点を解消できた') < 0 && sheetH.indexOf('勤務条件の一致に「具体性」があるか') > 0, 'sheet に hint なし');
-  // 保存時点の台本（checklistDef）の文言で出す: 現在の profile の文言を変えてもレポートは保存時の文言
-  const p2 = P(); p2.checklist.sections[1].blocks[0].items[1].label = 'シフト連絡は電話のみ（LINE不可）';
+  // 保存時点の台本（checklistDef）の文言で出す: 現在の profile の確認点・必須条件の文言を変えても用紙は保存時の文言
+  const p2 = P();
+  R.checklistItems(p2.checklist, 'rating')[0].item.label = '具体性（変更後の文言）';
+  R.checklistItems(p2.checklist, 'must')[0].item.label = '週4日以上（変更後の文言）';
   const html3 = S.generateReportHTML(rec, p2);
-  assert.ok(html3.indexOf('シフト関連の連絡：原則電話のみ') > 0 && html3.indexOf('LINE不可') < 0);
+  assert.ok(html3.indexOf('勤務条件の一致に「具体性」があるか') > 0 && html3.indexOf('土日を含む週3日以上、5時間以上') > 0 && html3.indexOf('変更後の文言') < 0);
   // checklistDef が無い（保存前の旧データ）なら現在の台本
   const html3b = S.generateReportHTML(Object.assign({}, rec, { checklistDef: null }), p2);
-  assert.ok(html3b.indexOf('LINE不可') > 0);
-  // print.showQuestions=false で質問文が出ない（メモは出る）
+  assert.ok(html3b.indexOf('具体性（変更後の文言）') > 0 && html3b.indexOf('週4日以上（変更後の文言）') > 0);
+  // print.showQuestions（効き先だった「詳細」表示は 2026-10-14 に削除）: キーは互換のため正規化で残るが、用紙の出力は true／false で変わらない。
+  //   用紙は設定に関係なく質問文・hint を載せず、メモは載せる
   const pq = P(); pq.checklist.print.showQuestions = false;
-  const sheetQ = S.checklistSheetHtml(Object.assign({}, rec, { checklistDef: pq.checklist }), pq, { mode: 'sheet' });
-  assert.ok(sheetQ.indexOf('cl-qs') < 0 && sheetQ.indexOf('歌舞伎町ですので') < 0 && sheetQ.indexOf('長期希望 &lt;/script&gt;') > 0);
-  assert.ok(sheetQ.indexOf('cl-hint') < 0, 'showQuestions=false の A4 は hint も省く');
-  // 旧形式（scores のみ）→ チェックリスト節（未入力）と A4 報告（白紙の台本）。旧評価の節は出さない
-  assert.ok(html2.indexOf('data-sec="checklist"') > 0 && html2.indexOf('id="rtPrintChecklist"') > 0 && html2.indexOf('id="clSheet"') > 0);
-  // 旧 scores ＋チェックリスト入力 → チェックリストだけ（旧評価の「参考」の節も出さない）
+  const pqT = P(); pqT.checklist.print.showQuestions = true;
+  assert.strictEqual(S.normalizeChecklistDef(pq.checklist, S.defaults().checklist).print.showQuestions, false, 'showQuestions は正規化で残る（互換）');
+  const sheetQ = S.checklistSheetHtml(Object.assign({}, rec, { checklistDef: pq.checklist }), pq, {});
+  const sheetQT = S.checklistSheetHtml(Object.assign({}, rec, { checklistDef: pqT.checklist }), pqT, {});
+  assert.strictEqual(sheetQ, sheetQT, 'showQuestions の true／false で用紙は同じ');
+  assert.ok(sheetQT.indexOf('cl-qs') < 0 && sheetQT.indexOf('歌舞伎町ですので') < 0 && sheetQT.indexOf('cl-hint') < 0 && sheetQT.indexOf('長期希望 &lt;/script&gt;') > 0, 'true でも質問文・hint は出さない（メモは出る）');
+  // 旧 scores ＋チェックリスト入力 → チェックリストの用紙だけ（旧評価の「参考」も出さない）
   const html4 = S.generateReportHTML(Object.assign({}, rec, { scores: { greeting: 4, overall_judgment: 4 } }), p);
-  assert.ok(html4.indexOf('data-sec="checklist"') > 0 && html4.indexOf('面接評価（旧形式') < 0 && html4.indexOf('data-sec="scores"') < 0);
-  // 入力なし（① で保存）→ 「未入力です」（A4 報告は白紙の台本として出す）
+  assert.ok(html4.indexOf('id="a4"') > 0 && html4.indexOf('面接評価（旧形式') < 0 && html4.indexOf('data-sec="scores"') < 0);
+  // 入力なし（① で保存）→ 白紙の台本の用紙（結果「未実施」・確認点はすべて「—」）
   const html5 = S.generateReportHTML(Object.assign({}, rec, { checklist: R.emptyChecklist(), judgment: null, step: 1 }), p);
-  assert.ok(html5.indexOf('面接チェックリストは未入力です。') > 0 && html5.indexOf('data-sec="scores"') < 0 && html5.indexOf('id="rtPrintChecklist"') > 0);
+  assert.ok(html5.indexOf('<span class="cl-tile-k">結果</span><span class="cl-tile-v">未実施</span>') > 0 && (html5.match(/<span class="cl-mark m-none">—<\/span>/g) || []).length === 7 && html5.indexOf('data-sec="scores"') < 0);
 });
 // ======================================================================
 // 報告書表示・最終合否スタンプ（docs/SPEC-report.md 8-1。#67〜#71）
@@ -690,42 +688,50 @@ test('70 record.decision の正規化と往復（buildRecord・parseRecordFromHT
   }
 });
 
-test('71 保存レポートの報告書表示・最終合否（generateReportHTML・checklistSheetHtml）', function () {
+test('71 保存 HTML の用紙と最終合否（generateReportHTML・checklistSheetHtml。docs/SPEC-a4.md）', function () {
   const st = decisionState();
   const p = st.profile;
   assert.strictEqual(st.judgment.result, 'recommend', 'state の判定は採用推奨');
   const rec = S.buildRecord(st);
   const recH = Object.assign({}, rec, { decision: DEC_HIRE });
   const htmlH = S.generateReportHTML(recH, p);
-  assert.ok(htmlH.indexOf('<body class="view-report has-cl mode-script" data-filename="応募者_山田_花子_') > 0 && htmlH.indexOf('_採用.html">') > 0, 'body の class と合否付きファイル名');
-  ['id="rtViewReport"', 'id="rtViewFull"', 'id="reportPaper"', 'id="clPaper"', 'id="clPaperDecision"', 'id="clDecision"', 'id="decision"', 'id="rhDecision"']
-    .forEach(function (t) { assert.ok(htmlH.indexOf(t) > 0, t); });
-  assert.ok(htmlH.indexOf('id="clPaper"') < htmlH.indexOf('<header class="rh">'), '紙プレビューはヘッダーの前');
-  assert.ok(htmlH.indexOf('<h2>応募者の管理</h2>') < htmlH.indexOf('id="decision"') && htmlH.indexOf('id="decision"') < htmlH.indexOf('id="mgmt"'), 'パネルは「応募者の管理」の見出しと #mgmt の間');
-  assert.strictEqual((noScript(htmlH).match(/<svg class="verdict-stamp"/g) || []).length, 4, '合否スタンプは紙・印刷用・パネル・ヘッダーの 4 つ');
+  assert.ok(htmlH.indexOf('<body class="a4-doc" data-filename="応募者_山田_花子_') > 0 && htmlH.indexOf('_採用.html">') > 0, 'body の class と合否付きファイル名');
+  ['id="a4"', 'id="a4Decision"'].forEach(function (t) { assert.ok(htmlH.indexOf(t) > 0, t); });
+  ['rtViewReport', 'rtViewFull', 'reportPaper', 'clPaper', 'clPaperDecision', 'clDecision', 'decision', 'rhDecision', 'mgmt', 'mgmtSave'].forEach(function (id) {
+    assert.ok(htmlH.indexOf('id="' + id + '"') < 0, '無い: #' + id);
+  });
+  assert.ok(htmlH.indexOf('id="a4Decision"') > htmlH.indexOf('<main class="a4" id="a4">') && htmlH.indexOf('id="a4Decision"') < htmlH.indexOf('</main>'), '最終合否は用紙の中');
+  assert.strictEqual((noScript(htmlH).match(/<svg class="verdict-stamp"/g) || []).length, 1, '合否スタンプは用紙の 1 つ');
+  assert.ok(noScript(htmlH).indexOf('<div class="cl-decision is-hire" id="a4Decision" data-result="hire">') > 0 && noScript(htmlH).indexOf('id="vdA4"') > 0);
   assert.strictEqual((noScript(htmlH).match(/<svg class="hanko"/g) || []).length, 0, 'state の management どおり（押印なし）');
   const cfg = JSON.parse(htmlH.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
   assert.ok(cfg.decision.hireLabel === '採用' && cfg.decision.sub === '新宿' && cfg.decision.stampField === 'final', JSON.stringify(cfg.decision));
-  assert.ok(htmlH.indexOf('addEventListener("beforeprint"') > 0 && htmlH.indexOf('__setReportView') > 0 && htmlH.indexOf('function verdictSvg(') > 0);
+  assert.ok(htmlH.indexOf('beforeprint') < 0 && htmlH.indexOf('afterprint') < 0 && htmlH.indexOf('function verdictSvg(') > 0 && htmlH.indexOf('function decisionSheetHtml(') > 0);
   assert.strictEqual((htmlH.match(/<\/script>/g) || []).length, (htmlH.match(/<script[ >]/g) || []).length, 'script 要素の開始・終了の数が同じ');
-  // 食い違い注記（X10）
-  // （埋め込みスクリプトにも同じ文言があるので、script 要素を除いて調べる）
-  assert.ok(noScript(S.generateReportHTML(Object.assign({}, rec, { decision: DEC_REJECT }), p)).indexOf('<div class="dec-note">※ アプリの判定「') > 0, '不採用 × 採用推奨 → 注記');
-  assert.ok(noScript(htmlH).indexOf('アプリの判定「') < 0 && noScript(htmlH).indexOf('<div class="dec-note"></div>') > 0, '採用 × 採用推奨 → 注記なし');
-  // 回答なし（① で保存）→ 白紙の台本の紙・パネルあり
+  // 食い違い注記（X10）は用紙・生成 HTML の要素には出さない（窓の中だけ。注記の有無の分岐は e2e E3・E9・E12 で確かめる。
+  //   スクリプトのソースには文言が常にあるので、ここでは noScript の側だけを見る）
+  const htmlR = S.generateReportHTML(Object.assign({}, rec, { decision: DEC_REJECT }), p);
+  assert.ok(noScript(htmlR).indexOf('アプリの判定「') < 0 && noScript(htmlR).indexOf('と異なる最終合否です') < 0, '不採用 × 採用推奨 → 用紙には注記を出さない');
+  assert.ok(noScript(htmlH).indexOf('アプリの判定「') < 0 && noScript(htmlH).indexOf('と異なる最終合否です') < 0);
+  // 回答なし（① で保存）→ 白紙の台本の用紙・最終合否の欄あり
   const html0 = S.generateReportHTML(Object.assign({}, rec, { checklist: R.emptyChecklist(), judgment: null, step: 1 }), p);
-  assert.ok(html0.indexOf('<body class="view-report has-cl mode-script" data-filename=') > 0 && html0.indexOf('id="clPaper"') > 0 && html0.indexOf('id="decision"') > 0 && html0.indexOf('id="rtViewReport"') > 0, '回答なし');
-  // 無効（enabled=false）: 合否の UI を出さない・ファイル名に付けない・データは残す
+  assert.ok(html0.indexOf('<body class="a4-doc" data-filename=') > 0 && html0.indexOf('id="a4"') > 0 && html0.indexOf('id="a4Decision"') > 0, '回答なし');
+  // 無効（enabled=false）: 合否の欄を出さない・ファイル名に付けない・データは残す
   const pOff = P(); pOff.management.decision.enabled = false;
   const htmlOff = S.generateReportHTML(recH, pOff);
-  assert.ok(htmlOff.indexOf('id="decision"') < 0 && noScript(htmlOff).indexOf('class="cl-decision') < 0 && htmlOff.indexOf('id="rhDecision"') < 0, '無効なら UI なし');
+  assert.ok(htmlOff.indexOf('id="a4Decision"') < 0 && noScript(htmlOff).indexOf('class="cl-decision') < 0, '無効なら欄なし');
   assert.strictEqual(JSON.parse(htmlOff.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]).decision, null, '無効なら埋め込み設定の decision は null');
   assert.ok(htmlOff.match(/data-filename="([^"]*)"/)[1].indexOf('_採用') < 0, '無効ならファイル名に付けない');
   assert.strictEqual(JSON.parse(htmlOff.match(/id="recruit-record">([\s\S]*?)<\/script>/)[1]).decision.result, 'hire', '無効でも埋め込みデータの decision は残す');
-  // checklistSheetHtml: section には出さない・sheet は未押印の枠
-  assert.ok(S.checklistSheetHtml(recH, p, { mode: 'section' }).indexOf('cl-decision') < 0, 'section に cl-decision なし');
-  const sh = S.checklistSheetHtml(rec, p, { mode: 'sheet' });
-  ['cl-decision is-none', '未押印', 'class="cl-judge"', 'cl-judge-row'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
+  // checklistSheetHtml: {mode:'section'} を渡しても 1 ページの要約（未押印の枠つき）
+  const shSec = S.checklistSheetHtml(recH, p, { mode: 'section' });
+  assert.ok(shSec.indexOf('cl-mode-sheet') > 0 && shSec.indexOf('cl-decision is-hire') > 0, 'section を渡しても 1 ページの要約');
+  const sh = S.checklistSheetHtml(rec, p, {});
+  ['cl-decision is-none', '未押印', 'class="cl-judge"', 'cl-judge-row', 'id="clDecision"'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
+  assert.ok(sh.indexOf('<svg class="hanko"') < 0, '押印なしの記録はハンコなし');
+  // 押印した記録: ハンコの SVG の id は o.stampSvgPrefix（既定 'cl'）＋番号
+  const recS = Object.assign({}, rec, { management: { final: { name: '笹川 晴央', short: '笹川', title: '副支配人', date: '2026.10.10', at: '' } } });
+  assert.ok(S.checklistSheetHtml(recS, p, {}).indexOf('id="cl1"') > 0 && S.checklistSheetHtml(recS, p, { stampSvgPrefix: 'ap' }).indexOf('id="ap1"') > 0);
   assert.ok(S.reportCss().indexOf('</' + 'script') < 0 && S.checklistSheetCss().indexOf('</' + 'script') < 0);
 });
 
@@ -862,32 +868,27 @@ test('76 保存レコードと保存 HTML', function () {
   assert.strictEqual(rec.schemaVersion, 2);
   const html = S.generateReportHTML(rec, P());
   const ns = noScript(html);
-  assert.ok(html.indexOf('<body class="view-report has-cl mode-script" data-filename="応募者_台本_花子_') > 0, 'body の class');
-  ['<h2>応募者情報</h2>', '<h2>面接チェックリスト</h2>', '<h2>採用可否判定</h2>', '<h2>応募者の管理</h2>', 'id="rtPrintChecklist"', 'id="clPaper"', 'id="clSheet"',
-    'id="decision"', 'id="rtViewReport"', 'class="kv script-judge"', '<div class="result recommend">'].forEach(function (t) { assert.ok(html.indexOf(t) > 0, '含む: ' + t); });
-  ['<h2>応募時の情報</h2>', '<h2>面接者への申し送りコメント</h2>', '<h2>面接者への申し送り（留意点）</h2>', '<h2>面接で確認した情報</h2>', '<h2>面接前に分かっている情報（未確認）</h2>',
-    '<h2>シフト貢献度</h2>', 'id="rtPrintSheet"', 'id="rtPrintAll"', 'class="dash"', 'data-tile=']
-    .forEach(function (t) { assert.ok(html.indexOf(t) < 0, '含まない: ' + t); });
-  // 節（section.sec）として生成しない（reportCss・埋め込みスクリプトのセレクタには data-sec="handoff" などの文字列が残るため、要素の形で調べる）
-  ['contrib', 'handoff', 'pre', 'interview', 'comment'].forEach(function (k) { assert.ok(html.indexOf('<section class="sec" data-sec="' + k + '"') < 0, '節を生成しない: ' + k); });
-  assert.ok(ns.indexOf('シフト貢献度') < 0 && ns.indexOf('2軸') < 0, 'script 要素以外に「シフト貢献度」「2軸」が無い');
+  assert.ok(html.indexOf('<body class="a4-doc" data-filename="応募者_台本_花子_') > 0, 'body の class');
+  // 用紙の部品（docs/SPEC-a4.md 1-2）: 見出し・応募者 → 結果ストリップ → 必須条件｜勤務条件 → 確認点 → 面接メモ → 説明・連絡 → 押印行。用紙の後ろに埋め込みデータ
   const at = function (t) { return html.indexOf(t); };
-  assert.ok(at('<h2>応募者情報</h2>') < at('<h2>面接チェックリスト</h2>') && at('<h2>面接チェックリスト</h2>') < at('<h2>採用可否判定</h2>') &&
-    at('<h2>採用可否判定</h2>') < at('id="clSheet"') && at('id="clSheet"') < at('<h2>応募者の管理</h2>'), '節の並び');
-  const appSec = html.slice(at('<h2>応募者情報</h2>'), at('<h2>面接チェックリスト</h2>'));
-  ['2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央', '電話の受け答えが丁寧。'].forEach(function (t) { assert.ok(appSec.indexOf(t) > 0, '応募者情報に ' + t); });
-  assert.ok(appSec.indexOf('>メモ<') > 0 && appSec.indexOf('備考') < 0, '応募者情報のメモの見出しは「メモ」（Step① と同じ。「備考」は出さない）');
-  // 消極属性（旧レコードの header.negatives）は応募者情報・ヘッダー・HTML 全体に出さない
-  ['短期希望', '消極属性'].forEach(function (t) { assert.ok(appSec.indexOf(t) < 0, '応募者情報に無い: ' + t); });
-  const rhS = html.slice(html.indexOf('<header class="rh">'), html.indexOf('</header>'));
-  assert.ok(rhS.length > 0 && rhS.indexOf('短期求人') > 0 && rhS.indexOf('短期希望') < 0, 'ヘッダーのチップに短期希望なし');
+  const order = ['<main class="a4" id="a4">', '<div class="cl-sheet-head">', '<div class="cl-judge', 'cl-blk-must', 'cl-blk-rate', 'cl-blk-notes', 'class="cl-exline"', '<div class="cl-stamps">', '</main>', '<footer class="a4-foot"', 'id="recruit-record"', 'id="recruit-mgmt-config"'];
+  order.forEach(function (t, i) { assert.ok(at(t) > 0 && (i === 0 || at(order[i - 1]) < at(t)), '並び: ' + t); });
+  ['<section class="sec"', 'class="rh"', 'class="rtool', 'class="kv script-judge"', '<div class="result ', '<h2>', 'id="clSheet"', 'id="rtPrintChecklist"',
+    '<h2>応募時の情報</h2>', '<h2>面接者への申し送りコメント</h2>', '<h2>シフト貢献度</h2>', 'id="rtPrintSheet"', 'id="rtPrintAll"', 'class="dash"', 'data-tile=']
+    .forEach(function (t) { assert.ok(html.indexOf(t) < 0, '含まない: ' + t); });
+  assert.ok(ns.indexOf('シフト貢献度') < 0 && ns.indexOf('2軸') < 0, 'script 要素以外に「シフト貢献度」「2軸」が無い');
+  // 応募者の項目は用紙の見出し（.cl-who）と面接メモ（Step① のメモは「メモ」。「備考」は出さない）
+  const head = html.slice(at('<div class="cl-sheet-head">'), at('<div class="cl-judge'));
+  ['台本 花子', '2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央'].forEach(function (t) { assert.ok(head.indexOf(t) > 0, '見出しに ' + t); });
+  assert.ok(html.indexOf('<div class="cl-nm-k">メモ</div><div class="cl-nm-v">電話の受け答えが丁寧。</div>') > 0 && ns.indexOf('備考') < 0, '① のメモは「メモ」');
+  // 消極属性（旧レコードの header.negatives）は出さない
+  ['短期希望', '消極属性'].forEach(function (t) { assert.ok(head.indexOf(t) < 0, '見出しに無い: ' + t); });
   assert.ok(html.indexOf('消極属性') < 0 && html.indexOf('朝～12時のみ') < 0, '保存 HTML に消極属性・朝～12時のみ が無い');
   assert.strictEqual((html.match(/<\/script>/g) || []).length, (html.match(/<script[ >]/g) || []).length, 'script 要素の開始・終了の数が同じ');
-  // 回答なし（白紙の台本も has-cl）
+  // 回答なし: 白紙の台本の用紙（結果「未実施」）
   const rec0 = S.buildRecord(scriptState({ checklist: (function () { const c = R.emptyChecklist(); c.header.date = '2026-10-10'; return c; })(), judgment: null, step: 1 }));
   const html0 = S.generateReportHTML(rec0, P());
-  ['class="view-report has-cl mode-script"', 'id="clPaper"', 'id="rtPrintChecklist"', '採用可否判定は未実施です（アプリの「報告書」を開くと判定します）。']
-    .forEach(function (t) { assert.ok(html0.indexOf(t) > 0, '回答なし: ' + t); });
+  ['class="a4-doc"', 'id="a4"', '<span class="cl-tile-v">未実施</span>', '<div class="cl-stamps">'].forEach(function (t) { assert.ok(html0.indexOf(t) > 0, '回答なし: ' + t); });
 });
 
 test('77 scriptApplicantRows・checklistSheetHtml', function () {
@@ -905,7 +906,7 @@ test('77 scriptApplicantRows・checklistSheetHtml', function () {
   // checklistSheetHtml（旧い詳細の項目が state に残っていても、記録は 6 キーだけ）
   const rec2 = S.buildRecord(scriptState({ applicant: { name: '台本 花子', age: '20', category: '大学2年生', workPeriod: 'long', daysMin: '3', daysMax: '4', shifts: { sat: { start: '10:00', end: '18:00' } }, reviewerNotes: '電話の受け答えが丁寧。' } }));
   assert.deepStrictEqual(Object.keys(rec2.applicant), ['name', 'gender', 'age', 'category', 'graduationDate', 'reviewerNotes']);
-  const sh = S.checklistSheetHtml(rec2, P(), { mode: 'sheet' });
+  const sh = S.checklistSheetHtml(rec2, P(), {});
   //   1 ページの A4（2026-10-14）: 結果ストリップは 結果・総合判断・必須条件・確認点、Step① のメモは【面接メモ】の「メモ」
   ['<span class="cl-tile-k">確認点</span>', '<span class="cl-tile-k">必須条件</span>', '<span class="cl-tile-k">総合判断</span>', '<span class="cl-tile-k">結果</span>', 'class="cl-judge"',
     '可・2,500円', '短期求人', '<div class="cl-nm-k">メモ</div><div class="cl-nm-v">電話の受け答えが丁寧。</div>'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
@@ -920,17 +921,16 @@ test('77 scriptApplicantRows・checklistSheetHtml', function () {
   assert.ok(shHead.length > 0 && shHead.indexOf('短期希望') < 0 && shHead.indexOf('<dt>目安</dt>') < 0, 'A4 ヘッダーに短期希望・目安なし');
   assert.deepStrictEqual(kvKeys(shHead), ['面接日', '担当', '応募した求人', 'タクシー可否・料金'], 'A4 ヘッダー 2 行目（卒業予定が無い記録）: ' + kvKeys(shHead).join(','));
   assert.ok(shHead.indexOf('卒業予定') < 0, '卒業予定が無い記録は 1 行目にも出さない');
-  const shG = S.checklistSheetHtml(S.buildRecord(scriptState()), P(), { mode: 'sheet' });
+  const shG = S.checklistSheetHtml(S.buildRecord(scriptState()), P(), {});
   const shGHead = headOf(shG);
   assert.deepStrictEqual(kvKeys(shGHead), ['面接日', '担当', '応募した求人', 'タクシー可否・料金'], 'A4 ヘッダー 2 行目の順: ' + kvKeys(shGHead).join(','));
   assert.ok(shGHead.indexOf('<span class="cl-sh-grad"><b>卒業予定</b>2029年3月</span>') > 0 && shGHead.indexOf('<span class="cl-sh-grad">') < shGHead.indexOf('<dl class="cl-sh-kv">'), 'A4 ヘッダー 1 行目に卒業予定');
   ['台本 花子', '大学2年生・20歳・女性', '2029年3月', '短期求人', '可・2,500円', '<dt>面接日</dt><dd>2026/10/10</dd>', '<dt>担当</dt><dd>笹川 晴央'].forEach(function (t) { assert.ok(shGHead.indexOf(t) > 0, 'A4 ヘッダーに ' + t); });
-  const sec = S.checklistSheetHtml(rec2, P(), { mode: 'section' });
-  assert.ok(sec.indexOf('可・2,500円') > 0 && sec.indexOf('（手入力）') < 0 && sec.indexOf('（自動）') < 0 && sec.indexOf('<dt>目安</dt>') < 0, 'section');
 });
 
-test('78 「採用可否判定」節の見出し（必須条件の不一致は from / to に関係なく固定）・押印欄の説明', function () {
-  const head = function (html) { const m = html.match(/<div class="adj-head">([\s\S]*?)<\/div>/g); return m ? m.map(function (x) { return x.replace(/<[^>]+>/g, ''); }) : []; };
+test('78 用紙の調整の行（必須条件の不一致は from / to に関係なく固定）・押印欄の説明', function () {
+  // 保存 HTML の用紙の結果ストリップの下（.cl-adj）。1 件 1 行の見出し（太字）
+  const head = function (html) { const m = html.match(/<ul class="cl-adj">[\s\S]*?<\/ul>/); return m ? (m[0].match(/<li><b>([\s\S]*?)<\/b>/g) || []).map(function (x) { return x.replace(/<[^>]+>/g, ''); }) : []; };
   const mk = function (cl, prof) {
     prof = prof || P();
     const s0 = scriptState();
@@ -946,7 +946,7 @@ test('78 「採用可否判定」節の見出し（必須条件の不一致は f
   const cl2 = R.emptyChecklist(); cl2.values.must_weekly = 'mismatch';
   const r2 = mk(cl2);
   assert.ok(r2.j.adjustments[0].from === 'review' && r2.j.adjustments[0].to === 'reject', JSON.stringify(plain(r2.j.adjustments)));
-  assert.deepStrictEqual(r2.heads, ['必須条件の不一致により「不採用推奨」に固定（総合判断は未入力）']);
+  assert.deepStrictEqual(r2.heads, ['必須条件の不一致により「不採用推奨」に固定']);
   // 総合判断「不採用」＋不一致（from = to = reject）
   const cl3 = clAll('good', 'reject', null, P()); cl3.values.must_weekly = 'mismatch';
   assert.deepStrictEqual(mk(cl3).heads, ['必須条件の不一致により「不採用推奨」に固定']);
@@ -957,7 +957,7 @@ test('78 「採用可否判定」節の見出し（必須条件の不一致は f
   assert.deepStrictEqual(r4.heads, ['必須条件の不一致により「上長最終判断要」に固定']);
   // 必須条件以外の調整（総合判断の上限）は従来どおり「調整」
   const p5 = P(); p5.checklist.overallCaps.hold = 'reject';
-  assert.deepStrictEqual(mk(clAll('good', 'hold', null, p5), p5).heads, ['総合判断による結果「上長最終判断要」から「不採用推奨」に調整']);
+  assert.deepStrictEqual(mk(clAll('good', 'hold', null, p5), p5).heads, ['上長最終判断要 → 不採用推奨']);
   // 調整なしなら見出しなし
   assert.deepStrictEqual(mk(clAll('good', 'hire', null, P())).heads, []);
   // 押印欄の説明（既定）。書き換えた説明は残す
@@ -988,8 +988,8 @@ test('79 消極属性の削除（旧設定・旧レコードの互換。docs/SPE
   const shown = html.replace(/<script type="application\/json" id="recruit-record">[\s\S]*?<\/script>/, '');
   assert.ok(shown.length < html.length, 'JSON ブロックを除いた');
   ['消極属性', '朝～12時のみ'].forEach(function (t) { assert.ok(shown.indexOf(t) < 0, '保存 HTML（表示部分）に無い: ' + t); });
-  ['<h2>応募者情報</h2>', 'id="clSheet"', '短期求人', '可・2,500円'].forEach(function (t) { assert.ok(html.indexOf(t) > 0, '保存 HTML に ' + t); });
-  const sheet = S.checklistSheetHtml(old, P(), { mode: 'sheet' });
+  ['id="a4"', '<div class="cl-who">', '短期求人', '可・2,500円'].forEach(function (t) { assert.ok(html.indexOf(t) > 0, '保存 HTML に ' + t); });
+  const sheet = S.checklistSheetHtml(old, P(), {});
   const head = sheet.slice(sheet.indexOf('cl-sheet-head'), sheet.indexOf('<div class="cl-judge'));
   assert.ok(head.indexOf('短期希望') < 0 && head.indexOf('消極属性') < 0 && head.indexOf('短期求人') > 0, 'A4 ヘッダー');
   ctx.DOMParser = function () {};
@@ -1011,7 +1011,7 @@ test('79 消極属性の削除（旧設定・旧レコードの互換。docs/SPE
   } finally { delete ctx.DOMParser; }
 });
 
-test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC-checklist.md 4-2・2026-10-14）', function () {
+test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC-checklist.md 4-2・docs/SPEC-a4.md 1-2）', function () {
   const escH = ctx.RecruitUtil ? ctx.RecruitUtil.esc : function (x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
   const st = scriptState();
   const p = st.profile;
@@ -1022,7 +1022,7 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
   cl.values.nt_hire = true;
   cl.notes = { continuity_q: '前職は飲食で2年。学業との両立のため退職。', rt_concrete: '土日両日可と具体的に回答' };
   const rec = S.buildRecord(Object.assign({}, st, { checklist: cl }));
-  const sh = S.checklistSheetHtml(rec, p, { mode: 'sheet' });
+  const sh = S.checklistSheetHtml(rec, p, {});
   // (1) 台本の説明文・質問文（「」で始まる質問ラベル）・確認点の補足・ブロックの注記・ページの前書きを載せない
   R.checklistItems(def, 'explain').forEach(function (x) { assert.ok(sh.indexOf(escH(x.item.label)) < 0, '説明文なし: ' + x.item.label); });
   R.checklistItems(def, 'question').forEach(function (x) {
@@ -1042,7 +1042,7 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
   assert.deepStrictEqual(must, ['<tr class="m-match" data-cl-item="must_weekly">', '<tr class="m-match" data-cl-item="must_busy">']);
   // 未入力の確認点も行は出す（灰色の「—」）
   const cl2 = plain(cl); delete cl2.values.rt_team; delete cl2.values.rt_mismatch;
-  const sh2 = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: cl2 })), p, { mode: 'sheet' });
+  const sh2 = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: cl2 })), p, {});
   assert.strictEqual((sh2.match(/<tr data-cl-item="rt_/g) || []).length, 7);
   assert.strictEqual((sh2.match(/<span class="cl-mark m-none">—<\/span>/g) || []).length, 2);
   assert.ok(sh2.indexOf('○5 △0 ×0 未入力2') > 0, '確認点タイルに未入力');
@@ -1056,10 +1056,10 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
   assert.ok(sh.indexOf('<span class="cl-ex-i">①' + ' 4/4</span>') > 0 && sh.indexOf('② 3/3') > 0 && sh.indexOf('③ 4/4') > 0 && sh.indexOf('④ 3/3') > 0, '短期求人: ① 4/4');
   ['regular', ''].forEach(function (pst) {
     const c3 = plain(cl); c3.header.posting = pst;
-    const h3 = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: c3 })), p, { mode: 'sheet' });
+    const h3 = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: c3 })), p, {});
     assert.ok(h3.indexOf('<span class="cl-ex-i">① 2/2</span>') > 0 && h3.indexOf('① 4/4') < 0, '求人「' + pst + '」: ① 2/2');
     c3.values.ex_fare = false;
-    const h4 = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: c3 })), p, { mode: 'sheet' });
+    const h4 = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: c3 })), p, {});
     assert.ok(h4.indexOf('<span class="cl-ex-i is-off">① 1/2</span>') > 0, '未説明があれば強調: ' + pst);
   });
   assert.ok(sh.indexOf('<span class="cl-ex-k">合否連絡</span><span class="cl-ex-i">採用時 ☑</span><span class="cl-ex-sep">／</span><span class="cl-ex-i is-off">不合格 ☐</span>') > 0, '合否連絡は短い名前と☑/☐');
@@ -1070,16 +1070,23 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
   assert.ok(sh.indexOf('<div class="cl-nm-k"><span class="cl-nm-no">②</span>前のバイトの期間・退職理由 ほか2問</div><div class="cl-nm-v">前職は飲食で2年。学業との両立のため退職。</div>') > 0, '② の回答');
   assert.ok(sh.indexOf('週3日出せないと分かったら') < 0 && sh.indexOf('当日急に出られなくなったら') < 0, '2 問目以降の名前は並べない');
   const clQ = plain(cl); clQ.notes = { reverse_q: '時給と交通費の上限を質問' };
-  const shQ = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: clQ })), p, { mode: 'sheet' });
+  const shQ = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: clQ })), p, {});
   assert.ok(shQ.indexOf('<div class="cl-nm-k"><span class="cl-nm-no">⑤</span>気になる点（逆質問）</div><div class="cl-nm-v">時給と交通費の上限を質問</div>') > 0, '1 問だけのブロック');
   assert.ok(sh.indexOf('<div class="cl-nm-k">面接所見</div><div class="cl-nm-v">受け答えが丁寧</div>') > 0 && sh.indexOf('<div class="cl-nm-k">メモ</div><div class="cl-nm-v">電話の受け答えが丁寧。</div>') > 0);
   // 案内行: 「…」で切れたメモがある（.cl-nm-cut）／質問の回答を省いた（.cl-compact-2・質問の回答があるときだけ .has-q）ときに表示
-  assert.ok(sh.indexOf('<p class="cl-nm-ref has-q"><span class="cl-nm-ref-c">「…」で切れたメモの全文は、保存 HTML の「詳細」表示にあります</span><span class="cl-nm-ref-q">質問の回答は省略（') > 0, '質問の回答があるときの案内行');
+  assert.ok(sh.indexOf('<p class="cl-nm-ref has-q"><span class="cl-nm-ref-c">「…」で切れたメモは、画面でクリックすると全文を表示します</span>' +
+    '<span class="cl-nm-ref-q">質問の回答は省略（画面でこの行をクリックすると、回答と「…」で切れたメモの全文を表示します）</span></p>') > 0, '質問の回答があるときの案内行');
+  assert.ok(sh.indexOf('詳細') < 0, '「詳細」表示の案内は無い');
+  //   アプリ ③ の紙（クリックしても窓を出さない）は o.refWhere で「保存した HTML の画面で」に言い換える（文言以外は同じ）
+  const shApp = S.checklistSheetHtml(rec, p, { refWhere: '保存した HTML の画面で' });
+  assert.ok(shApp.indexOf('<span class="cl-nm-ref-c">「…」で切れたメモは、保存した HTML の画面でクリックすると全文を表示します</span>' +
+    '<span class="cl-nm-ref-q">質問の回答は省略（保存した HTML の画面でこの行をクリックすると、回答と「…」で切れたメモの全文を表示します）</span>') > 0, '③ の紙の案内行');
+  assert.strictEqual(shApp.split('保存した HTML の').join(''), sh, '③ の紙は案内の文言だけが違う');
   const clNoQ = plain(cl); clNoQ.notes = {};
-  const shNoQ = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: clNoQ })), p, { mode: 'sheet' });
+  const shNoQ = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: clNoQ })), p, {});
   assert.ok(shNoQ.indexOf('<p class="cl-nm-ref"><span class="cl-nm-ref-c">') > 0 && shNoQ.indexOf('cl-nm-ref-q') < 0 && shNoQ.indexOf('has-q') < 0, '質問の回答が無ければ「…」の案内だけ（面接所見・メモが切れたとき用）');
   const empty = plain(cl); empty.notes = {};
-  const shE = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: empty, interviewNotes: '', applicant: Object.assign({}, st.applicant, { reviewerNotes: '' }) })), p, { mode: 'sheet' });
+  const shE = S.checklistSheetHtml(S.buildRecord(Object.assign({}, st, { checklist: empty, interviewNotes: '', applicant: Object.assign({}, st.applicant, { reviewerNotes: '' }) })), p, {});
   assert.ok(shE.indexOf('cl-blk-notes') < 0 && shE.indexOf('面接メモ') < 0, '何も無ければ【面接メモ】ごと省く');
   // (5) 短い名前: short → 既定の short（文言が既定と同じ旧い台本）→ 文言の先頭 14 文字＋「…」（前後の「」は外す）
   const pS = P();
@@ -1095,7 +1102,7 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
   assert.ok(!('short' in nBad[0]) && !('short' in nBad[1]), '空・文字列以外の short は外す');
   assert.deepStrictEqual(plain(S.normalizeProfile(nS)), plain(nS), '冪等');
   const recS = S.buildRecord(Object.assign({}, st, { profile: nS, checklist: cl }));
-  const shS = S.checklistSheetHtml(recS, nS, { mode: 'sheet' });
+  const shS = S.checklistSheetHtml(recS, nS, {});
   assert.ok(shS.indexOf('<span class="cl-nm-no">②</span>アルバイトを続けるうえで一番… ほか2問</div>') > 0, shS.match(/<span class="cl-nm-no">②<\/span>[^<]*/));
   const nQ = nS.checklist.sections[1].blocks[1].items;
   assert.strictEqual(S.checklistShortLabel(nQ[1]), '週3日出せないと分かったら', '文言が既定と同じ旧い台本は既定の short');
@@ -1109,65 +1116,81 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
   ['<div class="cl-judge" data-result="recommend">', '<div class="cl-tile cl-tile-res t-ok"><span class="cl-tile-k">結果</span><span class="cl-tile-v">採用推奨</span>', '<span class="cl-tile-v">すべて一致</span>',
     '<span class="cl-tile-v">16<small>/16点</small></span>', '○7 △0 ×0', 'class="cl-decision is-none"', 'cl-judge-row'].forEach(function (t) { assert.ok(sh.indexOf(t) > 0, 'sheet に ' + t); });
   assert.ok(sh.indexOf('<div class="cl-judge') < sh.indexOf('cl-blk-must') && sh.indexOf('class="cl-decision') < sh.indexOf('cl-blk-must'), '最終合否は結果ストリップの右端（必須条件より前）');
-  const shN = S.checklistSheetHtml(Object.assign({}, rec, { judgment: null }), p, { mode: 'sheet' });
+  const shN = S.checklistSheetHtml(Object.assign({}, rec, { judgment: null }), p, {});
   assert.ok(shN.indexOf('<div class="cl-tile cl-tile-res t-none"><span class="cl-tile-k">結果</span><span class="cl-tile-v">未実施</span>') > 0 && shN.indexOf('cl-adj') < 0);
-  // 必須条件の不一致: 結果は不採用推奨・.cl-adj に「必須条件の不一致により「不採用推奨」に固定」の 1 行（保存 HTML の「採用可否判定」と同じ言い方）
+  // 必須条件の不一致: 結果は不採用推奨・.cl-adj に「必須条件の不一致により「不採用推奨」に固定」の 1 行
   const clNg = plain(cl); clNg.values.must_busy = 'mismatch';
   const stNg = scriptState({ checklist: clNg }); stNg.judgment = R.evaluateScript(stNg.applicant, clNg, p, OPTS);
-  const shNg = S.checklistSheetHtml(S.buildRecord(stNg), p, { mode: 'sheet' });
+  const shNg = S.checklistSheetHtml(S.buildRecord(stNg), p, {});
   assert.ok(/<ul class="cl-adj"><li><b>必須条件の不一致により「不採用推奨」に固定<\/b>：必須条件が一致しないため/.test(shNg) && shNg.indexOf('<div class="cl-tile cl-tile-must is-ng"><span class="cl-tile-k">必須条件</span><span class="cl-tile-v">不一致 1</span>') > 0 &&
     shNg.indexOf('<div class="cl-judge" data-result="reject">') > 0 && shNg.indexOf('<tr class="m-mismatch" data-cl-item="must_busy"><td class="cl-mm-c"><span class="cl-mm">×不一致</span>') > 0, shNg.slice(0, 200));
-  // 押印行（アプリの印刷用）は最下段の .cl-stamps
-  const shSt = S.checklistSheetHtml(rec, p, { mode: 'sheet', stamps: '<div class="stamp-row">S</div>' });
-  assert.ok(shSt.lastIndexOf('<div class="cl-stamps"><div class="stamp-row">S</div></div></div>') === shSt.length - '<div class="cl-stamps"><div class="stamp-row">S</div></div></div>'.length);
-  // ヘッダー帯（題名・台本の版・劇場名・作成日）
-  assert.ok(sh.indexOf('<div class="cl-band"><span class="cl-band-t">面接チェックリスト報告</span><span class="cl-band-v">台本 2026-10-08 版</span><span class="cl-band-r">TOHOシネマズ新宿 ／ 作成 ') > 0);
+  // 押印行は用紙の最下段の .cl-stamps（record.management から描く。o.stamps の文字列は使わない）。押印 1 件 → ハンコ 1・欄 2・2 列
+  const shSt = S.checklistSheetHtml(rec, p, { stamps: '<div class="stamp-row">S</div>' });
+  const stRow = shSt.slice(shSt.indexOf('<div class="cl-stamps">'));
+  assert.ok(stRow.indexOf('<div class="cl-stamps"><div class="stamp-row cl-stamps-row cols-2">') === 0 && /<\/div><\/div><\/div><\/div>$/.test(stRow) && shSt.indexOf('>S<') < 0, '最下段・o.stamps は使わない');
+  assert.ok((stRow.match(/<svg class="hanko"/g) || []).length === 1 && (stRow.match(/data-field-id="/g) || []).length === 2 && stRow.indexOf('笹川 晴央（副支配人）　2026.10.10') > 0);
+  //   押印欄 4 件は 3 列（cols-2 なし）
+  const p4s = P(); p4s.management.fields.push({ id: 'extra3', label: '追加確認3', hint: '' }, { id: 'extra4', label: '追加確認4', hint: '' });
+  const sh4s = S.checklistSheetHtml(rec, S.normalizeProfile(p4s), {});
+  assert.ok((sh4s.match(/data-field-id="/g) || []).length === 4 && sh4s.indexOf('cols-2') < 0 && sh4s.indexOf('<div class="stamp-row cl-stamps-row">') > 0);
+  // 見出し（白地＋下線。題名・台本の版・劇場名・作成日。ロゴが無ければ題名だけ）
+  assert.ok(sh.indexOf('<div class="cl-title"><span class="cl-title-t">面接チェックリスト報告</span><span class="cl-title-r">台本 2026-10-08 版 ／ TOHOシネマズ新宿 ／ 作成 ') > 0 && sh.indexOf('cl-band') < 0);
   // (7) 旧い形式の記録（mode: 'full'・2 軸の判定・勤務条件の項目入り）でも 4 タイル・応募者は ① の項目だけ
-  const shF = S.checklistSheetHtml(fixtureRecord('legacy-full-checklist.html'), P(), { mode: 'sheet' });
+  const shF = S.checklistSheetHtml(fixtureRecord('legacy-full-checklist.html'), P(), {});
   assert.ok(shF.indexOf('<span class="cl-tile-k">シフト貢献度</span>') < 0 && shF.indexOf('cl-tiles n5') < 0 && shF.indexOf('<dt>勤務期間</dt>') < 0 && shF.indexOf('<dt>希望シフト</dt>') < 0 && shF.indexOf('<div class="cl-tiles">') > 0);
   // (8) 1 ページ保証: CSS（.cl-compact・.cl-compact-2）と保存 HTML の計測（アプリと同じ関数のソース）
   const css = S.checklistSheetCss();
-  ['.cl-mode-sheet.cl-compact{font-size:9px', '.cl-mode-sheet.cl-compact-2 .cl-nm-q{display:none}', '.cl-mode-sheet.cl-nm-cut .cl-nm-ref,.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q{display:block}', '-webkit-line-clamp:2', '@page clsheet{size:A4;margin:8mm 10mm}',
+  ['.cl-mode-sheet.cl-compact{font-size:9px', '.cl-mode-sheet.cl-compact-2 .cl-nm-q{display:none}', '.cl-mode-sheet.cl-nm-cut .cl-nm-ref,.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q{display:block}', '-webkit-line-clamp:2',
+    // A4 縦の用紙（210×297mm・内側の余白 8mm／10mm）。用紙のハンコはアプリのダークテーマの明るさ補正を受けない
+    '.a4{display:block;box-sizing:border-box;width:210mm;height:297mm;padding:8mm 10mm;', '.cl-sheet .hanko,.cl-sheet .verdict-stamp{filter:none !important}',
+    '.cl-mode-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #24324a}',
     // 面接所見は行数の上限を固定（.cl-compact 10 行 → .cl-compact-q1 6 行 → .cl-compact-2 4 行）。質問の回答は .cl-compact では 2 行のまま、.cl-compact-q1 で 1 行
     '.cl-mode-sheet.cl-compact .cl-nm-iv .cl-nm-v,.cl-mode-sheet.cl-compact .cl-nm-memo .cl-nm-v{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:10;overflow:hidden}',
     '.cl-mode-sheet.cl-compact-q1 .cl-nm-q .cl-nm-v,.cl-mode-sheet.cl-compact-q1 .cl-nm-b .cl-nm-v{-webkit-line-clamp:1}', '.cl-mode-sheet.cl-compact-q1 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:6}', '.cl-mode-sheet.cl-compact-2 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:4}'
   ].forEach(function (t) { assert.ok(css.indexOf(t) >= 0, 'CSS に ' + t); });
   assert.ok(css.indexOf('.cl-mode-sheet.cl-compact .cl-nm-q .cl-nm-v') < 0, '.cl-compact では質問の回答を 1 行にしない（面接所見から先に削る）');
   assert.ok(css.indexOf('cl-fit') < 0 && css.indexOf('break-before:page') < 0, '2 ページ用の規則なし');
+  ['@page clsheet', '.cl-band', 'cl-sheet-print', 'print-checklist', 'cl-mode-section', '.cl-s-h', '@media'].forEach(function (x) { assert.ok(css.indexOf(x) < 0, 'CSS に無い: ' + x); });   // 用紙の中に画面幅で変わる規則を置かない
+  // 保存 HTML の計測: アプリと同じ関数のソース・上限は用紙の内寸の高さ（押印行込み）。印刷のための切替なし
   const html = S.generateReportHTML(rec, p);
-  assert.ok(html.indexOf('function clFitSheet(sheet, limit)') > 0 && html.indexOf('var CL_LIMIT=' + S.CL_SHEET_BODY_PX + ';') > 0 && html.indexOf('window.__fitChecklistPaper=fitPaper;') > 0 && html.indexOf('cl-fit') < 0);
+  assert.ok(html.indexOf('function clFitSheet(sheet, limit)') > 0 && html.indexOf('var LIMIT=1052,') > 0 && html.indexOf('window.__a4Fit = fit;') > 0 && html.indexOf('cl-fit') < 0);
   assert.ok(html.indexOf('webkitLineClamp') < 0, '面接所見を残りの高さまで広げない（行数の上限は CSS で固定）');
-  assert.ok(S.CL_SHEET_BODY_PX > 800 && S.CL_SHEET_BODY_PX < 1040, String(S.CL_SHEET_BODY_PX));
-  // 押印行の分は押印欄の件数（1 段 3 件）で決める: 3 件まで 950・4〜6 件 890・7〜9 件 830（保存 HTML の CL_LIMIT も同じ）
-  assert.deepStrictEqual([0, 1, 3, 4, 6, 7, 9, 10].map(S.checklistSheetLimit), [950, 950, 950, 890, 890, 830, 830, 770]);
-  assert.strictEqual(S.checklistSheetLimit(3), S.CL_SHEET_BODY_PX);
-  // 既定の押印欄 2 件は 1 段（上限 950）。JSON で 2 件足すと 4 件・2 段（上限 890）
-  assert.ok(html.indexOf('var CL_LIMIT=950;') > 0, '押印欄 2 件の保存 HTML は上限 950');
+  assert.ok(S.CL_SHEET_LIMIT_PX === 1052 && S.checklistSheetLimit === undefined && S.CL_SHEET_BODY_PX === undefined, '上限は定数 1 つ（押印欄の件数による見積もりは無い）');
   const p4 = P(); p4.management.fields.push({ id: 'extra3', label: '追加確認3', hint: '' }, { id: 'extra4', label: '追加確認4', hint: '' });
   const n4 = S.normalizeProfile(p4);
   assert.strictEqual(n4.management.fields.length, 4);
   const html4 = S.generateReportHTML(S.buildRecord(Object.assign({}, st, { profile: n4, checklist: cl })), n4);
-  assert.ok(html4.indexOf('var CL_LIMIT=890;') > 0 && html4.indexOf('var CL_LIMIT=950;') < 0, '押印欄 4 件（2 段）の保存 HTML は上限 890');
+  assert.ok(html4.indexOf('var LIMIT=1052,') > 0 && (noScript(html4).match(/class="stamp-box" data-field-id="/g) || []).length === 4, '押印欄 4 件も同じ上限（押印行を含めて計る）');
   assert.strictEqual((html.match(/<\/script>/g) || []).length, (html.match(/<script[ >]/g) || []).length);
-  // section（「詳細」の節）は従来どおり台本の全文（質問文・説明文・補足）
-  const sec = S.checklistSheetHtml(rec, p, { mode: 'section' });
-  assert.ok(sec.indexOf('ol class="cl-qs"') > 0 && sec.indexOf('歌舞伎町ですので') > 0 && sec.indexOf('シフト提出は木曜23時、確定は水曜') > 0 && sec.indexOf('cl-hint') > 0 && sec.indexOf('cl-judge') < 0);
+  // 台本の全文（質問文・説明文・補足）は保存 HTML にも出さない（「詳細」表示は 2026-10-14 に削除）
+  const shownH = noScript(html).replace(/<script type="application\/json"[\s\S]*?<\/script>/g, '');
+  assert.ok(shownH.length > 1000 && shownH.indexOf('ol class="cl-qs"') < 0 && shownH.indexOf('歌舞伎町ですので') < 0 && shownH.indexOf('シフト提出は木曜23時、確定は水曜') < 0 && shownH.indexOf('cl-hint') < 0);
 });
 
-test('81 1 ページ保証の詰め方（fitChecklistSheet: 段階の順・「…」の案内・押印行の除外・縮小の測り直し）', function () {
+test('81 1 ページ保証の詰め方（fitChecklistSheet: 段階の順・「…」の案内と .cl-cut・押印行込みの高さ・縮小の測り直し）', function () {
   // 疑似 DOM: 高さは付いているクラスと縮小率で決める。縮小は Chromium と同じく比例しない（小さくするほど縮み切らない）ものとする
+  function classes() {
+    const c = {};
+    return { c: c, list: { add: function (x) { c[x] = true; }, remove: function (x) { delete c[x]; }, contains: function (x) { return !!c[x]; } } };
+  }
   function mock(base, opts) {
     opts = opts || {};
-    const cls = {};
+    const sc = classes(), cls = sc.c;
+    // メモの要素: 表示されていて切れるもの・表示されていて切れないもの・非表示（切れる寸法でも数えない）。classList の無い要素は飛ばす
+    const vCut = classes(), vOk = classes(), vHidden = classes();
+    const els = [
+      { classList: vCut.list, getClientRects: function () { return [1]; }, get scrollHeight() { return (typeof opts.cut === 'function' ? opts.cut(cls) : !!opts.cut) ? 40 : 20; }, clientHeight: 20, scrollWidth: 100, clientWidth: 100 },
+      { classList: vOk.list, getClientRects: function () { return [1]; }, scrollHeight: 20, clientHeight: 20, scrollWidth: 100, clientWidth: 100 },
+      { classList: vHidden.list, getClientRects: function () { return []; }, scrollHeight: 99, clientHeight: 1, scrollWidth: 1, clientWidth: 1 },
+      { getClientRects: function () { return []; }, scrollHeight: 1, clientHeight: 1, scrollWidth: 1, clientWidth: 1 }
+    ];
+    vOk.c['cl-cut'] = true;   // 前回の計測の残り（切れなくなったら外す）
     const sheet = {
       style: { zoom: '' },
-      classList: { add: function (c) { cls[c] = true; }, remove: function (c) { delete cls[c]; }, contains: function (c) { return !!cls[c]; } },
+      classList: sc.list,
       querySelector: function (sel) { return sel === '.cl-stamps' && opts.stamps ? opts.stamps(sheet) : null; },
-      querySelectorAll: function () {
-        const cut = typeof opts.cut === 'function' ? opts.cut(cls) : !!opts.cut;
-        return [{ getClientRects: function () { return [1]; }, scrollHeight: cut ? 40 : 20, clientHeight: 20, scrollWidth: 100, clientWidth: 100 },
-          { getClientRects: function () { return []; }, scrollHeight: 99, clientHeight: 1, scrollWidth: 1, clientWidth: 1 }];   // 非表示の要素は数えない
-      },
+      querySelectorAll: function () { return els; },
+      __els: { cut: vCut.c, ok: vOk.c, hidden: vHidden.c },
       getBoundingClientRect: function () { return { top: 0, height: sheet.__h(), bottom: sheet.__h() }; },
       __h: function () {
         let h = base.v;
@@ -1182,13 +1205,16 @@ test('81 1 ページ保証の詰め方（fitChecklistSheet: 段階の順・「�
     return { sheet: sheet, cls: cls };
   }
   const L = 950;
+  const cutOf = function (m) { return ['cut', 'ok', 'hidden'].filter(function (k) { return !!m.sheet.__els[k]['cl-cut']; }).join(','); };
   const on = function (m) { return ['cl-compact', 'cl-compact-q1', 'cl-compact-2', 'cl-nm-cut'].filter(function (c) { return m.cls[c]; }).join(' '); };
   let m = mock({ v: 900 });
   assert.strictEqual(S.fitChecklistSheet(m.sheet, L), '');
   assert.strictEqual(on(m), '');
+  assert.strictEqual(cutOf(m), '', '切れていなければ .cl-cut は付かない（前回の残りも外す）');
   m = mock({ v: 900 }, { cut: true });
   assert.strictEqual(S.fitChecklistSheet(m.sheet, L), '');
   assert.strictEqual(on(m), 'cl-nm-cut', '「…」で切れたメモがあれば案内を出す（詰めなくても）');
+  assert.strictEqual(cutOf(m), 'cut', '切れた要素だけに .cl-cut（非表示の要素には付けない。保存 HTML ではクリックで全文）');
   m = mock({ v: 1000 });
   assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact');
   // 案内 1 行の高さも含めて計る: .cl-compact だと 952px（案内込み）→ .cl-compact-q1
@@ -1209,12 +1235,14 @@ test('81 1 ページ保証の詰め方（fitChecklistSheet: 段階の順・「�
   big.v = 940;
   assert.strictEqual(S.fitChecklistSheet(m.sheet, L), '');
   assert.ok(m.sheet.style.zoom === '' && on(m) === '', on(m));
-  // 押印行（.cl-stamps）とその上の余白は除いて計る（直前の要素の下端まで）
-  m = mock({ v: 1100 }, { stamps: function () { return { previousElementSibling: { getBoundingClientRect: function () { return { bottom: 930 }; } } }; } });
-  assert.strictEqual(S.fitChecklistSheet(m.sheet, L), '', '押印行を除いた本文 930px は上限以内');
-  // 上限を省略すると押印欄 3 件の上限（CL_SHEET_BODY_PX）
-  m = mock({ v: S.CL_SHEET_BODY_PX + 1 });
+  // 押印行（.cl-stamps）があってもシート全体の高さで計る（押印行は用紙の中。docs/SPEC-a4.md S3）
+  m = mock({ v: 1000 }, { stamps: function () { return { previousElementSibling: { getBoundingClientRect: function () { return { bottom: 930 }; } } }; } });
+  assert.strictEqual(S.fitChecklistSheet(m.sheet, L), 'cl-compact', '押印行込みの 1000px は上限超え');
+  // 上限を省略すると用紙の内寸の高さの上限（CL_SHEET_LIMIT_PX = 1052）
+  m = mock({ v: S.CL_SHEET_LIMIT_PX + 1 });
   assert.strictEqual(S.fitChecklistSheet(m.sheet), 'cl-compact');
+  m = mock({ v: S.CL_SHEET_LIMIT_PX });
+  assert.strictEqual(S.fitChecklistSheet(m.sheet), '');
 });
 // ======================================================================
 // 面接特化（docs/SPEC-slim.md 5-1。#82〜#88）
@@ -1398,44 +1426,44 @@ test('86 buildRecord（書くキー・応募者 6 キー）', function () {
   assert.strictEqual(n.step, 4);
 });
 
-test('87 保存 HTML に削除した機能が無い（.dash・申し送りシート・レポート全体・初期対応者）', function () {
+test('87 保存 HTML に削除した機能が無い（.dash・申し送りシート・レポート全体・初期対応者・詳細表示・印刷の切替）', function () {
   const st = scriptState({ management: { interviewer: { name: '笹川 晴央', short: '笹川', title: '副支配人', date: '2026.10.10', at: '' } } });
   const rec = plain(S.buildRecord(st));
-  rec.scores = { greeting: 5, overall_judgment: 4 };   // 旧評価の点数があっても旧評価の節は出さない
+  rec.scores = { greeting: 5, overall_judgment: 4 };   // 旧評価の点数があっても旧評価は出さない
   const html = S.generateReportHTML(rec, P());
   const shown = html.replace(/<script type="application\/json" id="recruit-record">[\s\S]*?<\/script>/, '');
-  ['class="dash"', 'rtPrintSheet', 'rtPrintAll', '__prepareHandoffSheet', 'print-handoff', 'printingAll', '初期対応者', '詳細モード', 'シフト貢献度', '留意点', 'data-sec="scores"', '面接評価（旧形式', 'data-tile=', 'レポート全体']
+  ['class="dash"', 'rtPrintSheet', 'rtPrintAll', '__prepareHandoffSheet', 'print-handoff', 'printingAll', '初期対応者', '詳細モード', 'シフト貢献度', '留意点', 'data-sec="scores"', '面接評価（旧形式', 'data-tile=', 'レポート全体',
+    // 2026-10-14 に削除（docs/SPEC-a4.md 1-6）: 報告書／詳細の切替・印刷ボタン・印刷専用の複製・詳細表示の節とヘッダー・押印カード・合否パネル
+    'rtViewFull', 'rtViewReport', 'rtPrintChecklist', 'print-checklist', '__prepareChecklistSheet', '__setReportView', '__fitChecklistPaper', 'data-sec=', 'class="rh"', 'class="rtool',
+    'id="clSheet"', 'id="clPaper"', 'id="mgmt"', 'id="decision"', 'mgmtSave', 'view-report', 'view-full', 'cl-mode-section', 'beforeprint', 'afterprint']
     .forEach(function (t) { assert.ok(shown.indexOf(t) < 0, '保存 HTML に無い: ' + t); });
-  assert.ok(html.indexOf('<button type="button" id="rtPrintChecklist" class="primary">A4 で印刷（1 ページ）</button>') > 0, '印刷ボタンは「A4 で印刷（1 ページ）」だけ');
-  assert.strictEqual((html.match(/id="rtPrint/g) || []).length, 1);
-  assert.ok(html.indexOf('<body class="view-report has-cl mode-script"') > 0);
-  // #mgmt の押印欄は 2 つ・2 列
-  const mg = html.slice(html.indexOf('id="mgmt"') - 40, html.indexOf('id="mgmtSave"'));
-  assert.ok(mg.indexOf('<div class="stamp-row cols-2" id="mgmt">') >= 0, mg.slice(0, 80));
+  assert.ok(html.indexOf('<body class="a4-doc"') > 0);
+  // 用紙の押印欄は 2 つ・2 列
+  const mg = html.slice(html.indexOf('<div class="cl-stamps">'), html.indexOf('</main>'));
+  assert.ok(mg.indexOf('<div class="cl-stamps"><div class="stamp-row cl-stamps-row cols-2">') === 0, mg.slice(0, 80));
   assert.deepStrictEqual((mg.match(/data-field-id="([a-z]+)"/g) || []), ['data-field-id="interviewer"', 'data-field-id="final"']);
   assert.ok(html.indexOf('data-field-id="initial"') < 0);
   // 旧レコード（初期対応者の押印入り）から作っても初期対応者の欄は出ない（欄は設定の 2 つ）
   const s3 = fixtureRecord('legacy-full-stamps3.html');
   const h3 = S.generateReportHTML(s3, P());
   assert.ok(noScript(h3).indexOf('data-field-id="initial"') < 0 && noScript(h3).replace(/<script type="application\/json"[\s\S]*?<\/script>/g, '').indexOf('初期対応者') < 0);
-  // 埋め込みスクリプト: beforeprint は報告書表示のときだけ A4（詳細表示はブラウザの既定）
-  assert.ok(html.indexOf('if(!bd.classList.contains("view-report")||bd.classList.contains("print-checklist"))return;') > 0);
   assert.strictEqual((html.match(/<\/script>/g) || []).length, (html.match(/<script[ >]/g) || []).length, 'script 要素の開始・終了の数が同じ');
-  // CSS: 削除した部品の規則が無い・2 列の規則がある
+  // CSS: 削除した部品の規則が無い・用紙の押印行は 2 列のまま（狭い画面でも 1 列にしない。用紙ごと縮小する）
   const css = S.reportCss() + S.checklistSheetCss();
-  ['print-handoff', '.dash', '.tile', 'li.h', '.mx', '.axes', '@page sheet', 'cl-tiles.n5'].forEach(function (t) { assert.ok(css.indexOf(t) < 0, 'CSS に無い: ' + t); });
-  ['.stamp-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}', '.cl-sheet .stamp-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}', '@media (max-width:720px){.stamp-row,.stamp-row.cols-2{grid-template-columns:1fr}}']
-    .forEach(function (t) { assert.ok(css.indexOf(t) >= 0, 'CSS に ' + t); });
+  ['print-handoff', '.dash', '.tile', 'li.h', '.mx', '.axes', '@page sheet', 'cl-tiles.n5', '.rtool', '.paper-wrap', '.rh-', '.sec{', '.decision{', '.mgmt-save', 'print-checklist'].forEach(function (t) { assert.ok(css.indexOf(t) < 0, 'CSS に無い: ' + t); });
+  assert.ok(css.indexOf('.cl-sheet .stamp-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}') >= 0, 'CSS に用紙の押印行の 2 列');
+  assert.ok(css.indexOf('@media (max-width:720px){.stamp-row') < 0 && css.indexOf('@media (max-width') < 0, '画面幅で押印行を 1 列にする規則は無い');
 });
 
 test('88 公開 API（削除した関数が無い・interviewModel の新しい引数）', function () {
   ['buildHandoff', 'evaluateHiring', 'computeContribution', 'isScriptMode', 'isScriptRecord', 'checklistAuto', 'hasNumericScore', 'firstContractEnd', 'CHECKLIST_AUTO',
     'analyzeShifts', 'highschoolStatus', 'nightStatus', 'describeApplicant', 'stageOf', 'interviewConfirm', 'CONDITIONS', 'LOCKED_RULES', 'INPUT_SECTIONS', 'DAYS']
     .forEach(function (k) { assert.strictEqual(R[k], undefined, 'R.' + k); });
-  ['V1_DEFAULT_TEXTS'].forEach(function (k) { assert.strictEqual(S[k], undefined, 'S.' + k); });
+  ['V1_DEFAULT_TEXTS', 'checklistSheetLimit', 'CL_SHEET_BODY_PX'].forEach(function (k) { assert.strictEqual(S[k], undefined, 'S.' + k); });
   ['RESULT_RANK', 'num', 'round1', 'bandOf', 'categoryGroup', 'isStudentGroup', 'emptyChecklist', 'checklistHasInput', 'checklistItems', 'interviewModel', 'mustSummary',
     'checklistSummary', 'checklistDiff', 'scriptApplicantRows', 'evaluateScript', 'circled'].forEach(function (k) { assert.ok(R[k] !== undefined, 'R.' + k); });
-  ['normalizeRecord', 'normalizeProfile', 'parseProfileJSON', 'buildRecord', 'generateReportHTML', 'checklistSheetHtml'].forEach(function (k) { assert.strictEqual(typeof S[k], 'function', 'S.' + k); });
+  ['normalizeRecord', 'normalizeProfile', 'parseProfileJSON', 'buildRecord', 'generateReportHTML', 'checklistSheetHtml', 'checklistSheetCss', 'fitChecklistSheet', 'brandLogo', 'reportCss'].forEach(function (k) { assert.strictEqual(typeof S[k], 'function', 'S.' + k); });
+  assert.strictEqual(S.CL_SHEET_LIMIT_PX, 1052);
   // interviewModel(profile, cl): #55 と同じ点（旧い 3 引数の呼び方だと cl が {} になり 0 点になる）
   const cl = clMarks(['good', 'good', 'good', 'good', 'fair', 'fair', 'poor']);
   const m = R.interviewModel(P(), cl);
@@ -1445,33 +1473,68 @@ test('88 公開 API（削除した関数が無い・interviewModel の新しい�
   assert.ok(R.isStudentGroup('highschool') && !R.isStudentGroup('freeter'));
 });
 
-test('89 ロゴ（brand.js）: 保存レポートのヘッダーは、ロゴがあれば画像・無ければ 1 文字のマーク', function () {
+test('89 ロゴ（brand.js）: 用紙の見出し（アプリ ③・印刷・保存 HTML）は、ロゴがあれば画像・無ければ題名だけ', function () {
   const rec = S.buildRecord({ profile: P(), applicant: SA({ name: 'ロゴ 確認' }), checklist: R.emptyChecklist(), management: {}, step: 1 });
-  const head = function (h) { return (h.match(/<div class="rh-brand">[\s\S]*?<\/div><\/div><\/div>/) || [''])[0]; };
-  // 公開版（RecruitBrand なし・空）: マーク
+  const head = function (h) { return (h.match(/<div class="cl-title">[\s\S]*?<\/div>/) || [''])[0]; };
+  const TITLE = '<span class="cl-title-t">面接チェックリスト報告</span>';
+  // 公開版（RecruitBrand なし・空）: 題名だけ（1 文字のマークも出さない）
   ctx.RecruitBrand = undefined;
   let h = head(S.generateReportHTML(rec, P()));
-  assert.ok(h.indexOf('<span class="rh-mark">新</span>') >= 0 && h.indexOf('rh-logo') < 0, h);
+  assert.ok(h.indexOf('<div class="cl-title">' + TITLE) === 0 && h.indexOf('<img') < 0 && h.indexOf('rh-mark') < 0, h);
+  assert.strictEqual(S.brandLogo('x'), null);
   ctx.RecruitBrand = { logo: '', logoAlt: '' };
   h = head(S.generateReportHTML(rec, P()));
-  assert.ok(h.indexOf('rh-mark') >= 0 && h.indexOf('rh-logo') < 0, h);
-  // ロゴあり: img（代替テキストはエスケープ）
+  assert.ok(h.indexOf('<img') < 0 && h.indexOf(TITLE) > 0, h);
+  // ロゴあり: img（代替テキストはエスケープ）を題名の左に。保存 HTML とアプリの紙（checklistSheetHtml）で同じ
   const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
   ctx.RecruitBrand = { logo: png, logoAlt: 'TOHO "CINEMAS" <x>' };
   h = head(S.generateReportHTML(rec, P()));
-  assert.ok(h.indexOf('<img class="rh-logo" src="' + png + '" alt="TOHO &quot;CINEMAS&quot; &lt;x&gt;">') >= 0 && h.indexOf('rh-mark') < 0, h);
+  assert.ok(h.indexOf('<div class="cl-title"><img class="cl-title-logo" src="' + png + '" alt="TOHO &quot;CINEMAS&quot; &lt;x&gt;">' + TITLE) === 0, h);
+  assert.strictEqual(head(S.checklistSheetHtml(rec, P(), {})), h, 'アプリの紙・印刷と同じ見出し');
+  assert.deepStrictEqual(plain(S.brandLogo('劇場')), { src: png, alt: 'TOHO "CINEMAS" <x>' });
   // 代替テキストが空なら劇場名
   ctx.RecruitBrand = { logo: png, logoAlt: '' };
   assert.ok(head(S.generateReportHTML(rec, P())).indexOf('alt="TOHOシネマズ新宿"') >= 0);
-  // data URL の画像以外・不正な文字を含むものは使わない（マークに戻る）
+  // data URL の画像以外・不正な文字を含むものは使わない（題名だけ）
   ['javascript:alert(1)', 'https://example.com/logo.png', 'data:text/html;base64,PGI+', 'data:image/png;base64,AAA" onerror="x', 'data:image/svg+xml,<svg/>'].forEach(function (bad) {
     ctx.RecruitBrand = { logo: bad, logoAlt: '' };
     const hb = head(S.generateReportHTML(rec, P()));
-    assert.ok(hb.indexOf('rh-mark') >= 0 && hb.indexOf('<img') < 0, bad + ' → ' + hb);
+    assert.ok(hb.indexOf('<img') < 0 && hb.indexOf(TITLE) > 0 && S.brandLogo('x') === null, bad + ' → ' + hb);
   });
   ctx.RecruitBrand = undefined;
-  // CSS
-  assert.ok(S.reportCss().indexOf('.rh-logo{height:28px;width:auto;max-width:150px;flex:none;object-fit:contain}') >= 0);
+  // CSS（高さ 7mm）
+  assert.ok(S.checklistSheetCss().indexOf('.cl-mode-sheet .cl-title-logo{flex:none;display:block;height:7mm;width:auto;max-width:50mm;object-fit:contain}') >= 0);
+  assert.ok(S.reportCss().indexOf('.rh-logo') < 0);
+});
+
+test('90 保存 HTML の構成（A4 縦の用紙 1 枚。docs/SPEC-a4.md 1-1）', function () {
+  const rec = S.buildRecord(scriptState());
+  const html = S.generateReportHTML(rec, P());
+  // body の最初の要素が用紙 main.a4#a4、続いて用紙の外の 1 行（footer.a4-foot に meta.footer）・埋め込みデータ 2 つ・スクリプト 1 つ
+  const body = html.slice(html.indexOf('<body'), html.indexOf('</body>'));
+  assert.ok(/^<body class="a4-doc" data-filename="[^"]+">\n<main class="a4" id="a4"><div class="cl-sheet cl-mode-sheet">/.test(body), body.slice(0, 120));
+  const foot = (html.match(/<footer class="a4-foot" id="a4Foot">([^<]*)<\/footer>/) || [])[1] || '';
+  assert.ok(foot.indexOf(P().meta.footer) === 0 && foot.indexOf('このファイルはアプリの「読み込み」で再度開けます。埋め込みデータは編集しないでください。') > 0, foot);
+  assert.ok(html.indexOf('<title>面接チェックリスト報告 - 台本 花子さん | TOHOシネマズ新宿</title>') > 0);
+  assert.deepStrictEqual((body.match(/<script[^>]*>/g) || []), ['<script type="application/json" id="recruit-record">', '<script type="application/json" id="recruit-mgmt-config">', '<script>']);
+  const tags = body.replace(/<script[\s\S]*?<\/script>/g, '');
+  assert.ok(/<\/main>\n<footer class="a4-foot" id="a4Foot">[^<]*<\/footer>\s*$/.test(tags), tags.slice(-200));
+  // 窓・保存バー・押せる欄の印はスクリプトが作る（生成 HTML の要素には無い）
+  const shown = html.replace(/<style>[\s\S]*?<\/style>/, '').replace(/<script[\s\S]*?<\/script>/g, '');
+  ['class="pop', 'id="a4Pop"', 'class="savebar', 'id="saveBar"', 'data-a4-t=', 'a4-live', '--a4-zoom', 'tabindex=', 'role="button"'].forEach(function (t) { assert.ok(shown.indexOf(t) < 0, '生成 HTML に無い: ' + t); });
+  // CSS: 印刷は用紙そのもの（@page の余白 0）。狭い画面の縮小は画面だけ
+  const css = S.reportCss();
+  ['@page{size:A4 portrait;margin:0}', '@media screen{\n.a4{zoom:var(--a4-zoom,1)}', 'body>.a4{margin:24px auto}', 'body>.a4{margin:0;box-shadow:none}', '.a4-foot,.pop,.savebar{display:none !important}',
+    'body.a4-live .a4 [data-a4-t="stamp"]:hover::after{content:"クリックで押印"}'].forEach(function (t) { assert.ok(css.indexOf(t) >= 0, 'reportCss に ' + t); });
+  assert.ok(html.indexOf('</' + 'script') === html.indexOf('</script>') && (html.match(/<\/script/gi) || []).length === 3, 'script の閉じタグは 3 つだけ');
+  assert.ok(S.reportCss().indexOf('</' + 'script') < 0);
+  // 押印欄 0・合否 OFF でも押印設定は出す（長いメモの窓は常に使う）
+  const p0 = P(); p0.management.decision.enabled = false;
+  const h0 = S.generateReportHTML(rec, p0);
+  assert.ok(h0.indexOf('id="recruit-mgmt-config"') > 0 && JSON.parse(h0.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]).decision === null);
+  // 埋め込みスクリプトは構文として正しい（vm で解釈できる）
+  const code = html.match(/<script>\n([\s\S]*?)\n<\/script>/)[1];
+  assert.doesNotThrow(function () { new vm.Script(code); });
 });
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

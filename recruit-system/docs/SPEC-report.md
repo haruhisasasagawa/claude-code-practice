@@ -1,6 +1,7 @@
 # 詳細仕様書（確定版）: 報告書表示と最終合否スタンプ（フェーズ5）
 
 > 2026-10-14 の面接特化（docs/SPEC-slim.md）で、詳細モード・初期対応者・旧 10 項目評価・レポート全体印刷に関する記述は無効。
+> 2026-10-14 に保存 HTML を A4 縦 1 枚へ変更（docs/SPEC-a4.md）。報告書表示／詳細表示の切替・`#clPaper`／`#clSheet`（保存 HTML）・`#mgmt`／`#decision`・「A4 で印刷（1 ページ）」・'section' モード・押印欄の件数による上限（`checklistSheetLimit`）の記述は無効。保存 HTML は用紙 `main.a4#a4` 1 枚で、押印・最終合否は用紙の欄を直接クリックして押す。
 
 - 対象: `recruit-system/`（ブランチ `claude/toho-shinjuku-hiring-app-quhjtc`。直前コミット 6f32341 = フェーズ4完了。**commit / push はしない**）
 - 根拠: ユーザー決定 D1〜D12（下記 0-2 に要約。変更不可）

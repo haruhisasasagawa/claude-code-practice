@@ -120,7 +120,7 @@
       if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
     });
 
-    // ブラウザの印刷（Ctrl+P）も A4 面接チェックリスト報告にする（保存 HTML の報告書表示と同じ考え方）
+    // ブラウザの印刷（Ctrl+P）も A4 面接チェックリスト報告にする（③ の紙と同じ用紙 1 枚。保存 HTML の印刷と同じ様式）
     let autoClPrint = false;
     window.addEventListener('beforeprint', function () {
       if (state.view !== 'judge' || document.body.classList.contains('print-checklist')) return;
@@ -138,12 +138,12 @@
     $('#brandTheater').textContent = m.theaterName || '';
     $('#brandMark').textContent = (m.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R';
     // ロゴ（brand.js）があれば 1 文字のマークの代わりに出す。公開版は空なのでマークのまま
-    const brand = global.RecruitBrand || {};
     const logo = $('#brandLogo');
     if (logo) {
-      // 保存レポート（storage.js generateReportHTML）と同じ条件: base64 の data URL の画像だけ
-      const hasLogo = typeof brand.logo === 'string' && /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(brand.logo);
-      if (hasLogo) { logo.src = brand.logo; logo.alt = brand.logoAlt || m.theaterName || ''; }
+      // 用紙の見出し（storage.checklistSheetHtml）と同じ条件: base64 の data URL の画像だけ（storage.brandLogo）
+      const bl = typeof S.brandLogo === 'function' ? S.brandLogo(m.theaterName) : null;
+      const hasLogo = !!bl;
+      if (hasLogo) { logo.src = bl.src; logo.alt = bl.alt; }
       logo.hidden = !hasLogo;
       $('#brandMark').hidden = hasLogo;
       $('#brand').classList.toggle('has-logo', hasLogo);
@@ -958,11 +958,13 @@
     if (!noSummary) renderSummary();
   }
   // =====================================================================
-  // Step③ 報告書（docs/SPEC-script-mode.md 2-4）
-  //   紙プレビュー（保存 HTML の報告書表示と同じ A4 シート）→ 押印 → 最終合否 → 保存・印刷
+  // Step③ 報告書（docs/SPEC-script-mode.md 2-4・docs/SPEC-a4.md 5 章）
+  //   紙プレビュー（保存 HTML と同じ A4 縦の用紙。押印行も用紙の中）→ 押印 → 最終合否 → 保存・印刷。
+  //   紙の欄はクリックしても何もしない（操作は下のカード。保存 HTML では用紙の欄をクリックして押す）
   // =====================================================================
   function reportPaperInnerHtml() {
-    return S.checklistSheetHtml(S.buildRecord(state), state.profile, { mode: 'sheet', stamps: '', decisionId: 'appPaperDecision', decisionSvgId: 'vdAppPaper' });
+    // 面接メモの案内は「保存した HTML の画面でクリックすると全文」（③ の紙はクリックしても窓を出さない。アプリの印刷は保存 HTML と同じ「画面で」）
+    return S.checklistSheetHtml(S.buildRecord(state), state.profile, { decisionId: 'appPaperDecision', decisionSvgId: 'vdAppPaper', stampSvgPrefix: 'ap', refWhere: '保存した HTML の画面で' });
   }
 
   // 入力・押印・合否の変更で紙プレビューを描き直す（Step③ を開いていないときは何もしない）
@@ -971,23 +973,18 @@
     if (el) { el.innerHTML = reportPaperInnerHtml(); fitReportPaper(); }
   }
 
-  // 紙プレビューにも印刷と同じ 1 ページ保証のクラス（.cl-compact / .cl-compact-q1 / .cl-compact-2）を付ける（storage.fitChecklistSheet。画面に出ているときだけ計れる）。
+  // 紙プレビューにも印刷と同じ 1 ページ保証のクラス（.cl-compact / .cl-compact-q1 / .cl-compact-2）を付ける（storage.fitChecklistSheet。押印行込みの用紙で計る。画面に出ているときだけ計れる）。
   //   紙は等倍（本文 9.5px）で見せる: 右サマリーの横で紙が入らない幅（1280px・1366px など）は右サマリーを紙の下に回す（.judge-layout.paper-stack）。
   //   それでも列が紙より狭いときだけ縮小し、縮小は 0.95 倍まで（本文 9px 以上）。それより狭い画面（タブレット縦・スマホ）は等倍で紙だけ横スクロール。
   //   計測は縮小を外した状態で行う（縮小したままだと高さが変わる）
   const PAPER_MIN_ZOOM = 0.95;
-  function checklistSheetLimit() {
-    const mg = state.profile.management || {};
-    const n = Array.isArray(mg.fields) ? mg.fields.length : 0;
-    return typeof S.checklistSheetLimit === 'function' ? S.checklistSheetLimit(n) : undefined;
-  }
   function fitReportPaper() {
     const paper = $('#appPaper');
     const layout = $('#view-judge .judge-layout');
     if (!paper) { if (layout) layout.classList.remove('paper-stack'); return; }
     paper.style.zoom = '';
     const sh = $('.cl-sheet', paper);
-    if (sh && typeof S.fitChecklistSheet === 'function') S.fitChecklistSheet(sh, checklistSheetLimit());
+    if (sh && typeof S.fitChecklistSheet === 'function') S.fitChecklistSheet(sh);
     const wrap = $('#appPaperWrap');
     if (!wrap || !paper.offsetWidth) return;
     const room = function () { return (wrap.clientWidth - 4) / paper.offsetWidth; };
@@ -1010,8 +1007,8 @@
       '</div>';
     }
     html += '<div class="report-paper-wrap" id="appPaperWrap">' +
-      '<div class="report-paper-cap"><b>面接チェックリスト報告（A4 プレビュー）</b><span>保存した HTML も同じ表示で開きます。印刷は「A4 で印刷」で 1 枚</span></div>' +
-      '<div class="report-paper" id="appPaper">' + reportPaperInnerHtml() + '</div></div>';
+      '<div class="report-paper-cap"><b>面接チェックリスト報告（A4）</b><span>保存した HTML はこの用紙 1 枚で開きます。押印・合否は下のカードで（保存した HTML では用紙の欄をクリック）</span></div>' +
+      '<div class="a4" id="appPaper">' + reportPaperInnerHtml() + '</div></div>';
     html += managementCardHtml();
     html += decisionCardHtml();
     html += '<div class="actions between no-print">' +
@@ -1199,30 +1196,11 @@
   }
 
   // =====================================================================
-  // 面接チェックリスト報告（A4 1 枚）の印刷（docs/SPEC-checklist.md 4-4）
-  //   body.print-checklist を付けて印刷する。描画は storage.checklistSheetHtml（保存レポートと共通）で、
-  //   入力 UI ではなく専用のホスト #clSheet に描く（画面では非表示）
+  // 面接チェックリスト報告（A4 縦 1 枚）の印刷（docs/SPEC-a4.md 5 章）
+  //   body.print-checklist を付けて印刷する。印刷ホスト #clSheet（画面では非表示）に ③ の紙と同じ部品（div.a4 ＋ storage.checklistSheetHtml）を
+  //   描き、同じ計測（storage.fitChecklistSheet。押印行込みの用紙）をしてから、用紙そのものを 1 ページ（@page の余白 0）で印刷する。
+  //   ①②③・トップバー・Ctrl+P のどこからでも印刷できるようホストは ③ の紙と別に持つ（③ を開いていなくても描ける）
   // =====================================================================
-  // 押印欄（静的・小さめ。操作部品なし）。押印欄が 2 つのときは 2 列（docs/SPEC-slim.md D10）
-  function checklistStampsHtml() {
-    const mg = state.profile.management || {};
-    const fields = Array.isArray(mg.fields) ? mg.fields : [];
-    if (!fields.length || !Stamp) return '';
-    return '<div class="stamp-row cl-stamps-row' + (fields.length === 2 ? ' cols-2' : '') + '">' + fields.map(function (fld, idx) {
-      const e = state.management[fld.id];
-      return '<div class="stamp-box" data-field-id="' + esc(fld.id) + '"><div class="stamp-label">' + esc(fld.label) + '</div>' +
-        '<div class="stamp-area">' + (e && e.name ? Stamp.render(e, { size: 46, id: 'cl' + idx }) : '<div class="stamp-empty">未押印</div>') + '</div>' +
-        '<div class="stamp-meta">' + (e && e.name ? esc(e.name + (e.title ? '（' + e.title + '）' : '') + '　' + (e.date || '')) : '') + '</div></div>';
-    }).join('') + '</div>';
-  }
-
-  // 1 ページ保証: 押印行を除いた高さが上限（storage.checklistSheetLimit。押印欄の件数で決まる）を超えたら
-  //   .cl-compact → .cl-compact-q1 → .cl-compact-2 → 縮小（storage.fitChecklistSheet）。紙プレビューと同じ上限
-  function fitChecklistSheet() {
-    const sheet = $('#clSheet .cl-sheet');
-    if (sheet && typeof S.fitChecklistSheet === 'function') S.fitChecklistSheet(sheet, checklistSheetLimit());
-  }
-
   function prepareChecklistSheet(on) {
     const host = $('#clSheet');
     if (!host) return false;
@@ -1235,9 +1213,10 @@
       // ③ を開かずに印刷しても結果が入るよう、判定が無ければ現在の入力で判定する
       if (ensureJudgment() && state.view === 'judge') renderSummary();
       const rec = S.buildRecord(state);
-      host.innerHTML = S.checklistSheetHtml(rec, state.profile, { mode: 'sheet', stamps: checklistStampsHtml() });
+      host.innerHTML = '<div class="a4">' + S.checklistSheetHtml(rec, state.profile, {}) + '</div>';
       document.body.classList.add('print-checklist');
-      fitChecklistSheet();
+      const sheet = $('#clSheet .cl-sheet');
+      if (sheet && typeof S.fitChecklistSheet === 'function') S.fitChecklistSheet(sheet);
     } else {
       document.body.classList.remove('print-checklist');
       host.innerHTML = '';
@@ -1268,7 +1247,7 @@
     const ivName = String(((state.checklist || {}).header || {}).interviewer || '').trim();
     const ivIdx = ivName ? managers.findIndex(function (m) { return m && m.name === ivName; }) : -1;
     return '<div class="card" id="mgmtCard"><div class="card-head"><h2>応募者の管理（押印）</h2>' +
-      '<p>担当者を選んで押印してください。押印は保存ファイル（HTML）に入り、レポート上でも押印できます。名簿は設定の「応募者の管理」で編集します。</p></div>' +
+      '<p>担当者を選んで押印してください。押印は保存ファイル（HTML）に入り、保存した HTML でも用紙の欄をクリックして押印できます。名簿は設定の「応募者の管理」で編集します。</p></div>' +
       '<div class="stamp-row' + (fields.length === 2 ? ' cols-2' : '') + '">' + fields.map(function (fld, idx) {
         const e = state.management[fld.id];
         const svg = e && e.name ? Stamp.render(e, { size: 88, id: 'app' + idx }) : '';
@@ -1426,12 +1405,12 @@
       '<div class="help-steps">' +
         '<div class="help-step"><span class="n">1</span><h3>応募者</h3><p>1 枚のカードに 3 行だけ。氏名（必須）・年齢・性別・区分（学生は卒業予定年月）、面接日・面接担当者・応募した求人（通常／短期）、タクシー可否・料金とメモを、分かる範囲で入力します。</p></div>' +
         '<div class="help-step"><span class="n">2</span><h3>面接チェックリスト</h3><p>①勤務条件 → ②継続性・報連相 → ③仕事内容の説明 → ④集団行動特性 → ⑤逆質問 の順に、必須条件（一致／不一致）・説明のチェック・質問のメモ・確認点の ○△×・総合判断（採用／保留／不採用）を入力します。必須条件が 1 つでも不一致なら不採用推奨です。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（面接対応者／最終確認）に電子印を押して「報告書を保存（HTML）」します。「A4 で印刷」で 1 枚（結果・必須条件・確認点・面接メモ・押印）に印刷できます。台本の全文は保存 HTML の「詳細」に残ります。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（面接対応者／最終確認）に電子印を押して「報告書を保存（HTML）」します。「A4 で印刷」で 1 枚（結果・必須条件・確認点・面接メモ・押印）に印刷できます。保存した HTML も同じ A4 縦の用紙 1 枚です。</p></div>' +
       '</div></div>' +
       '<div class="card" id="helpScriptFlow"><div class="card-head"><h3>報告書（HTML）の流れ</h3></div><ol class="list-plain">' +
         '<li>面接者が「面接対応者」に押印して保存し、社内スレッドに添付します。</li>' +
-        '<li>副支配人がファイルをブラウザで開きます（報告書の表示で開きます。「詳細」で全体を表示）。</li>' +
-        '<li><b>最終合否</b>：担当者を選んで「採用」または「不採用」を押し（最終確認の印も自動で押されます）、「押印を保存」で再出力します（ファイル名の末尾に _採用 / _不採用）。</li>' +
+        '<li>副支配人がファイルをブラウザで開きます（A4 縦の用紙 1 枚。そのまま印刷しても同じ 1 枚です。「…」で切れたメモはクリックすると全文を表示）。</li>' +
+        '<li><b>最終合否</b>：用紙の「最終合否」の欄をクリックし、担当者を選んで「採用」または「不採用」を押します（最終確認の印も自動で押されます）。押印欄もクリックで押せます。右下の「押印を保存」で再出力します（ファイル名の末尾に _採用 / _不採用）。</li>' +
         '<li>再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。</li></ol></div>' +
       '<div class="card"><div class="card-head"><h3>結果（推奨）の決まり方</h3></div><ul class="list-plain">' +
         '<li>必須条件に不一致がある → 不採用推奨（設定で上長最終判断要に変更可）。</li>' +
