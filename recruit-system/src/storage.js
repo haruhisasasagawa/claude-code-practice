@@ -538,6 +538,7 @@
       '.rh-top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border);background:var(--surface-2);font-size:12px;color:var(--muted)}',
       '.rh-brand{display:flex;align-items:center;gap:10px;color:var(--text)}',
       '.rh-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#6f3fd1);color:#fff;font-weight:800;display:grid;place-items:center;font-size:14px;flex:none}',
+      '.rh-logo{height:28px;width:auto;max-width:150px;flex:none;object-fit:contain}',
       '.rh-theater{font-weight:700;font-size:13.5px;line-height:1.3}.rh-app{font-size:11.5px;color:var(--muted);line-height:1.3}',
       '.rh-meta{text-align:right;line-height:1.5}',
       '.rh-main{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px 22px;flex-wrap:wrap}',
@@ -1289,8 +1290,13 @@
     const verdictHtml = j
       ? '<div class="verdict ' + esc(j.result) + '"><span class="v-kicker">採用可否判定</span><span class="v-title">' + esc(j.title || titleOf(j.result)) + '</span><span class="v-sub">' + esc('必須条件 ' + mustShort(jMust) + '・総合判断 ' + (jOv.label || '未入力')) + '</span></div>'
       : '<div class="verdict"><span class="v-kicker">採用可否判定</span><span class="v-title">未実施</span><span class="v-sub">アプリの「報告書」を開くと判定します</span></div>';
+    // ロゴ（brand.js）があれば 1 文字のマークの代わりに出す（公開版は空）。data URL の画像だけを受け付ける
+    const brand = global.RecruitBrand || {};
+    const brandMarkHtml = typeof brand.logo === 'string' && /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(brand.logo)
+      ? '<img class="rh-logo" src="' + brand.logo + '" alt="' + esc(brand.logoAlt || meta.theaterName || '') + '">'
+      : '<span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span>';
     const headerHtml = '<header class="rh"><div class="rh-top">' +
-      '<div class="rh-brand"><span class="rh-mark">' + esc((meta.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R') + '</span><div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
+      '<div class="rh-brand">' + brandMarkHtml + '<div><div class="rh-theater">' + esc(meta.theaterName) + '</div><div class="rh-app">' + esc(meta.appTitle) + ' ' + esc(meta.version) + '</div></div></div>' +
       '<div class="rh-meta">保存日時 ' + esc(savedAt) + (stepText ? '<br>進捗: ' + esc(stepText) : '') + '</div></div>' +
       '<div class="rh-main"><div><div class="rh-kicker">応募者情報</div><h1 class="rh-name">' + esc(a.name || '応募者') + '<small>さん</small></h1><div class="rh-chips">' + chipsHtml + '</div></div>' +
       verdictHtml + (dcfg.enabled ? '<div class="rh-decision" id="rhDecision">' + decSvg(72, 'vdHead') + '</div>' : '') + '</div></header>\n';

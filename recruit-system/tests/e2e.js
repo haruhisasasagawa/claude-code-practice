@@ -1385,6 +1385,65 @@ const pdfTextOf = (f) => {
   expect(!!(await page.$('#decisionCard svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('不採用・鈴木'), 'E12 ON に戻すと ③ のカード（記録した合否）が戻る');
   await fresh();
 
+  // =====================================================================
+  // E13 ロゴ（brand.js）と、ロゴ・名簿入りの版（node build.js --local）
+  //   公開版の dist はロゴなし（1 文字のマーク）。--local はテスト用の架空のロゴ・名簿（tests/fixtures/local-sample）で確認する
+  // =====================================================================
+  await fresh();
+  expect(!(await visible('#brandLogo')) && await visible('#brandMark') && (await page.textContent('#brandMark')) === '新' && !(await page.$eval('#brand', el => el.classList.contains('has-logo'))),
+    'E13 公開版（dist）はロゴなし・1 文字のマーク「新」');
+  {
+    const cp = require('child_process');
+    const ROOT13 = path.join(__dirname, '..');
+    const DIST13 = path.join(ROOT13, 'dist', 'toho-recruit-judge.html');
+    const OUT13 = path.join(OUT, 'local-build.html');
+    const before13 = fs.readFileSync(DIST13, 'utf8');
+    const log13 = cp.execSync('node build.js --local tests/fixtures/local-sample --out ' + JSON.stringify(OUT13), { cwd: ROOT13 }).toString();
+    const built13 = fs.readFileSync(OUT13, 'utf8');
+    expect(log13.includes('ロゴ・名簿 2 名') && built13.includes('見本 一郎') && built13.includes('data:image/png;base64,') && fs.readFileSync(DIST13, 'utf8') === before13,
+      'E13 node build.js --local でロゴ・名簿入りの版を別のファイルに作る（公開版の dist は変わらない）: ' + log13.trim().split('\n').join(' / '));
+    let refused13 = false;
+    try { cp.execSync('node build.js --local tests/fixtures/local-sample --out dist/toho-recruit-judge.html', { cwd: ROOT13, stdio: 'pipe' }); } catch (e) { refused13 = true; }
+    expect(refused13 && fs.readFileSync(DIST13, 'utf8') === before13, 'E13 --local の出力で公開版の dist を上書きしようとすると止まる');
+    // ロゴ入りの版を開く（同じ file:// の localStorage を使うので先に消す）
+    const lerr13 = [];
+    const lp = await newReportPage(lerr13);
+    await lp.goto('file://' + OUT13);
+    await lp.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await lp.reload();
+    await lp.waitForTimeout(300);
+    const side13 = await lp.evaluate(() => { const i = document.getElementById('brandLogo'); const r = i.getBoundingClientRect(); return { hidden: i.hidden, alt: i.alt, natural: i.naturalWidth, w: Math.round(r.width), mark: document.getElementById('brandMark').hidden, cls: document.getElementById('brand').classList.contains('has-logo'), bg: getComputedStyle(i).backgroundColor }; });
+    expect(!side13.hidden && side13.alt === 'SAMPLE LOGO' && side13.natural === 220 && side13.w > 100 && side13.w <= 200 && side13.mark && side13.cls,
+      'E13 ロゴ入りの版: サイドバーにロゴ（代替テキスト・幅 200px 以内）、1 文字のマークは出さない: ' + JSON.stringify(side13));
+    await lp.click('#btnTheme');
+    await lp.waitForTimeout(200);
+    const dark13 = await lp.evaluate(() => getComputedStyle(document.getElementById('brandLogo')).backgroundColor);
+    await lp.click('#btnTheme');
+    await lp.waitForTimeout(100);
+    expect(side13.bg === 'rgba(0, 0, 0, 0)' && dark13 === 'rgb(255, 255, 255)', 'E13 ダークモードではロゴを白い台紙に載せる（ライトは透明）: ' + side13.bg + ' / ' + dark13);
+    const opts13 = await lp.$$eval('#saInterviewer option', els => els.map(e => e.textContent));
+    expect(opts13.some(t => t.includes('見本 一郎')) && opts13.some(t => t.includes('試験 花子')) && !opts13.some(t => t.includes('笹川')),
+      'E13 名簿は local の managers.txt に置き換わる: ' + JSON.stringify(opts13));
+    // 保存レポートのヘッダーにもロゴ
+    await lp.fill('[data-field="name"]', 'ロゴ 確認');
+    const [dl13] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
+    const rf13 = path.join(OUT, 'local-build-report.html');
+    await dl13.saveAs(rf13);
+    const rp13 = await newReportPage(lerr13);
+    await rp13.goto('file://' + rf13);
+    await rp13.waitForTimeout(300);
+    await rp13.click('#rtViewFull');
+    await rp13.waitForTimeout(150);
+    const head13 = await rp13.evaluate(() => { const i = document.querySelector('.rh-logo'); return i ? { alt: i.alt, natural: i.naturalWidth, h: Math.round(i.getBoundingClientRect().height), mark: !!document.querySelector('.rh-mark') } : null; });
+    expect(!!head13 && head13.alt === 'SAMPLE LOGO' && head13.natural === 220 && head13.h === 28 && !head13.mark,
+      'E13 保存レポート（詳細表示）のヘッダーもロゴ（高さ 28px）: ' + JSON.stringify(head13));
+    expect(lerr13.length === 0, 'E13 ロゴ入りの版・保存レポートでページエラーなし: ' + (lerr13.join(' / ') || 'none'));
+    await rp13.close();
+    await lp.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await lp.close();
+  }
+  await fresh();
+
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');
   await browser.close();

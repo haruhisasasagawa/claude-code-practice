@@ -1445,5 +1445,34 @@ test('88 公開 API（削除した関数が無い・interviewModel の新しい�
   assert.ok(R.isStudentGroup('highschool') && !R.isStudentGroup('freeter'));
 });
 
+test('89 ロゴ（brand.js）: 保存レポートのヘッダーは、ロゴがあれば画像・無ければ 1 文字のマーク', function () {
+  const rec = S.buildRecord({ profile: P(), applicant: SA({ name: 'ロゴ 確認' }), checklist: R.emptyChecklist(), management: {}, step: 1 });
+  const head = function (h) { return (h.match(/<div class="rh-brand">[\s\S]*?<\/div><\/div><\/div>/) || [''])[0]; };
+  // 公開版（RecruitBrand なし・空）: マーク
+  ctx.RecruitBrand = undefined;
+  let h = head(S.generateReportHTML(rec, P()));
+  assert.ok(h.indexOf('<span class="rh-mark">新</span>') >= 0 && h.indexOf('rh-logo') < 0, h);
+  ctx.RecruitBrand = { logo: '', logoAlt: '' };
+  h = head(S.generateReportHTML(rec, P()));
+  assert.ok(h.indexOf('rh-mark') >= 0 && h.indexOf('rh-logo') < 0, h);
+  // ロゴあり: img（代替テキストはエスケープ）
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+  ctx.RecruitBrand = { logo: png, logoAlt: 'TOHO "CINEMAS" <x>' };
+  h = head(S.generateReportHTML(rec, P()));
+  assert.ok(h.indexOf('<img class="rh-logo" src="' + png + '" alt="TOHO &quot;CINEMAS&quot; &lt;x&gt;">') >= 0 && h.indexOf('rh-mark') < 0, h);
+  // 代替テキストが空なら劇場名
+  ctx.RecruitBrand = { logo: png, logoAlt: '' };
+  assert.ok(head(S.generateReportHTML(rec, P())).indexOf('alt="TOHOシネマズ新宿"') >= 0);
+  // data URL の画像以外・不正な文字を含むものは使わない（マークに戻る）
+  ['javascript:alert(1)', 'https://example.com/logo.png', 'data:text/html;base64,PGI+', 'data:image/png;base64,AAA" onerror="x', 'data:image/svg+xml,<svg/>'].forEach(function (bad) {
+    ctx.RecruitBrand = { logo: bad, logoAlt: '' };
+    const hb = head(S.generateReportHTML(rec, P()));
+    assert.ok(hb.indexOf('rh-mark') >= 0 && hb.indexOf('<img') < 0, bad + ' → ' + hb);
+  });
+  ctx.RecruitBrand = undefined;
+  // CSS
+  assert.ok(S.reportCss().indexOf('.rh-logo{height:28px;width:auto;max-width:150px;flex:none;object-fit:contain}') >= 0);
+});
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

@@ -137,6 +137,17 @@
     $('#brandTitle').textContent = m.appTitle || 'リクルート判定システム';
     $('#brandTheater').textContent = m.theaterName || '';
     $('#brandMark').textContent = (m.theaterName || 'R').replace(/^TOHOシネマズ/, '').charAt(0) || 'R';
+    // ロゴ（brand.js）があれば 1 文字のマークの代わりに出す。公開版は空なのでマークのまま
+    const brand = global.RecruitBrand || {};
+    const logo = $('#brandLogo');
+    if (logo) {
+      // 保存レポート（storage.js generateReportHTML）と同じ条件: base64 の data URL の画像だけ
+      const hasLogo = typeof brand.logo === 'string' && /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(brand.logo);
+      if (hasLogo) { logo.src = brand.logo; logo.alt = brand.logoAlt || m.theaterName || ''; }
+      logo.hidden = !hasLogo;
+      $('#brandMark').hidden = hasLogo;
+      $('#brand').classList.toggle('has-logo', hasLogo);
+    }
     $('#brandVersion').textContent = 'Version ' + (m.version || '') + '　判定ルール: ' + (m.theaterName || '');
     $('#footerText').textContent = m.footer || '';
     document.title = (m.appTitle || 'リクルート判定システム') + ' | ' + (m.theaterName || '');

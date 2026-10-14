@@ -71,7 +71,7 @@
 ### 3-2. 保存・互換・UI
 - [ ] 保存ファイル名の規則（現在 `応募者_氏名_YYYY-MM-DD.html`）。Playwright の Chromium では日本語のファイル名が `download` になる（自動テスト環境の挙動とみられる）。実機の Edge / Chrome で名前どおり保存されるか確認すること
 - [ ] 名簿にない面接担当者は ① で選べない（設定の名簿に追加する。押印欄では手入力できる。読み込んだ記録の担当が名簿外なら「（名簿外）」として残す）
-- [ ] 新宿の所属メンバー 15 名（支配人 1・副支配人 1・MGR 13）は副支配人から受領済み。**リポジトリが非公開になった後に `config.default.js` の `management.managers` へ反映する**（公開リポジトリに実名を置かないため）。それまでは名簿入りの配布 HTML を直接渡す
+- [ ] 新宿の所属メンバー 15 名（支配人 1・副支配人 1・MGR 13）と公式ロゴ（TC_logo_1L.eps）は副支配人から受領済み。**リポジトリが非公開になった後に `config.default.js` の `management.managers` と `src/brand.js` の `logo` へ反映する**（公開リポジトリに実名・商標を置かないため）。それまでは `recruit-system/local/`（.gitignore 済み）に `logo.png`・`logo-alt.txt`・`managers.txt` を置き、`node build.js --local` で作った `local/dist/toho-recruit-judge.html` を直接渡す（README「ロゴ・名簿入りの版」）。local/ はコンテナにしか無いので、新しいセッションでは EPS と名簿から作り直す
 - 既知の制限: ブラウザ以外（メールやチャットのプレビュー等）で開くとスクリプトが動かず、合否・押印は押せない（表示は保存時点の内容）。判定画面以外（設定・使い方）での Ctrl+P は画面全体の印刷
 
 ## 4. 触る場所の早見表
