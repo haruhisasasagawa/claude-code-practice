@@ -256,11 +256,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .btn.ghost { background: transparent; }
 .btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong)); }
 .btn.danger:hover { background: var(--danger-soft); }
-.btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
 .btn.sm { padding: 6px 11px; font-size: 13px; border-radius: 7px; }
-.btn.link { border: none; background: none; color: var(--accent); padding: 2px 4px; font-weight: 500; }
-.btn.link:hover { text-decoration: underline; background: none; }
-.btn.block { width: 100%; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .actions.end { justify-content: flex-end; }
 .actions.between { justify-content: space-between; }
@@ -295,19 +291,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .suffix { font-size: 13px; color: var(--muted); white-space: nowrap; }
 
-.chip {
-  position: relative; display: inline-flex; align-items: center; justify-content: center;
-  min-width: 44px; padding: 8px 14px; border-radius: 999px;
-  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
-  font-size: 14px; font-weight: 600; cursor: pointer; user-select: none;
-  transition: background .15s, border-color .15s, color .15s;
-}
-.chip:hover { background: var(--surface-3); }
-.chip input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; margin: 0; }
-.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-
-.chip:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
-
 /* ---------- アラート・バッジ ---------- */
 .alert {
   display: flex; gap: 10px; align-items: flex-start;
@@ -315,8 +298,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 }
 .alert.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
 .alert.danger { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
-.alert.info { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 45%, transparent); }
-.alert.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
 .alert .ico { flex: none; }
 
 .badge {
@@ -333,13 +314,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 
 .tag { font-size: 11.5px; color: var(--muted); padding: 1px 7px; border: 1px solid var(--border); border-radius: 4px; white-space: nowrap; }
 
-/* ---------- 表 ---------- */
-.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.table th, .table td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-.table th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
-.table.kv th { width: 9em; }
-.table td.num, .table th.num { text-align: right; }
-
 /* ---------- ボタン式の選択（面接チェックリスト・応募した求人） ---------- */
 .score-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .seg-btn {
@@ -354,7 +328,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .list-plain { margin: 0; padding-left: 1.2em; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .list-x { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .list-x li::before { content: "！ "; color: var(--danger); font-weight: 800; }
-.empty { color: var(--muted); font-size: 13.5px; }
 
 /* ---------- 右サマリー ---------- */
 .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; }
@@ -434,8 +407,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
   .card-head { margin-bottom: 8px; break-after: avoid; }
   .card-head h2 { font-size: 13px; }
   .card h3.sub { margin: 10px 0 6px; break-after: avoid; }
-  .stamp-row, .table tr, .alert { break-inside: avoid; }
-  .table th, .table td { padding: 4px 8px; }
+  .stamp-row, .alert { break-inside: avoid; }
   .stamp-area { height: 80px; }
   .hanko { width: 70px; height: 70px; }
 }
@@ -595,7 +567,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px 14px; align-items: center;
   padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: 6px;
 }
-.cl-row.missing, #clOverall.missing { outline: 2px solid var(--danger); outline-offset: 1px; }
 .cl-row-main { min-width: 0; }
 .cl-label { font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .cl-label.b { font-weight: 700; }
@@ -865,7 +836,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 /*
  * 日付印（ハンコ）と最終合否スタンプの SVG
  * ----------------------------------------------------------------------
- * アプリ（Step2/Step4 の「応募者の管理」「最終合否」）と保存レポート（レポート上でも押印・合否を押せる）の両方で使う。
+ * アプリ（③ 報告書の「応募者の管理」「最終合否」）と保存レポート（レポート上でも押印・合否を押せる）の両方で使う。
  * レポートには stampSvg / shortName / verdictSvg / decisionSheetHtml / decisionFilename の関数ソースをそのまま埋め込むため、
  * これらは外部参照を持たない純関数（ES5）にしておくこと（decisionSheetHtml が verdictSvg を呼ぶことだけ許す）。
  */
@@ -1131,7 +1102,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
     options: {
       genders: ['男性', '女性', '回答しない'],
-      // group: highschool / university / vocational / freeter / homemaker / doubleworker / other
+      // group: 学生は highschool / university / vocational（Step① に卒業予定年月の欄を出す）、それ以外は other
       categories: [
         { value: '高校1年生', group: 'highschool' },
         { value: '高校2年生', group: 'highschool' },
@@ -1144,9 +1115,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         { value: '専門学校生1年生', group: 'vocational' },
         { value: '専門学校生2年生', group: 'vocational' },
         { value: '専門学校生3年生', group: 'vocational' },
-        { value: 'フリーター', group: 'freeter' },
-        { value: '主婦・主夫', group: 'homemaker' },
-        { value: 'ダブルワーカー', group: 'doubleworker' },
+        { value: 'フリーター', group: 'other' },
+        { value: '主婦・主夫', group: 'other' },
+        { value: 'ダブルワーカー', group: 'other' },
         { value: 'その他', group: 'other' }
       ]
     },
@@ -1164,9 +1135,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     //   ○=2・△=1・×=0、総合判断 採用=2・保留=1・不採用=0 の得点率は面接評価（点数・帯）として報告書に載せる（境界は evaluation.thresholds）。
     //   short: A4「面接チェックリスト報告」（1 ページ）で使う短い名前（question・notify・fields。任意。無ければ文言の先頭 14 文字＋「…」）
     checklist: {
-      title: 'スタッフ面接チェックリスト',
       version: '2026-10-08',
-      intro: '台本の順に確認し、その場で入力してください。必須条件が1つでも不一致なら判定は不採用推奨になります（追加質問して解消しなければ「⑤ 逆質問」へ進み、最大10分で終了してください）。',
       pages: [
         { no: 1, title: '必須条件一致・継続性', lead: '必須条件と報連相の意識・具体性を確認。最低限の話し方、敬語が可能か。必須条件が不一致なら不採用、逆質問を最大１０分で終了。' },
         { no: 2, title: '人物確認・逆質問', lead: '行動を確認。採用を検討できる人には不安解消の時間を取る。' }
@@ -1510,7 +1479,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const header = {
       date: clStr(hdr.date), posting: posting, postingLabel: postingOpt ? clStr(postingOpt.label) : '',
       interviewer: ivName || stamp, interviewerFromStamp: !ivName && !!stamp,
-      taxi: { text: taxiOv, tone: taxiOv ? 'info' : 'muted', auto: false }
+      taxi: { text: taxiOv, tone: taxiOv ? 'info' : 'muted' }
     };
 
     // 必須条件
@@ -1963,6 +1932,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
   // 台本の正規化（決定的・冪等。未知のキーは残す）。baseDef は既定の台本。
   //   自動表示（auto / autoParams）は 2026-10-14 に削除した（docs/SPEC-slim.md D8）。旧い設定・記録の台本に残っていれば外す
+  //   台本の題名・説明文（title / intro）も同日に削除した（表示していた詳細モードのヘッダーごと無くなったため）。残っていれば外す
   function normalizeChecklistDef(def, baseDef) {
     const R = clRules();
     const base = U.isObj(baseDef) ? baseDef : defaults().checklist;
@@ -1971,7 +1941,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const types = R.CHECKLIST_BLOCK_TYPES || ['must', 'fields', 'explain', 'question', 'rating', 'notify', 'note'];
     const kinds = R.CHECKLIST_FIELD_KINDS || ['text', 'date', 'month', 'choice'];
 
-    ['title', 'version', 'intro', 'overallLabel', 'overallHint'].forEach(function (k) { out[k] = strOr(out[k], base[k]); });
+    delete out.title;
+    delete out.intro;
+    ['version', 'overallLabel', 'overallHint'].forEach(function (k) { out[k] = strOr(out[k], base[k]); });
     const bo = base.overallOptions || {};
     if (!U.isObj(out.overallOptions)) out.overallOptions = U.deepClone(bo);
     ['hire', 'hold', 'reject'].forEach(function (k) { out.overallOptions[k] = strOr(out.overallOptions[k], bo[k]); });
@@ -2368,7 +2340,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   // ---------- HTML レポートのスタイル（アプリと同じデザイントークン。印刷・共有向けにライトテーマ固定） ----------
   function reportCss() {
     return [
-      ':root{--bg:#f3f5f8;--surface:#fff;--surface-2:#f8fafc;--surface-3:#eef2f6;--text:#1a2233;--muted:#5b6675;--border:#dde3ea;--accent:#1f5fbf;--accent-soft:#e6eefb;--ok:#0e9f6e;--ok-soft:#e3f6ee;--warn:#d97706;--warn-soft:#fdf1dc;--danger:#dc2626;--danger-soft:#fde8e8;--info:#2563eb;--info-soft:#e5edff;color-scheme:light}',
+      ':root{--bg:#f3f5f8;--surface:#fff;--surface-2:#f8fafc;--surface-3:#eef2f6;--text:#1a2233;--muted:#5b6675;--border:#dde3ea;--accent:#1f5fbf;--accent-soft:#e6eefb;--ok:#0e9f6e;--ok-soft:#e3f6ee;--warn:#d97706;--warn-soft:#fdf1dc;--danger:#dc2626;--danger-soft:#fde8e8;color-scheme:light}',
       '*{box-sizing:border-box}',
       'body{margin:0;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}',
       '.page{max-width:900px;margin:0 auto;padding:28px 20px 48px;counter-reset:sec}',
@@ -2403,14 +2375,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       'table.kv th{width:10em;text-align:left;font-weight:600;color:var(--muted);padding:7px 10px 7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}',
       'table.kv td{padding:7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}',
       'table.kv tr:last-child th,table.kv tr:last-child td{border-bottom:none}',
-      // バッジ・タグ
-      '.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;background:var(--surface-3);color:var(--muted)}',
-      '.badge.ok{background:var(--ok-soft);color:var(--ok)}.badge.warn{background:var(--warn-soft);color:var(--warn)}.badge.danger{background:var(--danger-soft);color:var(--danger)}.badge.info{background:var(--info-soft);color:var(--info)}.badge.accent{background:var(--accent-soft);color:var(--accent)}',
-      '.badge.lg{font-size:14px;padding:5px 14px}',
-      '.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:5px;background:var(--surface-3);color:#3a4556;white-space:nowrap;vertical-align:1px}',
-      '.tag.warn{background:var(--warn-soft);color:#9a5b00}.tag.danger{background:var(--danger-soft);color:#b42318}.tag.ok{background:var(--ok-soft);color:#0b7a55}',
+      // 所見・空の段落
       '.note{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.7}',
-      '.muted{color:var(--muted)}.empty{color:var(--muted);font-size:13.5px}',
+      '.empty{color:var(--muted);font-size:13.5px}',
       // 判定
       '.result{border:2px solid var(--border);border-radius:12px;padding:18px 20px;background:var(--surface)}',
       '.result.recommend{border-color:var(--ok);background:linear-gradient(180deg,var(--ok-soft),#fff 60%)}.result.review{border-color:var(--warn);background:linear-gradient(180deg,var(--warn-soft),#fff 60%)}.result.reject{border-color:var(--danger);background:linear-gradient(180deg,var(--danger-soft),#fff 60%)}',
@@ -2491,7 +2458,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.result{padding:11px 14px;break-inside:auto}.result-title{font-size:18px}.adj{margin-top:8px}.adj li{padding:5px 10px}',
       '.stamp-row{gap:8px}.stamp-box{padding:8px}.stamp-area{height:80px}.hanko{width:70px;height:70px}.stamp-empty{width:66px;height:66px}.foot{margin-top:12px}',
       '.note,.stamp-row,.adj li{break-inside:avoid}.sec h2,.sec h3,.result-kicker,.result-title,.result-body{break-after:avoid}',
-      '.verdict,.result,.badge,.tag,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+      '.verdict,.result,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     ].join('\n');
   }
   // ---------- 面接チェックリスト（報告書の描画。アプリの A4 報告・保存レポートで共用。docs/SPEC-checklist.md 4-2） ----------
@@ -2922,7 +2889,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.cl-sheet tr.t-danger .cl-val,.cl-sheet tr.t-danger .cl-mk{color:#b42318;background:#fde8e8}.cl-sheet tr.t-muted .cl-val{color:#5b6675;background:#eef2f6}',
       '.cl-sheet dl.cl-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 12px;margin:0}',
       '.cl-sheet dl.cl-fields>div{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:4px;border-bottom:1px solid #e3e8ee;padding:2px 0;break-inside:avoid}',
-      '.cl-sheet dl.cl-fields dt{color:#5b6675;font-weight:600}.cl-sheet dl.cl-fields dd{margin:0;overflow-wrap:anywhere}.cl-sheet dl.cl-fields dd small{color:#5b6675;margin-left:3px}',
+      '.cl-sheet dl.cl-fields dt{color:#5b6675;font-weight:600}.cl-sheet dl.cl-fields dd{margin:0;overflow-wrap:anywhere}',
       '.cl-sheet .cl-col dl.cl-fields{grid-template-columns:minmax(0,1fr)}.cl-sheet .cl-col dl.cl-fields>div{grid-template-columns:10em minmax(0,1fr)}',
       '.cl-sheet ul.cl-checks{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px 12px}',
       '.cl-sheet .cl-col ul.cl-checks,.cl-sheet .cl-b-notify ul.cl-checks{grid-template-columns:minmax(0,1fr)}',
@@ -2938,8 +2905,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.cl-mode-section dl.cl-sh-kv{display:flex;flex-wrap:wrap;gap:2px 20px;margin:0 0 4px}.cl-mode-section dl.cl-sh-kv>div{display:flex;gap:6px;align-items:baseline}',
       '.cl-mode-section dl.cl-sh-kv dt{color:#5b6675;font-weight:600}.cl-mode-section dl.cl-sh-kv dd{margin:0;font-weight:700}.cl-mode-section dl.cl-sh-kv dd small{font-weight:500;color:#5b6675;margin-left:3px}',
       '.cl-mode-section .cl-sh-chips{display:flex;flex-wrap:wrap;gap:4px}',
-      '.cl-mode-section .cl-hchip{display:inline-flex;gap:6px;align-items:baseline;padding:1px 8px;border:1px solid #c9d2dd;border-radius:5px;font-size:12px;background:#fff}.cl-mode-section .cl-hchip b{color:#5b6675;font-weight:700}.cl-mode-section .cl-hchip small{color:#5b6675}',
-      '.cl-mode-section .cl-hchip.t-ok{border-color:#9fd8bf;background:#e3f6ee}.cl-mode-section .cl-hchip.t-warn{border-color:#f3cf8a;background:#fdf1dc}.cl-mode-section .cl-hchip.t-danger{border-color:#f5b5b5;background:#fde8e8;color:#b42318}.cl-mode-section .cl-hchip.t-info{border-color:#b9cdf7;background:#e5edff}',
+      '.cl-mode-section .cl-hchip{display:inline-flex;gap:6px;align-items:baseline;padding:1px 8px;border:1px solid #c9d2dd;border-radius:5px;font-size:12px;background:#fff}.cl-mode-section .cl-hchip b{color:#5b6675;font-weight:700}',
+      // タクシーのチップ（手入力の値があれば t-info。docs/SPEC-slim.md B1）
+      '.cl-mode-section .cl-hchip.t-info{border-color:#b9cdf7;background:#e5edff}',
       '.cl-mode-section .cl-page-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:4px 0 6px;padding-bottom:3px;border-bottom:2px solid #24324a;break-after:avoid}',
       '.cl-mode-section .cl-page-no{font-size:11.5px;font-weight:800;color:#fff;background:#24324a;padding:0 7px;border-radius:4px}.cl-mode-section .cl-page-t{font-weight:800;font-size:14px}',
       '.cl-mode-section .cl-page-lead{flex-basis:100%;font-size:12px;color:#3a4556}',
@@ -3422,7 +3390,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
   function R() { return global.RecruitRules || {}; }
 
-  const GROUP_HINT = 'highschool（高校生）/ university（大学・大学院）/ vocational（専門学校）/ freeter / homemaker / doubleworker / other';
+  // 区分のグループで変わるのは、学生かどうか（Step① の卒業予定年月の欄）だけ（rules.isStudentGroup）
+  const GROUP_HINT = '学生は highschool（高校）/ university（大学・大学院）/ vocational（専門学校）で、Step① に卒業予定年月の欄を出します。それ以外は other（freeter などほかの値も学生以外として扱います）';
 
   // ---------- 描画ヘルパー ----------
   function val(path) {
@@ -3443,8 +3412,6 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       opts.step !== undefined ? 'step="' + opts.step + '"' : '',
       opts.placeholder ? 'placeholder="' + esc(opts.placeholder) + '"' : '',
       opts.repaint ? 'data-repaint' : '',
-      opts.disabled ? 'disabled' : '',
-      opts.cls ? 'class="' + esc(opts.cls) + '"' : '',
       opts.aria ? 'aria-label="' + esc(opts.aria) + '"' : ''
     ].filter(Boolean).join(' ');
     return '<input ' + attrs + '>';
@@ -3477,24 +3444,21 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '<div class="hint">1行に1項目。' + (opts.hint ? esc(opts.hint) : '') + '</div></div>';
   }
 
-  function sCheck(path, label, hint, opts) {
-    opts = opts || {};
-    return '<label class="check-row"><input type="checkbox" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') +
-      (opts.repaint ? ' data-repaint' : '') + '>' +
+  function sCheck(path, label, hint) {
+    return '<label class="check-row"><input type="checkbox" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + '>' +
       '<div><div class="lbl">' + esc(label) + '</div>' + (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div></label>';
   }
 
   function selectTag(path, options, opts) {
     opts = opts || {};
     const cur = String(val(path));
-    return '<select data-bind="' + esc(path) + '"' + (opts.cls ? ' class="' + esc(opts.cls) + '"' : '') +
-      (opts.repaint ? ' data-repaint' : '') + (opts.aria ? ' aria-label="' + esc(opts.aria) + '"' : '') + (opts.disabled ? ' disabled' : '') + '>' +
+    return '<select data-bind="' + esc(path) + '"' + (opts.repaint ? ' data-repaint' : '') + (opts.aria ? ' aria-label="' + esc(opts.aria) + '"' : '') + '>' +
       options.map(function (o) { return '<option value="' + esc(o.value) + '"' + (String(o.value) === cur ? ' selected' : '') + '>' + esc(o.label) + '</option>'; }).join('') +
       '</select>';
   }
 
-  function sSelect(path, label, options, hint, opts) {
-    return '<div class="field"><label>' + esc(label) + '</label>' + selectTag(path, options, opts) +
+  function sSelect(path, label, options, hint) {
+    return '<div class="field"><label>' + esc(label) + '</label>' + selectTag(path, options) +
       (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div>';
   }
 
@@ -3514,7 +3478,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   function applicantHtml() {
     return section('s-applicant', '応募者の属性', 'Step① 応募者で選ぶ区分・性別と、学生の卒業予定年月の表示です。',
       '<div class="field-row">' +
-        sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。グループ: ' + GROUP_HINT }) +
+        sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。' + GROUP_HINT }) +
         sLines('options.genders', '性別') +
       '</div>' +
       sCheck('features.graduationDate', '卒業予定年月（学生）', '学生の区分のとき Step① に卒業予定年月の欄を出します。'));
@@ -3690,7 +3654,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '<h3 class="sub">判定</h3>' +
       '<div class="field-row">' +
         sSelect('checklist.mustFailResult', '必須条件に不一致があるとき', [{ value: 'reject', label: resultTitle('reject') }, { value: 'review', label: resultTitle('review') }],
-          '台本どおりなら「' + resultTitle('reject') + '」。不一致のときは確認点・総合判断が未入力でも判定に進めます（' + resultTitle('review') + 'のときは入力が必要）。') +
+          '台本どおりなら「' + resultTitle('reject') + '」。' + stepRef(3) + ' では「不一致のとき案内するセクション」へ進んで面接を終えるよう案内します。「' + resultTitle('review') + '」にすると、ほかのセクションの確認点も評価するよう案内します（どちらも未入力のまま報告書へ進めます）。') +
         sSelect('checklist.mustUnknownResult', '必須条件に未確認が残るとき', [{ value: 'none', label: '警告のみ（判定は変えない）' }, { value: 'review', label: '採用推奨に留めない（' + resultTitle('review') + 'まで）' }]) +
       '</div>' +
       '<div class="field-row">' +
@@ -3726,8 +3690,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       sCheck('checklist.print.showQuestions', '保存レポートの「詳細」に質問文も載せる', 'A4 の面接チェックリスト報告（1 枚）には質問文・説明文を載せません（質問の回答は短い名前で載せます）。OFF にすると「詳細」の面接チェックリスト節もメモだけになります。') +
 
       '<h3 class="sub">台本</h3>' +
-      '<div class="field-row">' + sInput('checklist.title', 'タイトル') + sInput('checklist.version', '版（例: 2026-10-08）') + '</div>' +
-      sTextarea('checklist.intro', stepRef(3) + ' の説明文', { rows: 2 }) +
+      '<div class="field-row">' + sInput('checklist.version', '版（例: 2026-10-08）', { hint: '報告書（A4）の「台本 … 版」に表示します。' }) + '</div>' +
       '<div class="field-row">' + pages.map(function (pg, k) {
         return '<div>' + sInput('checklist.pages[' + k + '].title', (pg.no || k + 1) + '枚目の見出し') + sTextarea('checklist.pages[' + k + '].lead', (pg.no || k + 1) + '枚目の説明', { rows: 2 }) + '</div>';
       }).join('') + '</div>' +
@@ -3817,8 +3780,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     return true;
   }
 
-  // 自動表示・入力の種類を変えたときの既定値（自動表示の設定値・選択肢）
-  // 入力の種類を選択式にしたら選択肢の見本を入れる
+  // 記入欄の入力の種類を選択式にしたら選択肢の見本を入れる
   function clOnBindChange(path, value) {
     const m = /^checklist\.sections\[(\d+)\]\.blocks\[(\d+)\]\.items\[(\d+)\]\.kind$/.exec(path);
     if (!m) return;
@@ -4327,16 +4289,15 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   }
 
   function labelHtml(label, o) {
-    if (o.bare || label === '') return '';
     return '<label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>';
   }
 
+  // ① 応募者の入力部品（呼び出しは scriptApplicantStepHtml だけ）。o: fSelect { placeholder }／fInput { type, required, placeholder, min, max, step, autocomplete, suffix, id }
   function fSelect(path, label, options, o) {
     o = o || {};
     const value = U.getPath(state.applicant, path) || '';
-    return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + '>' + labelHtml(label, o) +
-      '<select data-field="' + esc(path) + '"' + (o.required ? ' data-required' : '') + (o.bare ? ' aria-label="' + esc(label) + '"' : '') + '><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select>' +
-      (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
+    return '<div class="field">' + labelHtml(label, o) +
+      '<select data-field="' + esc(path) + '"><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select></div>';
   }
 
   function fInput(path, label, o) {
@@ -4351,14 +4312,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       o.min !== undefined ? 'min="' + o.min + '"' : '',
       o.max !== undefined ? 'max="' + o.max + '"' : '',
       o.step !== undefined ? 'step="' + o.step + '"' : '',
-      o.list ? 'list="' + o.list + '"' : '',
-      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : '',
-      (o.bare || label === '') && o.ariaLabel ? 'aria-label="' + esc(o.ariaLabel) + '"' : ''
+      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : ''
     ].filter(Boolean).join(' ');
     const input = '<input ' + attrs + '>';
     return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + '>' + labelHtml(label, o) +
-      (o.suffix ? '<div class="inline">' + input + '<span class="suffix">' + esc(o.suffix) + '</span></div>' : input) +
-      (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
+      (o.suffix ? '<div class="inline">' + input + '<span class="suffix">' + esc(o.suffix) + '</span></div>' : input) + '</div>';
   }
 
   function fTextarea(path, label, o) {
@@ -4366,9 +4324,6 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     return '<div class="field"><label>' + esc(label) + '</label>' +
       '<textarea data-field="' + esc(path) + '" rows="' + (o.rows || 3) + '" placeholder="' + esc(o.placeholder || '') + '">' + esc(U.getPath(state.applicant, path) || '') + '</textarea></div>';
   }
-
-  // ラジオ風セグメント。options: [{value,label,tone}]
-  //   o.required … ラベルに * を出し、.field に data-required-seg を付ける（checkRequired の対象）
 
   // 可視の必須欄を検査し、未入力に .invalid を付ける
   function checkRequired(scopeSel) {
@@ -4528,8 +4483,6 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         clSet(path, String(clGet(path)) === v ? '' : v);
         touchChecklist();
         if (path.indexOf('header.') === 0) rerenderClHeader();
-        const row = b.closest('.cl-row');
-        if (row && clGet(path)) row.classList.remove('missing');
         syncClButtons(path);   // Step①（応募した求人）は updateChecklistUI の対象外のため
         updateChecklistUI();
         break;
@@ -4640,13 +4593,6 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (m && (v === '' || v === false)) { delete state.checklist[m[1]][m[2]]; return; }
     U.setPath(state.checklist, path, v);
   }
-  // values.* / notes.* は空にするとき消す（回答なし＝未入力）。header.* / overall は '' にする
-  function clSet(path, v) {
-    ensureChecklist();
-    const m = /^(values|notes)\.(.+)$/.exec(path);
-    if (m && (v === '' || v === false)) { delete state.checklist[m[1]][m[2]]; return; }
-    U.setPath(state.checklist, path, v);
-  }
   // チェックリストの変更
   function touchChecklist() {
     state.checklist.updatedAt = new Date().toISOString();
@@ -4680,7 +4626,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   }
 
   // ② のヘッダー（読み取り専用・1 行。① の入力から。docs/SPEC-script-mode.md 2-3・12 章）
-  //   氏名・区分・年齢・求人・タクシー・面接日・担当 のチップと「応募者を編集」だけ（台本の題名・説明文・目安時間は出さない）
+  //   氏名・区分・年齢・求人・タクシー・面接日・担当 のチップと「応募者を編集」だけ（目安時間は出さない）
   const SCRIPT_HEAD_KEYS = ['category', 'age', 'posting', 'taxi', 'date', 'interviewer'];
   const SCRIPT_HEAD_SHORT = { taxi: 'タクシー', interviewer: '担当' };   // 値だけで分かる区分・年齢・求人・面接日（日付）はラベルを付けない（title に項目名）
   function scriptClHeaderHtml() {
@@ -4918,13 +4864,6 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       const unk = $('[data-unknown]', row);
       if (unk) unk.classList.toggle('is-off', !!m.value);   // 場所は残す（ボタンの位置を揃える）
     });
-    // 確認点：入力済みなら .missing を外す
-    sum.ratings.forEach(function (r) {
-      const row = $('.cl-rate-row[data-item="' + r.id + '"]', root);
-      if (row && r.value) row.classList.remove('missing');
-    });
-    if (sum.overall.value) $('#clOverall').classList.remove('missing');
-
     // 「※短期求人のみ」の説明は求人が短期のときだけ強調する
     const posting = String(state.checklist.header.posting || '');
     $$('.cl-check.short-only', root).forEach(function (l) {

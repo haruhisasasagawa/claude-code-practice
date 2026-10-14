@@ -248,11 +248,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .btn.ghost { background: transparent; }
 .btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong)); }
 .btn.danger:hover { background: var(--danger-soft); }
-.btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
 .btn.sm { padding: 6px 11px; font-size: 13px; border-radius: 7px; }
-.btn.link { border: none; background: none; color: var(--accent); padding: 2px 4px; font-weight: 500; }
-.btn.link:hover { text-decoration: underline; background: none; }
-.btn.block { width: 100%; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .actions.end { justify-content: flex-end; }
 .actions.between { justify-content: space-between; }
@@ -287,19 +283,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .suffix { font-size: 13px; color: var(--muted); white-space: nowrap; }
 
-.chip {
-  position: relative; display: inline-flex; align-items: center; justify-content: center;
-  min-width: 44px; padding: 8px 14px; border-radius: 999px;
-  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
-  font-size: 14px; font-weight: 600; cursor: pointer; user-select: none;
-  transition: background .15s, border-color .15s, color .15s;
-}
-.chip:hover { background: var(--surface-3); }
-.chip input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; margin: 0; }
-.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-
-.chip:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
-
 /* ---------- アラート・バッジ ---------- */
 .alert {
   display: flex; gap: 10px; align-items: flex-start;
@@ -307,8 +290,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 }
 .alert.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
 .alert.danger { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
-.alert.info { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 45%, transparent); }
-.alert.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
 .alert .ico { flex: none; }
 
 .badge {
@@ -325,13 +306,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 
 .tag { font-size: 11.5px; color: var(--muted); padding: 1px 7px; border: 1px solid var(--border); border-radius: 4px; white-space: nowrap; }
 
-/* ---------- 表 ---------- */
-.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.table th, .table td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-.table th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
-.table.kv th { width: 9em; }
-.table td.num, .table th.num { text-align: right; }
-
 /* ---------- ボタン式の選択（面接チェックリスト・応募した求人） ---------- */
 .score-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .seg-btn {
@@ -346,7 +320,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .list-plain { margin: 0; padding-left: 1.2em; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .list-x { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .list-x li::before { content: "！ "; color: var(--danger); font-weight: 800; }
-.empty { color: var(--muted); font-size: 13.5px; }
 
 /* ---------- 右サマリー ---------- */
 .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; }
@@ -426,8 +399,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
   .card-head { margin-bottom: 8px; break-after: avoid; }
   .card-head h2 { font-size: 13px; }
   .card h3.sub { margin: 10px 0 6px; break-after: avoid; }
-  .stamp-row, .table tr, .alert { break-inside: avoid; }
-  .table th, .table td { padding: 4px 8px; }
+  .stamp-row, .alert { break-inside: avoid; }
   .stamp-area { height: 80px; }
   .hanko { width: 70px; height: 70px; }
 }
@@ -587,7 +559,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px 14px; align-items: center;
   padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: 6px;
 }
-.cl-row.missing, #clOverall.missing { outline: 2px solid var(--danger); outline-offset: 1px; }
 .cl-row-main { min-width: 0; }
 .cl-label { font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .cl-label.b { font-weight: 700; }

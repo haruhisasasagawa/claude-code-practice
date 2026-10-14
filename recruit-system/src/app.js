@@ -293,16 +293,15 @@
   }
 
   function labelHtml(label, o) {
-    if (o.bare || label === '') return '';
     return '<label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>';
   }
 
+  // ① 応募者の入力部品（呼び出しは scriptApplicantStepHtml だけ）。o: fSelect { placeholder }／fInput { type, required, placeholder, min, max, step, autocomplete, suffix, id }
   function fSelect(path, label, options, o) {
     o = o || {};
     const value = U.getPath(state.applicant, path) || '';
-    return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + '>' + labelHtml(label, o) +
-      '<select data-field="' + esc(path) + '"' + (o.required ? ' data-required' : '') + (o.bare ? ' aria-label="' + esc(label) + '"' : '') + '><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select>' +
-      (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
+    return '<div class="field">' + labelHtml(label, o) +
+      '<select data-field="' + esc(path) + '"><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select></div>';
   }
 
   function fInput(path, label, o) {
@@ -317,14 +316,11 @@
       o.min !== undefined ? 'min="' + o.min + '"' : '',
       o.max !== undefined ? 'max="' + o.max + '"' : '',
       o.step !== undefined ? 'step="' + o.step + '"' : '',
-      o.list ? 'list="' + o.list + '"' : '',
-      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : '',
-      (o.bare || label === '') && o.ariaLabel ? 'aria-label="' + esc(o.ariaLabel) + '"' : ''
+      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : ''
     ].filter(Boolean).join(' ');
     const input = '<input ' + attrs + '>';
     return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + '>' + labelHtml(label, o) +
-      (o.suffix ? '<div class="inline">' + input + '<span class="suffix">' + esc(o.suffix) + '</span></div>' : input) +
-      (o.hint ? '<div class="hint">' + esc(o.hint) + '</div>' : '') + '</div>';
+      (o.suffix ? '<div class="inline">' + input + '<span class="suffix">' + esc(o.suffix) + '</span></div>' : input) + '</div>';
   }
 
   function fTextarea(path, label, o) {
@@ -332,9 +328,6 @@
     return '<div class="field"><label>' + esc(label) + '</label>' +
       '<textarea data-field="' + esc(path) + '" rows="' + (o.rows || 3) + '" placeholder="' + esc(o.placeholder || '') + '">' + esc(U.getPath(state.applicant, path) || '') + '</textarea></div>';
   }
-
-  // ラジオ風セグメント。options: [{value,label,tone}]
-  //   o.required … ラベルに * を出し、.field に data-required-seg を付ける（checkRequired の対象）
 
   // 可視の必須欄を検査し、未入力に .invalid を付ける
   function checkRequired(scopeSel) {
@@ -494,8 +487,6 @@
         clSet(path, String(clGet(path)) === v ? '' : v);
         touchChecklist();
         if (path.indexOf('header.') === 0) rerenderClHeader();
-        const row = b.closest('.cl-row');
-        if (row && clGet(path)) row.classList.remove('missing');
         syncClButtons(path);   // Step①（応募した求人）は updateChecklistUI の対象外のため
         updateChecklistUI();
         break;
@@ -606,13 +597,6 @@
     if (m && (v === '' || v === false)) { delete state.checklist[m[1]][m[2]]; return; }
     U.setPath(state.checklist, path, v);
   }
-  // values.* / notes.* は空にするとき消す（回答なし＝未入力）。header.* / overall は '' にする
-  function clSet(path, v) {
-    ensureChecklist();
-    const m = /^(values|notes)\.(.+)$/.exec(path);
-    if (m && (v === '' || v === false)) { delete state.checklist[m[1]][m[2]]; return; }
-    U.setPath(state.checklist, path, v);
-  }
   // チェックリストの変更
   function touchChecklist() {
     state.checklist.updatedAt = new Date().toISOString();
@@ -646,7 +630,7 @@
   }
 
   // ② のヘッダー（読み取り専用・1 行。① の入力から。docs/SPEC-script-mode.md 2-3・12 章）
-  //   氏名・区分・年齢・求人・タクシー・面接日・担当 のチップと「応募者を編集」だけ（台本の題名・説明文・目安時間は出さない）
+  //   氏名・区分・年齢・求人・タクシー・面接日・担当 のチップと「応募者を編集」だけ（目安時間は出さない）
   const SCRIPT_HEAD_KEYS = ['category', 'age', 'posting', 'taxi', 'date', 'interviewer'];
   const SCRIPT_HEAD_SHORT = { taxi: 'タクシー', interviewer: '担当' };   // 値だけで分かる区分・年齢・求人・面接日（日付）はラベルを付けない（title に項目名）
   function scriptClHeaderHtml() {
@@ -884,13 +868,6 @@
       const unk = $('[data-unknown]', row);
       if (unk) unk.classList.toggle('is-off', !!m.value);   // 場所は残す（ボタンの位置を揃える）
     });
-    // 確認点：入力済みなら .missing を外す
-    sum.ratings.forEach(function (r) {
-      const row = $('.cl-rate-row[data-item="' + r.id + '"]', root);
-      if (row && r.value) row.classList.remove('missing');
-    });
-    if (sum.overall.value) $('#clOverall').classList.remove('missing');
-
     // 「※短期求人のみ」の説明は求人が短期のときだけ強調する
     const posting = String(state.checklist.header.posting || '');
     $$('.cl-check.short-only', root).forEach(function (l) {

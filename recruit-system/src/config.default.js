@@ -54,7 +54,7 @@
 
     options: {
       genders: ['男性', '女性', '回答しない'],
-      // group: highschool / university / vocational / freeter / homemaker / doubleworker / other
+      // group: 学生は highschool / university / vocational（Step① に卒業予定年月の欄を出す）、それ以外は other
       categories: [
         { value: '高校1年生', group: 'highschool' },
         { value: '高校2年生', group: 'highschool' },
@@ -67,9 +67,9 @@
         { value: '専門学校生1年生', group: 'vocational' },
         { value: '専門学校生2年生', group: 'vocational' },
         { value: '専門学校生3年生', group: 'vocational' },
-        { value: 'フリーター', group: 'freeter' },
-        { value: '主婦・主夫', group: 'homemaker' },
-        { value: 'ダブルワーカー', group: 'doubleworker' },
+        { value: 'フリーター', group: 'other' },
+        { value: '主婦・主夫', group: 'other' },
+        { value: 'ダブルワーカー', group: 'other' },
         { value: 'その他', group: 'other' }
       ]
     },
@@ -87,9 +87,7 @@
     //   ○=2・△=1・×=0、総合判断 採用=2・保留=1・不採用=0 の得点率は面接評価（点数・帯）として報告書に載せる（境界は evaluation.thresholds）。
     //   short: A4「面接チェックリスト報告」（1 ページ）で使う短い名前（question・notify・fields。任意。無ければ文言の先頭 14 文字＋「…」）
     checklist: {
-      title: 'スタッフ面接チェックリスト',
       version: '2026-10-08',
-      intro: '台本の順に確認し、その場で入力してください。必須条件が1つでも不一致なら判定は不採用推奨になります（追加質問して解消しなければ「⑤ 逆質問」へ進み、最大10分で終了してください）。',
       pages: [
         { no: 1, title: '必須条件一致・継続性', lead: '必須条件と報連相の意識・具体性を確認。最低限の話し方、敬語が可能か。必須条件が不一致なら不採用、逆質問を最大１０分で終了。' },
         { no: 2, title: '人物確認・逆質問', lead: '行動を確認。採用を検討できる人には不安解消の時間を取る。' }

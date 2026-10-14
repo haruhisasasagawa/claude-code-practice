@@ -5,7 +5,7 @@
  * スクリーンショットは tests/shots/ に出力（git 管理外）。
  * 失敗した確認（FAIL）が 1 つでもあれば exit 1。
  *
- * シナリオ（docs/SPEC-script-mode.md 7-3・docs/SPEC-slim.md 5-2。2026-10-14 の面接特化で E1〜E39 → E1〜E11 に振り直し）
+ * シナリオ（docs/SPEC-script-mode.md 7-3・docs/SPEC-slim.md 5-2。2026-10-14 の面接特化で E1〜E39 → E1〜E11 に振り直し、E12 を追加）
  *   E1  3 ステップ・① 応募者（詳細モードの保存済み設定は 3 ステップで開く・詳細項目なし・390px）
  *   E2  ② 面接チェックリスト（①〜⑤ のみ・読み取り専用ヘッダー）→ ③ 報告書（紙プレビュー・判定サマリー・必須条件・総合判断・押印 2 欄）
  *   E3  押印 → 保存 → 保存 HTML（報告書表示・詳細・最終合否・押印を保存・A4 印刷）→ アプリで読込
@@ -17,6 +17,9 @@
  *   E9  押印欄 2 つ（初期対応者なし）: アプリ・紙・印刷用・保存 HTML・右サマリー・設定・旧い 3 欄の設定
  *   E10 設定画面（5 節・data-bind の許可リスト・保存／破棄／初期化・書き出し・v1／詳細モードの JSON の読み込み）・使い方
  *   E11 保存 HTML の印刷（A4 で印刷だけ・報告書表示の Ctrl+P は A4・詳細表示はブラウザ既定）・アプリの A4 印刷（押印 2 欄・1 ページ）
+ *   E12 設定の反映（必須条件の不一致を上長最終判断要に・台本の文言と確認点の増減・満点・空の文言・既定に戻す・壊れた台本）・読み込みの toast（確認点の差・他劇場）・
+ *       手入力の押印と最終合否・保存 HTML 上の取消・最終合否の ON/OFF（旧 E22・E26・E28・E31 のうち残した機能）
+ *   必須条件の不一致の案内（⑤ 逆質問へ・省略可。旧 E26）は E2 で確かめる
  */
 const { chromium } = (function(){ try { return require('playwright'); } catch (e) { return require('/opt/node-tools/node_modules/playwright'); } })();
 const path = require('path');
@@ -378,12 +381,30 @@ const pdfTextOf = (f) => {
   // 必須条件を不一致
   await navStep(3);
   await setCl('values.must_weekly', 'mismatch');
+  await wait(150);
+  // 打ち切りの案内（旧 E26。app.js の clMustAlertHtml・updateChecklistUI）: 「⑤ 逆質問へ進み…終了」・不一致あり・②〜④ は省略可（⑤ は対象外）・⑤ へ移動
+  const ma33 = await st(() => ({ text: document.getElementById('clMustAlertText').textContent, state: document.getElementById('clState-conditions').textContent,
+    skip: ['conditions', 'continuity', 'job', 'teamwork', 'reverse'].filter(id => document.getElementById('cl-' + id).classList.contains('cl-skippable')),
+    jump: (document.querySelector('#clMustAlert [data-action="cl-jump"]') || {}).textContent }));
+  expect(await visible('#clMustAlert') && ma33.text === '必須条件が一致しません（土日を含む週3日以上、5時間以上）。追加質問して解消しなければ ⑤ 逆質問へ進み、最大10分で終了してください（判定は不採用推奨になります）。' &&
+    ma33.state.includes('不一致あり') && JSON.stringify(ma33.skip) === JSON.stringify(['continuity', 'job', 'teamwork']) && await visible('#clMustAlert [data-action="cl-jump"]') && ma33.jump === '⑤ 逆質問へ',
+    'E2 必須条件の不一致: 赤い案内「⑤ 逆質問へ進み、最大10分で終了」・① に「不一致あり」・②〜④ に省略可（⑤ は対象外）・「⑤ 逆質問へ」ボタン: ' + JSON.stringify(ma33));
+  const inView33 = () => st(() => { const r = document.getElementById('cl-reverse').getBoundingClientRect(); return r.top < window.innerHeight && r.bottom > 0; });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await wait(100);
+  const before33 = await inView33();
+  await page.click('#clMustAlert [data-action="cl-jump"]');
+  await wait(900);
+  expect(!before33 && await inView33(), 'E2 「⑤ 逆質問へ」で ⑤ 逆質問へ移動（押す前は画面外）');
   await judge();
   const j33b = await judgment();
   expect(j33b.result === 'reject' && j33b.adjustments[0] === 'must_conditions' && (await page.textContent('#appPaper .cl-tile-res')).includes('不採用推奨'), 'E2 必須条件を「不一致」にすると不採用推奨（紙の結果タイルも）: ' + JSON.stringify(j33b));
   // 保留
   await navStep(3);
   await setCl('values.must_weekly', 'match');
+  await wait(100);
+  expect(!(await visible('#clMustAlert')) && await st(() => !document.querySelector('.cl-skippable') && !document.getElementById('clState-conditions').textContent.includes('不一致')),
+    'E2 必須条件を一致に戻すと案内・省略可・「不一致あり」が消える');
   await setCl('overall', 'hold');
   await judge();
   const j33c = await judgment();
@@ -1039,7 +1060,7 @@ const pdfTextOf = (f) => {
     'E10 設定の節は 劇場情報／応募者の属性／面接チェックリスト／応募者の管理（押印）／書き出し・読み込み の 5 つ（ナビも同じ順）: ' + JSON.stringify(set10.secs));
   const ALLOW = [
     /^meta\.(theaterName|appTitle|version|footer)$/, /^options\.(categories|genders)$/, /^features\.graduationDate$/,
-    /^checklist\.(mustFailResult|mustUnknownResult|mustFailJumpTo|overallLabel|overallHint|title|version|intro)$/, /^checklist\.overallCaps\.(hold|reject)$/, /^checklist\.overallOptions\.(hire|hold|reject)$/,
+    /^checklist\.(mustFailResult|mustUnknownResult|mustFailJumpTo|overallLabel|overallHint|version)$/, /^checklist\.overallCaps\.(hold|reject)$/, /^checklist\.overallOptions\.(hire|hold|reject)$/,
     /^evaluation\.thresholds\.(recommendPct|reviewPct)$/, /^checklist\.header\.interviewerField$/, /^checklist\.header\.posting\.label$/, /^checklist\.header\.posting\.options\[\d+\]\.label$/, /^checklist\.print\.showQuestions$/,
     /^checklist\.pages\[\d+\]\.(title|lead)$/, /^checklist\.sections\[\d+\]\.(title|minutes|minutesMax|page|lead)$/, /^checklist\.sections\[\d+\]\.blocks\[\d+\]\.(title|note|memo|memoLabel)$/,
     /^checklist\.sections\[\d+\]\.blocks\[\d+\]\.items\[\d+\]\.(label|hint|shortOnly|short|kind|options)$/,
@@ -1054,9 +1075,16 @@ const pdfTextOf = (f) => {
     'E10 data-action は台本の編集・保存／破棄／書き出し／読み込み／初期化だけ: ' + set10.actions.join(','));
   const txt10 = await page.evaluate(() => ({ cl: document.getElementById('s-checklist').textContent, mgmt: document.getElementById('s-mgmt').textContent, io: document.getElementById('s-io').textContent,
     band: !!document.querySelector('#clBandInputs [data-bind="evaluation.thresholds.recommendPct"]') && !!document.getElementById('clCapsScriptHint') }));
-  expect(txt10.cl.includes('説明（Step② に表示）') && txt10.cl.includes('Step② の説明文') && txt10.band && txt10.mgmt.includes('Step③ に「採用」「不採用」のボタン') &&
+  expect(txt10.cl.includes('説明（Step② に表示）') && txt10.band && txt10.mgmt.includes('Step③ に「採用」「不採用」のボタン') &&
     txt10.io.includes('v1 形式の JSON は読み込むと既定の設定になります') && !txt10.io.includes('新しい設定項目が既定値で補われます'),
     'E10 文言: 面接チェックリストは Step②・最終合否は Step③・帯の境界は面接チェックリストの節・書き出しの注記');
+  // どこにも表示しない台本の題名・説明文（checklist.title / intro）の欄は無い。必須条件の不一致の補足は削除した入力チェック（「入力が必要」）を案内しない
+  //   区分のグループは学生かどうかだけを説明する（freeter・homemaker などを選ばせない）
+  const ap10 = await page.evaluate(() => (document.querySelector('#s-applicant [data-bind="options.categories"]').closest('.field').querySelector('.hint') || {}).textContent || '');
+  expect(!set10.binds.includes('checklist.title') && !set10.binds.includes('checklist.intro') && !txt10.cl.includes('Step② の説明文') && !txt10.cl.includes('タイトル') &&
+    !txt10.cl.includes('入力が必要') && txt10.cl.includes('どちらも未入力のまま報告書へ進めます') &&
+    ap10.includes('学生は highschool') && ap10.includes('それ以外は other') && !ap10.includes('homemaker') && !ap10.includes('doubleworker'),
+    'E10 台本の題名・説明文の欄なし・必須条件の不一致の補足に「入力が必要」なし・区分のグループは学生／それ以外の説明だけ: ' + ap10);
   // 保存・破棄・初期化
   await page.fill('[data-bind="meta.theaterName"]', 'TOHOシネマズ 保存テスト');
   await saveSettings();
@@ -1164,6 +1192,198 @@ const pdfTextOf = (f) => {
   await st(() => window.RecruitApp.prepareChecklistSheet(false));
   const n11c = pdfPagesOf(pdf11c);
   expect(a11 === 2 && (n11c === -1 || n11c === 1), 'E11 アプリの A4 印刷は 1 ページ（押印行 2 欄）: ' + JSON.stringify({ pages: n11c, stamps: a11 }));
+
+  // =====================================================================
+  // E12 設定の反映・読み込みの案内・手入力の押印・保存 HTML 上の取消・最終合否の ON/OFF
+  //   （旧 E22・E26・E28・E31 のうち、面接特化後も残した機能。2026-10-14 の削除で検証ごと消えていたもの）
+  // =====================================================================
+  console.log('\n== E12 設定の反映・読み込みの案内・手入力の押印・最終合否の ON/OFF ==');
+  await fresh();
+  // 1. 必須条件に不一致があるとき「上長最終判断要」: 打ち切りの案内・省略可・⑤ へのボタンを出さず、未入力でも報告書へ進める
+  await toView('settings');
+  await page.selectOption('[data-bind="checklist.mustFailResult"]', 'review');
+  await saveSettings();
+  await toView('judge');
+  await fillScript({ name: '設定 一郎' });
+  await page.click('[data-action="script-next"]');
+  await wait(400);
+  await setCl('values.must_weekly', 'mismatch');
+  await setCl('overall', 'hire');
+  await wait(150);
+  const rv12 = await st(() => ({ text: document.getElementById('clMustAlertText').textContent, skip: document.querySelectorAll('.cl-skippable').length,
+    jump: !document.querySelector('#clMustAlert [data-action="cl-jump"]').classList.contains('hidden') }));
+  expect(await visible('#clMustAlert') && rv12.text.includes('ほかのセクションの確認点も評価してから判定してください') && rv12.text.includes('上長最終判断要以下') && !rv12.text.includes('終了してください') && rv12.skip === 0 && !rv12.jump,
+    'E12 mustFailResult=review の案内（確認点も評価・上長最終判断要以下。省略可・「⑤ 逆質問へ」は出さない）: ' + JSON.stringify(rv12));
+  await judge();
+  const j12a = await judgment();
+  expect(await step() === 4 && j12a.result === 'review' && j12a.adjustments.includes('must_conditions'), 'E12 mustFailResult=review: 確認点が未入力でも報告書へ進み、採用 → 上長最終判断要（must_conditions）: ' + JSON.stringify(j12a));
+  await toView('settings');
+  await page.selectOption('[data-bind="checklist.mustFailResult"]', 'reject');
+  await saveSettings();
+  // 2. 台本の編集: 文言を変える・① の確認点を削除（満点 14）・④ に確認点を追加（満点 16）
+  const NEW_BUSY = '指定繁忙期間すべて出勤可（年末年始・GW・お盆）';
+  await page.fill('[data-bind="checklist.sections[0].blocks[0].items[1].label"]', NEW_BUSY);
+  await page.click('.s-cl-item[data-item-id="rt_manner"] [data-action="cl-item-del"]');
+  await wait(150);
+  await saveSettings();
+  const sp12 = await storedProfile();
+  const max12a = { note: await txtIn(page, '#clMaxNote'), band: await txtIn(page, '#clBandInputs') };
+  expect(sp12.checklist.sections[0].blocks[0].items[1].label === NEW_BUSY && !JSON.stringify(sp12.checklist).includes('rt_manner') && max12a.note.includes('確認点 6 項目') && max12a.note.includes('満点 14 点') && max12a.band.includes('現在の満点 14点'),
+    'E12 文言の変更・確認点の削除を保存し、設定の満点表示は 14 点（帯の境界も 14 点で計算）: ' + JSON.stringify(max12a));
+  await toView('judge');
+  expect((await txtIn(page, '#sumMarks')).includes('/14点'), 'E12 右サマリーの満点 14 点: ' + await txtIn(page, '#sumMarks'));
+  await toView('settings');
+  await page.click('details.s-cl-sec[data-sec-id="teamwork"] > summary');
+  await wait(100);
+  await page.click('details.s-cl-sec[data-sec-id="teamwork"] [data-action="cl-item-add"][data-block="2"]');
+  await wait(150);
+  await saveSettings();
+  expect((await txtIn(page, '#clMaxNote')).includes('満点 16 点'), 'E12 ④ に確認点を追加すると設定の満点表示は 16 点');
+  await toView('judge');
+  await page.click('#btnNew');
+  await wait(200);
+  await fillScript({ name: '設定 二郎' });
+  await page.click('[data-action="script-next"]');
+  await wait(400);
+  const cl12 = await st(() => ({ busy: (document.querySelector('.cl-must-row[data-item="must_busy"] .cl-label') || {}).textContent, rows: document.querySelectorAll('.cl-rate-row').length,
+    c1: document.querySelectorAll('#cl-conditions .cl-rate-row').length, c4: document.querySelectorAll('#cl-teamwork .cl-rate-row').length, manner: !!document.querySelector('.cl-rate-row[data-item="rt_manner"]') }));
+  expect(cl12.busy === NEW_BUSY && cl12.rows === 7 && cl12.c1 === 1 && cl12.c4 === 2 && !cl12.manner && (await txtIn(page, '#sumMarks')).includes('/16点'),
+    'E12 ② に新しい文言・確認点は ① 1 件／④ 2 件（計 7 件・満点 16 点）: ' + JSON.stringify(cl12));
+  await setCl('values.must_busy', 'mismatch');
+  await judge();
+  const why12 = await st(() => (window.RecruitApp.state.judgment.adjustments[0] || {}).reason || '');
+  expect(why12.includes('すべて出勤可'), 'E12 判定の理由文も新しい文言: ' + why12);
+  // 3. 保存時と確認点が違う記録を読むと toast で知らせる（保存済みの報告書は保存時の文言のまま）
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', file34b);
+  await wait(500);
+  const t12a = await toastText();
+  const html12a = fs.readFileSync(file34b, 'utf8');
+  expect(t12a.includes('保存時と面接チェックリストの確認点が異なります（追加 1・削除 1）。現在の台本で再判定します') && t12a.includes('台本 花子 さんのデータを読み込みました'),
+    'E12 読込の toast「確認点が異なります（追加 1・削除 1）」: ' + t12a);
+  expect(html12a.includes('指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）') && !html12a.includes('すべて出勤可'), 'E12 保存済みの報告書は保存時の文言のまま');
+  // 4. 空の文言は検証エラーで保存されない →「変更を破棄」→「既定の台本に戻す」
+  await toView('settings');
+  await page.fill('[data-bind="checklist.sections[0].blocks[0].items[0].label"]', '');
+  await saveSettings();
+  const t12b = await st(() => { const el = document.getElementById('toast'); return el.className + '|' + el.textContent; });
+  expect(/\berror\b/.test(t12b) && (await storedProfile()).checklist.sections[0].blocks[0].items[0].label === '土日を含む週3日以上、5時間以上' && !!(await page.$('#settingsIssues')),
+    'E12 空の文言は検証エラーで保存されない（保存済みの文言のまま・エラーの一覧）: ' + t12b);
+  await page.click('#view-settings [data-action="discard"]');
+  await wait(200);
+  await page.click('#view-settings [data-action="cl-default"]');
+  await wait(150);
+  await saveSettings();
+  const sp12b = await storedProfile();
+  expect(sp12b.checklist.sections[0].blocks[0].items[1].label === '指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）' && JSON.stringify(sp12b.checklist).includes('rt_manner') &&
+    (await txtIn(page, '#clMaxNote')).includes('満点 16 点') && await st(() => window.RecruitRules.interviewModel(window.RecruitApp.state.profile, window.RecruitRules.emptyChecklist()).max) === 16,
+    'E12 「既定の台本に戻す」で既定の文言・確認点・満点 16');
+  // 5. 壊れた台本（sections:"x"・mustFailResult:"xxx"）の保存済み設定は既定の台本・reject に戻る
+  const errs12 = errors.length;
+  await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('recruit.profile.v1')); p.checklist.sections = 'x'; p.checklist.mustFailResult = 'xxx'; localStorage.setItem('recruit.profile.v1', JSON.stringify(p)); });
+  await page.reload();
+  await wait(300);
+  const c12 = await st(() => { const c = window.RecruitApp.state.profile.checklist; return { n: c.sections.length, m: c.mustFailResult }; });
+  expect(c12.n === 5 && c12.m === 'reject' && errors.length === errs12, 'E12 壊れた台本の設定は既定の台本・reject に戻る（エラーなし）: ' + JSON.stringify(c12));
+  // 6. 他劇場の設定で保存された記録 → toast
+  const rec12 = parseRecord(fs.readFileSync(file34b, 'utf8'));
+  rec12.profile.theaterName = 'TOHOシネマズ 他劇場';
+  const file12 = path.join(OUT, 'other-theater.html');
+  fs.writeFileSync(file12, await st(r => window.RecruitStorage.generateReportHTML(r, window.RecruitApp.state.profile), rec12));
+  await page.setInputFiles('#fileInput', file12);
+  await wait(500);
+  const t12c = await toastText();
+  expect(await step() === 4 && t12c.includes('このファイルは「TOHOシネマズ 他劇場」の設定で保存されています。現在の設定で判定し直します') && !t12c.includes('確認点が異なります'),
+    'E12 他劇場の設定で保存された記録は toast で知らせる: ' + t12c);
+  // 7. 名簿にない担当者（手入力）の押印・取消（アプリ ③）
+  const box12 = (id) => '#mgmtCard .stamp-box[data-field-id="' + id + '"]';
+  await page.click(box12('interviewer') + ' [data-action="unstamp"]');
+  await wait(150);
+  expect(!(await st(() => window.RecruitApp.state.management.interviewer)) && !(await page.$(box12('interviewer') + ' svg.hanko')), 'E12 押印欄の「取消」で印が消える');
+  await page.selectOption(box12('interviewer') + ' select', '__free');
+  await wait(100);
+  expect(await visible(box12('interviewer') + ' .stamp-free'), 'E12 「名簿にない担当者（手入力）」を選ぶと氏名欄が出る');
+  await page.click(box12('interviewer') + ' [data-action="stamp"]');
+  await wait(150);
+  expect(!(await st(() => window.RecruitApp.state.management.interviewer)) && (await toastText()).includes('氏名を入力してください'), 'E12 手入力の氏名が空なら押印しない（toast）');
+  await page.fill(box12('interviewer') + ' .stamp-free', '山田 太郎');
+  await page.click(box12('interviewer') + ' [data-action="stamp"]');
+  await wait(200);
+  const m12 = await st(() => window.RecruitApp.state.management.interviewer);
+  expect(!!m12 && m12.name === '山田 太郎' && m12.short === '山田' && m12.title === '' && m12.date === '2026.10.10' && !!(await page.$(box12('interviewer') + ' svg.hanko')) &&
+    (await txtIn(page, box12('interviewer') + ' .stamp-meta')).includes('山田 太郎'),
+    'E12 手入力の担当者で押印（印字名は姓）: ' + JSON.stringify(m12));
+  // 最終合否も手入力の担当者で押せる（最終確認が未押印なら同じ担当者の印も押す）
+  await page.click('#decisionCard [data-action="undecide"]');
+  await wait(150);
+  await page.click(box12('final') + ' [data-action="unstamp"]');
+  await wait(150);
+  await page.selectOption('#decisionManager', '__free');
+  await wait(100);
+  expect(await visible('#decisionFree'), 'E12 最終合否でも「手入力」を選ぶと氏名欄が出る');
+  await page.fill('#decisionFree', '鈴木 花子');
+  await page.click('#decisionCard [data-action="decide"][data-value="reject"]');
+  await wait(200);
+  const d12 = await st(() => { const s = window.RecruitApp.state; return { d: s.decision && s.decision.result, by: s.decision && s.decision.by.name, short: s.decision && s.decision.by.short, final: (s.management.final || {}).name }; });
+  expect(d12.d === 'reject' && d12.by === '鈴木 花子' && d12.short === '鈴木' && d12.final === '鈴木 花子' && (await txtIn(page, '#sumDecision')).includes('不採用・鈴木'),
+    'E12 手入力の担当者で「不採用」→ 最終確認にも同じ担当者の印: ' + JSON.stringify(d12));
+  // 8. 保存 HTML 上の取消・手入力の押印・合否の取消 → 押印を保存
+  const saved12 = await saveRecord('free-stamps.html');
+  expect(saved12.rec.management.interviewer.name === '山田 太郎' && saved12.rec.decision.by.name === '鈴木 花子' && saved12.html.includes('data-filename="応募者_台本_花子_2026-10-10_不採用.html"'),
+    'E12 手入力の押印・合否を保存（ファイル名 _不採用）');
+  const rp12Err = [];
+  const rp12 = await newReportPage(rp12Err);
+  await rp12.goto('file://' + saved12.file);
+  await rp12.waitForTimeout(300);
+  const rbox12 = (id) => '#mgmt .stamp-box[data-field-id="' + id + '"]';
+  await rp12.click(rbox12('interviewer') + ' [data-act="unstamp"]');
+  await rp12.waitForTimeout(150);
+  expect(!(await rp12.$(rbox12('interviewer') + ' svg.hanko')) && await rp12.$eval('#mgmtSave', el => el.classList.contains('show')), 'E12 保存 HTML 上で押印を取り消せる（保存バーが出る）');
+  await rp12.selectOption(rbox12('interviewer') + ' select', '__free');
+  await rp12.fill(rbox12('interviewer') + ' input', '佐藤 次郎');
+  await rp12.click(rbox12('interviewer') + ' [data-act="stamp"]');
+  await rp12.waitForTimeout(150);
+  expect(!!(await rp12.$(rbox12('interviewer') + ' svg.hanko')) && (await txtIn(rp12, rbox12('interviewer') + ' .stamp-meta')).includes('佐藤 次郎'), 'E12 保存 HTML 上で手入力の担当者で押印');
+  await rp12.click('#decision [data-act="undecide"]');
+  await rp12.waitForTimeout(150);
+  const fn12 = await rp12.evaluate(() => document.body.getAttribute('data-filename'));
+  expect(await rp12.$eval('#decision', el => el.classList.contains('is-none')) && !(await rp12.$('#clPaper .cl-decision svg.verdict-stamp')) && fn12 === '応募者_台本_花子_2026-10-10.html',
+    'E12 保存 HTML 上で合否を取り消すと紙の合否スタンプとファイル名の _不採用 が外れる: ' + fn12);
+  const [dl12] = await Promise.all([rp12.waitForEvent('download'), rp12.click('#mgmtSaveBtn')]);
+  const file12b = path.join(OUT, 'free-stamps-resaved.html');
+  await dl12.saveAs(file12b);
+  const r12b = parseRecord(fs.readFileSync(file12b, 'utf8'));
+  expect(r12b.decision == null && r12b.management.interviewer.name === '佐藤 次郎' && r12b.management.interviewer.short === '佐藤' && r12b.management.final.name === '鈴木 花子',
+    'E12 押印を保存した再出力ファイル: 合否なし・面接対応者は手入力の担当者・最終確認の印は残る: ' + JSON.stringify(r12b.management));
+  expect(rp12Err.length === 0, 'E12 保存 HTML のページエラーなし: ' + (rp12Err.join(' / ') || 'none'));
+  // 9. 最終合否の ON/OFF（設定「応募者の管理（押印）」）
+  await toView('settings');
+  const set12 = await st(() => { const q = (p) => document.querySelector('[data-bind="management.decision.' + p + '"]'); return q('enabled') && {
+    enabled: q('enabled').checked, label: q('label').value, hire: q('hireLabel').value, reject: q('rejectLabel').value, field: q('stampField').value, auto: q('autoStampFinal').checked, suffix: q('filenameSuffix').checked }; });
+  expect(!!set12 && set12.enabled && set12.label === '最終合否' && set12.hire === '採用' && set12.reject === '不採用' && set12.field === 'final' && set12.auto && set12.suffix,
+    'E12 設定に最終合否（有効・表示名・採用／不採用・連動する押印欄・ファイル名）: ' + JSON.stringify(set12));
+  await page.click('label:has([data-bind="management.decision.enabled"])');
+  await wait(100);
+  await saveSettings();
+  await toView('judge');
+  expect(await step() === 4 && !(await page.$('#decisionCard')) && !(await page.$('#sumDecision')) && !(await page.$('#appPaper .cl-decision')) && await st(() => (window.RecruitApp.state.decision || {}).result) === 'reject',
+    'E12 最終合否を OFF にすると ③ のカード・紙の合否欄・右サマリーを出さない（記録は保持）');
+  const saved12c = await saveRecord('decision-off.html');
+  const rp12c = await newReportPage(rp12Err);
+  await rp12c.goto('file://' + saved12c.file);
+  await rp12c.waitForTimeout(300);
+  expect(!(await rp12c.$('#decision')) && !(await rp12c.$('[data-act="decide"]')) && !!(await rp12c.$('#mgmt')) && rp12Err.length === 0,
+    'E12 最終合否 OFF で保存した HTML に合否パネルが無い（押印欄はある・エラーなし）: ' + (rp12Err.join(' / ') || 'ok'));
+  await rp12c.close();
+  await rp12.close();
+  await toView('settings');
+  await page.click('label:has([data-bind="management.decision.enabled"])');
+  await wait(100);
+  await saveSettings();
+  await toView('judge');
+  expect(!!(await page.$('#decisionCard svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('不採用・鈴木'), 'E12 ON に戻すと ③ のカード（記録した合否）が戻る');
+  await fresh();
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));
   console.log('ERRORS:', errors.length ? errors : 'none');

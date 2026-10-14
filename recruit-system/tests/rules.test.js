@@ -293,7 +293,7 @@ test('63 checklistSummary（ビューモデル）', function () {
   cl.values.weekend = 'one';
   const wk2 = R.checklistSummary(a, cl, p, {}).sections[0].blocks[1].items[0];
   assert.ok(wk2.effective === 'one' && wk2.effectiveLabel === 'いずれか');
-  assert.deepStrictEqual(plain(s1.header.taxi), { text: '', tone: 'muted', auto: false }, 'タクシーは手入力の値だけ');
+  assert.deepStrictEqual(plain(s1.header.taxi), { text: '', tone: 'muted' }, 'タクシーは手入力の値だけ');
   const ex = s1.sections[0].blocks.find(function (b) { return b.type === 'explain'; });
   assert.deepStrictEqual(plain(ex.items.map(function (x) { return x.dim; })), [false, false, true, true]);
   cl.header.posting = 'short';
@@ -313,7 +313,7 @@ test('63 checklistSummary（ビューモデル）', function () {
   cl.notes.conditions_q = '長期希望';
   cl.overall = 'hold';
   const s5 = R.checklistSummary(a, cl, p, {});
-  assert.deepStrictEqual(plain(s5.header.taxi), { text: '可・2,000円（本人申告）', tone: 'info', auto: false });
+  assert.deepStrictEqual(plain(s5.header.taxi), { text: '可・2,000円（本人申告）', tone: 'info' });
   assert.strictEqual(s5.sections[0].blocks.find(function (b) { return b.id === 'conditions_q'; }).memoText, '長期希望');
   assert.deepStrictEqual(plain(s5.overall), { value: 'hold', label: '保留', points: 1, tone: 'warn' });
   assert.strictEqual(s5.score.total, 2 + 1 + 1);
@@ -364,6 +364,7 @@ test('64 normalize（面接チェックリスト）', function () {
   c.header.negatives = [{ id: 'short', label: '短期希望', auto: 'shortTerm' }, { label: '平日のみ', auto: 'weekdayOnly' }];   // 旧い設定の消極属性 → 外す
   c.header.morningOnlyEnd = '25:00';
   c.print.showQuestions = 'yes';
+  c.title = 'スタッフ面接チェックリスト'; c.intro = '台本の順に確認し…';                  // 台本の題名・説明文（2026-10-14 に削除。どこにも表示しない）→ 外す
   c.myExtension = { keep: true };                                                       // 未知のキーは残す
   const n = S.normalizeProfile(p).checklist;
   assert.ok(!n.sections[0].blocks.some(function (b) { return b.type === 'video'; }));
@@ -386,6 +387,8 @@ test('64 normalize（面接チェックリスト）', function () {
   assert.ok(!('negatives' in n.header) && !('morningOnlyEnd' in n.header), '消極属性（negatives・morningOnlyEnd）は正規化で外す: ' + JSON.stringify(plain(n.header)));
   assert.deepStrictEqual(Object.keys(n.header).sort(), ['interviewerField', 'posting']);
   assert.strictEqual(n.print.showQuestions, true);
+  assert.ok(!('title' in n) && !('intro' in n) && n.version === '2026-10-08', '台本の題名・説明文は正規化で外す（版は残す）');
+  assert.ok(!('title' in base) && !('intro' in base), '既定の台本に題名・説明文は無い');
   assert.deepStrictEqual(plain(n.myExtension), { keep: true });
   // mustFailJumpTo が存在しないセクション → ''
   const pj = P(); pj.checklist.mustFailJumpTo = 'nowhere';

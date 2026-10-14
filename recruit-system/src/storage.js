@@ -120,6 +120,7 @@
 
   // 台本の正規化（決定的・冪等。未知のキーは残す）。baseDef は既定の台本。
   //   自動表示（auto / autoParams）は 2026-10-14 に削除した（docs/SPEC-slim.md D8）。旧い設定・記録の台本に残っていれば外す
+  //   台本の題名・説明文（title / intro）も同日に削除した（表示していた詳細モードのヘッダーごと無くなったため）。残っていれば外す
   function normalizeChecklistDef(def, baseDef) {
     const R = clRules();
     const base = U.isObj(baseDef) ? baseDef : defaults().checklist;
@@ -128,7 +129,9 @@
     const types = R.CHECKLIST_BLOCK_TYPES || ['must', 'fields', 'explain', 'question', 'rating', 'notify', 'note'];
     const kinds = R.CHECKLIST_FIELD_KINDS || ['text', 'date', 'month', 'choice'];
 
-    ['title', 'version', 'intro', 'overallLabel', 'overallHint'].forEach(function (k) { out[k] = strOr(out[k], base[k]); });
+    delete out.title;
+    delete out.intro;
+    ['version', 'overallLabel', 'overallHint'].forEach(function (k) { out[k] = strOr(out[k], base[k]); });
     const bo = base.overallOptions || {};
     if (!U.isObj(out.overallOptions)) out.overallOptions = U.deepClone(bo);
     ['hire', 'hold', 'reject'].forEach(function (k) { out.overallOptions[k] = strOr(out.overallOptions[k], bo[k]); });
@@ -525,7 +528,7 @@
   // ---------- HTML レポートのスタイル（アプリと同じデザイントークン。印刷・共有向けにライトテーマ固定） ----------
   function reportCss() {
     return [
-      ':root{--bg:#f3f5f8;--surface:#fff;--surface-2:#f8fafc;--surface-3:#eef2f6;--text:#1a2233;--muted:#5b6675;--border:#dde3ea;--accent:#1f5fbf;--accent-soft:#e6eefb;--ok:#0e9f6e;--ok-soft:#e3f6ee;--warn:#d97706;--warn-soft:#fdf1dc;--danger:#dc2626;--danger-soft:#fde8e8;--info:#2563eb;--info-soft:#e5edff;color-scheme:light}',
+      ':root{--bg:#f3f5f8;--surface:#fff;--surface-2:#f8fafc;--surface-3:#eef2f6;--text:#1a2233;--muted:#5b6675;--border:#dde3ea;--accent:#1f5fbf;--accent-soft:#e6eefb;--ok:#0e9f6e;--ok-soft:#e3f6ee;--warn:#d97706;--warn-soft:#fdf1dc;--danger:#dc2626;--danger-soft:#fde8e8;color-scheme:light}',
       '*{box-sizing:border-box}',
       'body{margin:0;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}',
       '.page{max-width:900px;margin:0 auto;padding:28px 20px 48px;counter-reset:sec}',
@@ -560,14 +563,9 @@
       'table.kv th{width:10em;text-align:left;font-weight:600;color:var(--muted);padding:7px 10px 7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}',
       'table.kv td{padding:7px 0;vertical-align:top;border-bottom:1px solid var(--surface-3)}',
       'table.kv tr:last-child th,table.kv tr:last-child td{border-bottom:none}',
-      // バッジ・タグ
-      '.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;background:var(--surface-3);color:var(--muted)}',
-      '.badge.ok{background:var(--ok-soft);color:var(--ok)}.badge.warn{background:var(--warn-soft);color:var(--warn)}.badge.danger{background:var(--danger-soft);color:var(--danger)}.badge.info{background:var(--info-soft);color:var(--info)}.badge.accent{background:var(--accent-soft);color:var(--accent)}',
-      '.badge.lg{font-size:14px;padding:5px 14px}',
-      '.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:5px;background:var(--surface-3);color:#3a4556;white-space:nowrap;vertical-align:1px}',
-      '.tag.warn{background:var(--warn-soft);color:#9a5b00}.tag.danger{background:var(--danger-soft);color:#b42318}.tag.ok{background:var(--ok-soft);color:#0b7a55}',
+      // 所見・空の段落
       '.note{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.7}',
-      '.muted{color:var(--muted)}.empty{color:var(--muted);font-size:13.5px}',
+      '.empty{color:var(--muted);font-size:13.5px}',
       // 判定
       '.result{border:2px solid var(--border);border-radius:12px;padding:18px 20px;background:var(--surface)}',
       '.result.recommend{border-color:var(--ok);background:linear-gradient(180deg,var(--ok-soft),#fff 60%)}.result.review{border-color:var(--warn);background:linear-gradient(180deg,var(--warn-soft),#fff 60%)}.result.reject{border-color:var(--danger);background:linear-gradient(180deg,var(--danger-soft),#fff 60%)}',
@@ -648,7 +646,7 @@
       '.result{padding:11px 14px;break-inside:auto}.result-title{font-size:18px}.adj{margin-top:8px}.adj li{padding:5px 10px}',
       '.stamp-row{gap:8px}.stamp-box{padding:8px}.stamp-area{height:80px}.hanko{width:70px;height:70px}.stamp-empty{width:66px;height:66px}.foot{margin-top:12px}',
       '.note,.stamp-row,.adj li{break-inside:avoid}.sec h2,.sec h3,.result-kicker,.result-title,.result-body{break-after:avoid}',
-      '.verdict,.result,.badge,.tag,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+      '.verdict,.result,.rh-mark,.sec h2::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     ].join('\n');
   }
   // ---------- 面接チェックリスト（報告書の描画。アプリの A4 報告・保存レポートで共用。docs/SPEC-checklist.md 4-2） ----------
@@ -1079,7 +1077,7 @@
       '.cl-sheet tr.t-danger .cl-val,.cl-sheet tr.t-danger .cl-mk{color:#b42318;background:#fde8e8}.cl-sheet tr.t-muted .cl-val{color:#5b6675;background:#eef2f6}',
       '.cl-sheet dl.cl-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 12px;margin:0}',
       '.cl-sheet dl.cl-fields>div{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:4px;border-bottom:1px solid #e3e8ee;padding:2px 0;break-inside:avoid}',
-      '.cl-sheet dl.cl-fields dt{color:#5b6675;font-weight:600}.cl-sheet dl.cl-fields dd{margin:0;overflow-wrap:anywhere}.cl-sheet dl.cl-fields dd small{color:#5b6675;margin-left:3px}',
+      '.cl-sheet dl.cl-fields dt{color:#5b6675;font-weight:600}.cl-sheet dl.cl-fields dd{margin:0;overflow-wrap:anywhere}',
       '.cl-sheet .cl-col dl.cl-fields{grid-template-columns:minmax(0,1fr)}.cl-sheet .cl-col dl.cl-fields>div{grid-template-columns:10em minmax(0,1fr)}',
       '.cl-sheet ul.cl-checks{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px 12px}',
       '.cl-sheet .cl-col ul.cl-checks,.cl-sheet .cl-b-notify ul.cl-checks{grid-template-columns:minmax(0,1fr)}',
@@ -1095,8 +1093,9 @@
       '.cl-mode-section dl.cl-sh-kv{display:flex;flex-wrap:wrap;gap:2px 20px;margin:0 0 4px}.cl-mode-section dl.cl-sh-kv>div{display:flex;gap:6px;align-items:baseline}',
       '.cl-mode-section dl.cl-sh-kv dt{color:#5b6675;font-weight:600}.cl-mode-section dl.cl-sh-kv dd{margin:0;font-weight:700}.cl-mode-section dl.cl-sh-kv dd small{font-weight:500;color:#5b6675;margin-left:3px}',
       '.cl-mode-section .cl-sh-chips{display:flex;flex-wrap:wrap;gap:4px}',
-      '.cl-mode-section .cl-hchip{display:inline-flex;gap:6px;align-items:baseline;padding:1px 8px;border:1px solid #c9d2dd;border-radius:5px;font-size:12px;background:#fff}.cl-mode-section .cl-hchip b{color:#5b6675;font-weight:700}.cl-mode-section .cl-hchip small{color:#5b6675}',
-      '.cl-mode-section .cl-hchip.t-ok{border-color:#9fd8bf;background:#e3f6ee}.cl-mode-section .cl-hchip.t-warn{border-color:#f3cf8a;background:#fdf1dc}.cl-mode-section .cl-hchip.t-danger{border-color:#f5b5b5;background:#fde8e8;color:#b42318}.cl-mode-section .cl-hchip.t-info{border-color:#b9cdf7;background:#e5edff}',
+      '.cl-mode-section .cl-hchip{display:inline-flex;gap:6px;align-items:baseline;padding:1px 8px;border:1px solid #c9d2dd;border-radius:5px;font-size:12px;background:#fff}.cl-mode-section .cl-hchip b{color:#5b6675;font-weight:700}',
+      // タクシーのチップ（手入力の値があれば t-info。docs/SPEC-slim.md B1）
+      '.cl-mode-section .cl-hchip.t-info{border-color:#b9cdf7;background:#e5edff}',
       '.cl-mode-section .cl-page-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:4px 0 6px;padding-bottom:3px;border-bottom:2px solid #24324a;break-after:avoid}',
       '.cl-mode-section .cl-page-no{font-size:11.5px;font-weight:800;color:#fff;background:#24324a;padding:0 7px;border-radius:4px}.cl-mode-section .cl-page-t{font-weight:800;font-size:14px}',
       '.cl-mode-section .cl-page-lead{flex-basis:100%;font-size:12px;color:#3a4556}',

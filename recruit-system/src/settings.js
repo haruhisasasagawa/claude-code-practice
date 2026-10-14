@@ -27,7 +27,8 @@
 
   function R() { return global.RecruitRules || {}; }
 
-  const GROUP_HINT = 'highschool（高校生）/ university（大学・大学院）/ vocational（専門学校）/ freeter / homemaker / doubleworker / other';
+  // 区分のグループで変わるのは、学生かどうか（Step① の卒業予定年月の欄）だけ（rules.isStudentGroup）
+  const GROUP_HINT = '学生は highschool（高校）/ university（大学・大学院）/ vocational（専門学校）で、Step① に卒業予定年月の欄を出します。それ以外は other（freeter などほかの値も学生以外として扱います）';
 
   // ---------- 描画ヘルパー ----------
   function val(path) {
@@ -48,8 +49,6 @@
       opts.step !== undefined ? 'step="' + opts.step + '"' : '',
       opts.placeholder ? 'placeholder="' + esc(opts.placeholder) + '"' : '',
       opts.repaint ? 'data-repaint' : '',
-      opts.disabled ? 'disabled' : '',
-      opts.cls ? 'class="' + esc(opts.cls) + '"' : '',
       opts.aria ? 'aria-label="' + esc(opts.aria) + '"' : ''
     ].filter(Boolean).join(' ');
     return '<input ' + attrs + '>';
@@ -82,24 +81,21 @@
       '<div class="hint">1行に1項目。' + (opts.hint ? esc(opts.hint) : '') + '</div></div>';
   }
 
-  function sCheck(path, label, hint, opts) {
-    opts = opts || {};
-    return '<label class="check-row"><input type="checkbox" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') +
-      (opts.repaint ? ' data-repaint' : '') + '>' +
+  function sCheck(path, label, hint) {
+    return '<label class="check-row"><input type="checkbox" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + '>' +
       '<div><div class="lbl">' + esc(label) + '</div>' + (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div></label>';
   }
 
   function selectTag(path, options, opts) {
     opts = opts || {};
     const cur = String(val(path));
-    return '<select data-bind="' + esc(path) + '"' + (opts.cls ? ' class="' + esc(opts.cls) + '"' : '') +
-      (opts.repaint ? ' data-repaint' : '') + (opts.aria ? ' aria-label="' + esc(opts.aria) + '"' : '') + (opts.disabled ? ' disabled' : '') + '>' +
+    return '<select data-bind="' + esc(path) + '"' + (opts.repaint ? ' data-repaint' : '') + (opts.aria ? ' aria-label="' + esc(opts.aria) + '"' : '') + '>' +
       options.map(function (o) { return '<option value="' + esc(o.value) + '"' + (String(o.value) === cur ? ' selected' : '') + '>' + esc(o.label) + '</option>'; }).join('') +
       '</select>';
   }
 
-  function sSelect(path, label, options, hint, opts) {
-    return '<div class="field"><label>' + esc(label) + '</label>' + selectTag(path, options, opts) +
+  function sSelect(path, label, options, hint) {
+    return '<div class="field"><label>' + esc(label) + '</label>' + selectTag(path, options) +
       (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div>';
   }
 
@@ -119,7 +115,7 @@
   function applicantHtml() {
     return section('s-applicant', '応募者の属性', 'Step① 応募者で選ぶ区分・性別と、学生の卒業予定年月の表示です。',
       '<div class="field-row">' +
-        sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。グループ: ' + GROUP_HINT }) +
+        sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。' + GROUP_HINT }) +
         sLines('options.genders', '性別') +
       '</div>' +
       sCheck('features.graduationDate', '卒業予定年月（学生）', '学生の区分のとき Step① に卒業予定年月の欄を出します。'));
@@ -295,7 +291,7 @@
       '<h3 class="sub">判定</h3>' +
       '<div class="field-row">' +
         sSelect('checklist.mustFailResult', '必須条件に不一致があるとき', [{ value: 'reject', label: resultTitle('reject') }, { value: 'review', label: resultTitle('review') }],
-          '台本どおりなら「' + resultTitle('reject') + '」。不一致のときは確認点・総合判断が未入力でも判定に進めます（' + resultTitle('review') + 'のときは入力が必要）。') +
+          '台本どおりなら「' + resultTitle('reject') + '」。' + stepRef(3) + ' では「不一致のとき案内するセクション」へ進んで面接を終えるよう案内します。「' + resultTitle('review') + '」にすると、ほかのセクションの確認点も評価するよう案内します（どちらも未入力のまま報告書へ進めます）。') +
         sSelect('checklist.mustUnknownResult', '必須条件に未確認が残るとき', [{ value: 'none', label: '警告のみ（判定は変えない）' }, { value: 'review', label: '採用推奨に留めない（' + resultTitle('review') + 'まで）' }]) +
       '</div>' +
       '<div class="field-row">' +
@@ -331,8 +327,7 @@
       sCheck('checklist.print.showQuestions', '保存レポートの「詳細」に質問文も載せる', 'A4 の面接チェックリスト報告（1 枚）には質問文・説明文を載せません（質問の回答は短い名前で載せます）。OFF にすると「詳細」の面接チェックリスト節もメモだけになります。') +
 
       '<h3 class="sub">台本</h3>' +
-      '<div class="field-row">' + sInput('checklist.title', 'タイトル') + sInput('checklist.version', '版（例: 2026-10-08）') + '</div>' +
-      sTextarea('checklist.intro', stepRef(3) + ' の説明文', { rows: 2 }) +
+      '<div class="field-row">' + sInput('checklist.version', '版（例: 2026-10-08）', { hint: '報告書（A4）の「台本 … 版」に表示します。' }) + '</div>' +
       '<div class="field-row">' + pages.map(function (pg, k) {
         return '<div>' + sInput('checklist.pages[' + k + '].title', (pg.no || k + 1) + '枚目の見出し') + sTextarea('checklist.pages[' + k + '].lead', (pg.no || k + 1) + '枚目の説明', { rows: 2 }) + '</div>';
       }).join('') + '</div>' +
@@ -422,8 +417,7 @@
     return true;
   }
 
-  // 自動表示・入力の種類を変えたときの既定値（自動表示の設定値・選択肢）
-  // 入力の種類を選択式にしたら選択肢の見本を入れる
+  // 記入欄の入力の種類を選択式にしたら選択肢の見本を入れる
   function clOnBindChange(path, value) {
     const m = /^checklist\.sections\[(\d+)\]\.blocks\[(\d+)\]\.items\[(\d+)\]\.kind$/.exec(path);
     if (!m) return;

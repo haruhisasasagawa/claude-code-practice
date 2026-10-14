@@ -200,8 +200,8 @@
 
 ### 1-6. CSS（`src/styles.css` 1,130 行 → 目安 750 行、`reportCss`）
 **styles.css で削除するブロック**（見出しコメント単位）: 「申し送り」(354–378 の `.handoff-*`・`.progress*`・`.strength-list`)、「面接評価」のうち `.eval-*`・`.seg-btn.active.s1〜s5`・`.scale-legend`・`.score-total`、「判定結果」(`.result-card`・`.metric*`・`.bars`・`.bar-*`・`.timeline`・`.tl-item`)、右サマリーのゲージ・件数（`.gauge*`・`.sum-counts`・`.sum-count`・`.sum-later`）、設定の `.mode-options`/`.mode-opt`・`.settings-advanced`・`.s-busy-*`・`.s-contrib-row`・2 軸の編集表・`.rule-row`・`.legend`・`.s-stage-row`・`.s-cl-legacy*`・`.s-cl-periods`・`.s-off`、「必須チェック（セグメント）」の `.seg`/`.seg-opt`（`fSeg` 用）、「高校生・例外条件」「繁忙期・土日祝」「シフト貢献度の内訳」「2軸判定」「右サマリー（貢献度）」「入力の段階」(665–726)、`.legacy-banner`、`#clTaxiAuto`/`.cl-auto`（自動表示）、`.cl-head-grid`・`.cl-legacy-table`、**「申し送りシート（A4 1枚）印刷」(890–943 の `body.print-handoff` 全部)**。
-**残す（共有なので消さない）**: `.score-seg`・`.seg-btn`（`clSegHtml` が使う）、`.table`・`.table.kv`、`.list-plain`・`.list-x`、`.empty`、`.grid-2`（使用箇所を grep してから判断）、`.chip`、`.alert`・`.badge`・`.card`。
-**reportCss で削除**: `.dash`・`.tile`・`.meter`・`.counts`、`table.list`、`.bars`・`.bar`・`.total-line`、`.hgroup*`・`ul.hlist`・`li.h*`・`ul.strengths`、`.callout*`、`.axes`・`.axis`・`.mx*`・`.result-note`、`.print-only`・`.sheet-title`、`@page sheet` と `body.print-handoff …` の全規則、`body.view-report:not(.has-cl)…` の 2 規則、各セレクタの `:not(.print-handoff)`・`body.print-handoff #decision`・`body.print-handoff .rh-decision` の部分、`@media (max-width:720px)` 内の `.dash`・`ul.strengths`・`.bar` の部分、`@media print` 全体印刷の `.dash`・`.tile`・`li.h`・`.bars`・`.axes`・`.mx*` の部分。**残す**: `.rh*`・`.chip`・`.verdict*`・`.sec*`・`table.kv`・`.badge`・`.tag`・`.note`・`.muted`・`.empty`・`.result*`（台本の判定節）・`.adj*`・`.warn-list`・`.disclaimer`・`.foot`・押印・最終合否・`.rtool*`・`.paper*`。
+**残す（共有なので消さない）**: `.score-seg`・`.seg-btn`（`clSegHtml` が使う）、`.list-plain`・`.list-x`、`.grid-2`（使用箇所を grep してから判断）、`.alert`・`.badge`・`.card`。（当初は `.table`・`.table.kv`・`.empty`・`.chip` も残すとしたが、削除後はどこからも生成されないため、レビュー後に `.alert.info`/`.ok`・`.btn.ok`/`.link`/`.block`・`.cl-row.missing` と一緒に削除した）
+**reportCss で削除**: `.dash`・`.tile`・`.meter`・`.counts`、`table.list`、`.bars`・`.bar`・`.total-line`、`.hgroup*`・`ul.hlist`・`li.h*`・`ul.strengths`、`.callout*`、`.axes`・`.axis`・`.mx*`・`.result-note`、`.print-only`・`.sheet-title`、`@page sheet` と `body.print-handoff …` の全規則、`body.view-report:not(.has-cl)…` の 2 規則、各セレクタの `:not(.print-handoff)`・`body.print-handoff #decision`・`body.print-handoff .rh-decision` の部分、`@media (max-width:720px)` 内の `.dash`・`ul.strengths`・`.bar` の部分、`@media print` 全体印刷の `.dash`・`.tile`・`li.h`・`.bars`・`.axes`・`.mx*` の部分。**残す**: `.rh*`・`.chip`・`.verdict*`・`.sec*`・`table.kv`・`.note`・`.empty`・`.result*`（台本の判定節）・`.adj*`・`.warn-list`・`.disclaimer`・`.foot`・押印・最終合否・`.rtool*`・`.paper*`。（`.badge*`・`.tag*`・`.muted` とそれ専用の `--info`/`--info-soft` はどこからも生成されないため、レビュー後に削除した。checklistSheetCss の `.cl-hchip` の t-ok/t-warn/t-danger・`.cl-hchip small`・`dl.cl-fields dd small`〔自動表示の名残〕も同様）
 **追加**: `.stamp-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}` を styles.css・reportCss・checklistSheetCss（`.cl-sheet .stamp-row.cols-2`）に（D10）。**詳細度に注意**: `.stamp-row.cols-2` は既存の狭い画面の 1 列化（styles.css `@media (max-width:760px){.stamp-row{…1fr}}`・reportCss `@media (max-width:720px){.stamp-row{…}}`）より強いので、その 2 つのメディアクエリに `.stamp-row.cols-2` も並べて 1 列に戻す（390px で横にはみ出さないこと）。
 
 未使用クラスの洗い出し（目安。動的に組み立てるクラス `tone-*`・`is-*`・`dec-*`・`decide-*`・`t-*`・`m-*`・`cl-mode-*`・`sev-*` は手で確認）:
@@ -230,7 +230,7 @@ for c in $(grep -oE '\.[a-z][a-z0-9-]+' src/styles.css | sort -u | sed 's/^\.//'
 
 | # | 箇所 | 現在の依存 | 置き換え |
 | --- | --- | --- | --- |
-| B1 | `rules.checklistSummary(applicant, cl, profile, opts)` | `checklistAuto`（autos）、`interviewModel(profile, opts.scores, cl).mode`、`opts.scores` | `autos` を削除し、必須条件の `autoText/autoTone`・記入欄の `autoText/fromAuto` は作らない（`r.effective = v`）。ヘッダーの `taxi` は `{ text: 手入力の値, tone: 値があれば 'info' さもなくば 'muted', auto: false }`。戻り値から `mode`・`autos` を外す（`hasInput, def, header, must, ratings, overall, score, sections, pages, minutesTotal` は維持）。`opts` は `{ management }` だけ |
+| B1 | `rules.checklistSummary(applicant, cl, profile, opts)` | `checklistAuto`（autos）、`interviewModel(profile, opts.scores, cl).mode`、`opts.scores` | `autos` を削除し、必須条件の `autoText/autoTone`・記入欄の `autoText/fromAuto` は作らない（`r.effective = v`）。ヘッダーの `taxi` は `{ text: 手入力の値, tone: 値があれば 'info' さもなくば 'muted' }`（当初は形を保つため `auto: false` を残したが、読む側が無いのでレビュー後に削除）。戻り値から `mode`・`autos` を外す（`hasInput, def, header, must, ratings, overall, score, sections, pages, minutesTotal` は維持）。`opts` は `{ management }` だけ |
 | B2 | `rules.evaluateScript` | `interviewModel(profile, {}, cl)` | `interviewModel(profile, cl)`。戻り値の形（`mode:'script'`・`contribution/matrix/highschool: null`・`interviewMode:'checklist'`・`scaleMax`・`checklist`・`must`・`overall`）は**変えない**（保存済み記録・e2e が参照） |
 | B3 | `rules.interviewModel` | `ev.items`・`hasNumericScore` | D7。`th = (profile.evaluation||{}).thresholds` だけ参照 |
 | B4 | `storage.buildRecord(state)` | `computeContribution`・`highschoolStatus`・`isScriptMode`・`state.handoff`・`state.scores`・`profile.inputStages` | 3-3 の形で書く |
@@ -377,10 +377,10 @@ else target = hasCl ? 3 : 1;                                              // ②
   - 総合判断: `checklist.overallLabel` `checklist.overallHint` `checklist.overallOptions.hire` `.hold` `.reject`
   - ヘッダー: `checklist.header.interviewerField` `checklist.header.posting.label` `checklist.header.posting.options[m].label`
   - 印刷: `checklist.print.showQuestions`
-  - 台本: `checklist.title` `checklist.version` `checklist.intro` `checklist.pages[k].title` `checklist.pages[k].lead`、`checklist.sections[i].title|minutes|minutesMax|page|lead`、`…blocks[j].title|note|memo|memoLabel`、`…items[k].label`、`…items[k].hint`（rating）、`…items[k].shortOnly`（explain）、`…items[k].short`（question・notify・fields）、`…items[k].kind`・`…items[k].options`（fields。data-type options）
+  - 台本: `checklist.version` `checklist.pages[k].title` `checklist.pages[k].lead`、`checklist.sections[i].title|minutes|minutesMax|page|lead`、`…blocks[j].title|note|memo|memoLabel`、`…items[k].label`、`…items[k].hint`（rating）、`…items[k].shortOnly`（explain）、`…items[k].short`（question・notify・fields）、`…items[k].kind`・`…items[k].options`（fields。data-type options）
 - `s-mgmt`: `management.fields[i].label` `management.fields[i].hint`（欄の数だけ。既定 2）`management.managers`（data-type managers）`management.allowFreeName` `management.decision.enabled|label|hireLabel|rejectLabel|hint|stampField|autoStampFinal|filenameSuffix`
 - `s-io`: なし（ボタンだけ）
-- **消える bind**: `mode`、`texts.*`、`evaluation.holdOn*`、`…items[k].auto`・`…autoParams.*`、`features.*`（graduationDate 以外）、`options.*`（2 つ以外）、`inputStages.*`、`stageOptions.*`、`params.*`、`highschoolPolicy.*`、`handoffRules[*]`、`contribution.*`、`matrix.*`
+- **消える bind**: `checklist.title`・`checklist.intro`（表示していた詳細モードのヘッダーが無くなり、どこにも出ないため。レビュー後に削除。正規化でも外す）、`mode`、`texts.*`、`evaluation.holdOn*`、`…items[k].auto`・`…autoParams.*`、`features.*`（graduationDate 以外）、`options.*`（2 つ以外）、`inputStages.*`、`stageOptions.*`、`params.*`、`highschoolPolicy.*`、`handoffRules[*]`、`contribution.*`、`matrix.*`
 
 ### 4-3. `data-action`
 残す: `save` `discard` `export` `import` `reset`、`cl-sec-add|del|up|down` `cl-block-add|del|up|down` `cl-item-add|del|up|down` `cl-default`。削除: `busy-*` `stages-*` `rule-default` `cl-period`。
@@ -409,7 +409,7 @@ else target = hasCl ? 3 : 1;                                              // ②
   - #87 `generateReportHTML`: `class="dash"`・`rtPrintSheet`・`rtPrintAll`・`__prepareHandoffSheet`・`print-handoff`・`printingAll`・「初期対応者」・「詳細モード」・「シフト貢献度」・「留意点」が無い（埋め込み JSON を除いた部分で）、`#rtPrintChecklist` の表示名「A4 で印刷（1 ページ）」、`#mgmt .stamp-box` が 2 つ・`stamp-row cols-2`、body クラス `view-report has-cl mode-script`、record に `scores` があっても旧評価の節を出さない。
   - #88 公開 API: `R.buildHandoff`・`evaluateHiring`・`computeContribution`・`isScriptMode`・`isScriptRecord`・`checklistAuto`・`hasNumericScore`・`firstContractEnd`・`CHECKLIST_AUTO`・`S.V1_DEFAULT_TEXTS` が `undefined`、`R.interviewModel(P(), cl)` の新しい引数で #55 と同じ点。
 
-### 5-2. e2e（`tests/e2e.js`。E1〜E39 → E1〜E11）
+### 5-2. e2e（`tests/e2e.js`。E1〜E39 → E1〜E11、レビュー後に E12 を追加）
 **振り直し表**（期待値は緩めない。削除した機能に関する期待値だけを「無いこと」の確認に置き換える）
 | 新 | 旧 | 内容・変更点 |
 | --- | --- | --- |
@@ -424,6 +424,7 @@ else target = hasCl ? 3 : 1;                                              // ②
 | E9 | 新 | 押印欄 2 つ: アプリ `#mgmtCard`・紙 `#appPaper`・印刷用 `#clSheet .cl-stamps`・保存 HTML `#mgmt`・右サマリー `#sumStamps`・設定 `s-mgmt` に「初期対応者」が無く欄は 2 つ。localStorage に 3 欄の設定（初期対応者の表示名を変更）を入れて再読込 → 2 欄・表示名維持。最終合否で「最終確認」に自動押印 |
 | E10 | 新 | 設定画面: 節が 4-1 の 5 つだけ（順序も）・ナビ 5 リンク・`data-bind` が 4-2 の許可リスト（正規表現で照合）だけ・重複なし・「詳細モード」「2軸」「貢献度」「留意点」「初期対応者」の文字が無い・保存／破棄／初期化・書き出した JSON に `mode`・`handoffRules` 等が無い・`v1-profile-other.json` の読み込みで toast「古い形式のため既定の設定を使います」・`legacy-profile-full.json` の読み込みで 2 欄。使い方: help-step 3 つ・「詳細モード」「初期対応者」「2軸」の文字が無い |
 | E11 | 新 | 保存 HTML の印刷: `#rtPrintChecklist` だけ・`.dash`/`#rtPrintSheet`/`#rtPrintAll`/`window.__prepareHandoffSheet` が無い・報告書表示で `emulateMedia('print')`＋beforeprint 相当 → `print-checklist` が付き PDF 1 ページ・詳細表示では `print-checklist` が付かない（全文）。アプリの ③「A4 で印刷」も PDF 1 ページ（押印 2 欄） |
+| E12 | 新（レビュー後） | 旧 E22・E26・E28・E31 のうち、スリム版にも残した機能（E1〜E11 への振り直しで検証ごと消えていた）: mustFailResult=review の案内（省略可・⑤ へを出さない・未入力でも ③ へ）、台本の文言の変更・確認点の削除／追加（満点 14／16 点）・判定の理由文、読込の toast（確認点の差・他劇場）、空の文言の検証エラー・既定の台本に戻す・壊れた台本、手入力（`__free`）の押印・最終合否、保存 HTML 上の取消・手入力の押印・合否の取消、最終合否の ON/OFF。必須条件の不一致の案内（旧 E26 の前半: 「⑤ 逆質問へ進み…終了」・不一致あり・②〜④ の `.cl-skippable`・⑤ へ移動）は E2 に追加 |
 
 **ヘルパーの整理**
 - `fresh()` は `localStorage.clear()`＋reload だけ（K8）。`freshScript` は削除して `fresh` に統一。`ensureFullMode`・`fillBasic`・`busyAllFull`・`checkAll`・`toHandoff`・`checkDeferred`・`setStage`・`copyHandoff`・`inPreFill`・`preFillOpen`・`openPreFill`・`handoffIds`・`handoffItem`・`contribution` を削除。`judgment()` から貢献度・マスの項目を外す。
@@ -503,7 +504,7 @@ git status --short               # 想定外のファイルが無いこと（コ
 2. **保存 HTML の埋め込みスクリプト**（generateReportHTML 末尾の 2 本目の `<script>`）: `window.__prepareHandoffSheet = prep`・`prep()`・`rtPrintSheet`（変数 `b`）・`rtPrintAll`（変数 `a`）・`printingAll` が 1 本のスクリプトに絡んでいる。`printingAll` は beforeprint でも参照しているので、片方だけ消すと **ReferenceError（保存 HTML のページエラー）** になる。ES5（`var`・文字列連結）のまま書く。`clFitSheet.toString()` を埋め込んでいるので `clFitSheet` 内にコメントを書かない・ES5 のまま。
 3. **CSS の print-handoff**: styles.css（890–943）と reportCss（`@page sheet`・`body.print-handoff …`）の両方にある。reportCss の `@media screen` の 4 規則は `:not(.print-checklist):not(.print-handoff)` の連結なので、`:not(.print-handoff)` だけ消して `:not(.print-checklist)` は残す。`@media print` の `body.print-checklist #decision,body.print-handoff #decision,body.print-handoff .rh-decision` も前半を残す。
 4. **index.html の `#clSheet`** はアプリの A4 印刷のホスト（`prepareChecklistSheet`）なので消さない。保存 HTML 側の `#clSheet.cl-sheet-print` とは別物。
-5. **共有 CSS**: `.score-seg`・`.seg-btn` は「面接評価」の見出しの下にあるが、台本の ○△×・一致／不一致・求人のボタン（`clSegHtml`）が使う。`.table`・`.list-x`（`#scriptWarnings`）・`.empty` も残す。
+5. **共有 CSS**: `.score-seg`・`.seg-btn` は「面接評価」の見出しの下にあるが、台本の ○△×・一致／不一致・求人のボタン（`clSegHtml`）が使う。`.list-x`（`#scriptWarnings`）も残す（`.table`・`.empty` は削除後に使われなくなったので、レビュー後に削除した）。
 6. **`interviewModel` の引数変更**（D7）: rules（checklistSummary 内 2 か所・evaluateScript）、app（`clModel`・`scriptSummaryHtml`）、storage（generateReportHTML の `ivS`）、settings（`clMax`）、単体テスト。古い 3 引数の呼び出しが残ると `cl` に `{}` が入り、点が 0 になる（例外にならないので気づきにくい）。
 7. **`U.deepMerge` は配列を丸ごと置き換え、知らないキーも残す**。プロファイルは deepMerge に頼らずホワイトリストで組み立てる（3-1）。応募者も `deepMerge(emptyApplicant(), rec.applicant)` をやめて 6 キーだけ拾う。
 8. **`R.round1`**（app の `fmtNum`）、**`R.categoryGroup`・`R.isStudentGroup`**（卒業予定年月の表示）、**`RESULT_RANK`**（evaluateScript）、**`bandOf`** は消さない。

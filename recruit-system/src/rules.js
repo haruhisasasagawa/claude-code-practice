@@ -201,7 +201,7 @@
     const header = {
       date: clStr(hdr.date), posting: posting, postingLabel: postingOpt ? clStr(postingOpt.label) : '',
       interviewer: ivName || stamp, interviewerFromStamp: !ivName && !!stamp,
-      taxi: { text: taxiOv, tone: taxiOv ? 'info' : 'muted', auto: false }
+      taxi: { text: taxiOv, tone: taxiOv ? 'info' : 'muted' }
     };
 
     // 必須条件
