@@ -22,6 +22,10 @@
  *   E13 ロゴ（brand.js）と、ロゴ・名簿入りの版（node build.js --local）: サイドバー・③ の紙・保存 HTML の用紙の見出し
  *   E14 A4 用紙（docs/SPEC-a4.md 7-3）: 寸法 210×297mm・画面と印刷が同じ様式（スクリーンショットと PDF の画像）・欄クリックの窓（Esc・外のクリック・印刷に出ない・書き出しに残らない）・
  *       長いメモの全文・390px の縮小表示・アプリの印刷と保存 HTML の印刷が同じ見出しの 1 ページ
+ *   E15 最終承認のパスワード（docs/SPEC-a4.md 11 章）: 公開版はロックなし・ローカル版（tests/fixtures/local-sample の架空のパスワード）で ③ の最終確認・最終合否・保存 HTML の窓・
+ *       設定の変更／外す（現在のパスワード）・変えた後の保存 HTML・JSON の読み込み・初期化。dist にパスワード・ハッシュが無いこと
+ *   E16 用紙を埋めるレイアウト（docs/SPEC-a4.md 12 章）: 押印行は用紙の内寸の下端（上限近くのゆったりを狭い画面で開いても）・面接メモ・所見の枠（記入なしでも）・ゆったり（.cl-roomy）の付け外し・重いサンプルも 1 ページ・
+ *       スクリーンショット a4-form.png・a4-form-heavy.png・a4-form-print.png
  *   必須条件の不一致の案内（⑤ 逆質問へ・省略可。旧 E26）は E2 で確かめる
  */
 const { chromium } = (function(){ try { return require('playwright'); } catch (e) { return require('/opt/node-tools/node_modules/playwright'); } })();
@@ -805,10 +809,12 @@ const pdfTextOf = (f) => {
   await wait(500);
   const QS39 = ['歌舞伎町ですので', '前のアルバイトの期間と退職理由は', '忙しいときこそ心掛けたいことは', '何か気になる点はありますか', 'シフト提出は木曜23時', '多忙・立ち仕事・汚物清掃の可否', '「大丈夫です」のみ連呼', '条件一致：2へ', '採用を検討できる人には不安解消の時間を取る'];
   // 紙プレビューの計測（page.evaluate に渡す関数。引数 [紙のセレクタ, 出てはいけない文言]）
+  //   h は内容の高さ（.cl-measure を付けて用紙いっぱいに伸ばさない状態。docs/SPEC-a4.md 12 章）。用紙では内寸いっぱいに伸びる
   const paperOf = ([sel, qs]) => {
     const sh = document.querySelector(sel + ' .cl-sheet'), t = sh.textContent, top = sh.getBoundingClientRect().top, z = sh.getBoundingClientRect().width / sh.offsetWidth || 1;
+    sh.classList.add('cl-measure'); const nat = sh.getBoundingClientRect().height; sh.classList.remove('cl-measure');
     return { qs: qs.filter(q => t.includes(q)), res: Math.round((document.querySelector(sel + ' .cl-tile-res').getBoundingClientRect().top - top) / z),
-      rows: sh.querySelectorAll('.cl-rt tr[data-cl-item]').length, must: sh.querySelectorAll('.cl-mtab tr[data-cl-item]').length, h: Math.round(sh.getBoundingClientRect().height / z), cls: sh.className,
+      rows: sh.querySelectorAll('.cl-rt tr[data-cl-item]').length, must: sh.querySelectorAll('.cl-mtab tr[data-cl-item]').length, h: Math.round(nat / z), cls: sh.className,
       order: Array.from(sh.children).map(el => el.className.split(' ').slice(0, 2).join('.')), res2: (sh.querySelector('.cl-tile-res .cl-tile-v') || {}).textContent };
   };
   const pv39 = await page.evaluate(paperOf, ['#appPaper', QS39]);
@@ -942,15 +948,20 @@ const pdfTextOf = (f) => {
     const prof = S.normalizeProfile(p);
     const cl = R.emptyChecklist();
     cl.header = { date: '2026-10-10', interviewer: '笹川 晴央', posting: 'short', taxi: '可・2,500円' };
-    R.checklistItems(prof.checklist, 'rating').forEach(x => { cl.values[x.item.id] = 'good'; });
+    R.checklistItems(prof.checklist, 'rating').forEach(x => { cl.values[x.item.id] = o.rate || 'good'; });
     R.checklistItems(prof.checklist, 'must').forEach(x => { cl.values[x.item.id] = 'match'; });
     R.checklistItems(prof.checklist, 'explain').forEach(x => { cl.values[x.item.id] = true; });
-    cl.overall = 'hire';
+    cl.overall = o.overall || 'hire';
     cl.notes = {};
     if (o.q) R.checklistItems(prof.checklist, 'question').forEach(x => { cl.notes[x.block.id] = Lx(o.q); });
     const applicant = { name: '台本 五郎', age: '21', gender: '男性', category: '大学3年生', reviewerNotes: o.memo ? Lx(o.memo) : '' };
+    // o.stamp: 全欄に押印済み／o.dec: 最終合否（'hire'・'reject'）
+    const who = { name: '笹川 晴央', short: '笹川', title: '副支配人', date: '2026/10/10', at: '2026-10-10T00:00:00.000Z' };
+    const management = {};
+    if (o.stamp) prof.management.fields.forEach(f => { management[f.id] = Object.assign({}, who); });
+    const decision = o.dec ? { result: o.dec, label: o.dec === 'hire' ? '採用' : '不採用', date: who.date, at: who.at, by: { name: who.name, short: who.short, title: who.title } } : null;
     const rec = { kind: 'recruit-applicant-record', schemaVersion: 2, step: 4, savedAt: new Date().toISOString(), profile: { theaterName: prof.meta.theaterName }, applicant, checklist: cl, checklistDef: prof.checklist,
-      interviewNotes: o.iv ? Lx(o.iv) : '', management: {}, decision: null, judgment: R.evaluateScript(applicant, cl, prof, {}) };
+      interviewNotes: o.iv ? Lx(o.iv) : '', management, decision, judgment: R.evaluateScript(applicant, cl, prof, {}) };
     return S.generateReportHTML(rec, prof);
   };
   const fit39 = [];
@@ -964,7 +975,8 @@ const pdfTextOf = (f) => {
     const m = await rp.evaluate(() => {
       const a4 = document.getElementById('a4'), sh = a4.querySelector('.cl-sheet'), st = a4.querySelector('.cl-stamps'), top = a4.getBoundingClientRect().top;
       const mm = 96 / 25.4;
-      return { cls: sh.className.replace('cl-sheet cl-mode-sheet', '').trim(), zoom: sh.style.zoom, h: Math.round(sh.getBoundingClientRect().height), boxes: a4.querySelectorAll('.cl-stamps .stamp-box').length,
+      sh.classList.add('cl-measure'); const nat = sh.getBoundingClientRect().height; sh.classList.remove('cl-measure');
+      return { cls: sh.className.replace('cl-sheet cl-mode-sheet', '').trim(), zoom: sh.style.zoom, h: Math.round(nat), boxes: a4.querySelectorAll('.cl-stamps .stamp-box').length,
         stampsBottom: st ? Math.round(st.getBoundingClientRect().bottom - top) : -1, innerBottom: Math.round((8 + 281) * mm) };
     });
     const pdf = path.join(OUT, 'script-report-fit-' + c.key + '.pdf');
@@ -974,8 +986,8 @@ const pdfTextOf = (f) => {
     await rp.close();
   }
   const fit39k = (k) => fit39.find(x => x.key === k);
-  expect(fit39.every(x => x.pages === -1 || x.pages === 1) && fit39.every(x => x.name !== false) && fit39.every(x => x.h <= 1052 && x.stampsBottom > 0 && x.stampsBottom <= x.innerBottom),
-    'E8 保存 HTML の用紙は境界の記録でも押印行込みで 1052px 以内・押印行の下端は用紙の内寸の下端より上・そのまま印刷して 1 ページ（面接所見 4,000 字・押印欄 4 件・確認点 +65 件）: ' + JSON.stringify(fit39));
+  expect(fit39.every(x => x.pages === -1 || x.pages === 1) && fit39.every(x => x.name !== false) && fit39.every(x => x.h <= 1052 && x.stampsBottom > 0 && x.stampsBottom <= x.innerBottom && x.stampsBottom >= x.innerBottom - 8),
+    'E8 保存 HTML の用紙は境界の記録でも押印行込みの内容が 1052px 以内・押印行の下端は用紙の内寸の下端（2mm 以内。縮小しても）・そのまま印刷して 1 ページ（面接所見 4,000 字・押印欄 4 件・確認点 +65 件）: ' + JSON.stringify(fit39));
   expect(/\bcl-compact\b/.test(fit39k('iv4000').cls) && !fit39k('iv4000').cls.includes('cl-compact-2') && fit39k('iv4000').ref !== false,
     'E8 面接所見 4,000 字: .cl-compact で所見が切れても「…」の案内 1 行（画面でクリックすると全文）: ' + JSON.stringify(fit39k('iv4000')));
   expect(fit39k('stamps4').boxes === 4 && fit39k('stamps4').h <= 1052, 'E8 押印欄 4 件（押印行 2 段）も押印行込みの上限（1052px）で詰める: ' + JSON.stringify(fit39k('stamps4')));
@@ -1127,8 +1139,9 @@ const pdfTextOf = (f) => {
   // 「詳細」表示（保存 HTML）は 2026-10-14 に削除（docs/SPEC-a4.md）。その表示だけに効いた「質問文も載せる」の行も無い
   const words10 = ['詳細モード', '2軸', '2 軸', '貢献度', '留意点', '初期対応者', '運用モード', '申し送り', '自動表示', 'Step3', 'Step4', '応募情報から', '旧形式', '「詳細」', '質問文も載せる'].filter(w => set10.txt.includes(w));
   expect(!words10.length, 'E10 設定画面に削除した機能の文言が無い: ' + words10.join(','));
-  expect(JSON.stringify(set10.actions) === JSON.stringify(['cl-block-add', 'cl-block-del', 'cl-block-down', 'cl-block-up', 'cl-default', 'cl-item-add', 'cl-item-del', 'cl-item-down', 'cl-item-up', 'cl-sec-add', 'cl-sec-del', 'cl-sec-down', 'cl-sec-up', 'discard', 'export', 'import', 'reset', 'save']),
-    'E10 data-action は台本の編集・保存／破棄／書き出し／読み込み／初期化だけ: ' + set10.actions.join(','));
+  // 最終承認のパスワード（2026-10-14 追加。公開版はロックなしなので［設定する］だけ。docs/SPEC-a4.md 11 章）
+  expect(JSON.stringify(set10.actions) === JSON.stringify(['cl-block-add', 'cl-block-del', 'cl-block-down', 'cl-block-up', 'cl-default', 'cl-item-add', 'cl-item-del', 'cl-item-down', 'cl-item-up', 'cl-sec-add', 'cl-sec-del', 'cl-sec-down', 'cl-sec-up', 'discard', 'export', 'import', 'lock-change', 'reset', 'save']),
+    'E10 data-action は台本の編集・保存／破棄／書き出し／読み込み／初期化・最終承認のパスワードの設定だけ: ' + set10.actions.join(','));
   const txt10 = await page.evaluate(() => ({ cl: document.getElementById('s-checklist').textContent, mgmt: document.getElementById('s-mgmt').textContent, io: document.getElementById('s-io').textContent,
     band: !!document.querySelector('#clBandInputs [data-bind="evaluation.thresholds.recommendPct"]') && !!document.getElementById('clCapsScriptHint') }));
   expect(txt10.cl.includes('説明（Step② に表示）') && txt10.band && txt10.mgmt.includes('Step③ に「採用」「不採用」のボタン') &&
@@ -1191,6 +1204,9 @@ const pdfTextOf = (f) => {
   expect((await page.$$('#view-help .help-step')).length === 3 && ['応募者', '面接チェックリスト', '報告書', '最終合否', '面接対応者／最終確認'].every(t => help10.includes(t)) &&
     !['詳細モード', '初期対応者', '2軸', '貢献度', '留意点', '申し送り'].some(t => help10.includes(t)) && !(await page.$('#helpFullMode')),
     'E10 使い方は 3 ステップ（押印欄は 面接対応者／最終確認。詳細モード・初期対応者・2軸の記述なし）');
+  const helpLock10 = await page.textContent('#helpFinalLock').catch(() => '');
+  expect(['最終承認のパスワード', '誤操作を防ぐための鍵', 'HTML をテキストで開いて書き換える人までは防げません', 'パスワードそのものは保存しません', 'local/final-password.txt'].every(t => helpLock10.includes(t)),
+    'E10 使い方に最終承認のパスワード（誤操作を防ぐ鍵・書き換えは防げない・平文は保存しない・ローカル版の初期パスワードは local/final-password.txt）');
   await toView('judge');
   await fresh();
 
@@ -1903,7 +1919,8 @@ const pdfTextOf = (f) => {
   const zw14 = await p14n.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom').trim());
   await p14n.emulateMedia({ media: 'print' });
   const fp14 = await p14n.evaluate(() => { const a = document.getElementById('a4').getBoundingClientRect(), sh = document.querySelector('#a4 .cl-sheet').getBoundingClientRect(), stp = document.querySelector('#a4 .cl-stamps').getBoundingClientRect(), pad = parseFloat(getComputedStyle(document.getElementById('a4')).paddingBottom);
-    return { sheetH: Math.round(sh.height), stampsB: Math.round(stp.bottom), innerB: Math.round(a.bottom - pad) }; });
+    const el = document.querySelector('#a4 .cl-sheet'); el.classList.add('cl-measure'); const nat = el.getBoundingClientRect().height; el.classList.remove('cl-measure');
+    return { sheetH: Math.round(nat), fillH: Math.round(sh.height), stampsB: Math.round(stp.bottom), innerB: Math.round(a.bottom - pad) }; });
   const pdf14w = path.join(OUT, 'a4-narrow-heavy.pdf');
   await p14n.pdf({ path: pdf14w, format: 'A4', printBackground: true });
   await p14n.emulateMedia({ media: null });
@@ -1916,7 +1933,7 @@ const pdfTextOf = (f) => {
   const h14w = fs.readFileSync(f14w, 'utf8');
   const zw14b = await p14n.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom').trim());
   await p14n.context().close();
-  expect(st14h.cls.includes('cl-compact') && JSON.stringify(st14w) === JSON.stringify(st14h) && Math.abs(parseFloat(zw14) - 0.451) <= 0.01 && fp14.sheetH <= 1052 && fp14.stampsB <= fp14.innerB + 1 &&
+  expect(st14h.cls.includes('cl-compact') && JSON.stringify(st14w) === JSON.stringify(st14h) && Math.abs(parseFloat(zw14) - 0.451) <= 0.01 && fp14.sheetH <= 1052 && fp14.stampsB <= fp14.innerB + 1 && fp14.stampsB >= fp14.innerB - 8 &&
     (n14w === -1 || n14w === 1) && !shownHtml(h14w).includes('--a4-zoom') && h14w.includes('<html lang="ja">') && zw14b === zw14,
     'E14 (5) 重いサンプルを 390px で最初から開いても 1440px と同じ詰め方（縮小を外して計測）・印刷で押印行まで内寸に収まる・この幅で書き出したファイルに --a4-zoom が残らない: ' +
     JSON.stringify({ st14h, st14w, zw14, fp14, pages: n14w }));
@@ -1946,6 +1963,426 @@ const pdfTextOf = (f) => {
   expect(s14.step === 4 && s14.name === '旧版 花子' && s14.iv === '笹川 晴央' && new14.body === 'a4-doc a4-live' && new14.a4 && new14.hanko === 1 && new14.name === '旧版 花子さん',
     'E14 (A11) 旧い保存 HTML をアプリで読み込み → 保存し直すと A4 の用紙（押印を引き継ぐ）: ' + JSON.stringify({ s14, new14 }));
   expect(e14.length === 0, 'E14 保存 HTML のページエラー・console error なし: ' + (e14.join(' / ') || 'none'));
+  await fresh();
+
+  // =====================================================================
+  // E15 最終承認のパスワード（docs/SPEC-a4.md 11 章。指示「最終承認の押印はパスワードが必要な感じの方がいい」）
+  //   公開版（dist）はロックなし。ローカル版はテスト用の架空のパスワード（tests/fixtures/local-sample/final-password.txt）で確かめる。
+  //   local/final-password.txt（利用者の実際のパスワード）は中身を出力せず、公開版に入っていないことだけを確かめる
+  // =====================================================================
+  console.log('\n== E15 最終承認のパスワード ==');
+  {
+    const cp = require('child_process');
+    const ROOT = path.join(__dirname, '..');
+    const DISTF = path.join(ROOT, 'dist', 'toho-recruit-judge.html');
+    const PW = fs.readFileSync(path.join(FIX, 'local-sample', 'final-password.txt'), 'utf8').split(/\r?\n/)[0].trim();
+    const NEWPW = 'e2e-new-pass', PW3 = 'e2e-third-pass';
+    const e15 = [];
+    const cfgOf = (html) => JSON.parse(html.match(/id="recruit-mgmt-config">([\s\S]*?)<\/script>/)[1]);
+    // (1) 公開版の dist にパスワード・ハッシュが無い（ロックの既定は空）
+    const distHtml = fs.readFileSync(DISTF, 'utf8');
+    const realPwFile = path.join(ROOT, 'local', 'final-password.txt');
+    const realPw = fs.existsSync(realPwFile) ? (fs.readFileSync(realPwFile, 'utf8').replace(/^﻿/, '').split(/\r?\n/)[0] || '').trim() : '';
+    expect(/finalLock: \{ salt: '', hash: '' \}/.test(distHtml) && !/finalLock: \{"salt"/.test(distHtml) && !distHtml.includes(PW) && (!realPw || !distHtml.includes(realPw)),
+      'E15 公開版（dist）の最終承認のロックは空（テスト用・local のパスワードもハッシュも入っていない）' + (realPw ? '' : '（local/final-password.txt なし）'));
+    // (2) 公開版: ロックなしで従来どおり押せる（③ にパスワード欄なし・保存 HTML の窓にもなし）
+    await fresh();
+    await fillScript({ name: '鍵 公開' });
+    await page.click('[data-action="script-next"]');
+    await wait(300);
+    await judge();
+    const pub = await st(() => ({ lock: document.querySelectorAll('.final-lock').length, dec: !!document.querySelector('#decisionCard [data-action="decide"]'), fin: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="final"] [data-action="stamp"]') }));
+    await page.selectOption('#decisionManager', { label: SASA });
+    await page.click('#decisionCard [data-action="decide"][data-value="hire"]');
+    await wait(200);
+    const pubDec = await st(() => ({ dec: (window.RecruitApp.state.decision || {}).result || '', fin: !!(window.RecruitApp.state.management.final || {}).name }));
+    const pubSaved = await saveRecord('lock-public.html');
+    const pubCfg = cfgOf(pubSaved.html);
+    const pp = await newReportPage(e15);
+    await pp.goto('file://' + pubSaved.file);
+    await pp.waitForTimeout(300);
+    const popOf = (pg) => pg.evaluate(() => { const p = document.getElementById('a4Pop'), pw = p && p.querySelector('.pop-pw');
+      return p ? { pw: !!pw, type: pw ? pw.type : '', ac: pw ? pw.autocomplete : '', sel: !!p.querySelector('.pop-sel'), act: !!p.querySelector('[data-act="stamp"],[data-act="decide"],[data-act="unstamp"]'),
+        err: (p.querySelector('.pop-err') || {}).textContent || '', focus: (document.activeElement && document.activeElement.className) || '' } : null; });
+    await openStamp(pp, 'final');
+    const pubPop = await popOf(pp);
+    await pp.keyboard.press('Escape');
+    await openDecision(pp);
+    const pubPop2 = await popOf(pp);
+    await pp.close();
+    expect(pub.lock === 0 && pub.dec && pub.fin && pubDec.dec === 'hire' && pubDec.fin && pubCfg.finalLock === null && pubCfg.lockField === 'final' &&
+      !!pubPop && !pubPop.pw && pubPop.sel && !!pubPop2 && !pubPop2.pw && pubPop2.act,
+      'E15 公開版はロックなし: ③ の最終確認・最終合否はパスワードなしで押せる・保存 HTML の窓にもパスワード欄なし: ' + JSON.stringify({ pub, pubDec, pubPop, pubPop2 }));
+    // (3) ローカル版（テスト用の架空のパスワード）: build が salt と hash を差し込む（平文は出さない）
+    const OUTL = path.join(OUT, 'local-lock.html');
+    const logL = cp.execSync('node build.js --local tests/fixtures/local-sample --out ' + JSON.stringify(OUTL), { cwd: ROOT }).toString();
+    const builtL = fs.readFileSync(OUTL, 'utf8');
+    const lockL = JSON.parse((builtL.match(/finalLock: (\{"salt":"[0-9a-f]{32}","hash":"[0-9a-f]{64}"\})/) || [])[1] || 'null');
+    expect(logL.includes('最終承認のパスワード') && !!lockL && !builtL.includes(PW) && fs.readFileSync(DISTF, 'utf8') === distHtml,
+      'E15 node build.js --local は final-password.txt から salt と hash を作って既定のロックに差し込む（平文は出力しない・公開版の dist は変わらない）: ' + logL.trim().split('\n').join(' / '));
+    const lp = await newReportPage(e15);   // ローカル版のアプリ（同じ file:// の localStorage を使うので先に消す）
+    await lp.goto('file://' + OUTL);
+    await lp.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await lp.reload();
+    await lp.waitForTimeout(300);
+    await lp.fill('[data-field="name"]', '鍵 確認');
+    await lp.click('[data-action="script-next"]');
+    await lp.waitForTimeout(300);
+    await lp.click('[data-action="judge"]');
+    await lp.waitForTimeout(400);
+    const cards = () => lp.evaluate(() => ({
+      ivSel: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="interviewer"] select'),
+      finLock: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="final"] .final-lock'), finBtn: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="final"] [data-action="stamp"]'),
+      decLock: !!document.querySelector('#decisionCard .final-lock'), decBtn: !!document.querySelector('#decisionCard [data-action="decide"]'),
+      pwType: Array.from(document.querySelectorAll('.final-lock-pw')).map(i => i.type + '/' + i.autocomplete).join(','),
+      err: Array.from(document.querySelectorAll('.final-lock-err')).map(e => e.textContent).join('|'),
+      mg: Object.keys(window.RecruitApp.state.management).sort().join(','), finName: (window.RecruitApp.state.management.final || {}).name || '', dec: (window.RecruitApp.state.decision || {}).result || '' }));
+    const c0 = await cards();
+    expect(c0.ivSel && c0.finLock && !c0.finBtn && c0.decLock && !c0.decBtn && c0.pwType === 'password/off,password/off',
+      'E15 ローカル版の ③: 最終確認の押印欄と最終合否はパスワード欄（type=password・autocomplete=off）と［確認］だけ・面接対応者は従来どおり: ' + JSON.stringify(c0));
+    await lp.selectOption('#mgmtCard .stamp-box[data-field-id="interviewer"] select', { index: 1 });
+    await lp.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
+    await lp.waitForTimeout(200);
+    await lp.fill('#mgmtCard .final-lock-pw', 'wrong-pass');
+    await lp.click('#mgmtCard [data-action="unlock-final"]');
+    await lp.waitForTimeout(150);
+    const c1 = await cards();
+    expect(c1.mg === 'interviewer' && c1.finLock && c1.decLock && !c1.decBtn && c1.err.split('|')[0] === 'パスワードが違います' && c1.dec === '',
+      'E15 面接対応者はパスワードなしで押せる・違うパスワードでは「パスワードが違います」の 1 行だけで押せない: ' + JSON.stringify(c1));
+    // 正しいパスワード（Enter）→ 解錠され、続けて押せる（最終合否 → 最終確認にも押印 → 最終確認の取消・押し直し）
+    await lp.fill('#decisionCard .final-lock-pw', PW);
+    await lp.press('#decisionCard .final-lock-pw', 'Enter');
+    await lp.waitForTimeout(200);
+    const c2 = await cards();
+    const foc2 = await lp.evaluate(() => document.activeElement && document.activeElement.id);
+    await lp.selectOption('#decisionManager', { index: 1 });
+    await lp.click('#decisionCard [data-action="decide"][data-value="hire"]');
+    await lp.waitForTimeout(200);
+    const c3 = await cards();
+    await lp.click('#mgmtCard .stamp-box[data-field-id="final"] [data-action="unstamp"]');
+    await lp.waitForTimeout(200);
+    await lp.selectOption('#mgmtCard .stamp-box[data-field-id="final"] select', { index: 2 });
+    await lp.click('#mgmtCard .stamp-box[data-field-id="final"] [data-action="stamp"]');
+    await lp.waitForTimeout(200);
+    const c4 = await cards();
+    const ls4 = await lp.evaluate(() => JSON.stringify(Object.assign({}, localStorage)));
+    expect(!c2.finLock && !c2.decLock && c2.decBtn && c2.finBtn && foc2 === 'decisionManager' && c3.dec === 'hire' && c3.mg === 'final,interviewer' && c4.finName === '試験 花子' && !ls4.includes(PW),
+      'E15 正しいパスワード（Enter）で解錠: パスワード欄が消え、最終合否・最終確認の押印・取消を続けて押せる（localStorage に平文なし）: ' + JSON.stringify({ c2, foc2, c3, c4 }));
+    // (4) 保存 HTML: 保存時のロックで照合。最終確認・最終合否の窓はパスワード欄だけ（面接対応者は不要）→ 正しいと解錠され、続けて押せる
+    const [dlA] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
+    const fA = path.join(OUT, 'lock-local-a.html');
+    await dlA.saveAs(fA);
+    const hA = fs.readFileSync(fA, 'utf8');
+    const cfgA = cfgOf(hA);
+    expect(JSON.stringify(cfgA.finalLock) === JSON.stringify(lockL) && cfgA.lockField === 'final' && !hA.includes(PW), 'E15 保存 HTML に保存時のロック（salt・hash）と対象の押印欄を入れる・平文は無い');
+    const rA = await newReportPage(e15);
+    await rA.goto('file://' + fA);
+    await rA.waitForTimeout(300);
+    await openStamp(rA, 'interviewer');
+    const pA0 = await popOf(rA);
+    await rA.keyboard.press('Escape');
+    await openStamp(rA, 'final');
+    const pA1 = await popOf(rA);
+    await rA.fill('#a4Pop .pop-pw', 'wrong-pass');
+    await rA.press('#a4Pop .pop-pw', 'Enter');
+    await rA.waitForTimeout(100);
+    const pA2 = await popOf(rA);
+    await rA.fill('#a4Pop .pop-pw', PW);
+    await rA.click('#a4Pop [data-act="unlock"]');
+    await rA.waitForTimeout(100);
+    const pA3 = await popOf(rA);
+    await popAct(rA, 'unstamp');
+    const unA = await rA.evaluate(() => !document.querySelector('#a4 .stamp-box[data-field-id="final"] svg.hanko'));
+    await openDecision(rA);
+    const pA4 = await popOf(rA);
+    await popAct(rA, 'decide', 'reject');
+    const decA = await rA.evaluate(() => ({ dec: document.getElementById('a4Decision').classList.contains('is-reject'), fin: !!document.querySelector('#a4 .stamp-box[data-field-id="final"] svg.hanko') }));
+    expect(!!pA0 && !pA0.pw && pA0.sel && !!pA1 && pA1.pw && pA1.type === 'password' && pA1.ac === 'off' && !pA1.sel && !pA1.act && pA1.focus === 'pop-pw' &&
+      !!pA2 && pA2.pw && pA2.err === 'パスワードが違います' && !pA2.act && !!pA3 && !pA3.pw && pA3.sel && pA3.act && pA3.focus === 'pop-sel' && unA && !!pA4 && !pA4.pw && pA4.act && decA.dec && decA.fin,
+      'E15 保存 HTML: 最終確認の窓はパスワード欄だけ（面接対応者は不要）・違うと「パスワードが違います」・正しいと担当者と押印が出て、取消・最終合否も続けて押せる: ' + JSON.stringify({ pA0, pA1, pA2, pA3, pA4, decA }));
+    const [dlB] = await Promise.all([rA.waitForEvent('download'), rA.click('#saveBarBtn')]);
+    const fB = path.join(OUT, 'lock-local-b.html');
+    await dlB.saveAs(fB);
+    await rA.close();
+    const hB = fs.readFileSync(fB, 'utf8');
+    const rB = await newReportPage(e15);
+    await rB.goto('file://' + fB);
+    await rB.waitForTimeout(300);
+    await openDecision(rB);
+    const pB = await popOf(rB);
+    const decB = await rB.evaluate(() => document.getElementById('a4Decision').classList.contains('is-reject'));
+    await rB.close();
+    expect(!!pB && pB.pw && !pB.act && decB && !hB.includes(PW) && !shownHtml(hB).includes('pop-pw') && cfgOf(hB).finalLock.hash === lockL.hash,
+      'E15 書き出したファイルを開き直すとまたパスワードが要る（書き出しに解錠状態・パスワード欄・平文なし。ロックはそのまま）: ' + JSON.stringify(pB));
+    // (5) 設定: パスワードの変更には現在のパスワードが要る → 保存 → ③ はまた求める（前のパスワードは違う）→ 変えた後の保存 HTML は新しいパスワード
+    await lp.click('.nav-item[data-view="settings"]');
+    await lp.waitForTimeout(300);
+    const lst = () => lp.evaluate(() => { const f = document.getElementById('finalLockForm');
+      return { status: (document.getElementById('finalLockStatus') || {}).textContent || '', form: f ? f.getAttribute('data-lock-form') : '', err: (document.getElementById('finalLockErr') || {}).textContent || '',
+        binds: f ? f.querySelectorAll('[data-bind]').length : 0, pw: f ? Array.from(f.querySelectorAll('input')).map(i => i.id + ':' + i.type + ':' + i.autocomplete).join(',') : '',
+        stored: (JSON.parse(localStorage.getItem('recruit.profile.v1') || 'null') || { management: {} }).management.finalLock || null }; });
+    const s0 = await lst();
+    await lp.click('#finalLockChange');
+    await lp.waitForTimeout(100);
+    const s1 = await lst();
+    await lp.fill('#lockCur', 'wrong-pass');
+    await lp.fill('#lockNew', NEWPW);
+    await lp.fill('#lockNew2', NEWPW);
+    await lp.click('#finalLockApply');
+    await lp.waitForTimeout(100);
+    const s2 = await lst();
+    await lp.fill('#lockCur', PW);
+    await lp.fill('#lockNew2', NEWPW + 'x');
+    await lp.click('#finalLockApply');
+    await lp.waitForTimeout(100);
+    const s3 = await lst();
+    await lp.fill('#lockNew2', NEWPW);
+    await lp.press('#lockNew2', 'Enter');
+    await lp.waitForTimeout(150);
+    const s4 = await lst();
+    await lp.click('#view-settings [data-action="save"]');
+    await lp.waitForTimeout(300);
+    const s5 = await lst();
+    const ls5 = await lp.evaluate(() => JSON.stringify(Object.assign({}, localStorage)));
+    expect(s0.status.includes('設定済み') && s1.form === 'change' && s1.binds === 0 && s1.pw === 'lockCur:password:off,lockNew:password:off,lockNew2:password:off' &&
+      s2.err === '現在のパスワードが違います' && s3.err === '新しいパスワード（確認）が一致しません' && s4.form === '' && s4.status.includes('未保存の変更') && !(s4.stored && s4.stored.hash && s4.stored.hash !== lockL.hash) &&
+      !!s5.stored && /^[0-9a-f]{64}$/.test(s5.stored.hash) && s5.stored.hash !== lockL.hash && !s5.status.includes('未保存') && !ls5.includes(NEWPW) && !ls5.includes(PW),
+      'E15 設定でパスワードを変更: 現在のパスワードが要る・確認の不一致は止める・変更は「設定を保存」で確定（入力欄は data-bind なし・localStorage に平文なし）: ' + JSON.stringify({ s0: s0.status, s1, s2: s2.err, s3: s3.err, s4: s4.status, s5: s5.status }));
+    await lp.click('.nav-item[data-view="judge"]');
+    await lp.waitForTimeout(300);
+    const c5 = await cards();
+    await lp.fill('#decisionCard .final-lock-pw', PW);
+    await lp.press('#decisionCard .final-lock-pw', 'Enter');
+    await lp.waitForTimeout(150);
+    const c6 = await cards();
+    await lp.fill('#decisionCard .final-lock-pw', NEWPW);
+    await lp.press('#decisionCard .final-lock-pw', 'Enter');
+    await lp.waitForTimeout(150);
+    const c7 = await cards();
+    expect(c5.finLock && c5.decLock && c6.decLock && c6.err.includes('パスワードが違います') && !c7.decLock && !c7.finLock && c7.decBtn,
+      'E15 パスワードを変えると ③ はまた求める（前のパスワードは違う・新しいパスワードで解錠）: ' + JSON.stringify({ c5, c6: c6.err, c7 }));
+    const [dlC] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
+    const fC = path.join(OUT, 'lock-local-c.html');
+    await dlC.saveAs(fC);
+    const hC = fs.readFileSync(fC, 'utf8');
+    const tryPw = async (file, pw) => { const r = await newReportPage(e15); await r.goto('file://' + file); await r.waitForTimeout(300); await openDecision(r);
+      await r.fill('#a4Pop .pop-pw', pw); await r.press('#a4Pop .pop-pw', 'Enter'); await r.waitForTimeout(100); const o = await popOf(r); await r.close(); return o.pw ? o.err || 'locked' : 'unlocked'; };
+    const tC = { oldPw: await tryPw(fC, PW), newPw: await tryPw(fC, NEWPW), fileA_new: await tryPw(fA, NEWPW), fileA_old: await tryPw(fA, PW) };
+    expect(cfgOf(hC).finalLock.hash === s5.stored.hash && !hC.includes(NEWPW) && tC.oldPw === 'パスワードが違います' && tC.newPw === 'unlocked' && tC.fileA_new === 'パスワードが違います' && tC.fileA_old === 'unlocked',
+      'E15 変えた後の保存 HTML は新しいパスワード（前のパスワードは違う）・先に出したファイルは出した時点のパスワードのまま: ' + JSON.stringify(tC));
+    // (6) JSON の読み込みでロックを外そうとすると現在のパスワードが要る（同じロックの JSON はそのまま読める。違えば・キャンセルなら読み込まない）
+    await lp.click('.nav-item[data-view="settings"]');
+    await lp.waitForTimeout(300);
+    const profJ = await lp.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')));
+    await lp.setInputFiles('#profileFileInput', { name: 'profile-same.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(profJ)) });
+    await lp.waitForTimeout(300);
+    const j0 = await lp.evaluate(() => ({ dlg: !!document.getElementById('pwDialog'), toast: document.getElementById('toast').textContent }));
+    profJ.management.finalLock = { salt: '', hash: '' };
+    const jsonJ = Buffer.from(JSON.stringify(profJ));
+    await lp.setInputFiles('#profileFileInput', { name: 'profile-nolock.json', mimeType: 'application/json', buffer: jsonJ });
+    await lp.waitForTimeout(300);
+    const j1 = await lp.evaluate(() => { const d = document.getElementById('pwDialog'), i = document.getElementById('pwDialogInput');
+      return d ? { text: d.textContent, type: i.type, ac: i.autocomplete, focus: document.activeElement && document.activeElement.id } : null; });
+    await lp.fill('#pwDialogInput', PW);
+    await lp.press('#pwDialogInput', 'Enter');
+    await lp.waitForTimeout(100);
+    const j2 = await lp.evaluate(() => ({ open: !!document.getElementById('pwDialog'), err: (document.getElementById('pwDialogErr') || {}).textContent }));
+    await lp.keyboard.press('Escape');
+    await lp.waitForTimeout(200);
+    const j3 = await lp.evaluate(() => ({ open: !!document.getElementById('pwDialog'), hash: JSON.parse(localStorage.getItem('recruit.profile.v1')).management.finalLock.hash, toast: document.getElementById('toast').textContent }));
+    await lp.setInputFiles('#profileFileInput', { name: 'profile-nolock.json', mimeType: 'application/json', buffer: jsonJ });
+    await lp.waitForTimeout(300);
+    await lp.fill('#pwDialogInput', NEWPW);
+    await lp.click('#pwDialog [data-pw="ok"]');
+    await lp.waitForTimeout(300);
+    const j4 = await lst();
+    expect(!j0.dlg && j0.toast.includes('プロファイルを読み込みました') && !!j1 && j1.text.includes('外れます') && j1.type === 'password' && j1.ac === 'off' && j1.focus === 'pwDialogInput' &&
+      j2.open && j2.err === 'パスワードが違います' && !j3.open && j3.hash === s5.stored.hash && j3.toast.includes('読み込みませんでした') && !!j4.stored && j4.stored.hash === '' && j4.status.includes('未設定'),
+      'E15 JSON の読み込み: 同じロックはそのまま・ロックを外す JSON は現在のパスワードが要る（違えば「パスワードが違います」、キャンセルなら読み込まない、正しければ読み込む）: ' + JSON.stringify({ j0, j1: j1 && j1.focus, j2, j3: { open: j3.open, toast: j3.toast }, j4: j4.status }));
+    // (7) 未設定からの設定（現在のパスワードは不要）→ 外すには現在のパスワードが要る → ③ にパスワード欄なし
+    await lp.click('#finalLockChange');
+    await lp.waitForTimeout(100);
+    const s6 = await lst();
+    await lp.fill('#lockNew', PW3);
+    await lp.fill('#lockNew2', PW3);
+    await lp.click('#finalLockApply');
+    await lp.waitForTimeout(100);
+    await lp.click('#view-settings [data-action="save"]');
+    await lp.waitForTimeout(300);
+    const s7 = await lst();
+    await lp.click('#finalLockRemove');
+    await lp.waitForTimeout(100);
+    await lp.fill('#lockCur', NEWPW);
+    await lp.click('#finalLockRemoveApply');
+    await lp.waitForTimeout(100);
+    const s8 = await lst();
+    await lp.fill('#lockCur', PW3);
+    await lp.press('#lockCur', 'Enter');
+    await lp.waitForTimeout(100);
+    const s9 = await lst();
+    await lp.click('#view-settings [data-action="save"]');
+    await lp.waitForTimeout(300);
+    const s10 = await lst();
+    await lp.click('.nav-item[data-view="judge"]');
+    await lp.waitForTimeout(300);
+    const c8 = await cards();
+    expect(s6.form === 'change' && s6.pw === 'lockNew:password:off,lockNew2:password:off' && s7.status.includes('設定済み') && s7.stored.hash.length === 64 &&
+      s8.form === 'remove' && s8.err === '現在のパスワードが違います' && s9.form === '' && s9.status.includes('未設定') && s9.status.includes('未保存') && s10.stored.hash === '' &&
+      !c8.finLock && !c8.decLock && c8.finBtn && c8.decBtn,
+      'E15 設定: 未設定からは現在のパスワードなしで設定・外すには現在のパスワードが要る・外して保存すると ③ にパスワード欄なし: ' + JSON.stringify({ s6: s6.pw, s7: s7.status, s8: s8.err, s9: s9.status, c8 }));
+    // (8) 初期化でロックが変わるときも現在のパスワードが要る（ローカル版の初期は local のロック）
+    await lp.click('.nav-item[data-view="settings"]');
+    await lp.waitForTimeout(300);
+    await lp.click('#view-settings [data-action="reset"]');
+    await lp.waitForTimeout(300);
+    const r0 = await lst();
+    await lp.click('#finalLockChange');
+    await lp.waitForTimeout(100);
+    await lp.fill('#lockCur', PW);
+    await lp.fill('#lockNew', PW3);
+    await lp.fill('#lockNew2', PW3);
+    await lp.click('#finalLockApply');
+    await lp.waitForTimeout(100);
+    await lp.click('#view-settings [data-action="save"]');
+    await lp.waitForTimeout(300);
+    await lp.click('#view-settings [data-action="reset"]');
+    await lp.waitForTimeout(300);
+    const r1 = await lp.evaluate(() => { const d = document.getElementById('pwDialog'); return d ? d.textContent : ''; });
+    await lp.click('#pwDialog [data-pw="cancel"]');
+    await lp.waitForTimeout(200);
+    const r2 = await lst();
+    await lp.click('#view-settings [data-action="reset"]');
+    await lp.waitForTimeout(300);
+    await lp.fill('#pwDialogInput', PW3);
+    await lp.press('#pwDialogInput', 'Enter');
+    await lp.waitForTimeout(300);
+    const r3 = await lst();
+    expect(!!r0.stored && r0.stored.hash === lockL.hash && r1.includes('初期設定に戻すと最終承認のパスワードが初期のパスワードに変わります') && r2.stored.hash !== lockL.hash && r2.stored.hash.length === 64 &&
+      r3.stored.hash === lockL.hash && r3.status.includes('設定済み'),
+      'E15 初期化: ロックが無ければそのまま初期のロック（local）に戻す・別のパスワードのときは現在のパスワードが要る（キャンセルなら戻さない）: ' + JSON.stringify({ r1, r2: r2.status, r3: r3.status }));
+    await lp.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await lp.close();
+    expect(e15.length === 0, 'E15 ページエラー・console error なし: ' + (e15.join(' / ') || 'none'));
+  }
+  await fresh();
+
+  // =====================================================================
+  // E16 用紙を埋めるレイアウト（docs/SPEC-a4.md 12 章。ユーザー「印刷すると空白が多くなる」）
+  //   押印行は用紙の内寸の下端・その上の「面接メモ・所見」の枠が残りの高さいっぱい（記入なしでも枠と点線の罫線）・内容が少なければゆったり（.cl-roomy）
+  // =====================================================================
+  console.log('\n== E16 用紙を埋めるレイアウト ==');
+  {
+    const e16 = [];
+    const formOf = (pg, sel) => pg.evaluate((s) => {
+      const a = document.querySelector(s), sh = a.querySelector('.cl-sheet'), st = a.querySelector('.cl-stamps'), box = a.querySelector('.cl-nm-box'), ex = a.querySelector('.cl-exline');
+      const z = sh.getBoundingClientRect().width / sh.offsetWidth || 1, mm = 96 / 25.4;
+      const ar = a.getBoundingClientRect(), innerB = ar.bottom - parseFloat(getComputedStyle(a).paddingBottom) * z;
+      sh.classList.add('cl-measure'); const nat = sh.getBoundingClientRect().height / z; sh.classList.remove('cl-measure');
+      const lw = box && box.querySelector('.cl-nm-lines'), lines = lw ? Array.from(lw.querySelectorAll('i')) : [];
+      const lb = lw ? lw.getBoundingClientRect().bottom : 0;
+      return { cls: sh.className.replace('cl-sheet cl-mode-sheet', '').trim(), zoom: sh.style.zoom, nat: Math.round(nat), fill: Math.round(sh.getBoundingClientRect().height / z),
+        gapMm: +((innerB - st.getBoundingClientRect().bottom) / z / mm).toFixed(2), boxMm: box ? +(box.getBoundingClientRect().height / z / mm).toFixed(1) : 0,
+        empty: !!box && box.classList.contains('is-empty'), rows: a.querySelectorAll('.cl-nm-row').length, lines: lines.filter(i => i.getBoundingClientRect().bottom <= lb + 0.5).length,
+        pitchMm: lines.length > 1 ? +((lines[1].getBoundingClientRect().top - lines[0].getBoundingClientRect().top) / z / mm).toFixed(2) : 0, dotted: lines.length ? getComputedStyle(lines[0]).borderBottomStyle : '',
+        order: !!ex && !!box && box.closest('.cl-blk-notes').nextElementSibling === ex && ex.nextElementSibling === st && st === sh.lastElementChild,
+        body: parseFloat(getComputedStyle(sh).fontSize), h3: (a.querySelector('.cl-blk-notes .cl-h') || {}).textContent };
+    }, sel);
+    const okGap = (f) => f.gapMm >= 0 && f.gapMm <= 2;
+    const p16 = await newReportPage(e16);
+    await p16.setViewportSize({ width: 1440, height: 1300 });
+    // (1) 通常の記録（E3 の採用・押印済みの保存 HTML）
+    await p16.goto('file://' + file34b);
+    await p16.waitForTimeout(400);
+    await p16.mouse.move(0, 0);
+    const n16 = await formOf(p16, '#a4');
+    await p16.locator('#a4').screenshot({ path: path.join(OUT, 'a4-form.png') });
+    const pdf16 = path.join(OUT, 'a4-form.pdf');
+    await p16.pdf({ path: pdf16, format: 'A4', printBackground: true });
+    const np16 = pdfPagesOf(pdf16);
+    expect(n16.cls.includes('cl-roomy') && !n16.cls.includes('cl-compact') && n16.body === 10.5 && n16.nat <= 1052 && okGap(n16) && n16.boxMm >= 30 && n16.rows > 0 && n16.lines >= 3 &&
+      Math.abs(n16.pitchMm - 7.5) <= 0.1 && n16.dotted === 'dotted' && n16.order && n16.h3 === '面接メモ・所見' && (np16 === -1 || np16 === 1),
+      'E16 通常の記録: ゆったり（本文 10.5px）・押印行の下端は用紙の内寸の下端から 2mm 以内・面接メモ・所見の枠は 30mm 以上（記入の下に 7.5mm 間隔の点線）・説明・連絡は枠の下・印刷 1 ページ: ' + JSON.stringify(Object.assign({ pages: np16 }, n16)));
+    if (hasPpm14) {
+      const prn16 = png14(pdf16, path.join(OUT, 'a4-form-print'));
+      const c16 = await cmp14(path.join(OUT, 'a4-form.png'), prn16);
+      expect(c16.diff.every(d => d <= 0.02) && c16.mean <= 4 && c16.a[3] >= 0.95 && c16.b[3] >= 0.95,
+        'E16 画面の用紙と印刷（PDF の 1 ページ目 a4-form-print.png）が同じ・どちらも用紙の下端（95% 以上）まで使う: ' + JSON.stringify(c16));
+    } else console.log('SKIP pdftoppm が使えないため a4-form-print.png の比較を省略');
+    // (2) 重いサンプル（全メモ 300 字・面接所見 1,500 字）: ゆったりにしない・1 ページ・押印行は下端
+    await p16.goto('file://' + saved39.file);
+    await p16.waitForTimeout(400);
+    await p16.mouse.move(0, 0);
+    const h16 = await formOf(p16, '#a4');
+    await p16.locator('#a4').screenshot({ path: path.join(OUT, 'a4-form-heavy.png') });
+    const pdf16h = path.join(OUT, 'a4-form-heavy.pdf');
+    await p16.pdf({ path: pdf16h, format: 'A4', printBackground: true });
+    const np16h = pdfPagesOf(pdf16h);
+    expect(h16.cls.includes('cl-compact') && !h16.cls.includes('cl-roomy') && h16.nat <= 1052 && okGap(h16) && h16.order && (np16h === -1 || np16h === 1),
+      'E16 重いサンプル: .cl-compact（ゆったりにしない）・内容は 1052px 以内・1 ページで押印行は用紙の内寸の下端: ' + JSON.stringify(Object.assign({ pages: np16h }, h16)));
+    // (3) 記入なし（面接メモ・所見・質問の回答・① のメモが空）: 空の枠（点線の罫線＝手書きのメモ欄）
+    const f16e = path.join(OUT, 'a4-form-empty.html');
+    fs.writeFileSync(f16e, await page.evaluate(mk39, {}));
+    await p16.goto('file://' + f16e);
+    await p16.waitForTimeout(400);
+    const m16 = await formOf(p16, '#a4');
+    expect(m16.empty && m16.rows === 0 && m16.boxMm >= 30 && m16.lines >= 4 && m16.dotted === 'dotted' && okGap(m16) && m16.cls.includes('cl-roomy'),
+      'E16 記入なし: 空の面接メモ・所見の枠（30mm 以上・点線の罫線）・押印行は下端: ' + JSON.stringify(m16));
+    // (3b) 上限近くまで内容がある .cl-roomy の記録を狭い画面（--a4-zoom 0.45 前後）で開く: 縮小で行の高さが丸められて内容が数 % 伸びても、
+    //   罫線の部分が縮んで吸収し、押印行は用紙の内寸の下端のまま（罫線の最低 38mm は計測中＝.cl-measure のときだけ）
+    let near16 = null;
+    for (const iv of [80, 120, 160, 200, 240]) {
+      const f = path.join(OUT, 'a4-form-near-' + iv + '.html');
+      fs.writeFileSync(f, await page.evaluate(mk39, { q: 40, iv, stamp: true, dec: 'reject', overall: 'reject', rate: 'poor' }));
+      await p16.goto('file://' + f);
+      await p16.waitForTimeout(300);
+      const m = await formOf(p16, '#a4');
+      if (m.cls.includes('cl-roomy') && (!near16 || m.nat > near16.m.nat)) near16 = { iv, f, m };
+    }
+    const nr16 = {};
+    if (near16) {
+      for (const w of [430, 390, 360]) {
+        await p16.setViewportSize({ width: w, height: 844 });
+        await p16.goto('file://' + near16.f);
+        await p16.waitForTimeout(300);
+        nr16[w] = Object.assign({ a4zoom: await p16.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--a4-zoom').trim()) }, await formOf(p16, '#a4'));
+      }
+      await p16.setViewportSize({ width: 1440, height: 1300 });
+    }
+    expect(!!near16 && near16.m.nat >= 1030 && near16.m.nat <= 1052 && okGap(near16.m) && Object.keys(nr16).length === 3 &&
+      Object.keys(nr16).every(w => nr16[w].a4zoom !== '' && +nr16[w].a4zoom < 0.6 && nr16[w].cls === near16.m.cls && nr16[w].gapMm >= -0.1 && nr16[w].gapMm <= 2 && nr16[w].fill <= 1063 && nr16[w].boxMm >= 25),
+      'E16 上限近くの .cl-roomy（内容 1030〜1052px）を狭い画面（430・390・360px）で開いても押印行は用紙の内寸の下端から 2mm 以内（縮小の丸めの誤差 0.1mm まで。シートが用紙の内寸を超えない）: ' +
+      JSON.stringify({ iv: near16 && near16.iv, w1440: near16 && { cls: near16.m.cls, nat: near16.m.nat, gapMm: near16.m.gapMm, boxMm: near16.m.boxMm },
+        narrow: Object.keys(nr16).map(w => ({ w, a4zoom: nr16[w].a4zoom, cls: nr16[w].cls, fill: nr16[w].fill, gapMm: nr16[w].gapMm, boxMm: nr16[w].boxMm })) }));
+    await p16.close();
+    // (4) ゆったりの付け外し（アプリの印刷ホストで面接所見を長くしていく: ゆったり → 通常 → .cl-compact。印刷のときに計測し直さない＝描いたときに決まる）
+    const tog16 = await page.evaluate(() => {
+      const A = window.RecruitApp, out = [];
+      for (const n of [0, 300, 1000, 3000]) {
+        A.state.interviewNotes = 'あいうえおかきくけこさしすせそ'.repeat(Math.ceil(n / 15)).slice(0, n);
+        A.prepareChecklistSheet(true);
+        const sh = document.querySelector('#clSheet .cl-sheet');
+        out.push({ n, roomy: sh.classList.contains('cl-roomy'), compact: sh.classList.contains('cl-compact'), body: parseFloat(getComputedStyle(sh).fontSize) });
+        A.prepareChecklistSheet(false);
+      }
+      A.state.interviewNotes = '';
+      return out;
+    });
+    expect(tog16[0].roomy && tog16[0].body === 10.5 && tog16.some(x => !x.roomy && !x.compact && x.body === 9.5) && tog16[tog16.length - 1].compact && !tog16[tog16.length - 1].roomy &&
+      tog16.every((x, i) => i === 0 || !(x.roomy && !tog16[i - 1].roomy)),
+      'E16 ゆったりの付け外し: 内容が少なければ .cl-roomy（10.5px）、増えると外して通常（9.5px）、さらに .cl-compact: ' + JSON.stringify(tog16));
+    // (5) アプリ ③ の紙・アプリの印刷も同じ（押印行は下端・枠は 30mm 以上・同じ段階）
+    await page.click('#btnNew');
+    await wait(200);
+    await page.setInputFiles('#fileInput', file34b);
+    await wait(500);
+    const a16 = await formOf(page, '#appPaper');
+    await page.evaluate(() => window.RecruitApp.prepareChecklistSheet(true));
+    const pr16 = await formOf(page, '#clSheet .a4');
+    await page.evaluate(() => window.RecruitApp.prepareChecklistSheet(false));
+    expect(await step() === 4 && okGap(a16) && a16.boxMm >= 30 && a16.cls === n16.cls && okGap(pr16) && pr16.boxMm >= 30 && pr16.cls === n16.cls,
+      'E16 アプリ ③ の紙・アプリの印刷も同じ用紙（ゆったり・押印行は下端・面接メモ・所見の枠 30mm 以上）: ' + JSON.stringify({ a16, pr16 }));
+    expect(e16.length === 0, 'E16 ページエラー・console error なし: ' + (e16.join(' / ') || 'none'));
+  }
   await fresh();
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));

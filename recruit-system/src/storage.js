@@ -104,8 +104,21 @@
       fields: fields,
       managers: managers,
       allowFreeName: mg.allowFreeName !== false,
-      decision: Object.assign({}, U.deepClone(dsrc), decisionFields(dsrc, fields, bm.decision))
+      decision: Object.assign({}, U.deepClone(dsrc), decisionFields(dsrc, fields, bm.decision)),
+      // 最終承認のパスワード（docs/SPEC-a4.md 11 章）。キーが無ければ既定（ローカル版ならローカルのロック）。形が正しくなければ空（パスワードなし）
+      finalLock: normalizeLock(mg.finalLock === undefined ? bm.finalLock : mg.finalLock)
     };
+  }
+  // management.finalLock の正規化: { salt: 16 進 32 文字, hash: 16 進 64 文字 }（小文字）。それ以外は { salt: '', hash: '' }
+  function normalizeLock(l) {
+    const salt = U.isObj(l) && typeof l.salt === 'string' ? l.salt.trim().toLowerCase() : '';
+    const hash = U.isObj(l) && typeof l.hash === 'string' ? l.hash.trim().toLowerCase() : '';
+    return /^[0-9a-f]{32}$/.test(salt) && /^[0-9a-f]{64}$/.test(hash) ? { salt: salt, hash: hash } : { salt: '', hash: '' };
+  }
+  // 最終承認のロックがあるか（RecruitLock.isLocked。lock.js が無い環境でも形で判定する）
+  function lockOn(l) {
+    const L = global.RecruitLock;
+    return L && typeof L.isLocked === 'function' ? L.isLocked(l) : !!(U.isObj(l) && /^[0-9a-f]{64}$/.test(asStr(l.hash)) && /^[0-9a-f]{32}$/.test(asStr(l.salt)));
   }
 
   // ---------- 面接チェックリスト（docs/SPEC-checklist.md 6-1） ----------
@@ -352,7 +365,10 @@
     TEXT_SCRIPT_KEYS.forEach(function (k) { out.texts.script[k] = str(rs[k], bt.script[k]); });
     if (report) {
       if (raw.mode === 'full') report.fullModeRemoved = true;
-      if (REMOVED_KEYS.some(function (k) { return raw[k] !== undefined; }) || (Object.keys(raw).length && JSON.stringify(out) !== JSON.stringify(raw))) report.stripped = true;
+      // 最終承認のロックのキーが無いだけの保存済みの設定は保存し直さない（既定のロック＝ローカル版のロックを localStorage に固定しない。docs/SPEC-a4.md 11 章）
+      let cmp = out;
+      if (U.isObj(raw.management) && raw.management.finalLock === undefined) { cmp = U.deepClone(out); delete cmp.management.finalLock; }
+      if (REMOVED_KEYS.some(function (k) { return raw[k] !== undefined; }) || (Object.keys(raw).length && JSON.stringify(cmp) !== JSON.stringify(raw))) report.stripped = true;
     }
     return out;
   }
@@ -375,6 +391,13 @@
       else if (hl === rl) errors.push('最終合否の「採用」と「不採用」の表示名が同じです。');
       const fids = ((p.management || {}).fields || []).map(function (f) { return f && f.id; });
       if (dc.stampField && fids.indexOf(dc.stampField) < 0) warnings.push('最終合否と連動する押印欄が見つかりません。');
+    }
+    // 最終承認のパスワード（hash があれば salt〔16 進 32 文字〕と 16 進 64 文字の hash。docs/SPEC-a4.md 11 章）
+    const lk = (p.management || {}).finalLock;
+    if (U.isObj(lk) && asStr(lk.hash) !== '' && (!/^[0-9a-f]{64}$/.test(asStr(lk.hash)) || !/^[0-9a-f]{32}$/.test(asStr(lk.salt)))) {
+      errors.push('最終承認のパスワードの設定が壊れています。パスワードを設定し直してください。');
+    } else if (lk !== undefined && !U.isObj(lk)) {
+      errors.push('最終承認のパスワードの設定が壊れています。パスワードを設定し直してください。');
     }
     return { errors: errors, warnings: warnings };
   }
@@ -561,6 +584,8 @@
       '.pop input[hidden]{display:none}',
       '.pop-note{font-size:12px;color:#9a5b00;background:#fdf1dc;border:1px solid #f3cf8a;border-radius:6px;padding:3px 8px}',
       '.pop-err{font-size:12px;font-weight:700;color:#b42318}.pop-err:empty{display:none}',
+      // 最終承認のパスワード（ロックがあり、このページでまだ解錠していないとき。docs/SPEC-a4.md 11 章）
+      '.pop-lock{font-size:12px;font-weight:700;color:#5b6675}',
       '.pop-text{white-space:pre-wrap;overflow-wrap:anywhere}',
       '.pop-memos{margin:0}.pop-memos dt{font-size:11.5px;font-weight:700;color:#5b6675;margin-top:6px}.pop-memos dt:first-child{margin-top:0}.pop-memos dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}',
       '.pop-f{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}',
@@ -588,6 +613,8 @@
   //   refWhere は面接メモの案内の「画面で」の言い換え。アプリ ③ の紙だけが '保存した HTML の画面で' を渡す）
   //   1 ページの上限: 用紙の内寸の高さ 281mm（≒ 1062px）から 10px の余裕。押印行を含む .cl-sheet 全体の高さで計る
   const CL_SHEET_LIMIT_PX = 1052;
+  // 「面接メモ・所見」の枠の手書き用の罫線（7.5mm 間隔の薄い点線）。内寸の高さ 281mm を超える本数（38 本）を置き、枠の外は切る
+  const CL_NM_LINES = new Array(39).join('<i></i>');
   function clFmtDate(v) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asStr(v)); return m ? m[1] + '/' + m[2] + '/' + m[3] : asStr(v); }
   function clFmtMonth(v) { const m = /^(\d{4})-(\d{2})$/.exec(asStr(v)); return m ? m[1] + '年' + Number(m[2]) + '月' : asStr(v); }
 
@@ -613,19 +640,26 @@
     return clShortFallback(it && it.label);
   }
 
-  // 1 ページ保証（docs/SPEC-a4.md 4-2）。.cl-sheet 全体（押印行を含む）の高さが limit を超えたら次の順に詰める。
+  // 1 ページ保証（docs/SPEC-a4.md 4-2・12 章）。.cl-sheet 全体（押印行を含む）の内容の高さ（.cl-measure を付けて用紙いっぱいに伸ばさない状態）で、
+  //   まず .cl-roomy（ゆったり。内容が少ないとき）を試し、limit を超えたら通常、さらに超えたら次の順に詰める。
   //   .cl-compact（本文 9px・余白を詰める。質問の回答は 2 行のまま、面接所見は 10 行まで）→
   //   .cl-compact-q1（質問の回答・メモを 1 行、面接所見は 6 行まで）→ .cl-compact-2（質問の回答を省いて案内 1 行、面接所見は 4 行まで）→
-  //   縮小（zoom。縮小後の高さを測り直し、上限に収まるまで下げる）。
+  //   縮小（zoom。縮小後の高さを測り直し、上限に収まるまで下げる）。戻り値は付けた段階（'cl-roomy'・''・'cl-compact'…・'zoom'）。
   //   「…」で切れたメモ（.cl-nm-v・.cl-rt-nt）に .cl-cut を付け（保存 HTML ではクリックで全文）、1 つでもあれば .cl-nm-cut で案内 1 行を出す（案内の高さも含めて計る）。
   //   アプリ ③ の紙（#appPaper）・アプリの印刷（#clSheet）・保存 HTML の用紙（#a4）に使う。祖先に zoom が掛かった状態で呼ばない（高さ・折り返しが変わる）。
+  //   計測のあとは用紙いっぱいに伸びる（押印行は用紙の内寸の下端）。印刷のときに計測し直さない（画面と印刷で同じ）。
   //   保存 HTML にソースをそのまま埋め込むため、外部参照なしの ES5 で書く（関数内にコメントを書かない）
   function clFitSheet(sheet, limit) {
     if (!sheet || !sheet.getBoundingClientRect) return '';
     var cls = sheet.classList;
     var lv = ['cl-compact', 'cl-compact-q1', 'cl-compact-2'];
     var i, h, z, n;
-    var hOf = function () { return sheet.getBoundingClientRect().height; };
+    var hOf = function () {
+      cls.add('cl-measure');
+      var r = sheet.getBoundingClientRect().height;
+      cls.remove('cl-measure');
+      return r;
+    };
     var cut = function () {
       var vs = sheet.querySelectorAll('.cl-nm-v,.cl-rt-nt'), c = false, k, v, on;
       for (k = 0; k < vs.length; k++) {
@@ -638,6 +672,11 @@
     };
     for (i = 0; i < lv.length; i++) cls.remove(lv[i]);
     sheet.style.zoom = '';
+    cls.add('cl-roomy');
+    cut();
+    h = hOf();
+    if (h && h <= limit) return 'cl-roomy';
+    cls.remove('cl-roomy');
     cut();
     h = hOf();
     if (!h || h <= limit) return '';
@@ -683,7 +722,7 @@
 
   // ---- A4「面接チェックリスト報告」（1 ページの要約。docs/SPEC-checklist.md 4-2・docs/SPEC-a4.md 1-2） ----
   //   上から: 見出し（白地＋濃紺の下線。左にロゴ・題、右に版／劇場／作成日）→ 応募者（2 行）→ 結果ストリップ（結果・総合判断・必須条件・確認点・最終合否、調整 1 行）→
-  //   必須条件｜勤務条件の確認 → 確認点（7 行）→ 面接メモ（記入があるものだけ）→ 説明・連絡（1 行）→ 押印行（record.management）
+  //   必須条件｜勤務条件の確認 → 確認点（7 行）→ 面接メモ・所見の枠（残りの高さいっぱい。記入の下は手書き用の罫線）→ 説明・連絡（1 行）→ 押印行（record.management。用紙の内寸の下端）
   //   色は結果・○△×（必須条件の一致／不一致を含む）・最終合否・ハンコだけ。他はグレースケール
   function clOnePageHtml(record, profile, o, def, sum) {
     const esc = U.esc;
@@ -802,7 +841,7 @@
         }).join('') + '</tbody></table></section>'
       : '';
 
-    // ---- 6. 面接メモ（記入があるものだけ。質問の回答は「短い名前：回答」2 行まで・面接所見・Step① のメモ） ----
+    // ---- 6. 面接メモ・所見の枠（記入があるものを上から。質問の回答は「短い名前：回答」2 行まで・面接所見・Step① のメモ。記入が無くても空の枠と罫線） ----
     //   質問の回答の名前は 1 問目の短い名前＋「ほか n 問」（回答はブロックに 1 つ。3 問の名前を並べると 2 行になり名前が回答より目立つため）
     const memoRows = [];
     let qRows = 0;
@@ -826,11 +865,15 @@
     //   保存 HTML の画面では、切れたメモ・この行をクリックすると全文の窓が出る（docs/SPEC-a4.md 3-7）。印刷物（保存 HTML・アプリの印刷）は「画面で」。
     //   アプリ ③ の紙はクリックしても窓を出さないので、o.refWhere（'保存した HTML の画面で'）で言い換える
     const refWhere = asStr(o.refWhere) || '画面で';
-    const notesHtml = memoRows.length
-      ? '<section class="cl-blk cl-blk-notes"><h3 class="cl-h">面接メモ</h3><div class="cl-nm">' + memoRows.join('') + '</div>' +
-        '<p class="cl-nm-ref' + (qRows ? ' has-q' : '') + '"><span class="cl-nm-ref-c">「…」で切れたメモは、' + esc(refWhere) + 'クリックすると全文を表示します</span>' +
-        (qRows ? '<span class="cl-nm-ref-q">質問の回答は省略（' + esc(refWhere) + 'この行をクリックすると、回答と「…」で切れたメモの全文を表示します）</span>' : '') + '</p></section>'
-      : '';
+    //   「面接メモ・所見」の枠（docs/SPEC-a4.md 12 章）: 常に出し、用紙の残りの高さいっぱいに広げる（押印行は用紙の下端）。
+    //   記入があれば上から並べ、その下（記入が無ければ枠全体）は手書き用の薄い点線の罫線（.cl-nm-lines。7.5mm 間隔。高さの計測には入らない）
+    const notesHtml = '<section class="cl-blk cl-blk-notes"><h3 class="cl-h">面接メモ・所見</h3><div class="cl-nm-box' + (memoRows.length ? '' : ' is-empty') + '">' +
+      (memoRows.length
+        ? '<div class="cl-nm">' + memoRows.join('') + '</div>' +
+          '<p class="cl-nm-ref' + (qRows ? ' has-q' : '') + '"><span class="cl-nm-ref-c">「…」で切れたメモは、' + esc(refWhere) + 'クリックすると全文を表示します</span>' +
+          (qRows ? '<span class="cl-nm-ref-q">質問の回答は省略（' + esc(refWhere) + 'この行をクリックすると、回答と「…」で切れたメモの全文を表示します）</span>' : '') + '</p>'
+        : '') +
+      '<div class="cl-nm-lines" aria-hidden="true">' + CL_NM_LINES + '</div></div></section>';
 
     // ---- 7. 説明・連絡（説明のチェック数。※短期求人のみ の項目は求人が短期のときだけ数える） ----
     const exParts = [], ntParts = [];
@@ -880,7 +923,11 @@
       '.cl-sheet *{box-sizing:border-box}',
       '.cl-sheet .cl-blank{color:#8a94a3}',
       // ---- sheet（A4 報告・1 ページの要約）。本文 9.5px・ラベル 8.5px・見出し 10.5px。画面でも同じ寸法にして計測する ----
-      '.cl-sheet.cl-mode-sheet{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:9.5px;line-height:1.4;background:#fff;color:#111}',
+      //   用紙を埋める（docs/SPEC-a4.md 12 章）: シートは縦の flex で用紙の内寸の高さ（.a4 の 100%）まで伸ばし、「面接メモ・所見」の枠が残りの高さを取る
+      //   ＝押印行は用紙の内寸の下端。高さの計測（clFitSheet）は .cl-measure（min-height:0）で内容そのものの高さを測る
+      '.cl-sheet.cl-mode-sheet{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:9.5px;line-height:1.4;background:#fff;color:#111;' +
+        'display:flex;flex-direction:column;min-height:100%}',
+      '.cl-sheet.cl-mode-sheet.cl-measure{min-height:0 !important}',
       '.cl-mode-sheet .cl-blank{color:#8a94a3;font-weight:400}',
       // 1. 見出し（白地＋濃紺 2px の下線。左にロゴ・題、右に版／劇場／作成日）
       '.cl-mode-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #24324a}',
@@ -946,7 +993,14 @@
       '.cl-mode-sheet .cl-rt-nt{color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-mark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:10px;font-weight:800;line-height:1;color:#fff;background:#8a94a3}',
       '.cl-mode-sheet .cl-mark.m-good{background:#0b7a55}.cl-mode-sheet .cl-mark.m-fair{background:#c98a1b}.cl-mode-sheet .cl-mark.m-poor{background:#b42318}.cl-mode-sheet .cl-mark.m-none{color:#8a94a3;background:#eef1f5}',
-      // 6. 面接メモ（質問の回答は 2 行まで。面接所見・メモは全文）。名前の列は「1 問目の短い名前 ほか n 問」が 1 行に入る幅
+      // 6. 面接メモ・所見の枠（質問の回答は 2 行まで。面接所見・メモは全文）。名前の列は「1 問目の短い名前 ほか n 問」が 1 行に入る幅。
+      //   枠は残りの高さいっぱい（flex）。記入の下は手書き用の薄い点線の罫線（7.5mm 間隔。flex-basis 0・overflow:hidden で内容の高さに入れない）。
+      //   記入が無い枠は罫線 1 本分（7.5mm）を最低の高さにする
+      '.cl-mode-sheet .cl-blk-notes{flex:1 1 auto;display:flex;flex-direction:column}',
+      '.cl-mode-sheet .cl-nm-box{flex:1 1 auto;display:flex;flex-direction:column;padding:0 8px 1px;border:1px solid #c9d2dd;border-radius:4px;background:#fff}',
+      '.cl-mode-sheet .cl-nm-lines{flex:1 1 0;min-height:0;overflow:hidden}',
+      '.cl-mode-sheet .cl-nm-box.is-empty .cl-nm-lines{min-height:7.5mm}',
+      '.cl-mode-sheet .cl-nm-lines i{display:block;height:7.5mm;border-bottom:1px dotted #b8c2cf}',
       '.cl-mode-sheet .cl-nm-row{display:grid;grid-template-columns:18em minmax(0,1fr);gap:8px;padding:3px 4px;border-bottom:1px solid #e6eaef}',
       '.cl-mode-sheet .cl-nm-k{font-size:8.5px;font-weight:700;color:#5b6675;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}',
       '.cl-mode-sheet .cl-nm-no{margin-right:3px;color:#24324a}',
@@ -987,6 +1041,19 @@
       '.cl-mode-sheet.cl-compact-q1 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:6}.cl-mode-sheet.cl-compact-q1 .cl-nm-memo .cl-nm-v{-webkit-line-clamp:2}',
       '.cl-mode-sheet.cl-compact-2 .cl-nm-q{display:none}',
       '.cl-mode-sheet.cl-compact-2 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:4}.cl-mode-sheet.cl-compact-2 .cl-nm-memo .cl-nm-v{-webkit-line-clamp:1}.cl-mode-sheet.cl-compact-2 .cl-adj li+li{display:none}',
+      // ゆったり（clFitSheet が最初に試す。内容が少ないとき）: 本文 10.5px・行の高さ・確認点の行高・ブロックの間隔を広げる。
+      //   面接メモ・所見の枠に罫線 38mm 分を残せるときだけ付く（計測中＝.cl-measure のときだけ .cl-nm-lines の最低の高さを 38mm にして計る。
+      //   表示中は最低の高さを付けない＝狭い画面の --a4-zoom で行の高さが丸められて内容が数 % 伸びても、罫線の部分が縮んで吸収し、押印行は用紙の下端のまま）
+      '.cl-mode-sheet.cl-roomy{font-size:10.5px;line-height:1.5}',
+      '.cl-mode-sheet.cl-roomy .cl-judge{margin-top:10px}',
+      '.cl-mode-sheet.cl-roomy .cl-blk,.cl-mode-sheet.cl-roomy .cl-cols,.cl-mode-sheet.cl-roomy .cl-exline,.cl-mode-sheet.cl-roomy .cl-stamps{margin-top:13px}',
+      '.cl-mode-sheet.cl-roomy .cl-h{font-size:11.5px;margin-bottom:5px}.cl-mode-sheet.cl-roomy .cl-h small{font-size:9px}',
+      '.cl-mode-sheet.cl-roomy .cl-mtab td,.cl-mode-sheet.cl-roomy dl.cl-kv>div,.cl-mode-sheet.cl-roomy .cl-nm-row{padding-top:4px;padding-bottom:4px}',
+      '.cl-mode-sheet.cl-roomy .cl-rt td{padding-top:6px;padding-bottom:6px}',
+      '.cl-mode-sheet.cl-roomy dl.cl-kv dt,.cl-mode-sheet.cl-roomy .cl-nm-k,.cl-mode-sheet.cl-roomy .cl-rt-no,.cl-mode-sheet.cl-roomy .cl-ex-k{font-size:9.5px}',
+      '.cl-mode-sheet.cl-roomy .cl-mark{width:19px;height:19px;font-size:11px}',
+      '.cl-mode-sheet.cl-roomy .cl-exline{padding:5px 10px}',
+      '.cl-mode-sheet.cl-roomy.cl-measure .cl-nm-box .cl-nm-lines{min-height:38mm}',
       '.cl-sheet .cl-title-logo,.cl-sheet .cl-tile,.cl-sheet .hanko,.cl-sheet .stamp-empty,.cl-sheet .cl-judge,.cl-sheet .cl-mark,.cl-sheet .cl-mm,.cl-sheet .cl-exline,.cl-sheet .cl-decision,.cl-sheet .verdict-stamp,.cl-sheet .cl-dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
     ].join('\n');
   }
@@ -1012,15 +1079,21 @@
     // 窓で使う設定（押印欄・名簿・手入力の可否・担当と連動する押印欄・最終合否）。押印欄 0・合否 OFF でも出す（長いメモの窓は常に使う）
     const mg = profile.management || {};
     const clDef = normalizeChecklistDef(record.checklistDef || profile.checklist, defaults().checklist);
+    //   最終承認のパスワード（docs/SPEC-a4.md 11 章）: 保存時のロック（salt・hash だけ。平文は持たない）と、パスワードが要る押印欄（decision.stampField）。
+    //   保存 HTML はこのロックで照合する（保存後にアプリでパスワードを変えても、出したファイルは出した時点のパスワード）
+    const flk = normalizeLock(mg.finalLock);
     const mgmtConfig = jsonForScript({
       fields: Array.isArray(mg.fields) ? mg.fields : [], managers: Array.isArray(mg.managers) ? mg.managers : [], allowFreeName: mg.allowFreeName !== false,
       interviewerField: asStr((clDef.header || {}).interviewerField),
       decision: dcfg.enabled ? { label: dcfg.label, hireLabel: dcfg.hireLabel, rejectLabel: dcfg.rejectLabel, hireColor: dcfg.hireColor, rejectColor: dcfg.rejectColor,
-        stampField: dcfg.stampField, autoStampFinal: dcfg.autoStampFinal, filenameSuffix: dcfg.filenameSuffix, hint: dcfg.hint, sub: dcfg.sub } : null
+        stampField: dcfg.stampField, autoStampFinal: dcfg.autoStampFinal, filenameSuffix: dcfg.filenameSuffix, hint: dcfg.hint, sub: dcfg.sub } : null,
+      finalLock: lockOn(flk) ? flk : null,
+      lockField: asStr(dcfg.stampField)
     });
     const foot = [asStr(meta.footer).trim(), 'このファイルはアプリの「読み込み」で再度開けます。埋め込みデータは編集しないでください。'].filter(Boolean).join('　');
-    // スクリプトは 1 本: 1 ページ保証（clFitSheet）・ハンコと合否スタンプ（stamp.js の純関数）・用紙の操作（a4PageScript）
-    const script = '(function(){\n' + clFitSheet.toString() + '\n' + (Stamp ? Stamp.source() + '\n' : '') +
+    // スクリプトは 1 本: 1 ページ保証（clFitSheet）・ハンコと合否スタンプ（stamp.js の純関数）・最終承認のパスワードの照合（lock.js の純関数）・用紙の操作（a4PageScript）
+    const Lock = global.RecruitLock;
+    const script = '(function(){\n' + clFitSheet.toString() + '\n' + (Stamp ? Stamp.source() + '\n' : '') + (Lock ? Lock.source() + '\n' : '') +
       'var LIMIT=' + CL_SHEET_LIMIT_PX + ',PAPER_W=793.7;\n(' + a4PageScript.toString() + ')(LIMIT,PAPER_W);\n})();';
 
     return '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n' +
@@ -1036,8 +1109,9 @@
       '</body>\n</html>\n';
   }
 
-  // 保存 HTML の用紙の操作（docs/SPEC-a4.md 3 章）。generateReportHTML がソースをそのまま埋め込み、clFitSheet と stamp.js の関数
-  //   （stampSvg・shortName・verdictSvg・decisionSheetHtml・decisionFilename）と同じ IIFE の中で呼ぶ。アプリでは呼ばない。
+  // 保存 HTML の用紙の操作（docs/SPEC-a4.md 3 章・11 章）。generateReportHTML がソースをそのまま埋め込み、clFitSheet と stamp.js の関数
+  //   （stampSvg・shortName・verdictSvg・decisionSheetHtml・decisionFilename）・lock.js の関数（sha256Hex・hashPassword・isLocked・verify）と同じ IIFE の中で呼ぶ。アプリでは呼ばない。
+  //   最終承認のパスワード: cfg.finalLock があり未解錠なら、最終確認（cfg.lockField）と最終合否の窓はパスワード欄と［確認］だけ（正しければ unlocked。変数だけで書き出しに残さない）。
   //   外部参照はそれらの関数と DOM だけの ES5 で書く（関数内にコメント・閉じタグを書かない）。文字列は旧い埋め込みスクリプトと同じ二重引用符。
   //   計測（fit）は読み込み時・load・フォントの読み込み後・押印／合否の変更後だけ。印刷のための切替（beforeprint）はしない。
   //   狭い画面の縮小（--a4-zoom）は計測の前に外し、計測のあとで付け直す（祖先の zoom で高さ・折り返しが変わるため）
@@ -1056,6 +1130,8 @@
     cfg.allowFreeName = cfg.allowFreeName !== false;
     if (!rec.management || typeof rec.management !== "object") rec.management = {};
     var D = cfg.decision && typeof cfg.decision === "object" ? cfg.decision : null;
+    var LK = cfg.finalLock && typeof cfg.finalLock === "object" ? cfg.finalLock : null, lockF = typeof cfg.lockField === "string" ? cfg.lockField : "";
+    var locked = !!LK && (typeof isLocked !== "function" || isLocked(LK)), unlocked = false;
     var canStamp = recOk && typeof stampSvg === "function" && typeof shortName === "function" && cfg.fields.length > 0;
     var canDecide = recOk && !!D && typeof decisionSheetHtml === "function" && typeof decisionFilename === "function" && typeof shortName === "function";
     var dirty = false, saved = false, pop = null, anchor = null, bar = null, rz = 0;
@@ -1188,6 +1264,20 @@
       return "<button type=\"button\" class=\"pop-dec pop-" + r + (on ? " on" : "") + "\" data-act=\"decide\" data-value=\"" + r + "\" aria-pressed=\"" + (on ? "true" : "false") + "\">" + esc(label) + "</button>";
     }
     function popErr(msg) { var e = pop && pop.querySelector(".pop-err"); if (e) e.textContent = msg; }
+    function needPw(kind, id) { return locked && !unlocked && (kind === "decision" || (kind === "stamp" && !!lockF && id === lockF)); }
+    function pwHtml() {
+      return "<div class=\"pop-lock\">最終承認にはパスワードが必要です</div>" +
+        "<label class=\"pop-l\"><span>パスワード</span><input class=\"pop-pw\" type=\"password\" autocomplete=\"off\" aria-label=\"最終承認のパスワード\"></label>" +
+        "<div class=\"pop-err\" role=\"alert\"></div>";
+    }
+    function doUnlock() {
+      var inp = pop && pop.querySelector(".pop-pw"), t = anchor;
+      if (!inp || !t) return;
+      if (!inp.value) { popErr("パスワードを入力してください"); inp.focus(); return; }
+      if (typeof verify !== "function" || !verify(LK, inp.value)) { popErr("パスワードが違います"); inp.focus(); inp.select(); return; }
+      unlocked = true;
+      openPop(t);
+    }
     function pickPerson() {
       var sel = pop.querySelector(".pop-sel"), inp = pop.querySelector(".pop-free"), v = sel ? sel.value : "", m, nm;
       if (v === "__free") {
@@ -1225,17 +1315,19 @@
         if (!x) return;
         e = stamped(x.f.id);
         h = x.f.label || x.f.id; sub = x.f.hint || "";
-        body = personHtml(e ? e.name : (cfg.interviewerField && cfg.interviewerField === x.f.id && rec.checklist && rec.checklist.header ? String(rec.checklist.header.interviewer || "") : "")) +
+        if (needPw("stamp", x.f.id)) { body = pwHtml(); foot = "<button type=\"button\" class=\"primary\" data-act=\"unlock\">確認</button>" + close; }
+        else body = personHtml(e ? e.name : (cfg.interviewerField && cfg.interviewerField === x.f.id && rec.checklist && rec.checklist.header ? String(rec.checklist.header.interviewer || "") : "")) +
           "<div class=\"pop-err\" role=\"alert\"></div>";
-        foot = "<button type=\"button\" class=\"primary\" data-act=\"stamp\">押印</button>" + (e ? "<button type=\"button\" data-act=\"unstamp\">取消</button>" : "") + close;
+        if (!foot) foot = "<button type=\"button\" class=\"primary\" data-act=\"stamp\">押印</button>" + (e ? "<button type=\"button\" data-act=\"unstamp\">取消</button>" : "") + close;
       } else if (kind === "decision") {
         if (!canDecide) return;
         d = curDec(); st = D.stampField ? stamped(D.stampField) : null; j = rec.judgment; nt = noteText(d);
         h = D.label || "最終合否"; sub = D.hint || "";
-        body = personHtml((st && st.name) || (d && d.by.name) || "") +
+        if (needPw("decision", "")) { body = pwHtml(); foot = "<button type=\"button\" class=\"primary\" data-act=\"unlock\">確認</button>" + close; }
+        else body = personHtml((st && st.name) || (d && d.by.name) || "") +
           (j && j.result ? "<div class=\"pop-ref\">アプリの判定：" + esc(j.title || "") + "</div>" : "") +
           (nt ? "<div class=\"pop-note\">" + esc(nt) + "</div>" : "") + "<div class=\"pop-err\" role=\"alert\"></div>";
-        foot = decBtn("hire", D.hireLabel || "採用", d) + decBtn("reject", D.rejectLabel || "不採用", d) + (d ? "<button type=\"button\" data-act=\"undecide\">取消</button>" : "") + close;
+        if (!foot) foot = decBtn("hire", D.hireLabel || "採用", d) + decBtn("reject", D.rejectLabel || "不採用", d) + (d ? "<button type=\"button\" data-act=\"undecide\">取消</button>" : "") + close;
       } else if (kind === "memo") {
         memo = memoOf(t); h = memo.k; body = "<div class=\"pop-text\"></div>"; foot = close;
       } else if (kind === "memos") {
@@ -1263,7 +1355,7 @@
       document.body.appendChild(pop);
       anchor = t; t.setAttribute("aria-expanded", "true");
       place();
-      var f = pop.querySelector(".pop-sel") || pop.querySelector("[data-act=\"close\"]");
+      var f = pop.querySelector(".pop-pw") || pop.querySelector(".pop-sel") || pop.querySelector("[data-act=\"close\"]");
       if (f) f.focus({ preventScroll: true });
     }
     function doStamp(act) {
@@ -1293,6 +1385,8 @@
       act = b.getAttribute("data-act"); kind = pop.getAttribute("data-kind");
       popErr("");
       if (act === "close") closePop(true);
+      else if (act === "unlock") doUnlock();
+      else if (needPw(kind, anchor ? anchor.getAttribute("data-field-id") : "")) return;
       else if (kind === "stamp" && (act === "stamp" || act === "unstamp")) doStamp(act);
       else if (kind === "decision" && (act === "decide" || act === "undecide")) doDecide(act, b.getAttribute("data-value"));
     }
@@ -1305,6 +1399,7 @@
       place();
     }
     function onPopKey(ev) {
+      if (ev.key === "Enter" && ev.target.classList && ev.target.classList.contains("pop-pw")) { ev.preventDefault(); popErr(""); doUnlock(); return; }
       if (ev.key === "Enter" && ev.target.classList && ev.target.classList.contains("pop-free") && pop.getAttribute("data-kind") === "stamp") { ev.preventDefault(); popErr(""); doStamp("stamp"); }
     }
     function targetOf(ev) {

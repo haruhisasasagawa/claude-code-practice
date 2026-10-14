@@ -24,6 +24,7 @@
   let downInRoot = false;
   let repaintPending = false;
   let pointerBound = false;
+  let lockForm = '';   // 最終承認のパスワードの入力欄: '' | 'change'（変更・設定）| 'remove'（外す）
 
   function R() { return global.RecruitRules || {}; }
 
@@ -442,7 +443,81 @@
       '</div>' +
       sLines('management.managers', '担当者名簿（氏名|印字名|役職|等級）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人|S3 。印字名を省略すると姓（スペースの前）を使います。等級は任意（押印には使いません）。', rows: 17 }) +
       sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。') +
-      decisionSettingsHtml(fields));
+      decisionSettingsHtml(fields) + finalLockHtml());
+  }
+
+  // ---------- 最終承認のパスワード（docs/SPEC-a4.md 11 章） ----------
+  //   下書きの management.finalLock（{ salt, hash }。平文は持たない）を変える。変更は下書きに入り、「設定を保存」で確定する。
+  //   入力欄は data-bind を持たない（下書きに平文を入れない）。変更・外すには現在のパスワードが要る（設定済みのとき）
+  function lockOf(p) { return ((p || {}).management || {}).finalLock; }
+  function lockIsOn(l) { const L = global.RecruitLock; return !!(L && L.isLocked(l)); }
+  function pwField(id, label) {
+    return '<div class="field"><label for="' + id + '">' + esc(label) + '</label><input type="password" id="' + id + '" class="lock-pw" autocomplete="off"></div>';
+  }
+  function finalLockHtml() {
+    const lk = lockOf(draft), on = lockIsOn(lk);
+    const saved = handlers && handlers.current ? lockOf(handlers.current()) : null;
+    const key = function (l) { return lockIsOn(l) ? l.salt + ':' + l.hash : ''; };
+    const pending = key(lk) !== key(saved);
+    let body = '';
+    if (lockForm === 'change') {
+      body = '<div class="lock-form" id="finalLockForm" data-lock-form="change">' +
+        (on ? pwField('lockCur', '現在のパスワード') : '') + pwField('lockNew', '新しいパスワード') + pwField('lockNew2', '新しいパスワード（確認）') +
+        '<div class="lock-err" id="finalLockErr" role="alert"></div>' +
+        '<div class="actions"><button type="button" class="btn sm primary" data-action="lock-apply" id="finalLockApply">' + (on ? '変更する' : '設定する') + '</button>' +
+        '<button type="button" class="btn sm ghost" data-action="lock-cancel">キャンセル</button></div></div>';
+    } else if (lockForm === 'remove') {
+      body = '<div class="lock-form" id="finalLockForm" data-lock-form="remove">' + pwField('lockCur', '現在のパスワード') +
+        '<div class="lock-err" id="finalLockErr" role="alert"></div>' +
+        '<div class="actions"><button type="button" class="btn sm danger" data-action="lock-remove-apply" id="finalLockRemoveApply">パスワードを外す</button>' +
+        '<button type="button" class="btn sm ghost" data-action="lock-cancel">キャンセル</button></div></div>';
+    } else {
+      body = '<div class="actions"><button type="button" class="btn sm" data-action="lock-change" id="finalLockChange">' + (on ? '変更' : '設定する') + '</button>' +
+        (on ? '<button type="button" class="btn sm ghost danger" data-action="lock-remove" id="finalLockRemove">パスワードを外す</button>' : '') + '</div>';
+    }
+    return '<h3 class="sub" id="s-finalLock">最終承認のパスワード</h3>' +
+      '<div class="hint">最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（' + stepRef(4) + ' 報告書と保存した HTML の両方。面接対応者の押印には要りません）。' +
+        '誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げません。パスワードそのものは保存せず、照合用の値（ハッシュ）だけを設定に持ちます。' +
+        '保存した HTML は保存した時点のパスワードで照合します。</div>' +
+      '<div class="lock-status" id="finalLockStatus"><span class="badge ' + (on ? 'ok' : 'muted') + '">' + (on ? '設定済み' : '未設定') + '</span>' +
+        (pending ? '<span class="hint">未保存の変更です。「設定を保存」で確定します。</span>' : '') + '</div>' + body;
+  }
+  function lockFocus() {
+    const el = root && root.querySelector('#finalLockForm .lock-pw');
+    if (el) el.focus();
+  }
+  // 「変更する」「設定する」「パスワードを外す」（フォームの確定。Enter も同じ）
+  function lockApply(kind, y) {
+    const L = global.RecruitLock;
+    if (!L || !draft) return;
+    const lk = lockOf(draft), on = lockIsOn(lk);
+    const v = function (id) { const el = root.querySelector('#' + id); return el ? el.value : ''; };
+    const err = function (msg, id) {
+      const e = root.querySelector('#finalLockErr');
+      if (e) e.textContent = msg;
+      const el = root.querySelector('#' + id);
+      if (el) { el.focus(); if (el.select) el.select(); }
+    };
+    if (on && !v('lockCur')) { err('現在のパスワードを入力してください', 'lockCur'); return; }
+    if (on && !L.verify(lk, v('lockCur'))) { err('現在のパスワードが違います', 'lockCur'); return; }
+    if (!U.isObj(draft.management)) draft.management = {};
+    if (kind === 'remove') {
+      draft.management.finalLock = { salt: '', hash: '' };
+    } else {
+      if (!v('lockNew')) { err('新しいパスワードを入力してください', 'lockNew'); return; }
+      if (v('lockNew') !== v('lockNew2')) { err('新しいパスワード（確認）が一致しません', 'lockNew2'); return; }
+      draft.management.finalLock = L.makeLock(v('lockNew'));
+    }
+    lockForm = '';
+    paint(y);
+    if (handlers.onToast) handlers.onToast(kind === 'remove' ? '最終承認のパスワードを外しました。「設定を保存」で確定します' : '最終承認のパスワードを' + (on ? '変更' : '設定') + 'しました。「設定を保存」で確定します');
+  }
+  function onKey(e) {
+    const t = e.target;
+    if (e.key !== 'Enter' || !t || !t.classList || !t.classList.contains('lock-pw')) return;
+    e.preventDefault();
+    const f = t.closest('[data-lock-form]');
+    if (f) lockApply(f.getAttribute('data-lock-form') === 'remove' ? 'remove' : 'change', window.scrollY);
   }
 
   // 最終合否（採用／不採用のスタンプ。docs/SPEC-report.md 7 章）
@@ -587,6 +662,7 @@
       case 'discard':
         draft = U.deepClone(handlers.current());
         issues = null;
+        lockForm = '';
         paint(y);
         handlers.onToast && handlers.onToast('変更を破棄しました');
         break;
@@ -598,6 +674,22 @@
         break;
       case 'reset':
         if (window.confirm('すべての設定を初期状態（新宿の既定値）に戻します。よろしいですか？')) { issues = null; handlers.onReset(); }
+        break;
+      case 'lock-change':
+      case 'lock-remove':
+        lockForm = act === 'lock-change' ? 'change' : 'remove';
+        paint(y);
+        lockFocus();
+        break;
+      case 'lock-cancel':
+        lockForm = '';
+        paint(y);
+        break;
+      case 'lock-apply':
+        lockApply('change', y);
+        break;
+      case 'lock-remove-apply':
+        lockApply('remove', y);
         break;
       default:
         break;
@@ -612,6 +704,7 @@
     root.oninput = onEdit;
     root.onchange = onEdit;
     root.onclick = onClick;
+    root.onkeydown = onKey;
     if (typeof scrollY === 'number') window.scrollTo(0, scrollY);
   }
 
@@ -621,6 +714,7 @@
     draft = U.deepClone(profile);
     issues = null;
     clOpen = {};
+    lockForm = '';
     bindPointer();
     paint();
   }

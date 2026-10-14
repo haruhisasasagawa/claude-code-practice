@@ -49,7 +49,12 @@
         autoStampFinal: true,      // 合否を押したとき stampField の欄が未押印なら同じ担当者の印も押す
         filenameSuffix: true,      // 合否ありの保存ファイル名に _採用 / _不採用 を付ける
         hint: '最終確認者が合否を決めて押します'
-      }
+      },
+      // 最終承認のパスワード（src/lock.js）。最終確認（decision.stampField の欄）の押印・取消と最終合否の決定・取消の前に求める。
+      //   平文は持たない: hash = sha256Hex(salt + ':' + パスワード)（16 進 64 文字）、salt は 16 進 32 文字。hash が空＝パスワードなし（公開版の既定）。
+      //   誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げない。
+      //   ローカル版の初期パスワードは local/final-password.txt（node build.js --local がここに salt と hash を差し込む）
+      finalLock: { salt: '', hash: '' }
     },
 
     options: {

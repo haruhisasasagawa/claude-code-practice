@@ -1,6 +1,7 @@
 # SPEC-a4 — 保存 HTML を「A4 縦の用紙 1 枚」にする（作業仕様）
 
 作成 2026-10-14。基準コミット `a9e39cb`（全テスト緑: 単体 29 件・e2e E1〜E13 190 チェック）。**commit / push はしない**。
+**追記 2026-10-14（基準 `38e46bd`）**: 11 章「最終承認のパスワード」・12 章「用紙を埋めるレイアウト」。旧 11 章「実装メモ」は 13 章。S4（押印行は内容の直後）は 12 章で変更した。
 **行番号はすべて a9e39cb 時点の目安**。関数名・定数名・id で探すこと。作業用ファイルは scratchpad に置く。
 
 ---
@@ -15,7 +16,7 @@
 - 押印と最終合否は**用紙の欄を直接クリック**。小さな窓（ポップオーバー）で担当者を選んで押す。用紙の外に常設の操作パネルは置かない（窓は印刷されない）
 
 ### 0-3. オーケストレータの設計（A1〜A13。要約。本書はこれを具体化する）
-A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内側の余白 8mm／10mm）そのもの。画面と印刷で同じ要素・寸法・文字組み。印刷専用の複製・詳細表示・操作カード類は削除 ／ A2 中身は現行の 1 ページ要約＋押印行（最下段） ／ A3 見出しは白地＋濃紺 2px の下線・左にロゴ＋題・右に版／劇場／作成日 ／ A4 押印行込みの用紙を内寸の高さで計測（読み込み時に確定し、印刷時に切り替えない） ／ A5 押印は欄クリックの窓 ／ A6 最終合否は `.cl-decision` クリックの窓 ／ A7 右上の通知バーで保存（レビュー後に**右下**へ変更。11 章） ／ A8 切れたメモはクリックで全文 ／ A9 狭い画面は縮小表示 ／ A10 アプリ ③ の紙と A4 印刷も同じ用紙 ／ A11 旧い保存 HTML の互換 ／ A12 テスト ／ A13 docs
+A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内側の余白 8mm／10mm）そのもの。画面と印刷で同じ要素・寸法・文字組み。印刷専用の複製・詳細表示・操作カード類は削除 ／ A2 中身は現行の 1 ページ要約＋押印行（最下段） ／ A3 見出しは白地＋濃紺 2px の下線・左にロゴ＋題・右に版／劇場／作成日 ／ A4 押印行込みの用紙を内寸の高さで計測（読み込み時に確定し、印刷時に切り替えない） ／ A5 押印は欄クリックの窓 ／ A6 最終合否は `.cl-decision` クリックの窓 ／ A7 右上の通知バーで保存（レビュー後に**右下**へ変更。13 章） ／ A8 切れたメモはクリックで全文 ／ A9 狭い画面は縮小表示 ／ A10 アプリ ③ の紙と A4 印刷も同じ用紙 ／ A11 旧い保存 HTML の互換 ／ A12 テスト ／ A13 docs
 
 ### 0-4. 本書の決定（S1〜S16。迷ったらここに従う）
 | # | 決定 |
@@ -23,7 +24,7 @@ A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内�
 | S1 | 用紙の中身は `storage.checklistSheetHtml(record, profile, o)` が作る `.cl-sheet.cl-mode-sheet`（**常に 1 ページの要約**。`o.mode` は無視し、`'section'` は削除）。押印行も同じ関数が `record.management` と `profile.management.fields` から描く（`o.stamps` の HTML 文字列渡しは廃止。`app.checklistStampsHtml` は削除） |
 | S2 | 用紙の箱 `.a4` の規則（寸法・余白・白地・影・`overflow:hidden`）は**共有の `checklistSheetCss()`** に置く（アプリ ③ と保存 HTML とアプリの印刷で同じ規則）。ページ配置（灰色の背景・上下 24px・`@page`）は保存 HTML 用の `reportCss()`、アプリ用は `styles.css` |
 | S3 | 1 ページの上限は**定数 `CL_SHEET_LIMIT_PX = 1052`**（内寸 281mm ≒ 1062.0px から 10px の余裕）。`.cl-sheet` 全体（押印行を含む）の高さで計る。`checklistSheetLimit(n)`・`CL_SHEET_PAGE_PX`・`CL_SHEET_STAMPS_PX`・`CL_SHEET_STAMP_ROW_PX`・`CL_SHEET_BODY_PX` は削除 |
-| S4 | 押印行は内容の直後（`margin-top:10px`）に置く。用紙の下端に固定しない（固定すると計測が複雑になり、縮小時の位置もずれるため）。用紙の下の余白は空白のまま |
+| S4 | 押印行は内容の直後（`margin-top:10px`）に置く。用紙の下端に固定しない（固定すると計測が複雑になり、縮小時の位置もずれるため）。用紙の下の余白は空白のまま。**→ 12 章で変更**: 押印行は用紙の内寸の下端・空いた高さは面接メモ・所見の枠（計測は `.cl-measure` で内容の高さ） |
 | S5 | 保存 HTML のスクリプトは**1 本**（計測・縮小・窓・押印・合否・長いメモ・保存バー・書き出し）。窓 `.pop` と保存バー `.savebar` は**スクリプトが必要なときに body の末尾に作る**（生成 HTML には無い）。押せる欄の印（`data-a4-t`・`tabindex` など）もスクリプトが付ける |
 | S6 | 書き出しは `document.documentElement.cloneNode(true)` の**複製を掃除してから** `outerHTML`（窓・バー・`body.a4-live`・`data-a4-t` 系の属性・`--a4-zoom` を外す）。生きているページは書き換えない |
 | S7 | 狭い画面の縮小は **CSS 変数 `--a4-zoom` を `<html>` に置き、`@media screen{.a4{zoom:var(--a4-zoom,1)}}`**。計測（`clFitSheet`）は必ず `--a4-zoom` を外した状態で行う（試作で確認: 祖先の zoom 0.5 で `getBoundingClientRect` は 735→380px、`offsetHeight` も文字の折り返しが変わって 736→760px になる） |
@@ -458,7 +459,7 @@ function exportHtml(){closePop(false);
 5. **390px**: `setViewportSize({width:390,height:844})` → `scrollWidth - innerWidth <= 1`・`--a4-zoom` ≈ 0.451・`#a4` の rect 幅が 358±2・縦横比 297/210±0.01・押印行は 2 列のまま。窓を開くと左右とも画面内（left ≥ 0・right ≤ 390）。この幅で `page.pdf` → 1 枚・`#a4 .cl-sheet` の class と zoom が PDF の前後で同じ（計測し直さない）
 6. **ロゴ**: E13（7-2）
 7. **アプリと保存 HTML の印刷**: 同じ記録（`saved9`）で、アプリ（③ で読み込み → `prepareChecklistSheet(true)` → print メディア → `page.pdf`）と保存 HTML（開いたまま `page.pdf`）がどちらも 1 ページ、pdftotext（空白を詰める）の見出しが同じ（「面接チェックリスト報告」と「台本2026-10-08版／TOHOシネマズ新宿／作成2026/10/10」がどちらにもある）。2 の方法で 2 つの PDF の画像の外接矩形も ±0.02 以内
-- レビュー後の追加（11 章）: キーボード操作の直後（Esc で欄に戻る・Shift+Tab で「最終合否」）に印刷の表示で `outlineStyle` が `none`・その状態の PDF の画像がフォーカスなしの印刷と画素単位で同じ／ホバーの案内は 1 行・最終合否の欄の案内は欄の上の辺の外（未押印・押した後）／保存バーは 1280×768 で右下・見出し・氏名・最終合否に重ならない（スクロール 0／120px）・いちばん下までスクロールすれば用紙・注記に重ならない・保存後は［×］で閉じる・書き出しに `a4-sb` が残らない、390×844 で用紙・見出し・氏名・最終合否に重ならない／1366×768 で全文の窓が欄の上下どちらにも入らないときは画面の中（本文だけスクロール・［閉じる］が見える）／重いサンプルを 390px で**最初から**開いても 1440px と同じ class・zoom・印刷の表示でシートが 1052px 以内で押印行が内寸に収まる・PDF 1 枚・この幅で書き出したファイルに `--a4-zoom` が無い。E8: ③ の紙の案内は「保存した HTML の画面で…」・③ の紙のクリックで窓は出ない・アプリの印刷の PDF は「画面でクリックすると全文」。E9: 採用×不採用推奨の注記。E12: 未押印の面接対応者の窓は台本の担当を名簿から初期選択・そのまま押印した名簿の値（役職つき）が書き出したファイルに入る・キーボードで合否を取り消すとフォーカスが新しい欄に戻る
+- レビュー後の追加（13 章）: キーボード操作の直後（Esc で欄に戻る・Shift+Tab で「最終合否」）に印刷の表示で `outlineStyle` が `none`・その状態の PDF の画像がフォーカスなしの印刷と画素単位で同じ／ホバーの案内は 1 行・最終合否の欄の案内は欄の上の辺の外（未押印・押した後）／保存バーは 1280×768 で右下・見出し・氏名・最終合否に重ならない（スクロール 0／120px）・いちばん下までスクロールすれば用紙・注記に重ならない・保存後は［×］で閉じる・書き出しに `a4-sb` が残らない、390×844 で用紙・見出し・氏名・最終合否に重ならない／1366×768 で全文の窓が欄の上下どちらにも入らないときは画面の中（本文だけスクロール・［閉じる］が見える）／重いサンプルを 390px で**最初から**開いても 1440px と同じ class・zoom・印刷の表示でシートが 1052px 以内で押印行が内寸に収まる・PDF 1 枚・この幅で書き出したファイルに `--a4-zoom` が無い。E8: ③ の紙の案内は「保存した HTML の画面で…」・③ の紙のクリックで窓は出ない・アプリの印刷の PDF は「画面でクリックすると全文」。E9: 採用×不採用推奨の注記。E12: 未押印の面接対応者の窓は台本の担当を名簿から初期選択・そのまま押印した名簿の値（役職つき）が書き出したファイルに入る・キーボードで合否を取り消すとフォーカスが新しい欄に戻る
 - そのほか: 各保存 HTML の pageerror・console error なし。`tests/fixtures/legacy-full-stamps3.html`・`legacy-full-checklist.html` を直接開いても pageerror なし（旧い保存 HTML は自分のスクリプトで動く。A11）
 - e2e 冒頭のシナリオ一覧に E14 を足し、E3・E9・E11・E12・E13 の説明を新しい内容に直す
 
@@ -494,7 +495,79 @@ function exportHtml(){closePop(false);
 
 ---
 
-## 11. 実装メモ（実装時に決めたこと・本書からの差分）
+## 11. 最終承認のパスワード（2026-10-14 追記）
+
+### 11-0. 指示と決定
+> 最終承認の押印はパスワードが必要な感じの方がいいかもしれないね。パスワードは「（ローカル版の初期値）」て初期登録しといて
+
+（実際の値は `local/final-password.txt` にだけ置く。リポジトリ〔src・dist・tests・docs〕には実際の値もそのハッシュも入れない）
+
+| # | 決定 |
+| --- | --- |
+| L1 | 対象は **押印欄 `management.decision.stampField`（既定 `'final'` 最終確認）の押印・取消**と **最終合否（採用／不採用）の決定・取消**。アプリ（③ の `#mgmtCard` の最終確認・`#decisionCard`）と保存 HTML（用紙の最終確認欄・最終合否欄の窓）の両方。面接対応者の押印には要らない。`stampField` が `''`（連動しない）なら最終合否だけ |
+| L2 | データは `profile.management.finalLock = { salt, hash }`。`hash = sha256Hex(salt + ':' + パスワード)`（16 進 64 文字・小文字）、`salt` は 16 進 32 文字の乱数（`crypto.getRandomValues`、無ければ `Math.random`）。`hash` が空＝パスワードなし（公開版の既定）。平文はどこにも持たない |
+| L3 | `src/lock.js` の `RecruitLock = { sha256Hex, hashPassword(salt, pw), verify(lock, pw), isLocked(lock), newSalt(), makeLock(pw), source() }`。`sha256Hex` は外部参照のない ES5 の純関数（Node の crypto と 310 ケースで一致を確認済みの実装）。`verify` はロックが無ければ true。`source()` は `sha256Hex`・`hashPassword`・`isLocked`・`verify` のソース（保存 HTML に埋め込む） |
+| L4 | ロックがあり、そのページでまだ解錠していないとき、対象の操作の前にパスワード欄（`type=password`・`autocomplete="off"`）と［確認］を出す（操作のボタンは出さない）。違えば「パスワードが違います」を 1 行出して何もしない。空なら「パスワードを入力してください」。Enter で確定。正しければ**そのページを閉じる／読み込み直すまで解錠**（変数だけ。localStorage・書き出すファイルには残さない）。解錠済みならパスワード欄を出さない。連続失敗の回数制限はしない |
+| L5 | 設定 `#s-mgmt` の「最終承認のパスワード」（`#s-finalLock`）: 状態 `#finalLockStatus`（設定済み／未設定、下書きが保存済みと違えば「未保存の変更です。「設定を保存」で確定します。」）・［変更］（未設定なら［設定する］）`#finalLockChange` → `#lockCur`（設定済みのとき）・`#lockNew`・`#lockNew2`・［変更する］`#finalLockApply`／［キャンセル］・［パスワードを外す］`#finalLockRemove` → `#lockCur`・［パスワードを外す］`#finalLockRemoveApply`。エラーは `#finalLockErr` の 1 行（「現在のパスワードを入力してください」「現在のパスワードが違います」「新しいパスワードを入力してください」「新しいパスワード（確認）が一致しません」）。新しいパスワードは 1 文字以上。入力欄は `data-bind` を持たない（下書きに平文を入れない）。変更は下書きの `management.finalLock` に入り、［設定を保存］で確定（［変更を破棄］で戻る） |
+| L5b | プロファイル JSON の読み込み・［初期設定に戻す］でロックが変わる（salt か hash が違う）・外れるときは、**現在のロックがあれば**現在のパスワードを小さなダイアログ（`#pwDialog`・`#pwDialogInput`・`#pwDialogErr`・［キャンセル］［確認］。Esc でキャンセル）で求める。違えば「パスワードが違います」でダイアログに留まり、キャンセルなら読み込まない／戻さない（toast「プロファイルを読み込みませんでした（最終承認のパスワードを確認できません）」「初期設定に戻しませんでした（…）」）。同じロックの JSON はそのまま読む |
+| L6 | `node build.js --local [dir]` は `<dir>/final-password.txt` の 1 行目（前後の空白・BOM を除く）があれば、build のたびに salt を作って hash を計算し、`config.default.js` の `finalLock: { salt: '', hash: '' }` を差し込む（平文は出力しない。ログは「最終承認のパスワード」とだけ出す）。テスト用は `tests/fixtures/local-sample/final-password.txt`（架空の値） |
+| L6b | ブラウザに保存済みの設定（localStorage）に `management.finalLock` のキーが**無ければ**既定（ローカル版ならローカルのロック）を使う。キーが無いだけでは `report.stripped` を立てない＝開いただけでは既定のロックを localStorage に固定しない（`local/final-password.txt` を変えて build し直すと、設定を保存していない端末では新しい初期パスワードになる）。キーがあって空なら「外した」状態のまま |
+| L7 | 保存 HTML の `#recruit-mgmt-config` に保存時の `finalLock`（ロックが無ければ `null`）と `lockField`（`decision.stampField`）を入れ、保存 HTML はそれで照合する（保存後にアプリでパスワードを変えても、出したファイルは出した時点のパスワード）。書き出すファイルに解錠状態・パスワード欄を残さない |
+| L8 | README・HANDOFF・使い方（`#helpFinalLock`）に「誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げない」「平文は保存しない」「ローカル版の初期パスワードは `local/final-password.txt`（実際の値は書かない）」 |
+
+### 11-1. 正規化・検証（storage.js）
+- `fillManagement` の戻り値に `finalLock: normalizeLock(mg.finalLock === undefined ? bm.finalLock : mg.finalLock)`。`normalizeLock` は salt（16 進 32 文字）と hash（16 進 64 文字）を小文字にして返し、どちらかが形に合わなければ `{ salt: '', hash: '' }`（余分なキーは落とす）
+- `validateProfile`: `finalLock.hash` が空でないのに hash が 16 進 64 文字でない・salt が 16 進 32 文字でない、または `finalLock` がオブジェクトでないときエラー「最終承認のパスワードの設定が壊れています。パスワードを設定し直してください。」
+- プロファイル JSON の書き出し・読み込みに `finalLock`（salt・hash）を含める
+
+### 11-2. アプリ（app.js）
+- `finalLockNow()`（ロックがあればそれ）・`finalNeedsPw(fid)`（`fid === ''` は最終合否、それ以外は `fid === decisionConfig().stampField` のとき。解錠済み＝`finalUnlockedKey === salt + ':' + hash` なら false）。ロックが変わる（設定の保存・JSON・初期化）とキーが合わなくなり、また求める
+- ③ の `#mgmtCard` の対象の欄と `#decisionCard` は、`finalNeedsPw` のとき操作（担当者の select・押印／取消・採用／不採用／取消）の代わりに `.final-lock`（「🔒 最終承認にはパスワードが必要です」・`.final-lock-pw`・［確認］`data-action="unlock-final"`・`.final-lock-err`）を出す。正しければ両方のカードを描き直し、押そうとしたカードの担当者の select にフォーカス、toast「最終承認のパスワードを確認しました（このページを閉じるまで有効）」
+- `stamp`／`unstamp`／`decide`／`undecide` の処理の入口でも `finalNeedsPw` なら何もしない（念のため）
+- ③ の紙（`#appPaper`）は従来どおりクリックしても何もしない
+
+### 11-3. 保存 HTML（a4PageScript）
+- 埋め込みスクリプトは `clFitSheet` → stamp.js の関数 → `RecruitLock.source()`（`sha256Hex`・`hashPassword`・`isLocked`・`verify`）→ `a4PageScript` の順の 1 本の IIFE
+- `LK = cfg.finalLock`・`lockF = cfg.lockField`・`locked = !!LK && isLocked(LK)`・`unlocked = false`。`needPw(kind, id)` は `locked && !unlocked && (kind === "decision" || (kind === "stamp" && id === lockF))`
+- 窓（`#a4Pop`）: `needPw` のとき本文は「最終承認にはパスワードが必要です」・`.pop-pw`（`type=password`・`autocomplete=off`）・`.pop-err`、フッターは［確認］`data-act="unlock"`・［閉じる］。フォーカスは `.pop-pw`。Enter・［確認］で `verify(LK, 値)` → 正しければ `unlocked = true` で同じ欄の窓を開き直す（担当者の select にフォーカス）。違えば `.pop-err` に「パスワードが違います」
+- `onPopClick` でも `needPw` なら押印・合否の操作をしない（念のため）
+- 書き出しは従来どおり窓を閉じてから複製するので、パスワード欄・解錠状態は残らない。開き直すとまたロック
+
+### 11-4. テスト
+- 単体 #91（sha256Hex の既知ベクタ ''・'abc'・'あ'・Node の crypto と一致・hashPassword・verify・isLocked・newSalt・makeLock・source を新しい vm で実行）・#92（finalLock の正規化〔大文字→小文字・不正→空・キーが無ければ既定・stripped を立てない〕・validateProfile・JSON・保存 HTML の `#recruit-mgmt-config`〔保存時のロック・lockField・平文なし・スクリプトの構文〕）。#81 は 12 章のゆったりを足した
+- e2e E15（公開版はロックなし・dist にテスト用／local のパスワードもハッシュも無い〔local の値は出力しない〕・`build.js --local` の差し込み・③ の最終確認と最終合否・面接対応者は不要・違うと押せない・Enter で解錠して続けて押せる・localStorage に平文なし・保存 HTML の窓・開き直すとまたロック・設定の変更／外す・変えた後の保存 HTML は新しいパスワード／先に出したファイルは前のパスワード・JSON の読み込み・初期化）。E10 は設定の data-action に `lock-change`、使い方の `#helpFinalLock` を足した
+
+## 12. 用紙を埋めるレイアウト（2026-10-14 追記）
+
+### 12-0. 指示と決定
+ユーザーは以前「印刷すると空白が多くなる」と指摘。通常の記録では内容が用紙の上 55% ほどで終わり、押印行の下に 80〜130mm の空白が残っていた（0-4 S4「押印行は内容の直後。用紙の下の余白は空白のまま」を本章で変更）。
+
+| # | 決定 |
+| --- | --- |
+| F1 | 押印行（`.cl-stamps`）は**用紙の内寸の下端**（書類の最下段）。`.cl-sheet.cl-mode-sheet` を `display:flex;flex-direction:column;min-height:100%`（`.a4` の内寸 281mm）にする。シートに `zoom` が掛かっても（縮小の段階）`min-height:100%` は親の内寸で決まるので押印行は下端のまま（Chromium 141 で確認） |
+| F2 | 押印行の上に「**面接メモ・所見**」の枠（`.cl-blk-notes` の見出しを「面接メモ・所見」に、中身を `.cl-nm-box` の枠に）。**常に出し**、残りの高さいっぱいに広げる（`.cl-blk-notes`・`.cl-nm-box` が `flex:1 1 auto`）。記入があれば `.cl-nm`（行）→ `.cl-nm-ref`（案内）を上から、その下は手書き用の罫線 `.cl-nm-lines`（`<i>` 38 本・高さ 7.5mm・`border-bottom:1px dotted #b8c2cf`・`flex:1 1 0;min-height:0;overflow:hidden`＝内容の高さに入らない）。記入が無ければ `.cl-nm-box.is-empty`（罫線 1 本分 7.5mm を最低の高さ）。説明・連絡の 1 行（`.cl-exline`）は枠の下・押印行の直前 |
+| F3 | 内容が少ないときは **`.cl-roomy`**（本文 10.5px・行の高さ 1.5・確認点の行 上下 6px と ○△× 19px・ラベル 9.5px・見出し 11.5px・ブロックの間隔 13px）。ゆったりは面接メモ・所見の枠に罫線 38mm を残せるときだけ（`.cl-roomy.cl-measure .cl-nm-box .cl-nm-lines{min-height:38mm}`＝計測中だけ最低 38mm にして計る。表示中は最低の高さを付けないので、狭い画面の `--a4-zoom`〔0.45 前後〕で行の高さが丸められて内容が 3% ほど伸びても罫線の部分が縮んで吸収し、押印行は用紙の内寸の下端のまま） |
+| F3b | 計測 `clFitSheet(sheet, limit)`: `.cl-measure`（`min-height:0 !important`＝用紙いっぱいに伸ばさない）を付けて内容の高さを測る。順は **`.cl-roomy` → 通常 → `.cl-compact` → `.cl-compact-q1` → `.cl-compact-2` → 縮小**。戻り値は `'cl-roomy'`・`''`・`'cl-compact'`…・`'zoom'`。各段階で「…」の判定（`.cl-cut`・`.cl-nm-cut`）をやり直す。印刷のときに計測し直さない（画面と印刷が同じ）。上限は従来どおり `CL_SHEET_LIMIT_PX = 1052` |
+| F4 | 1 ページ・画面と印刷の一致・重いサンプルで 1 ページ（E8／E14）は維持。アプリ ③ の紙・アプリの印刷も同じ部品・同じ計測。面接所見の行数の上限（`.cl-compact` 10 行…）は変えない（詰めた段階では枠の下に罫線の余白が残ることがある） |
+
+### 12-1. 実測（Chromium 141・1440px。tests/shots）
+| 記録 | 段階 | 内容の高さ | 押印行の下端と内寸の下端の差 | 面接メモ・所見の枠 | PDF |
+| --- | --- | --- | --- | --- | --- |
+| 通常（E3 の採用・押印済み。`a4-form.png`・`a4-form-print.png`） | `.cl-roomy` | 890px | 0mm | 90.9mm（罫線 11 本） | 1 ページ |
+| 記入なし（`a4-form-empty.html`） | `.cl-roomy` | 863px | 0mm | 91.4mm（罫線 12 本） | — |
+| 重い（全メモ 300 字・面接所見 1,500 字。`a4-form-heavy.png`） | `.cl-compact` | 891px | 0mm | 133mm | 1 ページ |
+| 確認点 +65 件（E8） | `.cl-compact-2`＋縮小 0.499 | ≤ 1052px | 0mm | — | 1 ページ |
+
+面接所見の長さによる段階（アプリの印刷ホスト・回答なしの記録）: 0 字・300 字 → `.cl-roomy`、1,000 字 → 通常、3,000 字 → `.cl-compact`
+
+### 12-2. テストの変更
+- 内容の高さで計っていた確認（E8 の `paperOf`・境界の記録・E14 (5)）は `.cl-measure` を付けて測る（`getBoundingClientRect().height` は用紙いっぱいの 1062px になるため）。境界の記録と E14 (5) には「押印行の下端が内寸の下端から 2mm 以内」を足した
+- 単体 #76（並びの確認を `<section class="cl-blk cl-blk-notes">` で）・#80（記入なしでも空の枠と罫線 38 本・枠 → 説明・連絡 → 押印行・CSS）・#81（ゆったり → 通常 → 詰める段階・`.cl-measure` で測る・表示されていない用紙）
+- e2e E16（通常の記録: ゆったり・押印行の下端 2mm 以内・枠 30mm 以上・罫線 7.5mm 間隔の点線・枠 → 説明・連絡 → 押印行・画面と PDF の画像が同じで下端 95% まで使う／重いサンプル: `.cl-compact`・1 ページ・押印行は下端／記入なし: 空の枠／ゆったりの付け外し／アプリ ③ の紙・アプリの印刷も同じ）
+
+---
+
+## 13. 実装メモ（実装時に決めたこと・本書からの差分。2026-10-14 の追記で 11 章から 13 章へ番号を移した）
 - 埋め込みスクリプトの本体は文字列連結ではなく、`storage.js` の ES5 の関数 `a4PageScript(LIMIT, PAPER_W)` を `toString()` で埋め込む（`clFitSheet`・`RecruitStamp.source()` と同じやり方。`node --check` で構文を確かめられる）。生成されるのは 3-1 と同じ 1 本の IIFE: `clFitSheet` → stamp.js の関数 → `var LIMIT=1052,PAPER_W=793.7;` → `(function a4PageScript(LIMIT, PAPER_W){…})(LIMIT,PAPER_W);`。関数内の文字列は旧い埋め込みスクリプトと同じ二重引用符（`addEventListener("beforeunload"`・`recNode.textContent=JSON.stringify(rec).replace(/[<>&` は従来の文字列のまま）。テスト用の公開名は `window.__a4Fit = fit;`
 - 埋め込み JSON（`#recruit-record`）が読めないときは押印・合否の欄に印を付けない（書き出しで記録を壊さない）。長いメモの窓は要素の `textContent` で出す
 - 合否の窓にも見出しの下に `D.hint`（「最終確認者が合否を決めて押します」）を `.pop-sub` で出す。手入力の氏名欄で Enter を押すと押印

@@ -115,6 +115,7 @@
     content.addEventListener('input', onFieldEvent);
     content.addEventListener('change', onFieldEvent);
     content.addEventListener('click', onContentClick);
+    content.addEventListener('keydown', onContentKey);
 
     window.addEventListener('beforeunload', function (e) {
       if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
@@ -207,11 +208,17 @@
         },
         onImport: function () { const f = $('#profileFileInput'); f.value = ''; f.click(); },
         onReset: function () {
-          state.profile = S.resetProfile();
-          S.saveProfile(state.profile);
-          onProfileChanged();
-          toast('初期設定に戻しました', 'ok');
-          showView('settings');
+          const doReset = function () {
+            state.profile = S.resetProfile();
+            S.saveProfile(state.profile);
+            onProfileChanged();
+            toast('初期設定に戻しました', 'ok');
+            showView('settings');
+          };
+          // 初期設定で最終承認のパスワードが変わる／外れるときは、現在のパスワードを求める（違えば・キャンセルなら初期化しない）
+          if (!finalLockChanges(S.normalizeProfile(S.defaults()))) { doReset(); return; }
+          askFinalPassword('初期設定に戻すと最終承認のパスワードが' + (Lock.isLocked(S.normalizeProfile(S.defaults()).management.finalLock) ? '初期のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。')
+            .then(function (ok) { if (ok) doReset(); else toast('初期設定に戻しませんでした（最終承認のパスワードを確認できません）', 'error'); });
         },
         onToast: toast
       });
@@ -529,10 +536,13 @@
       case 'save':
         saveRecord();
         break;
+      case 'unlock-final':
+        unlockFinal(b.closest('.final-lock'));
+        break;
       case 'stamp': {
         const box = b.closest('.stamp-box');
         const fid = box && box.dataset.fieldId;
-        if (!fid) break;
+        if (!fid || finalNeedsPw(fid)) break;
         const sel = box.querySelector('select');
         const v = sel ? sel.value : '';
         const mg = state.profile.management || {};
@@ -557,13 +567,14 @@
       case 'unstamp': {
         const box = b.closest('.stamp-box');
         const fid = box && box.dataset.fieldId;
-        if (fid && state.management[fid]) { delete state.management[fid]; state.dirty = true; rerenderManagementCard(); rerenderReportPaper(); renderSummary(); }
+        if (fid && state.management[fid] && !finalNeedsPw(fid)) { delete state.management[fid]; state.dirty = true; rerenderManagementCard(); rerenderReportPaper(); renderSummary(); }
         break;
       }
       case 'decide':
         decide(b.dataset.value);
         break;
       case 'undecide':
+        if (finalNeedsPw('')) break;
         state.decision = null;
         state.dirty = true;
         rerenderDecisionCard();
@@ -574,6 +585,14 @@
       default:
         break;
     }
+  }
+
+  // 最終承認のパスワード欄で Enter（［確認］と同じ）
+  function onContentKey(e) {
+    const t = e.target;
+    if (e.key !== 'Enter' || !t || !t.classList || !t.classList.contains('final-lock-pw')) return;
+    e.preventDefault();
+    unlockFinal(t.closest('.final-lock'));
   }
 
   function focusFirst(el, msg) {
@@ -1176,11 +1195,17 @@
     const rep = {};
     try { p = S.parseProfileJSON(text, rep); } catch (err) { toast('読み込めません: ' + err.message, 'error'); return; }
     if (!window.confirm('「' + p.meta.theaterName + '」のプロファイルを読み込み、現在の設定を置き換えます。よろしいですか？')) return;
-    state.profile = p;
-    S.saveProfile(p);
-    onProfileChanged();
-    toast(profileNotice(rep) || 'プロファイルを読み込みました', 'ok');
-    showView('settings');
+    const apply = function () {
+      state.profile = p;
+      S.saveProfile(p);
+      onProfileChanged();
+      toast(profileNotice(rep) || 'プロファイルを読み込みました', 'ok');
+      showView('settings');
+    };
+    // 読み込むと最終承認のパスワードが変わる／外れるときは、現在のパスワードを求める（違えば・キャンセルなら読み込まない。docs/SPEC-a4.md 11 章）
+    if (!finalLockChanges(p)) { apply(); return; }
+    askFinalPassword('読み込むプロファイルでは最終承認のパスワードが' + (Lock.isLocked(p.management.finalLock) ? '別のパスワードに変わります' : '外れます') + '。現在のパスワードを入力してください。')
+      .then(function (ok) { if (ok) apply(); else toast('プロファイルを読み込みませんでした（最終承認のパスワードを確認できません）', 'error'); });
   }
 
   function newRecord() {
@@ -1237,6 +1262,90 @@
   // =====================================================================
   const Stamp = global.RecruitStamp;
 
+  // =====================================================================
+  // 最終承認のパスワード（docs/SPEC-a4.md 11 章）
+  //   最終確認（decision.stampField の押印欄）の押印・取消と最終合否の決定・取消の前に求める（面接対応者の押印には要らない）。
+  //   ロック（profile.management.finalLock = { salt, hash }）があり、このページでまだ解錠していないとき、③ のカードの操作の代わりにパスワード欄と［確認］を出す。
+  //   正しければこのページを閉じる／読み込み直すまで解錠（変数だけ。localStorage・書き出すファイルには残さない）。ロックが変わったら（設定の保存・JSON・初期化）また求める
+  // =====================================================================
+  const Lock = global.RecruitLock;
+  let finalUnlockedKey = '';
+  function finalLockNow() {
+    const lk = ((state.profile || {}).management || {}).finalLock;
+    return Lock && Lock.isLocked(lk) ? lk : null;
+  }
+  function lockKey(lk) { return lk ? lk.salt + ':' + lk.hash : ''; }
+  // fid: 押印欄の id（'' = 最終合否）。パスワードが要るのは最終合否と decision.stampField の欄だけ
+  function finalNeedsPw(fid) {
+    const lk = finalLockNow();
+    if (!lk || finalUnlockedKey === lockKey(lk)) return false;
+    return fid === '' || (!!fid && fid === S.decisionConfig(state.profile).stampField);
+  }
+  function finalLockRowHtml(where) {
+    return '<div class="final-lock no-print" data-lock-for="' + esc(where) + '">' +
+      '<div class="final-lock-msg">🔒 最終承認にはパスワードが必要です</div>' +
+      '<div class="final-lock-ctl"><input type="password" class="final-lock-pw" autocomplete="off" aria-label="最終承認のパスワード" placeholder="パスワード">' +
+      '<button type="button" class="btn sm primary" data-action="unlock-final">確認</button></div>' +
+      '<div class="final-lock-err" role="alert"></div></div>';
+  }
+  // ［確認］・Enter: 正しければ解錠して ③ のカードを描き直す（パスワード欄が消え、担当者の選択と押印・合否のボタンが出る）。違えば 1 行出して何もしない
+  function unlockFinal(row) {
+    const lk = finalLockNow();
+    if (!row || !lk) return;
+    const inp = row.querySelector('.final-lock-pw'), err = row.querySelector('.final-lock-err');
+    const fail = function (msg) { if (err) err.textContent = msg; if (inp) { inp.focus(); inp.select(); } };
+    if (!inp || !inp.value) { fail('パスワードを入力してください'); return; }
+    if (!Lock.verify(lk, inp.value)) { fail('パスワードが違います'); return; }
+    finalUnlockedKey = lockKey(lk);
+    const where = row.getAttribute('data-lock-for');
+    rerenderManagementCard();
+    rerenderDecisionCard();
+    const next = where === 'decision' ? $('#decisionManager') : $('#mgmtCard .stamp-box[data-field-id="' + (window.CSS && CSS.escape ? CSS.escape(where) : where) + '"] select');
+    if (next) next.focus();
+    toast('最終承認のパスワードを確認しました（このページを閉じるまで有効）', 'ok');
+  }
+  // JSON の読み込み・初期化でロックが変わる／外れるとき、現在のロックがあれば現在のパスワードを求める（小さなダイアログ。キャンセル・Esc で中止）
+  function finalLockChanges(nextProfile) {
+    const cur = finalLockNow();
+    if (!cur) return false;
+    const nx = ((nextProfile || {}).management || {}).finalLock;
+    return !(Lock.isLocked(nx) && nx.salt === cur.salt && nx.hash === cur.hash);
+  }
+  function askFinalPassword(msg) {
+    const lk = finalLockNow();
+    return new Promise(function (resolve) {
+      if (!lk) { resolve(true); return; }
+      const old = $('#pwDialog');
+      if (old) old.remove();
+      const back = document.createElement('div');
+      back.className = 'pw-dialog-back';
+      back.id = 'pwDialog';
+      back.innerHTML = '<div class="pw-dialog" role="dialog" aria-modal="true" aria-labelledby="pwDialogH">' +
+        '<h3 id="pwDialogH">最終承認のパスワード</h3><p>' + esc(msg) + '</p>' +
+        '<input type="password" id="pwDialogInput" autocomplete="off" aria-label="現在のパスワード" placeholder="現在のパスワード">' +
+        '<div class="pw-dialog-err" id="pwDialogErr" role="alert"></div>' +
+        '<div class="actions"><button type="button" class="btn" data-pw="cancel">キャンセル</button><button type="button" class="btn primary" data-pw="ok">確認</button></div></div>';
+      document.body.appendChild(back);
+      const inp = $('#pwDialogInput'), err = $('#pwDialogErr');
+      const onKey = function (e) {
+        if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); done(false); }
+        else if (e.key === 'Enter' && e.target === inp) { e.preventDefault(); tryOk(); }
+      };
+      const done = function (ok) { document.removeEventListener('keydown', onKey, true); back.remove(); resolve(ok); };
+      const tryOk = function () {
+        if (!inp.value) { err.textContent = 'パスワードを入力してください'; inp.focus(); return; }
+        if (!Lock.verify(lk, inp.value)) { err.textContent = 'パスワードが違います'; inp.focus(); inp.select(); return; }
+        done(true);
+      };
+      back.addEventListener('click', function (e) {
+        const b = e.target.closest('[data-pw]');
+        if (b) { if (b.dataset.pw === 'ok') tryOk(); else done(false); }
+      });
+      document.addEventListener('keydown', onKey, true);
+      inp.focus();
+    });
+  }
+
   function managementCardHtml() {
     const mg = state.profile.management || {};
     const fields = Array.isArray(mg.fields) ? mg.fields : [];
@@ -1256,6 +1365,7 @@
           '<div class="stamp-hint">' + esc(fld.hint || '') + '</div>' +
           '<div class="stamp-area">' + (svg || '<div class="stamp-empty">未押印</div>') + '</div>' +
           '<div class="stamp-meta">' + (e && e.name ? esc(e.name + (e.title ? '（' + e.title + '）' : '') + '　' + (e.date || '')) : '') + '</div>' +
+          (finalNeedsPw(fld.id) ? finalLockRowHtml(fld.id) + '</div>' :
           '<div class="stamp-ctl no-print">' +
             '<select data-stamp-select aria-label="' + esc(fld.label) + ' 担当者"><option value="">担当者を選択</option>' +
               managers.map(function (m, i) {
@@ -1267,7 +1377,7 @@
             (mg.allowFreeName !== false ? '<input type="text" class="stamp-free hidden" placeholder="氏名（例：山田 太郎）">' : '') +
             '<button type="button" class="btn sm primary" data-action="stamp">押印</button>' +
             (e && e.name ? '<button type="button" class="btn sm ghost" data-action="unstamp">取消</button>' : '') +
-          '</div></div>';
+          '</div></div>');
       }).join('') + '</div></div>';
   }
 
@@ -1327,6 +1437,7 @@
         '<div class="decision-main">' +
           '<div class="decision-meta" id="decisionMeta">' + esc(meta) + '</div>' +
           (note ? '<div class="decision-note" id="decisionNote">' + esc(note) + '</div>' : '') +
+          (finalNeedsPw('') ? finalLockRowHtml('decision') :
           '<div class="decision-ctl no-print">' +
             '<select id="decisionManager" data-decision-select aria-label="' + esc(dcfg.label) + ' 担当者"><option value="">担当者を選択</option>' +
               managers.map(function (m, i) { return '<option value="' + i + '"' + (i === selIdx ? ' selected' : '') + '>' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
@@ -1335,7 +1446,7 @@
             (allowFree ? '<input type="text" id="decisionFree" class="stamp-free' + (useFree ? '' : ' hidden') + '" placeholder="氏名（例：山田 太郎）" value="' + (useFree ? esc(selName) : '') + '">' : '') +
             btn('hire', dcfg.hireLabel, dcfg.hireColor) + btn('reject', dcfg.rejectLabel, dcfg.rejectColor) +
             (d ? '<button type="button" class="btn sm ghost" data-action="undecide">取消</button>' : '') +
-          '</div>' +
+          '</div>') +
           (linked ? '<div class="hint no-print">「' + esc(dcfg.hireLabel) + '」「' + esc(dcfg.rejectLabel) + '」を押すと、押印欄「' + esc(linked.label) + '」が未押印なら同じ担当者の印も押します。</div>' : '') +
         '</div>' +
       '</div></div>';
@@ -1354,7 +1465,7 @@
   // 「採用」「不採用」を押す（担当者は押印と同じ規則。autoStampFinal なら連動する押印欄も押す）
   function decide(r) {
     const dcfg = decisionCfg();
-    if (!dcfg.enabled || !Stamp || (r !== 'hire' && r !== 'reject')) return;
+    if (!dcfg.enabled || !Stamp || (r !== 'hire' && r !== 'reject') || finalNeedsPw('')) return;
     const mg = state.profile.management || {};
     const sel = $('#decisionManager');
     const v = sel ? sel.value : '';
@@ -1422,6 +1533,11 @@
       '<div class="card"><div class="card-head"><h3>設定（劇場プロファイル）</h3></div><ul class="list-plain">' +
         '<li>劇場情報・応募者の区分と性別・面接チェックリスト（台本の文言・項目・確認点）・押印欄と担当者名簿・最終合否を画面から変更できます。</li>' +
         '<li>設定は端末のブラウザに保存されます。他の劇場・端末へ展開するときは JSON を書き出して読み込んでください。</li></ul></div>' +
+      '<div class="card" id="helpFinalLock"><div class="card-head"><h3>最終承認のパスワード</h3></div><ul class="list-plain">' +
+        '<li>設定の「応募者の管理（押印）」でパスワードを決めると、最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（③ 報告書と保存した HTML の両方。面接対応者の押印には要りません）。一度正しく入れると、そのページを閉じる（読み込み直す）まで続けて押せます。</li>' +
+        '<li>誤操作を防ぐための鍵です。HTML をテキストで開いて書き換える人までは防げません。</li>' +
+        '<li>パスワードそのものは保存しません（照合用の値〔ハッシュ〕だけを設定と保存した HTML に入れます）。保存した HTML は保存した時点のパスワードで照合します。</li>' +
+        '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは <code>local/final-password.txt</code> で決めます。</li></ul></div>' +
       '<div class="view-footer">' + esc(m.footer) + '</div>';
   }
 

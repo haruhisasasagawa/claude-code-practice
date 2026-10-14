@@ -456,6 +456,23 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 @media (max-width: 760px) { .decision-body { grid-template-columns: 1fr; } }
 @media print { #decisionCard.is-none { display: none !important; } #decisionCard .verdict-stamp { width: 96px; height: 61px; filter: none; } }
 
+/* ---------- 最終承認のパスワード（docs/SPEC-a4.md 11 章）: ③ のカードのパスワード欄・JSON の読み込み／初期化のダイアログ・設定 ---------- */
+.final-lock { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 8px 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); text-align: left; }
+.final-lock-msg { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.final-lock-ctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.final-lock-ctl .final-lock-pw { width: auto; flex: 1 1 10em; min-width: 8em; padding: 6px 8px; font-size: 13px; }
+.final-lock-err, .pw-dialog-err, .lock-err { font-size: 12.5px; font-weight: 700; color: var(--danger); }
+.final-lock-err:empty, .pw-dialog-err:empty, .lock-err:empty { display: none; }
+.pw-dialog-back { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(16, 24, 40, .45); }
+.pw-dialog { width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
+.pw-dialog h3 { font-size: 15px; }
+.pw-dialog p { font-size: 13px; color: var(--muted); }
+.pw-dialog .actions { justify-content: flex-end; }
+.lock-status { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0 8px; }
+.lock-form { display: flex; flex-direction: column; gap: 4px; max-width: 26em; margin-bottom: 8px; }
+.lock-form .field { margin-bottom: 4px; }
+@media print { .pw-dialog-back { display: none !important; } }
+
 /* ---------- ① 応募者・② のヘッダー・③ 報告書（docs/SPEC-script-mode.md） ---------- */
 .cl-head-attrs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cl-attr { display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-size: 13px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }

@@ -11,9 +11,12 @@
  *     logo.png / logo.svg / logo.webp / logo.jpg … サイドバーと保存レポートのロゴ（最初に見つかったもの）
  *     logo-alt.txt                              … ロゴの代替テキスト（例: TOHO CINEMAS）
  *     managers.txt                              … 担当者名簿。1 行 1 人「氏名|印字名|役職|等級」（設定画面と同じ形式）
+ *     final-password.txt                        … 最終承認のパスワード（1 行目）。build のたびに salt を作って hash を計算し、
+ *                                                 config の management.finalLock の既定値に差し込む（平文は出力しない。docs/SPEC-a4.md 11 章）
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const SRC = path.join(__dirname, 'src');
 const DIST = path.join(__dirname, 'dist');
@@ -28,7 +31,7 @@ if (LOCAL && !fs.existsSync(LOCAL)) throw new Error('--local のディレクト�
 if (LOCAL && OUT === path.join(DIST, 'toho-recruit-judge.html')) throw new Error('--local の出力で dist/ を上書きしないでください（公開版です）');
 
 // --local: 差し込む内容を読む
-const local = { logo: '', logoAlt: '', managers: null };
+const local = { logo: '', logoAlt: '', managers: null, finalLock: null };
 if (LOCAL) {
   const MIME = { '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
   const logoFile = ['logo.png', 'logo.svg', 'logo.webp', 'logo.jpg', 'logo.jpeg'].map(f => path.join(LOCAL, f)).find(f => fs.existsSync(f));
@@ -44,6 +47,15 @@ if (LOCAL) {
       return m;
     }).filter(m => m.name);
   }
+  // 最終承認のパスワード: hash = sha256(salt + ':' + パスワード)（src/lock.js の hashPassword と同じ）。平文はどこにも書かない
+  const pwFile = path.join(LOCAL, 'final-password.txt');
+  if (fs.existsSync(pwFile)) {
+    const pw = (fs.readFileSync(pwFile, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/)[0] || '').trim();
+    if (pw) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      local.finalLock = { salt: salt, hash: crypto.createHash('sha256').update(salt + ':' + pw, 'utf8').digest('hex') };
+    }
+  }
 }
 // ファイルごとの差し込み（--local のときだけ）
 function applyLocal(file, js) {
@@ -57,6 +69,11 @@ function applyLocal(file, js) {
     const re = /managers: \[[\s\S]*?\n\s*\],/;
     if (!re.test(js)) throw new Error('config.default.js の managers を差し込めませんでした');
     js = js.replace(re, 'managers: ' + JSON.stringify(local.managers, null, 2).replace(/\n/g, '\n      ') + ',');
+  }
+  if (file === 'config.default.js' && local.finalLock) {
+    const re = /finalLock: \{ salt: '', hash: '' \}/;
+    if (!re.test(js)) throw new Error('config.default.js の finalLock を差し込めませんでした');
+    js = js.replace(re, 'finalLock: ' + JSON.stringify(local.finalLock));
   }
   return js;
 }
@@ -80,4 +97,4 @@ fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, html);
 const kb = (Buffer.byteLength(html, 'utf8') / 1024).toFixed(1);
 console.log('built: ' + path.relative(process.cwd(), OUT) + ' (' + kb + ' KB)');
-if (LOCAL) console.log('  local: ' + ([local.logo ? 'ロゴ' : '', local.managers ? '名簿 ' + local.managers.length + ' 名' : ''].filter(Boolean).join('・') || '差し込むものがありません'));
+if (LOCAL) console.log('  local: ' + ([local.logo ? 'ロゴ' : '', local.managers ? '名簿 ' + local.managers.length + ' 名' : '', local.finalLock ? '最終承認のパスワード' : ''].filter(Boolean).join('・') || '差し込むものがありません'));
