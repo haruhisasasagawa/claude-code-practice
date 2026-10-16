@@ -196,8 +196,8 @@
       ? '<textarea data-bind="' + esc(ip + '.label') + '" rows="2" aria-label="質問文">' + esc(it.label || '') + '</textarea>'
       : inputTag(ip + '.label', { aria: b.type === 'fields' ? '欄の名前' : '文言' });
     let extra = '';
-    // A4「面接チェックリスト報告」（1 枚）で使う短い名前（質問・合否連絡・記入欄。空なら文言の先頭 14 文字）
-    const shortTag = b.type === 'question' || b.type === 'notify' || b.type === 'fields'
+    // A4「面接チェックリスト報告」（1 枚）と面接記入シートで使う短い名前（質問・合否連絡・記入欄・説明・確認点。空なら文言の先頭 14 文字。docs/SPEC-persona.md D16）
+    const shortTag = b.type === 'question' || b.type === 'notify' || b.type === 'fields' || b.type === 'explain' || b.type === 'rating'
       ? '<div class="inline s-cl-short">' + inputTag(ip + '.short', { aria: '報告書での短い名前', placeholder: '報告書（A4 1 枚）での短い名前（任意。空なら文言の先頭 14 文字）' }) + '</div>' : '';
     if (b.type === 'rating') {
       extra = inputTag(ip + '.hint', { aria: '補足', placeholder: '補足（任意。例: 「大丈夫です」のみ連呼は要注意）' });
@@ -276,6 +276,31 @@
     }
     const mfields = ((draft.management || {}).fields || []).filter(function (f) { return f && f.id; });
     const pOpts = Array.isArray(posting.options) ? posting.options : [];
+    // 人物像（1〜5 点。docs/SPEC-persona.md 6-2）
+    const pd = U.isObj(cl.persona) ? cl.persona : (cl.persona = U.deepClone(global.RECRUIT_DEFAULT_PROFILE.checklist.persona));
+    const psItems = Array.isArray(pd.items) ? pd.items.filter(function (it) { return U.isObj(it); }) : [];
+    const psMax = psItems.length * 5;
+    const psLabels = Array.isArray(pd.scaleLabels) ? pd.scaleLabels : [];
+    const psText = psItems.map(function (it) {
+      const parts = [it.label || '', it.short || '', it.hint || ''];
+      while (parts.length > 1 && !parts[parts.length - 1]) parts.pop();
+      return parts.join('|');
+    }).join('\n');
+    const personaHtml = '<h3 class="sub" id="s-persona">人物像（1〜5 点）</h3>' +
+      '<div class="hint">' + stepRef(3) + ' の総評で項目ごとに 1〜5 点（' + [0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・') + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</div>' +
+      sCheck('checklist.persona.enabled', '人物像を使う', 'OFF にすると ' + stepRef(3) + ' に出さず、判定にも使いません。保存済みの報告書（HTML）は保存したときのままです。') +
+      '<div class="s-cl-max" id="clPsMaxNote">人物像 <b>' + psItems.length + '</b> 項目 × 5 点 ＝ 満点 <b>' + psMax + '</b> 点</div>' +
+      '<div class="field-row">' + sInput('checklist.persona.title', '見出し（' + stepRef(3) + ' と報告書）') + '</div>' +
+      '<div class="field"><label>項目（1 行に「項目名|短い名前|説明」）</label><textarea data-bind="checklist.persona.items" data-type="persona" data-repaint rows="8">' + esc(psText) + '</textarea>' +
+        '<div class="hint">短い名前（判定の理由・記入シート）と説明（' + stepRef(3) + ' に小さく表示）は省略できます。上から表示の順です。項目名を変えなければ、並べ替えても入力済みの点は引き継ぎます。</div></div>' +
+      '<div class="field-row">' +
+        sInput('checklist.persona.keepPct', 'そのまま（得点率）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（満点 ' + psMax + ' 点では ' + Math.ceil(psMax * n(pd.keepPct, 70) / 100) + ' 点以上）' }) +
+        sInput('checklist.persona.rejectBelowPct', '不採用推奨（得点率）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 未満（' + Math.ceil(psMax * n(pd.rejectBelowPct, 40) / 100) + ' 点未満。その間は' + resultTitle('review') + 'まで）' }) +
+      '</div>' +
+      '<div class="field-row">' +
+        sSelect('checklist.persona.onePointResult', '1 点の項目があるとき', capOpts) +
+        sSelect('checklist.persona.unscoredResult', '未入力の項目があるとき', capOpts) +
+      '</div>';
     // 面接評価の帯（高・中・低）の境界 evaluation.thresholds
     const th = (draft.evaluation || {}).thresholds || {};
     const bMax = clMax();
@@ -286,7 +311,7 @@
         '<div class="hint" style="margin:-6px 0 8px">報告書の「面接評価（確認点）」に出す 高・中・低 の境界です。結果（推奨）は総合判断で決まり、この境界では変わりません。</div>';
 
     return section('s-checklist', '面接チェックリスト',
-      '面接台本のチェックリストです。必須条件（一致／不一致）と確認点（○△×）・総合判断で面接評価を計算します。文言・項目の増減・確認点の有無を編集できます。面接評価の帯（高・中・低）の境界もこの節で設定します。',
+      '面接台本のチェックリストです。必須条件（一致／不一致）と確認点（○△×）・総合判断で面接評価を計算します。文言・項目の増減・確認点の有無を編集できます。面接評価の帯（高・中・低）の境界と、人物像（1〜5 点）の項目・結果を下げる境界もこの節で設定します。',
       '<div class="s-cl-max" id="clMaxNote">確認点 <b>' + nRating + '</b> 項目＋総合判断 ＝ 満点 <b>' + clMax() + '</b> 点<span class="hint">（○2・△1・×0、総合判断 採用2・保留1・不採用0）</span></div>' +
 
       '<h3 class="sub">判定</h3>' +
@@ -311,6 +336,8 @@
         sInput('checklist.overallOptions.hire', '「採用」の表示名') + sInput('checklist.overallOptions.hold', '「保留」の表示名') + sInput('checklist.overallOptions.reject', '「不採用」の表示名') +
       '</div>' +
       '<div class="hint" style="margin:-6px 0 8px">点は 採用 2・保留 1・不採用 0 で固定です。</div>' +
+
+      personaHtml +
 
       // 消極属性（negatives・morningOnlyEnd）の行は 2026-10-13 に削除（docs/SPEC-script-mode.md 12 章）
       '<h3 class="sub">ヘッダー</h3>' +
@@ -407,7 +434,7 @@
       case 'cl-item-up': if (!items || !swap(items, ki - 1, ki)) return true; break;
       case 'cl-item-down': if (!items || !swap(items, ki, ki + 1)) return true; break;
       case 'cl-default':
-        if (!window.confirm('面接チェックリストを既定の台本（2026-10-08 版）に戻します。編集した文言・項目は失われます。保存済みの応募者ファイルのレポートは保存時点の台本で表示されます。よろしいですか？')) return true;
+        if (!window.confirm('面接チェックリストを既定の台本（2026-10-08 版）に戻します（人物像の項目・境界も既定に戻ります）。編集した文言・項目は失われます。保存済みの応募者ファイルのレポートは保存時点の台本で表示されます。よろしいですか？')) return true;
         draft.checklist = U.deepClone(global.RECRUIT_DEFAULT_PROFILE.checklist);
         clOpen = {};
         break;
@@ -578,6 +605,27 @@
         const parts = line.split(/[|｜]/).map(function (x) { return x.trim(); });
         return { value: parts[0], label: parts[1] || parts[0] };
       }).filter(function (o) { return o.value; });
+    }
+    if (dt === 'persona') {
+      // 人物像の項目: 1 行に「項目名|短い名前|説明」（全角の「｜」も可。説明は残りを | でつなぐ）。空行は捨てる。
+      //   id は項目名が同じ既存の項目（下書き・保存済みの設定）のものを引き継ぐ（並べ替え・短い名前の変更では点が消えない。docs/SPEC-persona.md D20）。無ければ新しい id
+      const cur = handlers && handlers.current ? U.getPath(handlers.current(), t.dataset.bind) : null;
+      const old = [].concat(U.getPath(draft, t.dataset.bind) || [], cur || []).filter(function (o) { return U.isObj(o) && typeof o.id === 'string' && o.id; });
+      const used = {};
+      return t.value.split('\n').map(function (x) { return x.trim(); }).filter(Boolean).map(function (line) {
+        const parts = line.split(/[|｜]/).map(function (x) { return x.trim(); });
+        const label = parts[0] || '';
+        const short = parts[1] || '';
+        const hint = parts.slice(2).join('|').trim();
+        const hit = old.find(function (o) { return o.label === label && !used[o.id]; });
+        let id = hit ? hit.id : '';
+        while (!id || used[id]) id = U.uid('ps');
+        used[id] = true;
+        const o = { id: id, label: label };
+        if (short) o.short = short;
+        if (hint) o.hint = hint;
+        return o;
+      });
     }
     if (dt === 'categories') {
       return t.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean).map(function (line) {

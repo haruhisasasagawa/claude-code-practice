@@ -626,6 +626,40 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 
 /* 右サマリー */
 #sumMust .sum-val { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+#sumPersona .sum-val { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; }
+
+/* ② の上部の案内（面接中はメモ中心）・総評の人物像（1〜5 点）・質問の 1 行表示（docs/SPEC-persona.md 3 章） */
+.cl-guide { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 13.5px; font-weight: 600; }
+.cl-guide .btn { margin-left: auto; }
+.cl-persona { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
+.cl-ps-head { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.cl-ps-head h3 { font-size: 14.5px; font-weight: 700; }
+.cl-ps-legend { font-size: 12px; font-weight: 600; color: var(--muted); }
+.cl-ps-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: 6px; }
+.cl-ps-row.is-one { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); background: var(--danger-soft); }
+.cl-ps-main { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cl-ps-no { color: var(--muted); font-weight: 800; }
+.seg-btn.cl-ps-btn { width: 44px; height: 38px; font-size: 16px; font-weight: 800; }
+.seg-btn.cl-ps-btn.active.s1 { background: var(--danger); color: #fff; }
+.seg-btn.cl-ps-btn.active.s2 { background: var(--warn); color: #fff; }
+.seg-btn.cl-ps-btn.active.s4, .seg-btn.cl-ps-btn.active.s5 { background: var(--ok); color: #fff; }
+.cl-ps-btn:focus-visible, .cl-q:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cl-ps-total { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 14px; font-weight: 600; }
+.cl-ps-total #clPsSum { font-size: 22px; }
+#clPsWarn { margin-top: 6px; }
+.cl-ps-off { margin: 0 0 10px; }
+.cl-q-list { list-style: none; padding-left: 0; gap: 4px; }
+.cl-q-list li { font-size: inherit; line-height: inherit; }
+.cl-q { display: flex; align-items: baseline; gap: 10px; width: 100%; min-width: 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; line-height: 1.5; text-align: left; cursor: pointer; }
+.cl-q:hover { background: var(--surface-3); }
+.cl-q-no { flex: none; color: var(--muted); font-weight: 700; font-size: 12.5px; }
+.cl-q-short { flex: none; font-weight: 700; white-space: nowrap; }
+.cl-q-full { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-q.open { align-items: flex-start; }
+.cl-q.open .cl-q-full { white-space: normal; overflow: visible; color: var(--text); font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+.cl-q-all { margin-left: auto; }
+@media (max-width: 840px) { .cl-ps-row { grid-template-columns: minmax(0, 1fr); } .cl-q { flex-wrap: wrap; } .cl-q-short { white-space: normal; } }
+@media (max-width: 480px) { .seg-btn.cl-ps-btn { width: 40px; } }
 
 @media (max-width: 840px) {
   .cl-row, .cl-must-row, .cl-rate-row { grid-template-columns: minmax(0, 1fr); }

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>面接チェックリスト報告 - 保存 花子さん | TOHOシネマズ新宿</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#e6e9ee;color:#111;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body>.a4{margin:24px auto}
+.a4-foot{width:210mm;max-width:calc(100% - 32px);margin:0 auto 24px;font-size:11px;line-height:1.5;color:#5b6675;text-align:center}
+@media screen{
+.a4{transform:scale(var(--a4-zoom));transform-origin:0 0}
+body>.a4{margin:calc(24px * var(--a4-zoom,1)) 0 calc(24px * var(--a4-zoom,1) - 297mm * (1 - var(--a4-zoom,1))) max(0px,calc((100% - 210mm * var(--a4-zoom,1)) / 2))}
+body.a4-live .a4 [data-a4-t]{cursor:pointer}
+body.a4-live .a4 [data-a4-t="stamp"]:hover,body.a4-live .a4 [data-a4-t="decision"]:hover,body.a4-live .a4 [aria-expanded="true"]{outline:2px solid rgba(31,95,191,.4);outline-offset:1px}
+body.a4-live .a4 [data-a4-t]:focus-visible{outline:2px solid #1f5fbf;outline-offset:1px}
+body.a4-live .a4 [data-a4-t="stamp"]:hover::after{content:"クリックで押印"}
+body.a4-live .a4 [data-a4-t="decision"]:hover::after{content:"クリックで合否を押す"}
+body.a4-live .a4 [data-a4-t="stamp"]:hover::after,body.a4-live .a4 [data-a4-t="decision"]:hover::after{position:absolute;right:3px;bottom:2px;padding:0 4px;border-radius:3px;background:#1f5fbf;color:#fff;font-size:8px;font-weight:700;line-height:1.5;white-space:nowrap;pointer-events:none}
+body.a4-live .a4 [data-a4-t="decision"]:hover::after{right:-1px;bottom:100%;margin-bottom:3px}
+body.a4-live .a4 [data-a4-t="memo"]:hover,body.a4-live .a4 [data-a4-t="memos"]:hover{color:#1f4e8c;text-decoration:underline dotted}
+}
+.pop{position:absolute;z-index:30;width:260px;max-width:calc(100vw - 16px);padding:10px 12px;background:#fff;color:#1a2233;border:1px solid #c9d2dd;border-radius:8px;box-shadow:0 8px 24px rgba(16,24,40,.18);font-size:13px;line-height:1.5}
+.pop[data-kind="memo"],.pop[data-kind="memos"]{width:380px;max-height:60vh;display:flex;flex-direction:column}
+.pop[data-kind="memo"] .pop-b,.pop[data-kind="memos"] .pop-b{flex:1 1 auto;min-height:0;overflow:auto}
+.pop-h{font-weight:800;font-size:13.5px}.pop-sub,.pop-ref{font-size:11.5px;color:#5b6675}
+.pop-b{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.pop-l{display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:700;color:#5b6675}
+.pop select,.pop input{font:inherit;font-size:13px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;background:#fff;color:#1a2233;width:100%}
+.pop input[hidden]{display:none}
+.pop-note{font-size:12px;color:#9a5b00;background:#fdf1dc;border:1px solid #f3cf8a;border-radius:6px;padding:3px 8px}
+.pop-err{font-size:12px;font-weight:700;color:#b42318}.pop-err:empty{display:none}
+.pop-lock{font-size:12px;font-weight:700;color:#5b6675}
+.pop-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.pop-memos{margin:0}.pop-memos dt{font-size:11.5px;font-weight:700;color:#5b6675;margin-top:6px}.pop-memos dt:first-child{margin-top:0}.pop-memos dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.pop-f{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pop-f button,.savebar-btn{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:#1a2233;cursor:pointer}
+.pop-f button.primary,.savebar-btn{background:#1f5fbf;border-color:#1f5fbf;color:#fff}
+.pop-dec{color:var(--dec) !important;border:1.5px solid var(--dec) !important}.pop-hire{--dec:var(--dec-hire,#c8232c)}.pop-reject{--dec:var(--dec-reject,#1f4e8c)}
+.pop-dec:hover,.pop-dec.on{background:var(--dec) !important;color:#fff !important}
+.savebar{position:fixed;z-index:40;right:12px;bottom:12px;max-width:calc(100vw - 24px);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:8px;background:#fdf1dc;border:1px solid #f3cf8a;box-shadow:0 4px 14px rgba(16,24,40,.15);font-size:13px}
+.savebar-x{font:inherit;font-size:16px;line-height:1;padding:3px 6px;border:0;border-radius:6px;background:transparent;color:#5b6675;cursor:pointer}.savebar-x:hover{background:rgba(0,0,0,.06)}
+@media screen{body.a4-sb{padding-bottom:calc(var(--a4-sbh,49px) + 12px)}}
+@page{size:A4 portrait;margin:0}
+@media print{
+html,body{background:#fff}
+body>.a4{margin:0;box-shadow:none}
+.a4-foot,.pop,.savebar{display:none !important}
+.a4 [data-a4-t],.a4 [data-a4-t]:focus,.a4 [data-a4-t]:focus-visible{outline:none !important}
+}
+.a4{display:block;box-sizing:border-box;width:210mm;height:297mm;padding:8mm 10mm;margin:0 auto;background:#fff;color:#111;color-scheme:light;overflow:hidden;box-shadow:0 1px 3px rgba(16,24,40,.12),0 12px 32px rgba(16,24,40,.16)}
+.cl-sheet{color:#1a2233;font-size:13px;line-height:1.5}
+.cl-sheet *{box-sizing:border-box}
+.cl-sheet .cl-blank{color:#8a94a3}
+.cl-sheet.cl-mode-sheet{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:9.5px;line-height:1.4;background:#fff;color:#111;display:flex;flex-direction:column;min-height:100%;max-height:100%}
+.cl-sheet.cl-mode-sheet.cl-measure{min-height:0 !important;max-height:none !important}
+.cl-mode-sheet .cl-blank{color:#8a94a3;font-weight:400}
+.cl-mode-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #24324a}
+.cl-mode-sheet .cl-title-logo{flex:none;display:block;height:7mm;width:auto;max-width:50mm;object-fit:contain}
+.cl-mode-sheet .cl-title-t{flex:none;font-size:13px;font-weight:800;letter-spacing:.04em;line-height:1.3;color:#1a2233}
+.cl-mode-sheet .cl-title-r{margin-left:auto;min-width:0;font-size:8.5px;color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-who{padding:6px 2px 6px;border-bottom:1px solid #d5dbe3}
+.cl-mode-sheet .cl-who-1{display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;min-width:0}
+.cl-mode-sheet .cl-sh-name{font-size:16px;font-weight:800;line-height:1.25;overflow-wrap:anywhere}.cl-mode-sheet .cl-sh-name small{font-size:10px;font-weight:600;margin-left:2px}
+.cl-mode-sheet .cl-sh-who,.cl-mode-sheet .cl-sh-grad{font-size:9.5px;font-weight:600;color:#3a4556}.cl-mode-sheet .cl-sh-grad b{font-size:8.5px;font-weight:600;color:#5b6675;margin-right:4px}
+.cl-mode-sheet dl.cl-sh-kv{display:flex;flex-wrap:wrap;gap:1px 16px;margin:3px 0 0}
+.cl-mode-sheet dl.cl-sh-kv>div{display:flex;gap:5px;align-items:baseline;min-width:0;max-width:100%}
+.cl-mode-sheet dl.cl-sh-kv dt{flex:none;font-size:8.5px;font-weight:600;color:#5b6675}
+.cl-mode-sheet dl.cl-sh-kv dd{margin:0;min-width:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-judge{margin:8px 0 0;padding:6px;border:1px solid #d5dbe3;border-radius:5px;background:#f3f5f8;break-inside:avoid}
+.cl-mode-sheet .cl-judge[data-result="recommend"]{background:#eef8f3;border-color:#bfe3d2}.cl-mode-sheet .cl-judge[data-result="review"]{background:#fdf6e9;border-color:#efd5a4}.cl-mode-sheet .cl-judge[data-result="reject"]{background:#fdf1f1;border-color:#efc2c2}
+.cl-mode-sheet .cl-judge-row{display:flex;gap:6px;align-items:stretch;min-height:58px}
+.cl-mode-sheet .cl-judge-main{flex:1 1 auto;min-width:0;display:flex}
+.cl-mode-sheet .cl-tiles{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:6px}
+.cl-mode-sheet .cl-tile{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;padding:3px 8px;background:#fff;border:1px solid #d5dbe3;border-radius:4px}
+.cl-mode-sheet .cl-tile-k{font-size:8.5px;font-weight:700;color:#5b6675;line-height:1.2}
+.cl-mode-sheet .cl-tile-v{font-size:11px;font-weight:800;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-tile-v small{font-size:8.5px;font-weight:600;color:#5b6675;margin-left:1px}
+.cl-mode-sheet .cl-tile-s{font-size:8.5px;color:#3a4556;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-tile.is-ng .cl-tile-v{color:#b42318}
+.cl-mode-sheet .cl-tile-res{border-width:2px;padding:3px 10px}.cl-mode-sheet .cl-tile-res .cl-tile-v{font-size:14px;line-height:1.3}
+.cl-mode-sheet .cl-tile-res.t-ok{border-color:#0b7a55}.cl-mode-sheet .cl-tile-res.t-ok .cl-tile-v{color:#0b7a55}
+.cl-mode-sheet .cl-tile-res.t-warn{border-color:#c98a1b}.cl-mode-sheet .cl-tile-res.t-warn .cl-tile-v{color:#9a5b00}
+.cl-mode-sheet .cl-tile-res.t-danger{border-color:#b42318}.cl-mode-sheet .cl-tile-res.t-danger .cl-tile-v{color:#b42318}
+.cl-mode-sheet .cl-tile-res.t-none{border-color:#b8c2cf;border-style:dashed}.cl-mode-sheet .cl-tile-res.t-none .cl-tile-v{color:#5b6675}
+.cl-mode-sheet .cl-adj{list-style:none;margin:5px 2px 0;padding:0;font-size:9px;color:#3a4556}
+.cl-mode-sheet .cl-adj li{overflow-wrap:anywhere}.cl-mode-sheet .cl-adj li::before{content:"※ "}.cl-mode-sheet .cl-adj li b{color:#111}
+.cl-mode-sheet .cl-decision{flex:0 0 auto;min-width:0;max-width:48%;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid #d5dbe3;border-radius:4px;background:#fff}
+.cl-mode-sheet .cl-dec-stamp{flex:none;display:grid;place-items:center}.cl-mode-sheet .cl-dec-stamp .verdict-stamp{width:64px;height:41px;mix-blend-mode:multiply;filter:none}
+.cl-mode-sheet .cl-dec-meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#5b6675}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}
+.cl-mode-sheet .cl-dec-by,.cl-mode-sheet .cl-dec-date{font-size:8.5px;color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-decision.is-none{padding:3px 6px}
+.cl-mode-sheet .cl-dec-empty{width:72px;height:44px;border:1.5px dashed #b8c2cf;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.3;color:#5b6675;text-align:center}
+.cl-mode-sheet .cl-blk{margin:10px 0 0;break-inside:avoid}
+.cl-mode-sheet .cl-h{margin:0 0 3px;padding:0 0 0 6px;border-left:3px solid #24324a;font-size:10.5px;font-weight:800;line-height:1.35;color:#1a2233}
+.cl-mode-sheet .cl-h small{margin-left:10px;font-size:8.5px;font-weight:500;color:#5b6675}
+.cl-mode-sheet .cl-cols{display:grid;grid-template-columns:minmax(0,45fr) minmax(0,55fr);gap:0 16px;margin-top:10px}.cl-mode-sheet .cl-cols>.cl-blk{margin-top:0}
+.cl-mode-sheet table.cl-mtab{width:100%;border-collapse:collapse}
+.cl-mode-sheet .cl-mtab td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:top}
+.cl-mode-sheet .cl-mm-c{width:5em;white-space:nowrap}.cl-mode-sheet .cl-mm-l{font-weight:600}
+.cl-mode-sheet .cl-mm{display:inline-block;padding:0 5px;border-radius:3px;font-weight:800;line-height:1.45;color:#5b6675;background:#eef1f5}
+.cl-mode-sheet .m-match .cl-mm{color:#0b7a55;background:#e3f6ee}.cl-mode-sheet .m-mismatch .cl-mm{color:#fff;background:#b42318}
+.cl-mode-sheet dl.cl-kv{margin:0}
+.cl-mode-sheet dl.cl-kv>div{display:grid;grid-template-columns:9.5em minmax(0,1fr);gap:6px;align-items:baseline;padding:3px 4px;border-bottom:1px solid #e6eaef}
+.cl-mode-sheet dl.cl-kv dt{font-size:8.5px;font-weight:600;color:#5b6675}
+.cl-mode-sheet dl.cl-kv dd{margin:0;min-width:0;font-weight:700;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.cl-mode-sheet table.cl-rt{width:100%;border-collapse:collapse;table-layout:fixed}
+.cl-mode-sheet .cl-rt col.c-no{width:20px}.cl-mode-sheet .cl-rt col.c-lbl{width:40%}.cl-mode-sheet .cl-rt col.c-mk{width:30px}
+.cl-mode-sheet .cl-rt td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:middle}
+.cl-mode-sheet .cl-rt-no{font-size:8.5px;color:#5b6675;text-align:center}.cl-mode-sheet .cl-rt-lbl{font-weight:600}.cl-mode-sheet .cl-rt-mk{text-align:center}
+.cl-mode-sheet .cl-rt-nt{color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-mode-sheet .cl-mark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:10px;font-weight:800;line-height:1;color:#fff;background:#8a94a3}
+.cl-mode-sheet .cl-mark.m-good{background:#0b7a55}.cl-mode-sheet .cl-mark.m-fair{background:#c98a1b}.cl-mode-sheet .cl-mark.m-poor{background:#b42318}.cl-mode-sheet .cl-mark.m-none{color:#8a94a3;background:#eef1f5}
+.cl-mode-sheet .cl-blk-notes{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+.cl-mode-sheet .cl-nm-box{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;padding:0 8px 1px;border:1px solid #c9d2dd;border-radius:4px;background:#fff}
+.cl-mode-sheet .cl-nm{min-height:0;overflow:hidden}
+.cl-mode-sheet .cl-nm-lines{flex:1 1 0;min-height:0;overflow:hidden}
+.cl-mode-sheet .cl-nm-box.is-empty .cl-nm-lines{min-height:7.5mm}
+.cl-mode-sheet .cl-nm-lines i{display:block;height:7.5mm;border-bottom:1px dotted #b8c2cf}
+.cl-mode-sheet .cl-nm-row{display:grid;grid-template-columns:18em minmax(0,1fr);gap:8px;padding:3px 4px;border-bottom:1px solid #e6eaef}
+.cl-mode-sheet .cl-nm-k{font-size:8.5px;font-weight:700;color:#5b6675;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.cl-mode-sheet .cl-nm-no{margin-right:3px;color:#24324a}
+.cl-mode-sheet .cl-nm-v{min-width:0;overflow-wrap:anywhere}
+.cl-mode-sheet .cl-nm-q .cl-nm-v,.cl-mode-sheet .cl-nm-b .cl-nm-v{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.cl-mode-sheet .cl-nm-iv .cl-nm-v,.cl-mode-sheet .cl-nm-memo .cl-nm-v{white-space:pre-wrap}
+.cl-mode-sheet .cl-nm-ref{display:none;margin:3px 4px 0;font-size:8.5px;color:#5b6675}
+.cl-mode-sheet.cl-nm-cut .cl-nm-ref,.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q{display:block}
+.cl-mode-sheet .cl-nm-ref-q{display:none}.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q .cl-nm-ref-q{display:inline}.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q .cl-nm-ref-c{display:none}
+.cl-mode-sheet .cl-exline{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 5px;margin:10px 0 0;padding:4px 8px;border:1px solid #e1e6ec;border-radius:4px;background:#fafbfc}
+.cl-mode-sheet .cl-ex-k{font-size:8.5px;font-weight:700;color:#5b6675;margin-right:2px}.cl-mode-sheet .cl-ex-i{font-weight:600;white-space:nowrap}.cl-mode-sheet .cl-ex-i.is-off{font-weight:800;text-decoration:underline}
+.cl-mode-sheet .cl-ex-sep{color:#8a94a3}.cl-mode-sheet .cl-ex-bar{margin:0 6px;color:#b8c2cf}
+.cl-mode-sheet .cl-stamps{margin:10px 0 0;break-inside:avoid}
+.cl-sheet .stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;break-inside:avoid}
+.cl-sheet .stamp-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cl-sheet .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px;border:1px solid #c9d2dd;border-radius:4px;background:#fff;min-width:0}
+.cl-sheet .stamp-label{font-size:9.5px;font-weight:700;min-width:5em;color:#1a2233}.cl-sheet .stamp-area{height:auto;display:grid;place-items:center}
+.cl-sheet .hanko{width:46px;height:46px}.cl-sheet .stamp-empty{width:44px;height:44px;font-size:8.5px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;color:#5b6675;background:#fff}
+.cl-sheet .stamp-meta{font-size:8.5px;min-height:0;line-height:1.3;color:#3a4556}
+.cl-sheet .stamp-box,.cl-mode-sheet .cl-decision{position:relative}
+.cl-sheet .hanko,.cl-sheet .verdict-stamp{filter:none !important}
+.cl-mode-sheet.cl-compact{font-size:9px;line-height:1.35}
+.cl-mode-sheet.cl-compact .cl-blk,.cl-mode-sheet.cl-compact .cl-cols,.cl-mode-sheet.cl-compact .cl-exline,.cl-mode-sheet.cl-compact .cl-stamps{margin-top:7px}
+.cl-mode-sheet.cl-compact .cl-mtab td,.cl-mode-sheet.cl-compact .cl-rt td,.cl-mode-sheet.cl-compact dl.cl-kv>div,.cl-mode-sheet.cl-compact .cl-nm-row{padding-top:2px;padding-bottom:2px}
+.cl-mode-sheet.cl-compact dl.cl-kv dd{-webkit-line-clamp:1}
+.cl-mode-sheet.cl-compact .cl-nm-k{-webkit-line-clamp:1}
+.cl-mode-sheet.cl-compact .cl-nm-iv .cl-nm-v,.cl-mode-sheet.cl-compact .cl-nm-memo .cl-nm-v{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:10;overflow:hidden}
+.cl-mode-sheet.cl-compact .cl-nm-memo .cl-nm-v{-webkit-line-clamp:3}
+.cl-mode-sheet.cl-compact-q1 .cl-nm-q .cl-nm-v,.cl-mode-sheet.cl-compact-q1 .cl-nm-b .cl-nm-v{-webkit-line-clamp:1}
+.cl-mode-sheet.cl-compact-q1 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:6}.cl-mode-sheet.cl-compact-q1 .cl-nm-memo .cl-nm-v{-webkit-line-clamp:2}
+.cl-mode-sheet.cl-compact-2 .cl-nm-q{display:none}
+.cl-mode-sheet.cl-compact-2 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:4}.cl-mode-sheet.cl-compact-2 .cl-nm-memo .cl-nm-v{-webkit-line-clamp:1}.cl-mode-sheet.cl-compact-2 .cl-adj li+li{display:none}
+.cl-mode-sheet.cl-roomy{font-size:10.5px;line-height:1.5}
+.cl-mode-sheet.cl-roomy .cl-judge{margin-top:10px}
+.cl-mode-sheet.cl-roomy .cl-blk,.cl-mode-sheet.cl-roomy .cl-cols,.cl-mode-sheet.cl-roomy .cl-exline,.cl-mode-sheet.cl-roomy .cl-stamps{margin-top:13px}
+.cl-mode-sheet.cl-roomy .cl-h{font-size:11.5px;margin-bottom:5px}.cl-mode-sheet.cl-roomy .cl-h small{font-size:9px}
+.cl-mode-sheet.cl-roomy .cl-mtab td,.cl-mode-sheet.cl-roomy dl.cl-kv>div,.cl-mode-sheet.cl-roomy .cl-nm-row{padding-top:4px;padding-bottom:4px}
+.cl-mode-sheet.cl-roomy .cl-rt td{padding-top:6px;padding-bottom:6px}
+.cl-mode-sheet.cl-roomy dl.cl-kv dt,.cl-mode-sheet.cl-roomy .cl-nm-k,.cl-mode-sheet.cl-roomy .cl-rt-no,.cl-mode-sheet.cl-roomy .cl-ex-k{font-size:9.5px}
+.cl-mode-sheet.cl-roomy .cl-mark{width:19px;height:19px;font-size:11px}
+.cl-mode-sheet.cl-roomy .cl-exline{padding:5px 10px}
+.cl-mode-sheet.cl-roomy.cl-measure:not(.cl-grow) .cl-nm-box .cl-nm-lines{min-height:38mm}
+.cl-sheet .cl-title-logo,.cl-sheet .cl-tile,.cl-sheet .hanko,.cl-sheet .stamp-empty,.cl-sheet .cl-judge,.cl-sheet .cl-mark,.cl-sheet .cl-mm,.cl-sheet .cl-exline,.cl-sheet .cl-decision,.cl-sheet .verdict-stamp,.cl-sheet .cl-dec-empty{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+</style>
+</head>
+<body class="a4-doc" data-filename="応募者_保存_花子_2026-10-14_採用.html">
+<main class="a4" id="a4"><div class="cl-sheet cl-mode-sheet"><div class="cl-sheet-head"><div class="cl-title"><span class="cl-title-t">面接チェックリスト報告</span><span class="cl-title-r">台本 2026-10-08 版 ／ TOHOシネマズ新宿 ／ 作成 2026/10/14</span></div><div class="cl-who"><div class="cl-who-1"><span class="cl-sh-name">保存 花子<small>さん</small></span><span class="cl-sh-who">大学2年生・20歳・女性</span><span class="cl-sh-grad"><b>卒業予定</b>2029年3月</span></div><dl class="cl-sh-kv"><div><dt>面接日</dt><dd>2026/10/14</dd></div><div><dt>担当</dt><dd>笹川 晴央</dd></div><div><dt>応募した求人</dt><dd>通常求人</dd></div><div><dt>タクシー可否・料金</dt><dd>可・2,000円</dd></div></dl></div></div><div class="cl-judge" data-result="recommend"><div class="cl-judge-row"><div class="cl-judge-main"><div class="cl-tiles"><div class="cl-tile cl-tile-res t-ok"><span class="cl-tile-k">結果</span><span class="cl-tile-v">採用推奨</span><span class="cl-tile-s">判定 2026/10/14 06:30</span></div><div class="cl-tile cl-tile-ov"><span class="cl-tile-k">総合判断</span><span class="cl-tile-v">採用</span></div><div class="cl-tile cl-tile-must"><span class="cl-tile-k">必須条件</span><span class="cl-tile-v">すべて一致</span></div><div class="cl-tile cl-tile-score"><span class="cl-tile-k">確認点</span><span class="cl-tile-v">15<small>/16点</small></span><span class="cl-tile-s">○6 △1 ×0</span></div></div></div><div class="cl-decision is-hire" id="a4Decision" data-result="hire"><div class="cl-dec-stamp"><svg class="verdict-stamp" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 76" width="64" height="41" role="img" aria-label="採用 2026.10.14 新宿"><defs><filter id="vdA4" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></defs><g filter="url(#vdA4)" transform="rotate(-3 60 38)" opacity="0.93"><rect x="6" y="6" width="108" height="64" rx="9" fill="none" stroke="#c8232c" stroke-width="3.2"/><rect x="11" y="11" width="98" height="54" rx="6" fill="none" stroke="#c8232c" stroke-width="1.2"/><line x1="18" y1="50" x2="102" y2="50" stroke="#c8232c" stroke-width="1"/><g fill="#c8232c" font-family="'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic','YuGothic',Meiryo,'Noto Sans JP',sans-serif" font-weight="800" text-anchor="middle"><text x="60" y="42.5" font-size="28" letter-spacing="4">採用</text><text x="60" y="61" font-size="10" letter-spacing="0.4" textLength="86" lengthAdjust="spacingAndGlyphs">2026.10.14 新宿</text></g></g></svg></div><div class="cl-dec-meta"><span class="cl-dec-kv"><span class="cl-dec-k">最終合否</span><b class="cl-dec-v" style="color:#c8232c">採用</b></span><span class="cl-dec-by">笹川 晴央（副支配人）</span><span class="cl-dec-date">2026.10.14</span></div></div></div></div><div class="cl-cols"><section class="cl-blk cl-blk-must"><h3 class="cl-h">必須条件</h3><table class="cl-mtab"><tbody><tr class="m-match" data-cl-item="must_weekly"><td class="cl-mm-c"><span class="cl-mm">○一致</span></td><td class="cl-mm-l">土日を含む週3日以上、5時間以上</td></tr><tr class="m-match" data-cl-item="must_busy"><td class="cl-mm-c"><span class="cl-mm">○一致</span></td><td class="cl-mm-l">指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）</td></tr></tbody></table><dl class="cl-kv"><div data-cl-item="weekend"><dt>土日勤務可否</dt><dd>両日</dd></div><div data-cl-item="busy_ng"><dt>出勤不可な繁忙</dt><dd><span class="cl-blank">—</span></dd></div></dl></section><section class="cl-blk cl-blk-terms"><h3 class="cl-h">勤務条件の確認</h3><dl class="cl-kv"><div data-cl-item="term"><dt>短期／長期の希望</dt><dd>長期希望</dd></div><div data-cl-item="start_date"><dt>契約開始日の希望</dt><dd><span class="cl-blank">—</span></dd></div><div data-cl-item="first_end"><dt>初回契約終了</dt><dd><span class="cl-blank">—</span></dd></div><div data-cl-item="open_late"><dt>OPEN／25時の可否</dt><dd><span class="cl-blank">—</span></dd></div></dl></section></div><section class="cl-blk cl-blk-rate"><h3 class="cl-h">確認点<small>○ できている　△ やや不安　× できていない</small></h3><table class="cl-rt"><colgroup><col class="c-no"><col class="c-lbl"><col class="c-mk"><col class="c-nt"></colgroup><tbody><tr data-cl-item="rt_concrete"><td class="cl-rt-no">①</td><td class="cl-rt-lbl">勤務条件の一致に「具体性」があるか</td><td class="cl-rt-mk"><span class="cl-mark m-good">○</span></td><td class="cl-rt-nt">土日両日可と具体的に回答</td></tr><tr data-cl-item="rt_manner"><td class="cl-rt-no">①</td><td class="cl-rt-lbl">最低限の話し方、敬語が可能か</td><td class="cl-rt-mk"><span class="cl-mark m-fair">△</span></td><td class="cl-rt-nt"></td></tr><tr data-cl-item="rt_hourensou"><td class="cl-rt-no">②</td><td class="cl-rt-lbl">報連相できるか</td><td class="cl-rt-mk"><span class="cl-mark m-good">○</span></td><td class="cl-rt-nt"></td></tr><tr data-cl-item="rt_turnover"><td class="cl-rt-no">②</td><td class="cl-rt-lbl">離職要因はないか</td><td class="cl-rt-mk"><span class="cl-mark m-good">○</span></td><td class="cl-rt-nt"></td></tr><tr data-cl-item="rt_understand"><td class="cl-rt-no">③</td><td class="cl-rt-lbl">業務理解と接客の実行可能性</td><td class="cl-rt-mk"><span class="cl-mark m-good">○</span></td><td class="cl-rt-nt"></td></tr><tr data-cl-item="rt_team"><td class="cl-rt-no">④</td><td class="cl-rt-lbl">自己判断せずチームで動けるか</td><td class="cl-rt-mk"><span class="cl-mark m-good">○</span></td><td class="cl-rt-nt"></td></tr><tr data-cl-item="rt_mismatch"><td class="cl-rt-no">⑤</td><td class="cl-rt-lbl">採用後のミスマッチを低減</td><td class="cl-rt-mk"><span class="cl-mark m-good">○</span></td><td class="cl-rt-nt"></td></tr></tbody></table></section><section class="cl-blk cl-blk-notes"><h3 class="cl-h">面接メモ・所見</h3><div class="cl-nm-box"><div class="cl-nm"><div class="cl-nm-row cl-nm-q" data-cl-block="continuity_q"><div class="cl-nm-k"><span class="cl-nm-no">②</span>前のバイトの期間・退職理由 ほか2問</div><div class="cl-nm-v">前職は飲食で2年。学業との両立のため退職。</div></div><div class="cl-nm-row cl-nm-iv"><div class="cl-nm-k">面接所見</div><div class="cl-nm-v">受け答えが丁寧。笑顔が少なめ。</div></div><div class="cl-nm-row cl-nm-memo"><div class="cl-nm-k">メモ</div><div class="cl-nm-v">電話の受け答えが丁寧。</div></div></div><p class="cl-nm-ref has-q"><span class="cl-nm-ref-c">「…」で切れたメモは、画面でクリックすると全文を表示します</span><span class="cl-nm-ref-q">質問の回答は省略（画面でこの行をクリックすると、回答と「…」で切れたメモの全文を表示します）</span></p><div class="cl-nm-lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></section><div class="cl-exline"><span class="cl-ex-k">説明済み</span><span class="cl-ex-i">① 2/2</span><span class="cl-ex-sep">・</span><span class="cl-ex-i">② 3/3</span><span class="cl-ex-sep">・</span><span class="cl-ex-i">③ 4/4</span><span class="cl-ex-sep">・</span><span class="cl-ex-i">④ 3/3</span><span class="cl-ex-bar">｜</span><span class="cl-ex-k">合否連絡</span><span class="cl-ex-i">採用時 ☑</span><span class="cl-ex-sep">／</span><span class="cl-ex-i">不合格 ☑</span></div><div class="cl-stamps"><div class="stamp-row cl-stamps-row cols-2"><div class="stamp-box" data-field-id="interviewer"><div class="stamp-label">面接対応者</div><div class="stamp-area"><svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="46" height="46" role="img" aria-label="笹川 2026.10.14 副支配人"><defs><filter id="a4s0" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></defs><g filter="url(#a4s0)" transform="rotate(-6 50 50)" opacity="0.93"><circle cx="50" cy="50" r="42" fill="none" stroke="#c8232c" stroke-width="3"/><line x1="11" y1="36" x2="89" y2="36" stroke="#c8232c" stroke-width="1.5"/><line x1="11" y1="64" x2="89" y2="64" stroke="#c8232c" stroke-width="1.5"/><g fill="#c8232c" font-family="'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif" font-weight="700" text-anchor="middle"><text x="50" y="32" font-size="18">笹川</text><text x="50" y="54" font-size="11.5" letter-spacing="0.4">2026.10.14</text><text x="50" y="78.6" font-size="9.5">副支配人</text></g></g></svg></div><div class="stamp-meta">笹川 晴央（副支配人）　2026.10.14</div></div><div class="stamp-box" data-field-id="final"><div class="stamp-label">最終確認</div><div class="stamp-area"><svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="46" height="46" role="img" aria-label="笹川 2026.10.14 副支配人"><defs><filter id="a4s1" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></defs><g filter="url(#a4s1)" transform="rotate(-6 50 50)" opacity="0.93"><circle cx="50" cy="50" r="42" fill="none" stroke="#c8232c" stroke-width="3"/><line x1="11" y1="36" x2="89" y2="36" stroke="#c8232c" stroke-width="1.5"/><line x1="11" y1="64" x2="89" y2="64" stroke="#c8232c" stroke-width="1.5"/><g fill="#c8232c" font-family="'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif" font-weight="700" text-anchor="middle"><text x="50" y="32" font-size="18">笹川</text><text x="50" y="54" font-size="11.5" letter-spacing="0.4">2026.10.14</text><text x="50" y="78.6" font-size="9.5">副支配人</text></g></g></svg></div><div class="stamp-meta">笹川 晴央（副支配人）　2026.10.14</div></div></div></div></div></main>
+<footer class="a4-foot" id="a4Foot">© 2025 Haruhisa Sasagawa｜このツールの著作権は制作者に帰属します。無断転用・改変を禁じます。　このファイルはアプリの「読み込み」で再度開けます。埋め込みデータは編集しないでください。</footer>
+<script type="application/json" id="recruit-record">{"kind":"recruit-applicant-record","schemaVersion":2,"savedAt":"2026-10-14T07:00:00.000Z","profile":{"theaterName":"TOHOシネマズ新宿","version":"5.0.0-alpha","schemaVersion":2},"step":4,"applicant":{"name":"保存 花子","gender":"女性","age":"20","category":"大学2年生","graduationDate":"2029-03","reviewerNotes":"電話の受け答えが丁寧。"},"checklist":{"v":1,"header":{"date":"2026-10-14","interviewer":"笹川 晴央","posting":"regular","taxi":"可・2,000円"},"values":{"must_weekly":"match","must_busy":"match","ex_fare":true,"ex_hours":true,"ex_submit":true,"ex_phone":true,"ex_absence":true,"ex_start":true,"ex_busy":true,"ex_opinion":true,"ex_rules":true,"ex_team":true,"ex_sudden":true,"ex_radio":true,"nt_hire":true,"nt_reject":true,"rt_concrete":"good","rt_manner":"fair","rt_hourensou":"good","rt_turnover":"good","rt_understand":"good","rt_team":"good","rt_mismatch":"good","weekend":"both","term":"long"},"notes":{"continuity_q":"前職は飲食で2年。学業との両立のため退職。","rt_concrete":"土日両日可と具体的に回答"},"overall":"hire","updatedAt":"2026-10-14T06:00:00.000Z"},"checklistDef":{"version":"2026-10-08","pages":[{"no":1,"title":"必須条件一致・継続性","lead":"必須条件と報連相の意識・具体性を確認。最低限の話し方、敬語が可能か。必須条件が不一致なら不採用、逆質問を最大１０分で終了。"},{"no":2,"title":"人物確認・逆質問","lead":"行動を確認。採用を検討できる人には不安解消の時間を取る。"}],"mustFailResult":"reject","mustUnknownResult":"none","mustFailJumpTo":"reverse","overallLabel":"面接者の総合判断","overallHint":"①〜⑤の確認を踏まえて選んでください。","overallOptions":{"hire":"採用","hold":"保留","reject":"不採用"},"overallCaps":{"hold":"review","reject":"reject"},"header":{"posting":{"label":"応募した求人","options":[{"value":"regular","label":"通常求人"},{"value":"short","label":"短期求人"}]},"interviewerField":"interviewer"},"print":{"showQuestions":true},"sections":[{"id":"conditions","title":"勤務条件","minutes":10,"minutesMax":false,"page":1,"lead":"","blocks":[{"id":"conditions_must","type":"must","title":"必須条件","note":"1つでも不一致なら不採用（追加質問して解消しなければ「⑤」へ）","memo":false,"memoLabel":"","items":[{"id":"must_weekly","label":"土日を含む週3日以上、5時間以上"},{"id":"must_busy","label":"指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）"}]},{"id":"conditions_f1","type":"fields","title":"","note":"","memo":false,"memoLabel":"","items":[{"id":"weekend","label":"土日勤務可否","kind":"choice","options":[{"value":"one","label":"いずれか"},{"value":"both","label":"両日"}]},{"id":"busy_ng","label":"出勤不可な繁忙","kind":"text"}]},{"id":"conditions_explain","type":"explain","title":"説明","note":"※は短期求人に応募の場合のみご説明ください","memo":false,"memoLabel":"","items":[{"id":"ex_fare","label":"交通費（往復500円まで/日）"},{"id":"ex_hours","label":"営業開始・終了時間、タクシー条件の説明"},{"id":"ex_contract","label":"初回契約は2か月間(契約日の翌月末)。","shortOnly":true},{"id":"ex_switch","label":"長期への切り替えあり。本人希望と勤務状況等で判断","shortOnly":true}]},{"id":"conditions_f2","type":"fields","title":"質問","note":"","memo":false,"memoLabel":"","items":[{"id":"term","label":"短期／長期の希望","kind":"choice","options":[{"value":"short","label":"短期希望"},{"value":"long","label":"長期希望"}]},{"id":"start_date","label":"契約開始日の希望","kind":"date"},{"id":"first_end","label":"初回契約終了（月末締）","short":"初回契約終了","kind":"month"},{"id":"open_late","label":"OPEN／25時(タク〇のみ)までの可否","short":"OPEN／25時の可否","kind":"text"}]},{"id":"conditions_q","type":"question","title":"","note":"","memo":true,"memoLabel":"メモ","items":[{"id":"q_term","label":"「いまのところ、短期希望ですか？長期希望ですか？」or「採用となった場合、希望としては、いつ頃まで勤務継続希望でしょうか？」","short":"短期／長期の希望"},{"id":"q_two_months","label":"「最初の2か月で勤務条件が満たせない可能性は？（土日出せない、など）」","short":"最初の2か月で条件を満たせない可能性"},{"id":"q_family","label":"「歌舞伎町ですので、ご家族の反対などあれば遠慮なく辞退お願いします。」","short":"家族の反対"}]},{"id":"conditions_rate","type":"rating","title":"確認事項","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_concrete","label":"勤務条件の一致に「具体性」があるか","hint":"「大丈夫です」のみ連呼は特に要注意。"},{"id":"rt_manner","label":"最低限の話し方、敬語が可能か","hint":"面接全体を通して（台本1枚目の冒頭）"}]},{"id":"conditions_flow","type":"note","title":"","note":"条件一致：2へ　／　必須条件不一致：追加質問してみて、解消しなければ「５」へ","memo":false,"memoLabel":"","items":[]}]},{"id":"continuity","title":"継続性・報連相","minutes":3,"minutesMax":false,"page":1,"lead":"","blocks":[{"id":"continuity_explain","type":"explain","title":"説明","note":"","memo":false,"memoLabel":"","items":[{"id":"ex_submit","label":"シフト提出は木曜23時、確定は水曜"},{"id":"ex_phone","label":"シフト関連の連絡：原則電話のみ"},{"id":"ex_absence","label":"欠勤・遅刻は分かった時点で連絡"}]},{"id":"continuity_q","type":"question","title":"質問","note":"","memo":true,"memoLabel":"メモ","items":[{"id":"q_prev_job","label":"「前のアルバイトの期間と退職理由は？差し支えなければ退職理由は？」","short":"前のバイトの期間・退職理由"},{"id":"q_cant_3days","label":"「週3日出せないと事前に分かったら、どうするべきだと思いますか？」","short":"週3日出せないと分かったら"},{"id":"q_sudden_absence","label":"「当日、急に出勤できなくなったら、どうするべきだと思いますか？」","short":"当日急に出られなくなったら"}]},{"id":"continuity_rate","type":"rating","title":"確認事項","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_hourensou","label":"報連相できるか"},{"id":"rt_turnover","label":"離職要因はないか","hint":"○＝離職要因なし（前のアルバイトの期間・退職理由から）"}]}]},{"id":"job","title":"仕事内容の説明","minutes":10,"minutesMax":false,"page":2,"lead":"","blocks":[{"id":"job_explain","type":"explain","title":"説明","note":"","memo":false,"memoLabel":"","items":[{"id":"ex_start","label":"コンセorフロア業務からスタート"},{"id":"ex_busy","label":"多忙・立ち仕事・汚物清掃の可否"},{"id":"ex_opinion","label":"ときにはご意見の対応も"},{"id":"ex_rules","label":"細かなルールや接客指導あり"}]},{"id":"job_q","type":"question","title":"質問","note":"","memo":true,"memoLabel":"回答","items":[{"id":"q_value","label":"「前職で大切にしていたことは？」","short":"前職で大切にしていたこと"},{"id":"q_failure","label":"「前職での失敗談はありますか？」","short":"前職の失敗談"},{"id":"q_unsure","label":"「説明した業務で自信がないことや、相談・不明点はありますか？」","short":"自信がない業務・不明点"}]},{"id":"job_rate","type":"rating","title":"確認点","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_understand","label":"業務理解と接客の実行可能性"}]}]},{"id":"teamwork","title":"集団行動特性","minutes":8,"minutesMax":false,"page":2,"lead":"","blocks":[{"id":"teamwork_explain","type":"explain","title":"説明","note":"","memo":false,"memoLabel":"","items":[{"id":"ex_team","label":"チームで分業（例：清掃、商材補充）"},{"id":"ex_sudden","label":"急な指示も多い（例：SH、無線呼出）"},{"id":"ex_radio","label":"不明点・権限外の対応は無線で確認。"}]},{"id":"teamwork_q","type":"question","title":"質問","note":"","memo":true,"memoLabel":"回答","items":[{"id":"q_feedback","label":"「指摘を受けて行動を変えた経験はありますか？（仕事・部活動など）」","short":"指摘で行動を変えた経験"},{"id":"q_unknown","label":"「お客様に質問されて答えがわからない時、どうしますか？」","short":"答えが分からない時"},{"id":"q_busy_mind","label":"「忙しいときこそ心掛けたいことは？」","short":"忙しい時に心掛けること"}]},{"id":"teamwork_rate","type":"rating","title":"確認点","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_team","label":"自己判断せずチームで動けるか"}]}]},{"id":"reverse","title":"逆質問","minutes":10,"minutesMax":true,"page":2,"lead":"ミスマッチを解消するための時間","blocks":[{"id":"reverse_q","type":"question","title":"","note":"※業務の大変な面も率直に伝える。","memo":true,"memoLabel":"回答","items":[{"id":"q_concerns","label":"「条件・業務・映画館のことなど、何か気になる点はありますか？」","short":"気になる点（逆質問）"}]},{"id":"reverse_notify","type":"notify","title":"合否連絡","note":"面接の最後に伝えたらチェック","memo":false,"memoLabel":"","items":[{"id":"nt_hire","label":"採用時：数日中に電話連絡。ご家族の反対あればご辞退ください。同時に初日出勤日時を調整、もちものなど詳細はメールで送付。","short":"採用時"},{"id":"nt_reject","label":"不合格：メール連絡","short":"不合格"}]},{"id":"reverse_rate","type":"rating","title":"確認点","note":"","memo":false,"memoLabel":"","items":[{"id":"rt_mismatch","label":"採用後のミスマッチを低減","hint":"○＝不安・不明点を解消できた"}]}]}]},"interviewNotes":"受け答えが丁寧。笑顔が少なめ。","management":{"interviewer":{"name":"笹川 晴央","short":"笹川","title":"副支配人","date":"2026.10.14","at":"2026-10-14T07:00:00.000Z"},"final":{"name":"笹川 晴央","short":"笹川","title":"副支配人","date":"2026.10.14","at":"2026-10-14T07:00:00.000Z"}},"decision":{"result":"hire","label":"採用","date":"2026.10.14","at":"2026-10-14T07:00:00.000Z","by":{"name":"笹川 晴央","short":"笹川","title":"副支配人"}},"judgment":{"result":"recommend","title":"採用推奨","body":"保存 花子さんは面接者の総合判断が「採用」です（面接評価 15/16点・93.8%）。採用を推奨します。","disclaimer":"※本判定は基準統一のための参考値です。最終判断は上長が行います。","total":15,"max":16,"pct":93.8,"thresholds":{"recommendPct":70,"reviewPct":40,"recommendPts":12,"reviewPts":7},"breakdown":[{"id":"rt_concrete","label":"勤務条件の一致に「具体性」があるか","score":2,"isOverall":false,"mark":"good","markLabel":"○","sectionId":"conditions","sectionNo":1,"sectionTitle":"勤務条件","note":"土日両日可と具体的に回答"},{"id":"rt_manner","label":"最低限の話し方、敬語が可能か","score":1,"isOverall":false,"mark":"fair","markLabel":"△","sectionId":"conditions","sectionNo":1,"sectionTitle":"勤務条件","note":""},{"id":"rt_hourensou","label":"報連相できるか","score":2,"isOverall":false,"mark":"good","markLabel":"○","sectionId":"continuity","sectionNo":2,"sectionTitle":"継続性・報連相","note":""},{"id":"rt_turnover","label":"離職要因はないか","score":2,"isOverall":false,"mark":"good","markLabel":"○","sectionId":"continuity","sectionNo":2,"sectionTitle":"継続性・報連相","note":""},{"id":"rt_understand","label":"業務理解と接客の実行可能性","score":2,"isOverall":false,"mark":"good","markLabel":"○","sectionId":"job","sectionNo":3,"sectionTitle":"仕事内容の説明","note":""},{"id":"rt_team","label":"自己判断せずチームで動けるか","score":2,"isOverall":false,"mark":"good","markLabel":"○","sectionId":"teamwork","sectionNo":4,"sectionTitle":"集団行動特性","note":""},{"id":"rt_mismatch","label":"採用後のミスマッチを低減","score":2,"isOverall":false,"mark":"good","markLabel":"○","sectionId":"reverse","sectionNo":5,"sectionTitle":"逆質問","note":""},{"id":"__overall","label":"面接者の総合判断","score":2,"isOverall":true,"mark":"hire","markLabel":"採用","sectionId":"","sectionNo":null,"sectionTitle":"","note":""}],"strengths":["勤務条件の一致に「具体性」があるか（土日両日可と具体的に回答）","報連相できるか","離職要因はないか","業務理解と接客の実行可能性","自己判断せずチームで動けるか","採用後のミスマッチを低減"],"concerns":[],"warnings":[],"unresolved":[],"adjusted":false,"evaluatedAt":"2026-10-14T06:30:00.000Z","mode":"script","interview":{"total":15,"max":16,"pct":93.8,"band":"high","bandLabel":"高"},"contribution":null,"matrix":null,"highschool":null,"baseResult":"recommend","adjustments":[],"interviewMode":"checklist","scaleMax":2,"checklist":{"version":"2026-10-08","counts":{"good":6,"fair":1,"poor":0,"blank":0},"overall":{"value":"hire","label":"採用","points":2},"must":{"items":[{"id":"must_weekly","label":"土日を含む週3日以上、5時間以上","sectionNo":1,"sectionId":"conditions","value":"match","valueLabel":"一致","mark":"○","tone":"ok"},{"id":"must_busy","label":"指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）","sectionNo":1,"sectionId":"conditions","value":"match","valueLabel":"一致","mark":"○","tone":"ok"}],"total":2,"match":2,"mismatch":0,"unknown":0,"mismatchLabels":[],"unknownLabels":[]}},"must":{"items":[{"id":"must_weekly","label":"土日を含む週3日以上、5時間以上","sectionNo":1,"sectionId":"conditions","value":"match","valueLabel":"一致","mark":"○","tone":"ok"},{"id":"must_busy","label":"指定繁忙期間すべて可（クリスマス・年末年始・春休み・GW・お盆）","sectionNo":1,"sectionId":"conditions","value":"match","valueLabel":"一致","mark":"○","tone":"ok"}],"total":2,"match":2,"mismatch":0,"unknown":0,"mismatchLabels":[],"unknownLabels":[]},"overall":{"value":"hire","label":"採用","points":2,"tone":"ok"}}}</script>
+<script type="application/json" id="recruit-mgmt-config">{"fields":[{"id":"interviewer","label":"面接対応者","hint":"面接を行った担当者"},{"id":"final","label":"最終確認","hint":"採用可否を最終確認した上長"}],"managers":[{"name":"笹川 晴央","short":"笹川","title":"副支配人","grade":"S3"}],"allowFreeName":true,"interviewerField":"interviewer","decision":{"label":"最終合否","hireLabel":"採用","rejectLabel":"不採用","hireColor":"#c8232c","rejectColor":"#1f4e8c","stampField":"final","autoStampFinal":true,"filenameSuffix":true,"hint":"最終確認者が合否を決めて押します","sub":"新宿"},"finalLock":null,"lockField":"final","lockFields":["final"]}</script>
+<script>
+(function(){
+function clFitSheet(sheet, limit) {
+    if (!sheet || !sheet.getBoundingClientRect) return '';
+    var cls = sheet.classList;
+    var lv = ['cl-compact', 'cl-compact-q1', 'cl-compact-2'];
+    var i, h, z = 1, n, mode = 'zoom', vs;
+    var hOf = function () {
+      cls.add('cl-measure');
+      var r = sheet.getBoundingClientRect().height;
+      cls.remove('cl-measure');
+      return r;
+    };
+    var cut = function () {
+      var vs = sheet.querySelectorAll('.cl-nm-v,.cl-rt-nt'), c = false, k, v, on;
+      for (k = 0; k < vs.length; k++) {
+        v = vs[k];
+        on = !!(v.getClientRects().length && (v.scrollHeight > v.clientHeight + 1 || v.scrollWidth > v.clientWidth + 1));
+        if (on) c = true;
+        if (v.classList) { if (on) v.classList.add('cl-cut'); else v.classList.remove('cl-cut'); }
+      }
+      if (c) cls.add('cl-nm-cut'); else cls.remove('cl-nm-cut');
+    };
+    var clampTo = function (v, n) {
+      if (n) v.style.setProperty('-webkit-line-clamp', String(n));
+      else {
+        v.style.removeProperty('-webkit-line-clamp');
+        if (v.getAttribute && v.removeAttribute && !v.getAttribute('style')) v.removeAttribute('style');
+      }
+    };
+    var hidOf = function (v) { return v.scrollHeight - v.clientHeight; };
+    var grow = function () {
+      var qs = ['.cl-nm-iv .cl-nm-v', '.cl-nm-memo .cl-nm-v', '.cl-nm-q .cl-nm-v,.cl-nm-b .cl-nm-v'], list = [], k, j, a, v, cs, n0, m, lh, add, h2, hid, t;
+      if (typeof getComputedStyle !== 'function') return;
+      for (k = 0; k < qs.length; k++) { a = sheet.querySelectorAll(qs[k]); for (j = 0; j < a.length; j++) list.push(a[j]); }
+      cls.add('cl-grow');
+      for (k = 0; k < list.length; k++) {
+        v = list[k];
+        if (!v.style || !v.classList || !v.classList.contains('cl-cut')) continue;
+        cs = getComputedStyle(v);
+        n0 = m = parseInt(cs.getPropertyValue('-webkit-line-clamp'), 10);
+        lh = parseFloat(cs.lineHeight);
+        if (!(m > 0) || !(lh > 0)) continue;
+        for (t = 0; t < 200; t++) {
+          hid = hidOf(v);
+          if (!(hid > 1)) break;
+          add = Math.max(1, Math.min(Math.ceil(hid / lh), Math.floor((limit - h) / (lh * z))));
+          clampTo(v, m + add); cut(); h2 = hOf();
+          if (h2 > limit && add > 1) { add = 1; clampTo(v, m + 1); cut(); h2 = hOf(); }
+          if (h2 > limit || !(hidOf(v) < hid)) { clampTo(v, m === n0 ? 0 : m); cut(); break; }
+          m += add; h = h2;
+        }
+      }
+      cls.remove('cl-grow');
+    };
+    vs = sheet.querySelectorAll('.cl-nm-v');
+    for (i = 0; i < vs.length; i++) { if (vs[i] && vs[i].style && vs[i].style.removeProperty) clampTo(vs[i], 0); }
+    for (i = 0; i < lv.length; i++) cls.remove(lv[i]);
+    sheet.style.zoom = '';
+    cls.add('cl-roomy');
+    cut();
+    h = hOf();
+    if (h && h <= limit) mode = 'cl-roomy';
+    else {
+      cls.remove('cl-roomy');
+      cut();
+      h = hOf();
+      if (!h || h <= limit) mode = '';
+      for (i = 0; i < lv.length && mode === 'zoom'; i++) {
+        cls.add(lv[i]);
+        cut();
+        h = hOf();
+        if (h <= limit) mode = lv[i];
+      }
+    }
+    if (mode !== 'zoom') {
+      if (h) grow();
+      return mode;
+    }
+    for (n = 0; n < 12 && h > limit && z > 0.3; n++) {
+      z = Math.max(0.3, Math.floor(z * limit / h * 1000) / 1000 - (n ? 0.005 : 0));
+      sheet.style.zoom = String(z);
+      h = hOf();
+    }
+    if (h && h <= limit) grow();
+    return 'zoom';
+  }
+function stampSvg(opts) {
+    opts = opts || {};
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    };
+    var chars = function (s) { return Array.from ? Array.from(String(s)).length : String(s).length; };
+    var name = String(opts.name || '').trim();
+    var title = String(opts.title || '').trim();
+    var date = String(opts.date || '').trim();
+    var size = Number(opts.size) || 88;
+    var color = opts.color || '#c8232c';
+    var id = String(opts.id || ('hk' + chars(name) + chars(title) + date.replace(/\D/g, '')));
+    // 文字幅の目安（em）。ASCII・半角カナは約 0.6em、それ以外（漢字・かな）は 1em
+    var units = function (str) {
+      var u = 0;
+      (Array.from ? Array.from(str) : String(str).split('')).forEach(function (ch) {
+        var c = ch.charCodeAt(0);
+        u += c < 0x80 || (c >= 0xff61 && c <= 0xff9f) ? 0.62 : 1;
+      });
+      return u;
+    };
+    // 外周（r=42・線幅3 → 内側の縁 40.5）の内側に、にじみ分の余白を取った半径
+    var R = 38.5;
+    // 文字の上端・下端の高さで使える弦の幅を超えるときだけ textLength で詰める
+    var fitAttr = function (str, s, base) {
+      var top = base - 0.88 * s, bottom = base + 0.12 * s;
+      var dy = Math.max(Math.abs(50 - top), Math.abs(bottom - 50));
+      var cap = 2 * Math.sqrt(Math.max(0, R * R - dy * dy));
+      return units(str) * s > cap ? ' textLength="' + cap.toFixed(1) + '" lengthAdjust="spacingAndGlyphs"' : '';
+    };
+    var nu = units(name);
+    var nameSize = nu <= 2 ? 18 : nu <= 3 ? 15 : nu <= 4 ? 12 : nu <= 6 ? 10 : 9;
+    var nameBase = 32;
+    var tu = units(title);
+    var titleSize = tu <= 3 ? 11 : tu <= 5 ? 9.5 : tu <= 7 ? 8 : tu <= 9 ? 7 : 6;
+    var titleBase = 75 + titleSize * 0.38;
+    var font = "'Hiragino Mincho ProN','Hiragino Mincho Pro','Yu Mincho','YuMincho','MS Mincho','Noto Serif JP',serif";
+    return '<svg class="hanko" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="' + size + '" height="' + size + '" role="img" aria-label="' + esc(name + ' ' + date + ' ' + title) + '">' +
+      '<defs><filter id="' + esc(id) + '" x="-10%" y="-10%" width="120%" height="120%">' +
+        '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>' +
+        '<feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>' +
+      '</filter></defs>' +
+      '<g filter="url(#' + esc(id) + ')" transform="rotate(-6 50 50)" opacity="0.93">' +
+        '<circle cx="50" cy="50" r="42" fill="none" stroke="' + esc(color) + '" stroke-width="3"/>' +
+        '<line x1="11" y1="36" x2="89" y2="36" stroke="' + esc(color) + '" stroke-width="1.5"/>' +
+        '<line x1="11" y1="64" x2="89" y2="64" stroke="' + esc(color) + '" stroke-width="1.5"/>' +
+        '<g fill="' + esc(color) + '" font-family="' + font + '" font-weight="700" text-anchor="middle">' +
+          '<text x="50" y="' + nameBase + '" font-size="' + nameSize + '"' + fitAttr(name, nameSize, nameBase) + '>' + esc(name) + '</text>' +
+          '<text x="50" y="54" font-size="11.5" letter-spacing="0.4">' + esc(date) + '</text>' +
+          '<text x="50" y="' + titleBase.toFixed(1) + '" font-size="' + titleSize + '"' + fitAttr(title, titleSize, titleBase) + '>' + esc(title) + '</text>' +
+        '</g>' +
+      '</g></svg>';
+  }
+function shortName(name) {
+    var s = String(name || '').trim();
+    var head = s.split(/[\s　]+/)[0] || '';
+    if (!head) return '';
+    var arr = Array.from ? Array.from(head) : head.split('');
+    return arr.length <= 4 ? head : arr.slice(0, 2).join('');
+  }
+function verdictSvg(opts) {
+    opts = opts || {};
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    };
+    var list = function (str) { return Array.from ? Array.from(String(str)) : String(str).split(''); };
+    // 文字幅の目安（em）。ASCII・半角カナは約 0.62em、それ以外は 1em
+    var units = function (str) {
+      var u = 0;
+      list(str).forEach(function (ch) {
+        var c = ch.charCodeAt(0);
+        u += c < 0x80 || (c >= 0xff61 && c <= 0xff9f) ? 0.62 : 1;
+      });
+      return u;
+    };
+    var label = String(opts.label == null ? '採用' : opts.label).trim();
+    var date = String(opts.date || '').trim();
+    var sub = String(opts.sub || '').trim();
+    var size = Number(opts.size) || 120;
+    var color = opts.color || '#c8232c';
+    var id = String(opts.id || ('vd' + list(label).length + date.replace(/\D/g, '')));
+    var W = size, H = Math.round(size * 76 / 120);
+    var lower = [date, sub].filter(function (x) { return !!x; }).join(' ');
+    var aria = [label, date, sub].filter(function (x) { return !!x; }).join(' ');
+    var lu = units(label);
+    var fs = lu <= 2 ? 28 : lu <= 3 ? 24 : lu <= 4 ? 20 : 18;
+    var ls = lu <= 2 ? 4 : lu <= 3 ? 2 : lu <= 4 ? 1 : 0;
+    var fit = lu * fs + ls * Math.max(0, list(label).length - 1) > 88 ? ' textLength="88" lengthAdjust="spacingAndGlyphs"' : '';
+    var fit2 = units(lower) * 10 > 86 ? ' textLength="86" lengthAdjust="spacingAndGlyphs"' : '';
+    var font = "'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic','YuGothic',Meiryo,'Noto Sans JP',sans-serif";
+    var c = esc(color);
+    return '<svg class="verdict-stamp" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 76" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(aria) + '">' +
+      '<defs><filter id="' + esc(id) + '" x="-10%" y="-10%" width="120%" height="120%">' +
+        '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>' +
+        '<feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>' +
+      '</filter></defs>' +
+      '<g filter="url(#' + esc(id) + ')" transform="rotate(-3 60 38)" opacity="0.93">' +
+        '<rect x="6" y="6" width="108" height="64" rx="9" fill="none" stroke="' + c + '" stroke-width="3.2"/>' +
+        '<rect x="11" y="11" width="98" height="54" rx="6" fill="none" stroke="' + c + '" stroke-width="1.2"/>' +
+        (lower ? '<line x1="18" y1="50" x2="102" y2="50" stroke="' + c + '" stroke-width="1"/>' : '') +
+        '<g fill="' + c + '" font-family="' + font + '" font-weight="800" text-anchor="middle">' +
+          '<text x="60" y="' + (lower ? '42.5' : '48') + '" font-size="' + fs + '" letter-spacing="' + ls + '"' + fit + '>' + esc(label) + '</text>' +
+          (lower ? '<text x="60" y="61" font-size="10" letter-spacing="0.4"' + fit2 + '>' + esc(lower) + '</text>' : '') +
+        '</g>' +
+      '</g></svg>';
+  }
+function decisionSheetHtml(dec, o) {
+    o = o || {};
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    };
+    var title = o.title || '最終合否';
+    var idAttr = o.id ? ' id="' + esc(o.id) + '"' : '';
+    if (!dec || (dec.result !== 'hire' && dec.result !== 'reject')) {
+      return '<div class="cl-decision is-none"' + idAttr + ' data-result=""><div class="cl-dec-empty"><span>' + esc(title) + '</span><span>未押印</span></div></div>';
+    }
+    var hire = dec.result === 'hire';
+    var color = hire ? (o.hireColor || '#c8232c') : (o.rejectColor || '#1f4e8c');
+    var label = dec.label || (hire ? (o.hireLabel || '採用') : (o.rejectLabel || '不採用'));
+    var by = dec.by || {};
+    var name = String(by.name || '').trim();
+    var btitle = String(by.title || '').trim();
+    var svg = verdictSvg({ label: label, date: dec.date || '', color: color, size: o.size || 64, id: o.svgId || ((o.id || 'cl') + 'Svg'), sub: o.sub || '' });
+    return '<div class="cl-decision is-' + dec.result + '"' + idAttr + ' data-result="' + dec.result + '">' +
+      '<div class="cl-dec-stamp">' + svg + '</div>' +
+      '<div class="cl-dec-meta">' +
+        '<span class="cl-dec-kv"><span class="cl-dec-k">' + esc(title) + '</span><b class="cl-dec-v" style="color:' + esc(color) + '">' + esc(label) + '</b></span>' +
+        (name ? '<span class="cl-dec-by">' + esc(name) + (btitle ? '（' + esc(btitle) + '）' : '') + '</span>' : '') +
+        '<span class="cl-dec-date">' + esc(dec.date || '') + '</span>' +
+      '</div></div>';
+  }
+function decisionFilename(fn, dec, o) {
+    o = o || {};
+    var clean = function (s) { return String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_'); };
+    var name = String(fn || '');
+    var m = name.match(/\.html?$/i);
+    var ext = m ? m[0] : '.html';
+    var base = m ? name.slice(0, name.length - ext.length) : name;
+    var ok = !!dec && (dec.result === 'hire' || dec.result === 'reject');
+    var cands = ['不採用', '採用', o.rejectLabel, o.hireLabel, ok ? dec.label : '']
+      .map(function (x) { return clean(x); })
+      .filter(function (x, i, arr) { return !!x && arr.indexOf(x) === i; })
+      .sort(function (a, b) { return b.length - a.length; });
+    for (var i = 0; i < cands.length; i++) {
+      var suf = '_' + cands[i];
+      if (base.length > suf.length && base.slice(base.length - suf.length) === suf) { base = base.slice(0, base.length - suf.length); break; }
+    }
+    if (o.filenameSuffix !== false && ok) {
+      base += '_' + clean(dec.label || (dec.result === 'hire' ? (o.hireLabel || '採用') : (o.rejectLabel || '不採用')));
+    }
+    return base + ext;
+  }
+function sha256Hex(str) {
+    var K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+    var H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    var bytes = [], i, c;
+    str = String(str == null ? '' : str);
+    for (i = 0; i < str.length; i++) {
+      c = str.charCodeAt(i);
+      if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length) { var d = str.charCodeAt(i + 1); if (d >= 0xdc00 && d <= 0xdfff) { c = 0x10000 + ((c - 0xd800) << 10) + (d - 0xdc00); i++; } }
+      if (c < 0x80) bytes.push(c);
+      else if (c < 0x800) bytes.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+      else if (c < 0x10000) bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else bytes.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    }
+    var bitLen = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    var hi = Math.floor(bitLen / 0x100000000), lo = bitLen >>> 0;
+    bytes.push((hi >>> 24) & 255, (hi >>> 16) & 255, (hi >>> 8) & 255, hi & 255, (lo >>> 24) & 255, (lo >>> 16) & 255, (lo >>> 8) & 255, lo & 255);
+    var W = new Array(64), j, t1, t2, a, b, cc, dd, e, f, g, h;
+    var rotr = function (x, n) { return (x >>> n) | (x << (32 - n)); };
+    for (i = 0; i < bytes.length; i += 64) {
+      for (j = 0; j < 16; j++) W[j] = ((bytes[i + j * 4] << 24) | (bytes[i + j * 4 + 1] << 16) | (bytes[i + j * 4 + 2] << 8) | bytes[i + j * 4 + 3]) >>> 0;
+      for (j = 16; j < 64; j++) {
+        var s0 = rotr(W[j - 15], 7) ^ rotr(W[j - 15], 18) ^ (W[j - 15] >>> 3);
+        var s1 = rotr(W[j - 2], 17) ^ rotr(W[j - 2], 19) ^ (W[j - 2] >>> 10);
+        W[j] = (W[j - 16] + s0 + W[j - 7] + s1) >>> 0;
+      }
+      a = H[0]; b = H[1]; cc = H[2]; dd = H[3]; e = H[4]; f = H[5]; g = H[6]; h = H[7];
+      for (j = 0; j < 64; j++) {
+        t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[j] + W[j]) >>> 0;
+        t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & cc) ^ (b & cc))) >>> 0;
+        h = g; g = f; f = e; e = (dd + t1) >>> 0; dd = cc; cc = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + cc) >>> 0; H[3] = (H[3] + dd) >>> 0;
+      H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+    }
+    var out = '';
+    for (i = 0; i < 8; i++) out += ('00000000' + H[i].toString(16)).slice(-8);
+    return out;
+  }
+function hashPassword(salt, pw) {
+    return sha256Hex(String(salt == null ? '' : salt) + ':' + String(pw == null ? '' : pw));
+  }
+function isLocked(lock) {
+    return !!lock && typeof lock === 'object' && typeof lock.salt === 'string' && /^[0-9a-f]{32}$/.test(lock.salt) && typeof lock.hash === 'string' && /^[0-9a-f]{64}$/.test(lock.hash);
+  }
+function verify(lock, pw) {
+    if (!isLocked(lock)) return true;
+    return hashPassword(lock.salt, pw) === lock.hash;
+  }
+var LIMIT=1052,PAPER_W=793.7;
+(function a4PageScript(LIMIT, PAPER_W) {
+    var de = document.documentElement, a4 = document.getElementById("a4"), sheet = a4 && a4.querySelector(".cl-sheet");
+    if (!sheet) return;
+    var recNode = document.getElementById("recruit-record"), cfgNode = document.getElementById("recruit-mgmt-config");
+    var rec = null, cfg = null;
+    try { rec = JSON.parse(recNode.textContent); } catch (e) { rec = null; }
+    try { cfg = cfgNode ? JSON.parse(cfgNode.textContent) : null; } catch (e) { cfg = null; }
+    var recOk = !!rec && typeof rec === "object";
+    if (!recOk) rec = {};
+    if (!cfg || typeof cfg !== "object") cfg = {};
+    cfg.fields = Array.isArray(cfg.fields) ? cfg.fields : [];
+    cfg.managers = Array.isArray(cfg.managers) ? cfg.managers : [];
+    cfg.allowFreeName = cfg.allowFreeName !== false;
+    if (!rec.management || typeof rec.management !== "object") rec.management = {};
+    var D = cfg.decision && typeof cfg.decision === "object" ? cfg.decision : null;
+    var LK = cfg.finalLock && typeof cfg.finalLock === "object" ? cfg.finalLock : null, lockF = typeof cfg.lockField === "string" ? cfg.lockField : "";
+    var lockFs = Array.isArray(cfg.lockFields) ? cfg.lockFields.concat(["final"]) : ["final", lockF];
+    var locked = !!LK && (typeof isLocked !== "function" || isLocked(LK)), unlocked = false;
+    var canStamp = recOk && typeof stampSvg === "function" && typeof shortName === "function" && cfg.fields.length > 0;
+    var canDecide = recOk && !!D && typeof decisionSheetHtml === "function" && typeof decisionFilename === "function" && typeof shortName === "function";
+    var dirty = false, saved = false, pop = null, anchor = null, bar = null, rz = 0, fitKey = "";
+    var ATTRS = ["data-a4-t", "tabindex", "role", "aria-haspopup", "aria-label", "aria-expanded"];
+
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]; }); }
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    function today() { var d = new Date(); return d.getFullYear() + "." + pad(d.getMonth() + 1) + "." + pad(d.getDate()); }
+    function each(list, fn) { Array.prototype.forEach.call(list || [], fn); }
+    function fieldOf(id) {
+      for (var i = 0; i < cfg.fields.length; i++) { if (cfg.fields[i] && cfg.fields[i].id === id) return { f: cfg.fields[i], idx: i }; }
+      return null;
+    }
+    function stamped(id) { var e = rec.management[id]; return e && e.name ? e : null; }
+    function curDec() { var d = rec.decision; return d && (d.result === "hire" || d.result === "reject") && d.by && d.by.name ? d : null; }
+    function noteText(d) {
+      var j = rec.judgment;
+      if (!d || !j) return "";
+      if ((d.result === "hire" && j.result === "reject") || (d.result === "reject" && j.result === "recommend")) return "※ アプリの判定「" + (j.title || "") + "」と異なる最終合否です（記録はそのまま残ります）。";
+      return "";
+    }
+
+    function scale() {
+      var w = de.clientWidth, z = w < PAPER_W + 32 ? Math.max(0.2, Math.floor((w - 32) / PAPER_W * 1000) / 1000) : 1;
+      if (z < 1) de.style.setProperty("--a4-zoom", String(z)); else de.style.removeProperty("--a4-zoom");
+      if (!de.getAttribute("style")) de.removeAttribute("style");
+    }
+    function layoutKey() {
+      var k = document.fonts && document.fonts.status ? String(document.fonts.status) : "";
+      each(document.images, function (im) { k += im.complete ? "1" : "0"; });
+      return k;
+    }
+    function fit() {
+      de.style.removeProperty("--a4-zoom");
+      var lv = clFitSheet(sheet, LIMIT);
+      fitKey = layoutKey();
+      markTargets();
+      scale();
+      if (pop) { if (anchor && de.contains(anchor) && anchor.getAttribute("data-a4-t")) place(); else closePop(false); }
+      return lv;
+    }
+    function refit() { if (layoutKey() !== fitKey) fit(); }
+    function mark(el, t, label) {
+      el.setAttribute("data-a4-t", t); el.setAttribute("tabindex", "0"); el.setAttribute("role", "button");
+      el.setAttribute("aria-haspopup", "dialog"); el.setAttribute("aria-label", label);
+    }
+    function unmark(el) { for (var i = 0; i < ATTRS.length; i++) el.removeAttribute(ATTRS[i]); }
+    function markTargets() {
+      if (canStamp) each(sheet.querySelectorAll(".cl-stamps .stamp-box[data-field-id]"), function (box) {
+        var x = fieldOf(box.getAttribute("data-field-id"));
+        if (x) mark(box, "stamp", (x.f.label || x.f.id) + "の押印"); else unmark(box);
+      });
+      var dec = canDecide ? document.getElementById("a4Decision") : null;
+      if (dec) mark(dec, "decision", D.label || "最終合否");
+      each(sheet.querySelectorAll(".cl-nm-v,.cl-rt-nt"), function (el) {
+        if (el.classList.contains("cl-cut")) mark(el, "memo", "メモの全文を表示"); else if (el.getAttribute("data-a4-t")) unmark(el);
+      });
+      var ref = sheet.querySelector(".cl-nm-ref");
+      if (ref) { if (ref.getClientRects().length) mark(ref, "memos", "面接メモの全文を表示"); else if (ref.getAttribute("data-a4-t")) unmark(ref); }
+      if (anchor && anchor.getAttribute("data-a4-t")) anchor.setAttribute("aria-expanded", "true");
+    }
+
+    function renderStamps() {
+      if (!canStamp) return;
+      each(sheet.querySelectorAll(".cl-stamps .stamp-box[data-field-id]"), function (box) {
+        var x = fieldOf(box.getAttribute("data-field-id"));
+        if (!x) return;
+        var e = stamped(x.f.id), area = box.querySelector(".stamp-area"), meta = box.querySelector(".stamp-meta");
+        if (area) area.innerHTML = e ? stampSvg({ name: e.short || shortName(e.name), title: e.title || "", date: e.date || "", size: 46, id: "a4s" + x.idx }) : "<div class=\"stamp-empty\">未押印</div>";
+        if (meta) meta.textContent = e ? e.name + (e.title ? "（" + e.title + "）" : "") + "　" + (e.date || "") : "";
+      });
+    }
+    function renderDecision() {
+      if (!canDecide) return;
+      var old = document.getElementById("a4Decision");
+      if (!old) return;
+      var was = anchor === old, d = curDec();
+      old.outerHTML = decisionSheetHtml(d, { id: "a4Decision", svgId: "vdA4", title: D.label, hireLabel: D.hireLabel, rejectLabel: D.rejectLabel, hireColor: D.hireColor, rejectColor: D.rejectColor, sub: D.sub || "", size: 64 });
+      if (was) anchor = document.getElementById("a4Decision");
+      document.body.setAttribute("data-filename", decisionFilename(document.body.getAttribute("data-filename") || "applicant.html", d, D));
+    }
+    function barSpace() {
+      var bd = document.body;
+      if (bar) { bd.classList.add("a4-sb"); bd.style.setProperty("--a4-sbh", bar.offsetHeight + "px"); return; }
+      bd.classList.remove("a4-sb"); bd.style.removeProperty("--a4-sbh");
+      if (!bd.getAttribute("style")) bd.removeAttribute("style");
+    }
+    function renderBar() {
+      if (!dirty && !saved) { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); bar = null; barSpace(); return; }
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.className = "savebar"; bar.id = "saveBar";
+        bar.setAttribute("role", "status"); bar.setAttribute("aria-live", "polite");
+        bar.innerHTML = "<span class=\"savebar-msg\" id=\"saveBarMsg\"></span><button type=\"button\" class=\"savebar-btn\" id=\"saveBarBtn\"></button>" +
+          "<button type=\"button\" class=\"savebar-x\" id=\"saveBarClose\" aria-label=\"閉じる\" title=\"閉じる\" hidden>×</button>";
+        bar.querySelector(".savebar-btn").addEventListener("click", exportHtml);
+        bar.querySelector(".savebar-x").addEventListener("click", function () { saved = false; renderBar(); });
+        document.body.appendChild(bar);
+      }
+      bar.querySelector(".savebar-msg").textContent = dirty ? "押印・合否を変更しました" : "保存しました（保存できなかったときは再保存）";
+      bar.querySelector(".savebar-btn").textContent = dirty ? "押印を保存" : "再保存";
+      bar.querySelector(".savebar-x").hidden = dirty;
+      barSpace();
+    }
+    function render() { renderStamps(); renderDecision(); fit(); renderBar(); }
+    function changed() { dirty = true; saved = false; render(); }
+
+    function memoOf(el) {
+      var notes = (rec.checklist && rec.checklist.notes) || {}, row = el.closest(".cl-nm-row"), tr = el.closest("tr[data-cl-item]"), k = "", v = null, b;
+      if (row) {
+        k = (row.querySelector(".cl-nm-k") || {}).textContent || "メモ";
+        b = row.getAttribute("data-cl-block");
+        if (b && notes[b] != null) v = notes[b];
+        else if (row.classList.contains("cl-nm-iv")) v = rec.interviewNotes;
+        else if (row.classList.contains("cl-nm-memo")) v = (rec.applicant || {}).reviewerNotes;
+      } else if (tr) {
+        k = ((tr.querySelector(".cl-rt-no") || {}).textContent || "") + " " + ((tr.querySelector(".cl-rt-lbl") || {}).textContent || "") + " のメモ";
+        v = notes[tr.getAttribute("data-cl-item")];
+      }
+      if (v == null || v === "") v = el.textContent;
+      return { k: k || "メモ", v: String(v) };
+    }
+    function personHtml(name) {
+      var idx = -1, i, m, o = "<option value=\"\">担当者を選択</option>";
+      for (i = 0; i < cfg.managers.length; i++) { if (name && cfg.managers[i] && cfg.managers[i].name === name) { idx = i; break; } }
+      var free = !!name && idx < 0 && cfg.allowFreeName;
+      for (i = 0; i < cfg.managers.length; i++) {
+        m = cfg.managers[i] || {};
+        o += "<option value=\"" + i + "\"" + (i === idx ? " selected" : "") + ">" + esc(m.name + (m.title ? "（" + m.title + "）" : "")) + "</option>";
+      }
+      if (cfg.allowFreeName) o += "<option value=\"__free\"" + (free ? " selected" : "") + ">名簿にない担当者（手入力）</option>";
+      return "<label class=\"pop-l\"><span>担当者</span><select class=\"pop-sel\">" + o + "</select></label>" +
+        (cfg.allowFreeName ? "<input class=\"pop-free\" type=\"text\" placeholder=\"氏名（例：山田 太郎）\" aria-label=\"氏名\"" + (free ? " value=\"" + esc(name) + "\"" : " hidden") + ">" : "");
+    }
+    function decBtn(r, label, d) {
+      var on = !!d && d.result === r;
+      return "<button type=\"button\" class=\"pop-dec pop-" + r + (on ? " on" : "") + "\" data-act=\"decide\" data-value=\"" + r + "\" aria-pressed=\"" + (on ? "true" : "false") + "\">" + esc(label) + "</button>";
+    }
+    function popErr(msg) { var e = pop && pop.querySelector(".pop-err"); if (e) e.textContent = msg; }
+    function needPw(kind, id) { return locked && !unlocked && (kind === "decision" || (kind === "stamp" && !!id && lockFs.indexOf(id) >= 0)); }
+    function pwHtml() {
+      return "<div class=\"pop-lock\">最終承認にはパスワードが必要です</div>" +
+        "<label class=\"pop-l\"><span>パスワード</span><input class=\"pop-pw\" type=\"password\" autocomplete=\"off\" aria-label=\"最終承認のパスワード\"></label>" +
+        "<div class=\"pop-err\" role=\"alert\"></div>";
+    }
+    function doUnlock() {
+      var inp = pop && pop.querySelector(".pop-pw"), t = anchor;
+      if (!inp || !t) return;
+      if (!inp.value) { popErr("パスワードを入力してください"); inp.focus(); return; }
+      if (typeof verify !== "function" || !verify(LK, inp.value)) { popErr("パスワードが違います"); inp.focus(); inp.select(); return; }
+      unlocked = true;
+      openPop(t);
+    }
+    function pickPerson() {
+      var sel = pop.querySelector(".pop-sel"), inp = pop.querySelector(".pop-free"), v = sel ? sel.value : "", m, nm;
+      if (v === "__free") {
+        nm = inp ? inp.value.trim() : "";
+        if (!nm) { popErr("氏名を入力してください"); if (inp) inp.focus(); return null; }
+        return { name: nm, short: shortName(nm), title: "" };
+      }
+      m = cfg.managers[Number(v)];
+      if (!v || !m || !m.name) { popErr("担当者を選んでください"); if (sel) sel.focus(); return null; }
+      return { name: m.name, short: m.short || shortName(m.name), title: m.title || "" };
+    }
+
+    function place() {
+      if (!pop || !anchor) return;
+      var r = anchor.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight, vw = de.clientWidth, vh = window.innerHeight;
+      var top = r.bottom + 6;
+      if (top + ph > vh - 8) top = r.top - 6 - ph >= 8 ? r.top - 6 - ph : Math.max(8, vh - ph - 8);
+      var left = Math.min(Math.max(8, r.left), Math.max(8, vw - pw - 8));
+      pop.style.left = (left + window.pageXOffset) + "px";
+      pop.style.top = (top + window.pageYOffset) + "px";
+    }
+    function closePop(ret) {
+      if (!pop) return;
+      var t = anchor;
+      if (pop.parentNode) pop.parentNode.removeChild(pop);
+      pop = null; anchor = null;
+      if (t) { t.removeAttribute("aria-expanded"); if (ret && de.contains(t) && t.focus) t.focus({ preventScroll: true }); }
+    }
+    function openPop(t) {
+      var kind = t.getAttribute("data-a4-t"), h = "", sub = "", body = "", foot = "", close = "<button type=\"button\" data-act=\"close\">閉じる</button>";
+      var x, e, d, st, j, nt, memo = null;
+      closePop(false);
+      if (kind === "stamp") {
+        x = canStamp ? fieldOf(t.getAttribute("data-field-id")) : null;
+        if (!x) return;
+        e = stamped(x.f.id);
+        h = x.f.label || x.f.id; sub = x.f.hint || "";
+        if (needPw("stamp", x.f.id)) { body = pwHtml(); foot = "<button type=\"button\" class=\"primary\" data-act=\"unlock\">確認</button>" + close; }
+        else body = personHtml(e ? e.name : (cfg.interviewerField && cfg.interviewerField === x.f.id && rec.checklist && rec.checklist.header ? String(rec.checklist.header.interviewer || "") : "")) +
+          "<div class=\"pop-err\" role=\"alert\"></div>";
+        if (!foot) foot = "<button type=\"button\" class=\"primary\" data-act=\"stamp\">押印</button>" + (e ? "<button type=\"button\" data-act=\"unstamp\">取消</button>" : "") + close;
+      } else if (kind === "decision") {
+        if (!canDecide) return;
+        d = curDec(); st = D.stampField ? stamped(D.stampField) : null; j = rec.judgment; nt = noteText(d);
+        h = D.label || "最終合否"; sub = D.hint || "";
+        if (needPw("decision", "")) { body = pwHtml(); foot = "<button type=\"button\" class=\"primary\" data-act=\"unlock\">確認</button>" + close; }
+        else body = personHtml((st && st.name) || (d && d.by.name) || "") +
+          (j && j.result ? "<div class=\"pop-ref\">アプリの判定：" + esc(j.title || "") + "</div>" : "") +
+          (nt ? "<div class=\"pop-note\">" + esc(nt) + "</div>" : "") + "<div class=\"pop-err\" role=\"alert\"></div>";
+        if (!foot) foot = decBtn("hire", D.hireLabel || "採用", d) + decBtn("reject", D.rejectLabel || "不採用", d) + (d ? "<button type=\"button\" data-act=\"undecide\">取消</button>" : "") + close;
+      } else if (kind === "memo") {
+        memo = memoOf(t); h = memo.k; body = "<div class=\"pop-text\"></div>"; foot = close;
+      } else if (kind === "memos") {
+        h = "面接メモ（全文）"; body = "<dl class=\"pop-memos\"></dl>"; foot = close;
+      } else return;
+      pop = document.createElement("div");
+      pop.className = "pop"; pop.id = "a4Pop";
+      pop.setAttribute("role", "dialog"); pop.setAttribute("aria-labelledby", "a4PopH"); pop.setAttribute("data-kind", kind);
+      pop.innerHTML = "<div class=\"pop-h\" id=\"a4PopH\">" + esc(h) + "</div>" + (sub ? "<div class=\"pop-sub\">" + esc(sub) + "</div>" : "") +
+        "<div class=\"pop-b\">" + body + "</div><div class=\"pop-f\">" + foot + "</div>";
+      if (kind === "decision") { pop.style.setProperty("--dec-hire", String(D.hireColor || "#c8232c")); pop.style.setProperty("--dec-reject", String(D.rejectColor || "#1f4e8c")); }
+      if (memo) pop.querySelector(".pop-text").textContent = memo.v;
+      if (kind === "memos") {
+        each(sheet.querySelectorAll(".cl-nm-row"), function (row) {
+          var v = row.querySelector(".cl-nm-v"), m, dt, dd;
+          if (!v) return;
+          m = memoOf(v); dt = document.createElement("dt"); dd = document.createElement("dd");
+          dt.textContent = m.k; dd.textContent = m.v;
+          pop.querySelector(".pop-memos").appendChild(dt); pop.querySelector(".pop-memos").appendChild(dd);
+        });
+      }
+      pop.addEventListener("click", onPopClick);
+      pop.addEventListener("change", onPopChange);
+      pop.addEventListener("keydown", onPopKey);
+      document.body.appendChild(pop);
+      anchor = t; t.setAttribute("aria-expanded", "true");
+      place();
+      var f = pop.querySelector(".pop-pw") || pop.querySelector(".pop-sel") || pop.querySelector("[data-act=\"close\"]");
+      if (f) f.focus({ preventScroll: true });
+    }
+    function doStamp(act) {
+      var id = anchor.getAttribute("data-field-id"), p;
+      if (act === "stamp") {
+        p = pickPerson();
+        if (!p) return;
+        rec.management[id] = { name: p.name, short: p.short, title: p.title, date: today(), at: new Date().toISOString() };
+      } else delete rec.management[id];
+      closePop(true); changed();
+    }
+    function doDecide(act, r) {
+      var p, dt, at;
+      if (act === "undecide") { rec.decision = null; changed(); closePop(true); return; }
+      if (r !== "hire" && r !== "reject") return;
+      p = pickPerson();
+      if (!p) return;
+      dt = today(); at = new Date().toISOString();
+      rec.decision = { result: r, label: r === "hire" ? D.hireLabel : D.rejectLabel, date: dt, at: at, by: { name: p.name, short: p.short, title: p.title } };
+      if (D.autoStampFinal && D.stampField && fieldOf(D.stampField) && !stamped(D.stampField)) rec.management[D.stampField] = { name: p.name, short: p.short, title: p.title, date: dt, at: at };
+      changed();
+      if (noteText(rec.decision) && anchor) openPop(anchor); else closePop(true);
+    }
+    function onPopClick(ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-act]") : null, act, kind;
+      if (!b || !pop || !pop.contains(b)) return;
+      act = b.getAttribute("data-act"); kind = pop.getAttribute("data-kind");
+      popErr("");
+      if (act === "close") closePop(true);
+      else if (act === "unlock") doUnlock();
+      else if (needPw(kind, anchor ? anchor.getAttribute("data-field-id") : "")) return;
+      else if (kind === "stamp" && (act === "stamp" || act === "unstamp")) doStamp(act);
+      else if (kind === "decision" && (act === "decide" || act === "undecide")) doDecide(act, b.getAttribute("data-value"));
+    }
+    function onPopChange(ev) {
+      var sel = ev.target, inp;
+      if (!sel || !sel.classList || !sel.classList.contains("pop-sel")) return;
+      popErr("");
+      inp = pop.querySelector(".pop-free");
+      if (inp) { inp.hidden = sel.value !== "__free"; if (sel.value === "__free") inp.focus(); }
+      place();
+    }
+    function onPopKey(ev) {
+      if (ev.key === "Enter" && ev.target.classList && ev.target.classList.contains("pop-pw")) { ev.preventDefault(); popErr(""); doUnlock(); return; }
+      if (ev.key === "Enter" && ev.target.classList && ev.target.classList.contains("pop-free") && pop.getAttribute("data-kind") === "stamp") { ev.preventDefault(); popErr(""); doStamp("stamp"); }
+    }
+    function targetOf(ev) {
+      var t = ev.target && ev.target.closest ? ev.target.closest("[data-a4-t]") : null;
+      return t && sheet.contains(t) ? t : null;
+    }
+
+    function exportHtml() {
+      closePop(false);
+      recNode.textContent=JSON.stringify(rec).replace(/[<>&\u2028\u2029]/g,function(c){return "\\u"+("000"+c.charCodeAt(0).toString(16)).slice(-4);});
+      var root = de.cloneNode(true), bd = root.querySelector("body");
+      each(root.querySelectorAll(".pop,.savebar"), function (n) { n.parentNode.removeChild(n); });
+      each(root.querySelectorAll("[data-a4-t]"), unmark);
+      if (bd) {
+        bd.classList.remove("a4-live"); bd.classList.remove("a4-sb"); bd.style.removeProperty("--a4-sbh");
+        if (!bd.getAttribute("style")) bd.removeAttribute("style");
+      }
+      root.style.removeProperty("--a4-zoom");
+      if (!root.getAttribute("style")) root.removeAttribute("style");
+      var html = "<!DOCTYPE html>\n" + root.outerHTML;
+      var blob = new Blob([html], { type: "text/html;charset=utf-8" }), url = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = url; a.download = document.body.getAttribute("data-filename") || "applicant.html";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      dirty = false; saved = true; renderBar();
+    }
+
+    document.body.classList.add("a4-live");
+    sheet.addEventListener("click", function (ev) {
+      var t = targetOf(ev);
+      if (!t) return;
+      if (pop && anchor === t) closePop(true); else openPop(t);
+    });
+    sheet.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Enter" && ev.key !== " " && ev.key !== "Spacebar") return;
+      var t = targetOf(ev);
+      if (!t || t !== ev.target) return;
+      ev.preventDefault();
+      if (pop && anchor === t) closePop(true); else openPop(t);
+    });
+    document.addEventListener("mousedown", function (ev) {
+      if (!pop || pop.contains(ev.target) || (anchor && anchor.contains(ev.target))) return;
+      closePop(false);
+    }, true);
+    document.addEventListener("keydown", function (ev) {
+      if (pop && (ev.key === "Escape" || ev.key === "Esc")) { ev.preventDefault(); closePop(true); }
+    });
+    window.addEventListener("resize", function () {
+      if (rz) return;
+      rz = window.requestAnimationFrame(function () { rz = 0; scale(); if (pop) place(); if (bar) barSpace(); });
+    });
+    window.addEventListener("load", refit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+    window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+    window.__a4Fit = fit;
+    render();
+  })(LIMIT,PAPER_W);
+})();
+</script>
+</body>
+</html>

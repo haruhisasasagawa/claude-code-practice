@@ -3,7 +3,9 @@
  * ----------------------------------------------------------------------
  * - interviewModel ほか : 面接チェックリスト（面接台本。○△× と総合判断の得点率・必須条件。docs/SPEC-checklist.md）
  * - checklistSummary    : 面接チェックリストの表示用ビューモデル（② 面接チェックリスト・③ 報告書・右サマリー・保存レポート・A4 報告で共用）
- * - evaluateScript      : 採用可否の判定（面接者の総合判断が基準。必須条件の不一致は不採用推奨。docs/SPEC-script-mode.md）
+ * - evaluateScript      : 採用可否の判定（面接者の総合判断が基準。必須条件の不一致は不採用推奨。docs/SPEC-script-mode.md）。
+ *                         人物像（1〜5 点）の合計・1 点の項目・未入力で下げる方向にだけ調整する（docs/SPEC-persona.md）
+ * - personaModel        : 人物像（接客。1〜5 点）の集計（② の総評・右サマリー・A4 報告・判定で共用）
  * - scriptApplicantRows : 応募者情報の行（① 応募者の入力と台本のヘッダー）
  *
  * 劇場固有の数値・文言はすべて profile（config.default.js）から受け取る。
@@ -67,20 +69,84 @@
   function clStr(v) { return v == null ? '' : String(v); }
   function oneOf(v, list, def) { return list.indexOf(v) >= 0 ? v : def; }
 
-  // 空の回答
+  // 空の回答（persona: 人物像の点 { 項目 id: 1〜5 }。null は「人物像を使わない記録」＝人物像の導入前に保存した記録。docs/SPEC-persona.md D2）
   function emptyChecklist() {
     // header.negatives（消極属性）は 2026-10-13 に削除。旧レコードに残っていても読み飛ばす（docs/SPEC-script-mode.md 12 章）
-    return { v: 1, header: { date: '', interviewer: '', posting: '', taxi: '' }, values: {}, notes: {}, overall: '' };
+    return { v: 1, header: { date: '', interviewer: '', posting: '', taxi: '' }, values: {}, notes: {}, overall: '', persona: {} };
   }
 
-  // 回答が 1 つでもあるか（header は数えない。面接日は自動で入るため）
+  // 回答が 1 つでもあるか（header は数えない。面接日は自動で入るため）。人物像の点も数える
   function checklistHasInput(cl) {
     if (!U.isObj(cl)) return false;
     const vals = U.isObj(cl.values) ? cl.values : {};
     const notes = U.isObj(cl.notes) ? cl.notes : {};
     if (Object.keys(vals).some(function (k) { const v = vals[k]; return v != null && v !== '' && v !== false; })) return true;
     if (Object.keys(notes).some(function (k) { return clStr(notes[k]).trim() !== ''; })) return true;
+    if (U.isObj(cl.persona) && Object.keys(cl.persona).some(function (k) { return personaScore(cl, k) != null; })) return true;
     return !!cl.overall;
+  }
+
+  // ---------- 人物像（接客。1〜5 点。docs/SPEC-persona.md 2 章） ----------
+  //   台本（profile.checklist.persona）の項目ごとに 1〜5 点。合計・得点率・1 点の項目・未入力で結果を下げる方向にだけ使う（面接評価〔interviewModel〕には入れない）
+  const PERSONA_SCALE = 5;
+  const PERSONA_RESULTS = ['none', 'review', 'reject'];
+  const PERSONA_LABELS = ['不採用レベル', 'やや不安', '普通', '良い', 'とても良い'];
+  // 点（1〜5 の整数。数値か '1'〜'5' の文字列）。それ以外（true・0・''・2.5・6 など）は未入力 null
+  function personaScore(cl, id) {
+    const ps = U.isObj(cl) && U.isObj(cl.persona) ? cl.persona : null;
+    const v = ps ? ps[id] : undefined;
+    if (typeof v === 'number') return v % 1 === 0 && v >= 1 && v <= PERSONA_SCALE ? v : null;
+    if (typeof v === 'string' && /^[1-5]$/.test(v)) return Number(v);
+    return null;
+  }
+  // 台本の人物像（使わないときは null: 設定が無い・OFF・項目なし）
+  function personaDefOf(def) {
+    const ps = U.isObj(def) && U.isObj(def.persona) ? def.persona : null;
+    if (!ps || ps.enabled === false) return null;
+    const items = (Array.isArray(ps.items) ? ps.items : []).filter(function (it) { return U.isObj(it) && typeof it.id === 'string' && it.id !== ''; });
+    return items.length ? { ps: ps, items: items } : null;
+  }
+  // 人物像の集計。null: 台本に人物像が無い・OFF・項目なし・記録が人物像を使わない（cl.persona === null）。cl.persona が無ければ全部未入力
+  function personaModel(def, cl) {
+    if (U.isObj(cl) && cl.persona === null) return null;
+    const pd = personaDefOf(def);
+    if (!pd) return null;
+    const ps = pd.ps;
+    const labels = Array.isArray(ps.scaleLabels) ? ps.scaleLabels : [];
+    const keepPct = num(ps.keepPct, 70), rejectBelowPct = num(ps.rejectBelowPct, 40);
+    const items = pd.items.map(function (it) {
+      const label = clStr(it.label), short = clStr(it.short).trim();
+      return { id: it.id, label: label, short: short, hint: clStr(it.hint), name: short || label, score: personaScore(cl, it.id) };
+    });
+    let total = 0, scored = 0;
+    const ones = [], unscoredNames = [];
+    items.forEach(function (it) {
+      if (it.score == null) { unscoredNames.push(it.name); return; }
+      total += it.score; scored++;
+      if (it.score === 1) ones.push(it.name);
+    });
+    const max = items.length * PERSONA_SCALE;
+    const complete = scored === items.length;
+    return {
+      title: clStr(ps.title).trim() || '人物像', scaleMax: PERSONA_SCALE,
+      scaleLabels: PERSONA_LABELS.map(function (d, i) { return typeof labels[i] === 'string' && labels[i].trim() ? labels[i].trim() : d; }),
+      keepPct: keepPct, rejectBelowPct: rejectBelowPct,
+      onePointResult: oneOf(ps.onePointResult, PERSONA_RESULTS, 'review'), unscoredResult: oneOf(ps.unscoredResult, PERSONA_RESULTS, 'review'),
+      items: items, total: total, max: max, pct: max ? Math.floor(total * 100 / max) : 0,
+      scored: scored, unscored: items.length - scored, complete: complete, ones: ones, unscoredNames: unscoredNames,
+      // 得点率の比較は整数で厳密に（total*100 と境界×満点。表示の % は切り捨て）。未完了は null
+      band: !complete ? null : total * 100 < rejectBelowPct * max ? 'reject' : total * 100 < keepPct * max ? 'review' : 'keep'
+    };
+  }
+  // 人物像の項目の差。defA=保存時、defB=現在。両方に人物像（ON・項目あり）があるときだけ比べる（どちらかに無ければ空）
+  function personaDiff(defA, defB) {
+    const a = personaDefOf(defA), b = personaDefOf(defB);
+    if (!a || !b) return { added: [], removed: [] };
+    const ia = a.items.map(function (it) { return it.id; }), ib = b.items.map(function (it) { return it.id; });
+    return {
+      added: ib.filter(function (id) { return ia.indexOf(id) < 0; }),
+      removed: ia.filter(function (id) { return ib.indexOf(id) < 0; })
+    };
   }
 
   // 台本順の項目一覧 [{ item, block, section, sectionIndex, no, noMark }]（type 省略で全項目）
@@ -211,7 +277,7 @@
     const ratings = checklistItems(def, 'rating').map(function (x) {
       const v = ratingValue(cl, x.item.id), rm = RATING_MARKS[v];
       return {
-        id: x.item.id, label: clStr(x.item.label), hint: clStr(x.item.hint), sectionId: x.section.id, sectionNo: x.no, noMark: x.noMark,
+        id: x.item.id, label: clStr(x.item.label), short: clStr(x.item.short), hint: clStr(x.item.hint), sectionId: x.section.id, sectionNo: x.no, noMark: x.noMark,
         value: v, mark: rm ? rm.mark : '', points: rm ? rm.points : null, tone: rm ? rm.tone : 'muted', note: clStr(notes[x.item.id])
       };
     });
@@ -280,6 +346,7 @@
     return {
       def: def, hasInput: checklistHasInput(cl),
       header: header, must: must, ratings: ratings, overall: overall,
+      persona: personaModel(def, cl),
       score: { total: model.total, max: model.max, pct: model.pct, band: model.band, bandLabel: model.bandLabel,
         rated: model.rated, ratable: model.ratable, counts: model.counts },
       sections: sections,
@@ -436,6 +503,24 @@
         if (cap !== 'none') down(cap, 'overall_hold', '面接者の総合判断が「' + ovl + '」のため、' + tail(cap));
       }
     }
+    // (e) 人物像（docs/SPEC-persona.md 2-2。下げる方向だけ）: 未入力 → 得点率 → 1 点の項目。
+    //   必須条件の不一致で不採用推奨に固定したとき（mustGate）は使わない（打ち切った面接は入力不要）
+    const ps = personaModel(def, cl);
+    if (ps && !mustGate) {
+      const capTail = function (cap) { return cap === 'reject' ? '不採用推奨とします。' : '採用推奨ではなく上長最終判断要として扱います。'; };
+      // e1 未入力: 警告は常に 1 行。unscoredResult まで下げる（下がったときだけ adjustments。理由は警告に重ねない）
+      if (ps.unscored) {
+        warnings.push('人物像に未入力が ' + ps.unscored + ' 項目あります（' + ps.unscoredNames.join('、') + '）。');
+        if (ps.unscoredResult !== 'none' && RESULT_RANK[ps.unscoredResult] < RESULT_RANK[result]) {
+          adjustments.push({ code: 'persona_unscored', from: result, to: ps.unscoredResult, reason: '人物像に未入力が ' + ps.unscored + ' 項目あるため、' + capTail(ps.unscoredResult) });
+          result = ps.unscoredResult;
+        }
+      }
+      // e2 得点率（全部入っているときだけ）
+      if (ps.complete && ps.band !== 'keep') down(ps.band, 'persona_total', '人物像の合計 ' + ps.total + '/' + ps.max + '（' + ps.pct + '%）のため、' + capTail(ps.band));
+      // e3 1 点の項目（未入力があっても）
+      if (ps.ones.length && ps.onePointResult !== 'none') down(ps.onePointResult, 'persona_one', '人物像に 1 点の項目（' + ps.ones.join('、') + '）があるため、' + capTail(ps.onePointResult));
+    }
     // (d) ○△× と総合判断の食い違い（結果は変えない）
     if (!mustGate && ov === 'hire' && counts.poor > 0) {
       const poorLabels = breakdown.filter(function (b) { return !b.isOverall && b.mark === 'poor'; }).map(function (b) { return b.label; });
@@ -490,7 +575,10 @@
       scaleMax: CHECKLIST_SCALE,
       checklist: { version: clStr(def.version), counts: counts, overall: { value: ov, label: ovl, points: ovPoints }, must: must },
       must: must,   // checklist.must と同じ（台本モードの描画用の別名）
-      overall: { value: ov, label: ovl, points: ovPoints, tone: ov ? OVERALL_TONE[ov] : 'muted' }
+      overall: { value: ov, label: ovl, points: ovPoints, tone: ov ? OVERALL_TONE[ov] : 'muted' },
+      // 人物像（使わない記録・OFF は null。ones は短い名前）
+      persona: ps ? { title: ps.title, total: ps.total, max: ps.max, pct: ps.pct, scored: ps.scored, unscored: ps.unscored, ones: ps.ones.slice(),
+        items: ps.items.map(function (it) { return { id: it.id, label: it.label, score: it.score }; }) } : null
     };
   }
 
@@ -521,6 +609,12 @@
     mustSummary: mustSummary,
     checklistSummary: checklistSummary,
     checklistDiff: checklistDiff,
+    // 人物像（SPEC-persona）
+    PERSONA_SCALE: PERSONA_SCALE,
+    PERSONA_RESULTS: PERSONA_RESULTS,
+    personaScore: personaScore,
+    personaModel: personaModel,
+    personaDiff: personaDiff,
     // 判定（SPEC-script-mode）
     OVERALL_RESULT: OVERALL_RESULT,
     DEFAULT_SCRIPT_TEXTS: DEFAULT_SCRIPT_TEXTS,
