@@ -29,7 +29,8 @@
  *       切れたメモを罫線の空きまで広げる（重いサンプル・面接所見 4,000 字。狭い画面・書き出して開き直しても同じ行数）・
  *       スクリーンショット a4-form.png・a4-form-heavy.png・a4-form-print.png・a4-form-heavy-print.png
  *   E17 人物像（1〜5 点）・面接記入シート（手書き用）・面接中はメモ中心の案内・質問の 1 行表示（docs/SPEC-persona.md 7-2）: 総評の人物像（クリック・数字キー・合計・1 点の警告）・
- *       判定（1 点・40% 未満・全部 3・全部 4・未入力）・A4（5 タイル・確認点｜人物像・1 ページ）・右サマリー・記入シートの印刷（PDF 1 ページ）・設定・旧い記録・使い方。
+ *       判定（1 点・40% 未満・全部 3・全部 4・未入力）・A4（5 タイル・確認点｜人物像・1 ページ）・右サマリー・記入シートの印刷（PDF 1 ページ・面接日を空にすると線・本物の window.print の経路・
+ *       afterprint が来ないときの 3 秒の片付け）・設定・旧い記録（① だけ保存した導入前の記録は人物像を使う）・使い方。
  *       スクリーンショット p12-step2-persona.png・p12-step2-questions.png・p12-report.png・p12-report-print.png・p12-paper-sheet.png・p12-paper-sheet-filled.png
  *   2026-10-16 から既定の確認点は 6 項目（面接評価 14 点満点。rt_manner を人物像と重なるため外した）。rateAll・mk39 は人物像を 4 点で埋める（未入力だと上長最終判断要になるため）
  *   必須条件の不一致の案内（⑤ 逆質問へ・省略可。旧 E26）は E2 で確かめる
@@ -1055,34 +1056,66 @@ const pdfTextOf = (f) => {
   await wait(600);
   const app39n = await page.evaluate(() => { const n = window.__fitApp; window.RecruitStorage.fitChecklistSheet = window.__fitOrig; return { n: n, step: window.RecruitApp.state.step, paper: !!document.querySelector('#appPaper .cl-sheet') }; });
   expect(app39n.step === 4 && app39n.paper && app39n.n === 1, 'E8 アプリで保存 HTML を読み込むと ③ の紙の計測は 1 回: ' + JSON.stringify(app39n));
-  //   最終合否の担当者名が改行できない長い文字列でも、最終合否欄は結果ストリップの 36% まで（左の 5 枚のタイルを「…」で潰さない・用紙からはみ出さない。docs/SPEC-persona.md D10）
+  //   最終合否の担当者名が改行できない長い文字列でも、最終合否欄は結果ストリップの 36% まで（左の 5 枚のタイルを「…」で潰さない・用紙からはみ出さない。docs/SPEC-persona.md D10）。
+  //   結果が「上長最終判断要」（7 文字）・人物像のタイルが「未入力 3・1点あり」・確認点のタイルが「○3 △1 ×0 未入力2」でも同じ（タイルは中身の幅より狭くならず、足りなければ最終合否欄が縮む）。
+  //   名簿の氏名＋役職 18 文字（「試験 長名美子（エリアマネージャー）」）は、どちらの状態でも最終合否欄で切れない（c0d20ce と同じく収まる）。
+  //   人物像のタイルが無い 4 枚（人物像の導入前の記録＝persona: null・設定で人物像を OFF）も同じ（c0d20ce の E8 が確かめていた 4 タイル。最終合否欄の上限 36% と
+  //   .cl-judge-main／.cl-decision の flex は 4 タイルにも効く。docs/SPEC-persona.md 11-9 補完 8）: rec4・rev4（persona: null）・off4（OFF）
   const dec39 = await page.evaluate(() => {
     const S = window.RecruitStorage, R = window.RecruitRules;
     const prof = S.normalizeProfile(S.defaults());
-    const cl = R.emptyChecklist();
-    cl.header = { date: '2026-10-10', interviewer: '笹川 晴央', posting: 'short', taxi: '可' };
-    R.checklistItems(prof.checklist, 'rating').forEach(x => { cl.values[x.item.id] = 'good'; });
-    R.checklistItems(prof.checklist, 'must').forEach(x => { cl.values[x.item.id] = 'match'; });
-    prof.checklist.persona.items.forEach(it => { cl.persona[it.id] = 4; });   // 採用推奨のまま（人物像のタイルも出る）
-    cl.overall = 'hire';
+    const profOff = JSON.parse(JSON.stringify(prof)); profOff.checklist.persona.enabled = false;
     const applicant = { name: '台本 五郎', age: '21', gender: '男性', category: '大学3年生', reviewerNotes: '' };
+    const states = {
+      rec: function (cl) {   // 採用推奨のまま（人物像は全部 4 点）
+        R.checklistItems(prof.checklist, 'rating').forEach(x => { cl.values[x.item.id] = 'good'; });
+        prof.checklist.persona.items.forEach(it => { cl.persona[it.id] = 4; });
+        cl.overall = 'hire';
+      },
+      rev: function (cl) {   // 上長最終判断要（総合判断「保留」）・人物像は一部入力で 1 点あり・確認点は 2 件未入力と △
+        R.checklistItems(prof.checklist, 'rating').forEach((x, i) => { if (i < 4) cl.values[x.item.id] = i === 1 ? 'fair' : 'good'; });
+        prof.checklist.persona.items.forEach((it, i) => { const v = [1, 4, 0, 3, 0, 0, 4][i]; if (v) cl.persona[it.id] = v; });
+        cl.overall = 'hold';
+      }
+    };
     const out = [];
-    for (const nm of ['笹川 晴央', 'https://example.com/recruit/abcdefghij0123456789abcdefghij0123456789abcdefghij01', '笹川' + '\u{1F468}' + '\u200D\u{1F468}'.repeat(60)]) {
-      const decision = { result: 'hire', label: '採用', date: '2026.10.10', at: '2026-10-10T00:00:00.000Z', by: { name: nm, short: '笹川', title: '' } };
-      const rec = { applicant, checklist: cl, checklistDef: prof.checklist, interviewNotes: '', management: {}, decision, judgment: R.evaluateScript(applicant, cl, prof, {}) };
-      const host = document.createElement('div'); host.className = 'a4'; host.style.cssText = 'position:absolute;left:0;top:0';
-      host.innerHTML = S.checklistSheetHtml(rec, prof, {}); document.body.appendChild(host);
-      S.fitChecklistSheet(host.querySelector('.cl-sheet'));
-      const padR = host.getBoundingClientRect().right - parseFloat(getComputedStyle(host).paddingRight);
-      const d = host.querySelector('.cl-decision').getBoundingClientRect(), row = host.querySelector('.cl-judge-row').getBoundingClientRect();
-      out.push({ decW: Math.round(d.width), rowW: Math.round(row.width), over: Math.round(d.right - padR), tiles: host.querySelectorAll('.cl-tile').length, res: rec.judgment.result,
-        trunc: Array.from(host.querySelectorAll('.cl-tile-v,.cl-tile-s')).filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent) });
-      host.remove();
+    //   [記録の種類, 回答の状態, 設定, persona を null にするか]
+    for (const [k, base, pf, nul] of [['rec', 'rec', prof, false], ['rev', 'rev', prof, false], ['rec4', 'rec', prof, true], ['rev4', 'rev', prof, true], ['off4', 'rev', profOff, false]]) {
+      for (const by of [{ name: '笹川 晴央', title: '' }, { name: '試験 長名美子', title: 'エリアマネージャー' }, { name: 'https://example.com/recruit/abcdefghij0123456789abcdefghij0123456789abcdefghij01', title: '' },
+        { name: '笹川' + '\u{1F468}' + '\u200D\u{1F468}'.repeat(60), title: '' }]) {
+        const cl = R.emptyChecklist();
+        cl.header = { date: '2026-10-10', interviewer: '笹川 晴央', posting: 'short', taxi: '可' };
+        R.checklistItems(prof.checklist, 'must').forEach(x => { cl.values[x.item.id] = 'match'; });
+        states[base](cl);
+        if (nul) cl.persona = null;
+        const decision = { result: 'hire', label: '採用', date: '2026.10.10', at: '2026-10-10T00:00:00.000Z', by: { name: by.name, short: '笹川', title: by.title } };
+        const rec = { applicant, checklist: cl, checklistDef: pf.checklist, interviewNotes: '', management: {}, decision, judgment: R.evaluateScript(applicant, cl, pf, {}) };
+        const host = document.createElement('div'); host.className = 'a4'; host.style.cssText = 'position:absolute;left:0;top:0';
+        host.innerHTML = S.checklistSheetHtml(rec, pf, {}); document.body.appendChild(host);
+        S.fitChecklistSheet(host.querySelector('.cl-sheet'));
+        const padR = host.getBoundingClientRect().right - parseFloat(getComputedStyle(host).paddingRight);
+        const d = host.querySelector('.cl-decision').getBoundingClientRect(), row = host.querySelector('.cl-judge-row').getBoundingClientRect();
+        const tilesR = Math.max.apply(null, Array.from(host.querySelectorAll('.cl-tile')).map(t => t.getBoundingClientRect().right));
+        const byEl = host.querySelector('.cl-dec-by');
+        out.push({ k, len: (by.name + (by.title ? '（' + by.title + '）' : '')).length, decW: Math.round(d.width), rowW: Math.round(row.width), rowH: Math.round(row.height), over: Math.round(d.right - padR), gap: Math.round(d.left - tilesR),
+          tiles: host.querySelectorAll('.cl-tile').length, hasPs: host.querySelector('.cl-tiles').classList.contains('has-ps'), res: rec.judgment.result, byCut: !!byEl && byEl.scrollWidth > byEl.clientWidth + 1,
+          vals: Array.from(host.querySelectorAll('.cl-tile-v,.cl-tile-s')).map(e => e.textContent).join('|'),
+          trunc: Array.from(host.querySelectorAll('.cl-tile-v,.cl-tile-s')).filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent) });
+        host.remove();
+      }
     }
     return out;
   });
-  expect(dec39.every(x => x.trunc.length === 0 && x.over <= 0 && x.decW <= x.rowW * 0.36 + 1 && x.tiles === 5 && x.res === 'recommend') && dec39[0].decW < dec39[1].decW,
-    'E8 最終合否の担当者名が改行できない長い文字列（URL 80 字・ZWJ でつながった絵文字）でも、最終合否欄は結果ストリップの 36% まで・5 枚のタイルは切れない・用紙からはみ出さない: ' + JSON.stringify(dec39));
+  const dec39k = (k, len) => dec39.find(x => x.k === k && x.len === len) || {};
+  const dec39five = dec39.filter(x => x.k === 'rec' || x.k === 'rev'), dec39four = dec39.filter(x => /4$/.test(x.k));
+  expect(dec39five.length === 8 && dec39five.every(x => x.trunc.length === 0 && x.over <= 0 && x.gap >= 5 && x.decW <= x.rowW * 0.36 + 1 && x.tiles === 5 && x.hasPs && x.rowH === 58 && x.res === (x.k === 'rec' ? 'recommend' : 'review')) &&
+    dec39k('rec', 5).decW < dec39k('rec', 80).decW && dec39.filter(x => x.k === 'rev').every(x => x.vals.includes('上長最終判断要') && x.vals.includes('未入力 3・1点あり') && x.vals.includes('○3 △1 ×0 未入力2')) &&
+    !dec39k('rec', 18).byCut && !dec39k('rev', 18).byCut,
+    'E8 最終合否の担当者名が長くても（名簿の氏名＋役職 18 文字・URL 80 字・ZWJ でつながった絵文字）、最終合否欄は結果ストリップの 36% まで・5 枚のタイルは切れない（結果「上長最終判断要」・人物像「未入力 3・1点あり」・確認点「○3 △1 ×0 未入力2」でも）・用紙からはみ出さない・18 文字の担当者名は切れない: ' + JSON.stringify(dec39five));
+  expect(dec39four.length === 12 && dec39four.every(x => x.trunc.length === 0 && x.over <= 0 && x.gap >= 5 && x.decW <= x.rowW * 0.36 + 1 && x.tiles === 4 && !x.hasPs && x.rowH === 58 &&
+      x.res === (x.k === 'rec4' ? 'recommend' : 'review') && !x.vals.includes('/35点') && (x.k === 'rec4' || (x.vals.includes('上長最終判断要') && x.vals.includes('○3 △1 ×0 未入力2')))) &&
+    dec39k('rec4', 5).decW < dec39k('rec4', 80).decW && ['rec4', 'rev4', 'off4'].every(k => !dec39k(k, 18).byCut),
+    'E8 人物像のタイルが無い 4 枚（人物像の導入前の記録・設定で OFF）でも、長い担当者名で最終合否欄は 36% まで・タイルは切れない（結果「上長最終判断要」・確認点「○3 △1 ×0 未入力2」でも）・用紙からはみ出さない・18 文字の担当者名は切れない: ' + JSON.stringify(dec39four));
   expect(rp39Err.length === 0, 'E8 保存 HTML のページエラーなし: ' + (rp39Err.join(' / ') || 'none'));
 
   // =====================================================================
@@ -1408,8 +1441,9 @@ const pdfTextOf = (f) => {
   await wait(400);
   const cl12 = await st(() => ({ busy: (document.querySelector('.cl-must-row[data-item="must_busy"] .cl-label') || {}).textContent, rows: document.querySelectorAll('.cl-rate-row').length,
     c1: document.querySelectorAll('#cl-conditions .cl-rate-row').length, c2: document.querySelectorAll('#cl-continuity .cl-rate-row').length, c4: document.querySelectorAll('#cl-teamwork .cl-rate-row').length,
-    turnover: !!document.querySelector('.cl-rate-row[data-item="rt_turnover"]'), manner: !!document.querySelector('.cl-rate-row[data-item="rt_manner"]') }));
-  expect(cl12.busy === NEW_BUSY && cl12.rows === 6 && cl12.c1 === 1 && cl12.c2 === 1 && cl12.c4 === 2 && !cl12.turnover && !cl12.manner && (await txtIn(page, '#sumMarks')).includes('/14点'),
+    turnover: !!document.querySelector('.cl-rate-row[data-item="rt_turnover"]') }));
+  //   （c0d20ce では削除したのが rt_manner だったので「rt_manner が無い」を見ていた。いまは削除したのが rt_turnover で、rt_manner は既定に無い〔単体 #54〕ので見ない）
+  expect(cl12.busy === NEW_BUSY && cl12.rows === 6 && cl12.c1 === 1 && cl12.c2 === 1 && cl12.c4 === 2 && !cl12.turnover && (await txtIn(page, '#sumMarks')).includes('/14点'),
     'E12 ② に新しい文言・確認点は ① 1 件／② 1 件／④ 2 件（計 6 件・rt_turnover なし・満点 14 点）: ' + JSON.stringify(cl12));
   await setCl('values.must_busy', 'mismatch');
   await judge();
@@ -1965,11 +1999,11 @@ const pdfTextOf = (f) => {
   expect(pl14.fieldT - 6 - pl14.h < 8 && pl14.fieldB + 6 + pl14.h > pl14.vh - 8 && pl14.top >= 8 && pl14.bottom <= pl14.vh - 7 && pl14.closeB <= pl14.bottom && pl14.scroll,
     'E14 (4) 全文の窓が欄の上にも下にも入らないときは画面の中に収める（本文だけがスクロールし、［閉じる］は窓の中に見えている）: ' + JSON.stringify(pl14));
   await p14c.close();
-  //   質問の回答を省いた用紙（.cl-compact-2）: 案内の行をクリックすると全メモ（省いた質問の回答を含む）
+  //   質問の回答を省いた用紙（.cl-compact-2）: 案内の行をクリックすると全メモ（省いた質問の回答を含む）。確認点のメモ（rn）も入れて「確認点のメモ」の行（.cl-nm-rt）も並ぶことを確かめる
   let m14 = null;
   for (const extra of [20, 30, 45]) {
     const f = path.join(OUT, 'a4-memos.html');
-    fs.writeFileSync(f, await page.evaluate(mk39, { q: 300, iv: 2000, extra }));
+    fs.writeFileSync(f, await page.evaluate(mk39, { q: 300, iv: 2000, rn: 40, extra }));
     const pg = await newReportPage(e14);
     await pg.goto('file://' + f);
     await pg.waitForTimeout(300);
@@ -1984,10 +2018,16 @@ const pdfTextOf = (f) => {
     const ms14 = await m14.pg.evaluate(() => { const rows = Array.from(document.querySelectorAll('#a4 .cl-nm-row'));
       return { rows: rows.map(r => r.getAttribute('data-cl-block') || (r.classList.contains('cl-nm-iv') ? 'iv' : r.classList.contains('cl-nm-rt') ? 'rt' : 'memo')), hidden: rows.filter(r => !r.getClientRects().length).length,
         dd: Array.from(document.querySelectorAll('#a4Pop .pop-memos dd')).map(e => e.textContent), dt: Array.from(document.querySelectorAll('#a4Pop .pop-memos dt')).map(e => e.textContent), h: document.getElementById('a4PopH').textContent }; });
-    const want14 = ms14.rows.map(k => k === 'iv' ? recM14.interviewNotes : k === 'memo' ? recM14.applicant.reviewerNotes : recM14.checklist.notes[k]);
+    //   確認点のメモの行（rt）の期待値: 台本順に「番号＋短い名前：メモ」を 1 項目 1 行（既定の 6 項目は RT14、mk39 が ② に足した確認点は「②追加の確認点 n」＝項目名が 14 文字以内なのでそのまま）
+    const rtNames14 = Object.fromEntries(RT14);
+    const rtWantM14 = [];
+    recM14.checklistDef.sections.forEach((sec, si) => sec.blocks.forEach(b => { if (b.type === 'rating') b.items.forEach(it => { const n = String(recM14.checklist.notes[it.id] || '').trim();
+      if (n) rtWantM14.push((rtNames14[it.id] || '①②③④⑤'[si] + it.label) + '：' + n); }); }));
+    const want14 = ms14.rows.map(k => k === 'iv' ? recM14.interviewNotes : k === 'memo' ? recM14.applicant.reviewerNotes : k === 'rt' ? rtWantM14.join('\n') : recM14.checklist.notes[k]);
     expect(ref14.mark === 'memos' && ref14.role === 'button' && ref14.t === '質問の回答は省略（画面でこの行をクリックすると、回答と「…」で切れたメモの全文を表示します）' && ms14.h === '面接メモ（全文）' &&
-      ms14.hidden >= 1 && ms14.dd.length === ms14.rows.length && JSON.stringify(ms14.dd) === JSON.stringify(want14) && ms14.dt[ms14.dt.length - 1] === '面接所見',
-      'E14 (4) 質問の回答を省いた用紙（.cl-compact-2）は案内の行のクリックで全メモ（省いた回答を含む・記録の値と一致）: ' + JSON.stringify({ extra: m14.extra, ref14, rows: ms14.rows, hidden: ms14.hidden, dt: ms14.dt }));
+      ms14.hidden >= 1 && ms14.dd.length === ms14.rows.length && JSON.stringify(ms14.dd) === JSON.stringify(want14) && ms14.dt[ms14.dt.length - 1] === '面接所見' &&
+      ms14.rows.includes('rt') && ms14.dt[ms14.rows.indexOf('rt')] === '確認点のメモ' && rtWantM14.length === 6 + m14.extra && want14[ms14.rows.indexOf('rt')].split('\n').length === 6 + m14.extra,
+      'E14 (4) 質問の回答を省いた用紙（.cl-compact-2）は案内の行のクリックで全メモ（省いた回答・確認点のメモ〔1 項目 1 行〕を含む・記録の値と一致）: ' + JSON.stringify({ extra: m14.extra, ref14, rows: ms14.rows, hidden: ms14.hidden, dt: ms14.dt }));
     await m14.pg.close();
   }
   // (5) 390px: 用紙ごと縮小（横スクロールなし・縦横比はそのまま・押印行は 2 列のまま）。窓は画面の中。印刷は変わらず 1 ページ
@@ -3069,7 +3109,7 @@ const pdfTextOf = (f) => {
 
   // =====================================================================
   // E17 人物像（1〜5 点）・面接記入シート（手書き用）・面接中はメモ中心・質問の 1 行表示（docs/SPEC-persona.md 7-2）
-  //   フィードバック: ① 面接中はメモを中心に（1 対 1 でなくても回せる）② 紙で書いて面接後に転記 ③ 接客の人物像（1〜5 点）を総評に・内容をコンパクトに
+  //   フィードバック: ① 1 対 1 なら面接中はメモを中心に（1 対 1 でなければ面接しながらの入力は苦しい）② 紙で書いて面接後に転記 ③ 接客の人物像（1〜5 点）を総評に・内容をコンパクトに
   // =====================================================================
   console.log('\n== E17 人物像・記入シート・質問の 1 行表示 ==');
   {
@@ -3077,6 +3117,17 @@ const pdfTextOf = (f) => {
     const PS17 = ['ps_greeting', 'ps_impression', 'ps_smile', 'ps_voice', 'ps_eye', 'ps_speech', 'ps_motivation'];
     const PSL17 = ['挨拶ができていたか', '第一印象・身だしなみ', '笑顔・表情', '声のトーン・ハキハキさ', '目を見て話していたか', '言葉遣い・説明のわかりやすさ', '志望動機・接客で大切にしたいこと'];
     const psState17 = () => st(() => { const p = window.RecruitApp.state.checklist.persona; return p ? JSON.parse(JSON.stringify(p)) : p; });
+    //   ② の要素のスクリーンショット: 撮るあいだだけトップバー・目次の sticky を外す（要素の上端〔見出し〕に重ならない。sticky は流れの中にあるので配置は変わらない）。
+    //   マウスは要素の外へ（ホバーの色を写さない）・要素の中のフォーカスは外す（入力欄のフォーカス枠を写さない）・toast は消す
+    const shotEl17 = async (sel, file) => {
+      await page.mouse.move(1, 1);
+      await page.evaluate((q) => { const s = document.createElement('style'); s.id = 'e2eNoSticky'; s.textContent = '.topbar,.cl-nav{position:static !important}'; document.head.appendChild(s);
+        const a = document.activeElement, el = document.querySelector(q); if (a && el && el.contains(a) && a.blur) a.blur();
+        const t = document.getElementById('toast'); if (t) t.classList.remove('show'); }, sel);
+      await wait(80);
+      await page.locator(sel).screenshot({ path: path.join(OUT, file) });
+      await page.evaluate(() => { const s = document.getElementById('e2eNoSticky'); if (s) s.remove(); });
+    };
     //   点の比べ方（キーの順は問わない。未入力に戻すとキーを消し、入れ直すと最後に付くため）
     const keyed17 = (o) => o ? JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]])) : String(o);
     const activePs17 = () => st(() => { const a = document.activeElement; return a && a.dataset && a.dataset.persona ? a.dataset.persona + ':' + a.dataset.score : (a ? a.tagName : ''); });
@@ -3086,15 +3137,21 @@ const pdfTextOf = (f) => {
     const gap17 = (pg, sel) => pg.evaluate((q) => { const a = document.querySelector(q), stp = a.querySelector('.cl-stamps'), z = a.getBoundingClientRect().width / a.offsetWidth || 1, mm = 96 / 25.4;
       const innerB = a.getBoundingClientRect().bottom - parseFloat(getComputedStyle(a).paddingBottom) * z; return +((innerB - stp.getBoundingClientRect().bottom) / z / mm).toFixed(2); }, sel);
     const natOf17 = (pg, sel) => pg.evaluate((q) => { const sh = document.querySelector(q); sh.classList.add('cl-measure'); const h = sh.getBoundingClientRect().height; sh.classList.remove('cl-measure'); return { h: Math.round(h), cls: sh.className.replace('cl-sheet cl-mode-sheet', '').trim() }; }, sel);
+    //   印刷のスタブ（印刷の瞬間の状態を __pp に記録）。__ppDate: 記入シートの「面接日」の欄（記入用の線なら 'LINE'、印字ならその文字）
     const stubPrint17 = () => page.evaluate(() => {
       window.__pp = [];
+      window.__ppDate = (sh) => { const f = sh && Array.from(sh.querySelectorAll('.pp-who .pp-f')).find(x => (x.querySelector('dt') || {}).textContent === '面接日');
+        return f ? (f.querySelector('dd .pp-line') ? 'LINE' : f.querySelector('dd').textContent) : null; };
       window.print = function () { const sh = document.querySelector('#clSheet .pp-sheet'); window.__pp.push({ cls: document.body.classList.contains('print-checklist'), sheet: !!sh, a4: !!document.querySelector('#clSheet .a4.pp-a4'),
-        report: !!document.querySelector('#clSheet .cl-sheet'), who: sh ? sh.querySelector('.pp-who').textContent : '', nameLine: !!(sh && sh.querySelector('.pp-f-name .pp-line')) }); };
+        report: !!document.querySelector('#clSheet .cl-sheet'), who: sh ? sh.querySelector('.pp-who').textContent : '', nameLine: !!(sh && sh.querySelector('.pp-f-name .pp-line')), date: window.__ppDate(sh) }); };
     });
     await fresh();
     // (1) ① に記入シートのボタン・② の上部の案内・総評の構成
-    const sa17 = await page.evaluate(() => { const b = document.getElementById('saPaperBtn'); return b && { act: b.dataset.action, text: b.textContent.trim(), row: b.parentNode.id, next: !!b.parentNode.querySelector('#saNext') }; });
-    expect(!!sa17 && sa17.act === 'print-paper' && sa17.text === '🖨 記入シート（手書き用）' && sa17.row === 'saActions' && sa17.next, 'E17 (1) ① の操作行に「🖨 記入シート（手書き用）」（#saPaperBtn）と「進む」: ' + JSON.stringify(sa17));
+    const sa17 = await page.evaluate(() => { const b = document.getElementById('saPaperBtn'), n = document.getElementById('saNext'), c = document.getElementById('scriptApplicantCard');
+      return b && { act: b.dataset.action, text: b.textContent.trim(), row: b.parentNode.id, next: !!b.parentNode.querySelector('#saNext'),
+        left: !!n && b.getBoundingClientRect().right <= n.getBoundingClientRect().left, below: !!c && b.getBoundingClientRect().top >= c.getBoundingClientRect().bottom }; });
+    expect(!!sa17 && sa17.act === 'print-paper' && sa17.text === '🖨 記入シート（手書き用）' && sa17.row === 'saActions' && sa17.next && sa17.left && sa17.below,
+      'E17 (1) ① の操作行（カードの下）に「🖨 記入シート（手書き用）」（#saPaperBtn）と、その右に「進む」（使い方の説明どおりの場所）: ' + JSON.stringify(sa17));
     await fillScript({ name: '人物 一郎', interviewer: '笹川 晴央' });
     await page.click('[data-action="script-next"]');
     await wait(400);
@@ -3111,17 +3168,22 @@ const pdfTextOf = (f) => {
         rows: rows.map(r => r.dataset.psRow), btns: rows.map(r => Array.from(r.querySelectorAll('button.cl-ps-btn[data-action="ps-set"]')).map(b => b.dataset.persona === r.dataset.psRow ? b.dataset.score : 'x').join('')),
         legend: (document.getElementById('clPsLegend') || {}).textContent, h3: (document.getElementById('clPersonaH') || {}).textContent, hint: (document.querySelector('[data-ps-row="ps_impression"] .hint') || {}).textContent,
         tabs: rows.map(r => Array.from(r.querySelectorAll('.cl-ps-btn')).filter(b => b.tabIndex === 0).map(b => b.dataset.score).join('')),
-        off: !!document.getElementById('clPersonaOff'), ovHint: Array.from(ov.querySelectorAll(':scope > .hint')).map(h => h.textContent).join(' ')
+        off: !!document.getElementById('clPersonaOff'), ovHint: Array.from(ov.querySelectorAll(':scope > .hint')).map(h => h.textContent).join(' '),
+        lead: Array.from(document.querySelectorAll('.cl-page-head')).map(h => { const n = h.querySelector('.cl-lead-ps'); return h.dataset.page + ':' + (n ? n.dataset.psRef + ':' + n.textContent : ''); }),
+        leadAfter: (() => { const n = document.querySelector('.cl-page-head[data-page="1"] .cl-lead-ps'); return !!n && !!n.previousElementSibling && n.previousElementSibling.textContent.includes('最低限の話し方、敬語が可能か'); })()
       };
     });
     expect(s17.guide === '面接中はメモを中心に。○△×・人物像・総合判断は面接後にまとめて入力できます' && s17.role === 'note' && s17.guideBtn === '🖨 記入シート（手書き用）' && s17.guidePos &&
       s17.chip === '総評' && s17.h2 === '総評' && JSON.stringify(s17.order) === JSON.stringify(['clPersona', 'overall', 'notes']) && JSON.stringify(s17.rows) === JSON.stringify(PS17) &&
       s17.btns.every(b => b === '12345') && s17.legend === '1 不採用レベル　2 やや不安　3 普通　4 良い　5 とても良い' && s17.h3 === '人物像（接客）' && s17.hint === '服装・清潔感' &&
-      s17.tabs.every(t => t === '1') && !s17.off && s17.ovHint.includes('人物像の合計・1 点の項目で結果が下がることがあります。'),
-      'E17 (1) ② の上部に 1 行の案内と記入シートのボタン・目次の最後は「総評」・総評は 人物像 → 総合判断 → 面接所見（7 行×1〜5・凡例・行ごとに 1 つのタブ位置）: ' + JSON.stringify(s17));
+      s17.tabs.every(t => t === '1') && !s17.off && s17.ovHint.includes('人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます。'),
+      'E17 (1) ② の上部に 1 行の案内と記入シートのボタン・目次の最後は「総評」・総評は 人物像 → 総合判断 → 面接所見（7 行×1〜5・凡例・行ごとに 1 つのタブ位置）・総合判断の説明に人物像で下がる条件（合計・1 点・未入力）: ' + JSON.stringify(s17));
+    //   台本 1 枚目の前書き「…最低限の話し方、敬語が可能か。…」（台本の文言は変えない）の下に、付ける場所（人物像の「言葉遣い・説明のわかりやすさ」）を 1 行（docs/SPEC-persona.md 11-9 補完 6）
+    expect(JSON.stringify(s17.lead) === JSON.stringify(['1:ps_speech:→ 話し方・敬語は確認点ではなく、最後の総評の人物像（接客）「言葉遣い・説明のわかりやすさ」で 1〜5 点を付けます。', '2:']) && s17.leadAfter,
+      'E17 (1) 1 枚目の前書きの「最低限の話し方、敬語」の下に、人物像「言葉遣い・説明のわかりやすさ」で付ける旨の 1 行（2 枚目には出さない）: ' + JSON.stringify(s17.lead));
     const u17a = await psUi17();
-    expect(u17a.sum === '—' && u17a.max === '35' && u17a.pct === '' && u17a.state === '未入力 7' && u17a.warn === '' && u17a.nav.includes('人物像 —/35') && u17a.sum2.includes('未入力 7'),
-      'E17 (1) 入力前: 合計 —/35・「未入力 7」・目次の右に「人物像 —/35」・右サマリーの人物像「未入力 7」: ' + JSON.stringify(u17a));
+    expect(u17a.sum === '—' && u17a.max === '35' && u17a.pct === '' && u17a.state === '未入力 7・上長最終判断要まで' && u17a.stateCls.includes('warn') && u17a.warn === '' && u17a.nav.includes('人物像 —/35') && u17a.sum2.includes('未入力 7'),
+      'E17 (1) 入力前: 合計 —/35・琥珀「未入力 7・上長最終判断要まで」（このまま ③ に進むと上長最終判断要）・目次の右に「人物像 —/35」・右サマリーの人物像「未入力 7」: ' + JSON.stringify(u17a));
     // (2) クリック: 4 → 同じ 4 をもう一度で未入力に戻す
     await page.click('[data-action="ps-set"][data-persona="ps_greeting"][data-score="4"]');
     await wait(100);
@@ -3132,9 +3194,9 @@ const pdfTextOf = (f) => {
     await page.click('[data-action="ps-set"][data-persona="ps_greeting"][data-score="4"]');
     await wait(100);
     const c17b = { v: (await psState17()).ps_greeting, ui: await psUi17() };
-    expect(c17a.v === 4 && c17a.pressed === 'true' && c17a.active && c17a.set && c17a.tab === '4' && c17a.dirty && u17b.sum === '4' && u17b.state === '未入力 6' && u17b.sum2.includes('4/35点') && u17b.sum2.includes('未入力 6') &&
-      c17b.v === undefined && c17b.ui.sum === '—' && c17b.ui.state === '未入力 7',
-      'E17 (2) クリックで 4 点（aria-pressed・タブ位置・合計 4・「未入力 6」・右サマリー）・同じ点をもう一度押すと未入力に戻る: ' + JSON.stringify({ c17a, u17b, c17b }));
+    expect(c17a.v === 4 && c17a.pressed === 'true' && c17a.active && c17a.set && c17a.tab === '4' && c17a.dirty && u17b.sum === '4' && u17b.state === '未入力 6・上長最終判断要まで' && u17b.sum2.includes('4/35点') && u17b.sum2.includes('未入力 6') &&
+      c17b.v === undefined && c17b.ui.sum === '—' && c17b.ui.state === '未入力 7・上長最終判断要まで',
+      'E17 (2) クリックで 4 点（aria-pressed・タブ位置・合計 4・「未入力 6・上長最終判断要まで」・右サマリー）・同じ点をもう一度押すと未入力に戻る: ' + JSON.stringify({ c17a, u17b, c17b }));
     // (3) キーボード: 1 行目の「1」にフォーカス → 数字キーで入力して次の行へ（7 行）・Tab は 1 行 1 タブ位置・矢印はフォーカスだけ・Enter／Space は押下（同じ点で未入力）
     await page.focus('[data-ps-row="ps_greeting"] .cl-ps-btn[data-score="1"]');
     await page.keyboard.press('4');
@@ -3173,11 +3235,10 @@ const pdfTextOf = (f) => {
     await setPsAll([4, 4, 1, 4, 4, 4, 4]);
     await page.fill('textarea[data-note="interview"]', '受け答えは丁寧。笑顔が少なく表情が硬い。');
     const one17 = { ui: await psUi17(), row: await st(() => document.querySelector('[data-ps-row="ps_smile"]').className), btn: await st(() => getComputedStyle(document.querySelector('[data-persona="ps_smile"][data-score="1"]')).backgroundColor) };
-    await page.evaluate(() => { window.scrollTo(0, 0); const t = document.getElementById('toast'); if (t) t.classList.remove('show'); });
-    await page.locator('#clOverall').screenshot({ path: path.join(OUT, 'p12-step2-persona.png') });
+    await shotEl17('#clOverall', 'p12-step2-persona.png');
     expect(one17.ui.warn === '1 点の項目があります（笑顔・表情）。結果は上長最終判断要以下になります。' && one17.row.includes('is-one') && one17.ui.sum === '25' && one17.ui.pct === '（71%）' &&
-      one17.ui.sum2.includes('25/35点・71%') && one17.ui.sum2.includes('1点あり'),
-      'E17 (4) 1 点の項目: 警告「1 点の項目があります（笑顔・表情）。…」・行は赤（.is-one）・右サマリーに「1点あり」: ' + JSON.stringify(one17));
+      one17.ui.state === '上長最終判断要まで' && one17.ui.stateCls.includes('warn') && !one17.ui.stateCls.includes('ok') && one17.ui.sum2.includes('25/35点・71%') && one17.ui.sum2.includes('1点あり'),
+      'E17 (4) 1 点の項目: 警告「1 点の項目があります（笑顔・表情）。…」・行は赤（.is-one）・合計が 70% 以上でも状態は琥珀「上長最終判断要まで」（緑「70% 以上」にしない）・右サマリーに「1点あり」: ' + JSON.stringify(one17));
     await rateAll('good', { ps: false });
     await judge();
     const j17a = await judgment();
@@ -3310,16 +3371,53 @@ const pdfTextOf = (f) => {
       'E17 (10) 行のクリック／Enter で全文（.open・aria-expanded・高さが増える）・もう一度で閉じる・「全文」で全部開いて「たたむ」・もう一度で全部閉じる（メモ欄は残る）: ' + JSON.stringify({ qo17, qc17, qe17, qe17b, qa17, qa17b }));
     await page.click('[data-item="q_prev_job"] .cl-q');
     await wait(80);
-    await page.evaluate(() => { document.getElementById('cl-continuity').scrollIntoView(); const t = document.getElementById('toast'); if (t) t.classList.remove('show'); });
-    await wait(150);
-    await page.locator('#cl-continuity').screenshot({ path: path.join(OUT, 'p12-step2-questions.png') });
+    await shotEl17('#cl-continuity', 'p12-step2-questions.png');
+    //   ② の上部の案内の段組み（💡・文言・ボタン）と人物像の凡例（「点 意味」ごとの span）の折り返し
+    const lay17 = () => page.evaluate(() => {
+      const g = document.getElementById('clGuide'), r = (e) => e.getBoundingClientRect(), mid = (e) => (r(e).top + r(e).bottom) / 2, within = (y, e) => y >= r(e).top - 1 && y <= r(e).bottom + 1;
+      const ico = g.querySelector('.ico'), t = g.querySelector('.cl-guide-t'), b = document.getElementById('clPaperBtn');
+      return { h: Math.round(r(g).height), icoWithText: within(mid(ico), t), btnWithText: within(mid(b), t), btnBelow: r(b).top >= r(t).bottom - 1, textLines: Math.round(r(t).height / parseFloat(getComputedStyle(t).lineHeight)),
+        legendItems: document.querySelectorAll('#clPsLegend > span').length, legendSplit: Array.from(document.querySelectorAll('#clPsLegend > span')).filter(sp => sp.getClientRects().length > 1).map(sp => sp.textContent) };
+    });
     await page.setViewportSize({ width: 390, height: 900 });
     await wait(250);
     const nw17 = await page.evaluate(() => ({ ov: document.documentElement.scrollWidth - window.innerWidth, row: getComputedStyle(document.querySelector('.cl-ps-row')).gridTemplateColumns.split(' ').length,
       btnIn: Array.from(document.querySelectorAll('.cl-ps-btn')).every(b => b.getBoundingClientRect().right <= window.innerWidth) }));
+    const ly17 = { w390: await lay17() };
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await wait(200);
+    ly17.w1280 = await lay17();
     await page.setViewportSize({ width: 1440, height: 1000 });
     await wait(200);
+    ly17.w1440 = await lay17();
     expect(nw17.ov <= 1 && nw17.row === 1 && nw17.btnIn, 'E17 (10) 390px でも横スクロールなし（人物像の行は 1 列・ボタンは画面の中）: ' + JSON.stringify(nw17));
+    expect(ly17.w1440.textLines === 1 && ly17.w1440.btnWithText && ly17.w1280.icoWithText && ly17.w1280.btnWithText && ly17.w1280.h <= 64 && ly17.w390.icoWithText && ly17.w390.btnBelow &&
+      [ly17.w390, ly17.w1280, ly17.w1440].every(x => x.legendItems === 5 && x.legendSplit.length === 0),
+      'E17 (10) ② の上部の案内: 1440px は 1 行・1280px は文言を折り返してボタンと同じ行（ボタンだけの行を作らない）・390px は 💡 と文言が同じ行でボタンは次の行（💡 だけの行を作らない）。凡例は「5 とても良い」などの途中で折り返さない: ' + JSON.stringify(ly17));
+    //   ダークモード: 押下中の ○△×・一致・総合判断・人物像の点の文字と地のコントラストは 4.5:1 以上（白字では 2.0〜3.1:1 だった。--on-status）。アプリの「ダークモード」（data-theme）と OS の設定（prefers-color-scheme）の両方。ライトは白字のまま
+    await setPsAll([1, 2, 3, 4, 5, 4, 3]);
+    await setCl('values.rt_hourensou', 'fair');
+    await setCl('values.rt_turnover', 'poor');
+    await setCl('overall', 'hold');
+    const con17 = () => st(() => {
+      const lum = (c) => { const v = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(x => { x /= 255; return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+      const out = {};
+      Array.from(document.querySelectorAll('#view-judge .cl-sec .seg-btn.active, #clOverall .seg-btn.active')).forEach(b => { const cs = getComputedStyle(b), a = lum(cs.color), c = lum(cs.backgroundColor);
+        out[b.dataset.persona ? 'ps' + b.dataset.score : b.dataset.value] = { r: +((Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05)).toFixed(2), color: cs.color }; });
+      return out;
+    });
+    const theme17 = await st(() => document.documentElement.getAttribute('data-theme'));
+    await st(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const dk17a = await con17();
+    await st(() => document.documentElement.removeAttribute('data-theme'));
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const dk17b = await con17();
+    await page.emulateMedia({ colorScheme: 'light' });
+    await st((t) => { if (t) document.documentElement.setAttribute('data-theme', t); }, theme17);
+    const lt17 = await con17();
+    const KINDS17 = ['ps1', 'ps2', 'ps3', 'ps4', 'ps5', 'good', 'fair', 'poor', 'match', 'hold'];
+    expect([dk17a, dk17b].every(d => KINDS17.every(k => d[k] && d[k].r >= 4.5)) && ['ps1', 'ps2', 'ps4', 'good', 'fair', 'poor', 'match', 'hold'].every(k => lt17[k] && lt17[k].color === 'rgb(255, 255, 255)'),
+      'E17 (10) ダークモードでも押下中のボタン（人物像 1〜5・○△×・一致・総合判断）の文字は 4.5:1 以上（data-theme・prefers-color-scheme の両方。ライトは白字のまま）: ' + JSON.stringify({ dk17a, dk17b, lt17 }));
     // (9) 記入シート（手書き用）: ① で氏名が空でも印刷できる（印刷の瞬間だけ body.print-checklist と #clSheet .pp-sheet）・判定は走らない・保存しない
     await page.click('#btnNew');
     await wait(200);
@@ -3330,16 +3428,38 @@ const pdfTextOf = (f) => {
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
     await wait(100);
     const af17 = await page.evaluate(() => ({ cls: document.body.classList.contains('print-checklist'), host: document.getElementById('clSheet').innerHTML.length }));
-    expect(pr17.calls.length === 1 && pr17.calls[0].cls && pr17.calls[0].sheet && pr17.calls[0].a4 && !pr17.calls[0].report && pr17.calls[0].nameLine && pr17.j === null && pr17.step === 1 && !af17.cls && af17.host === 0,
-      'E17 (9) ① の「記入シート」（氏名が空でも）: 印刷の瞬間に body.print-checklist と #clSheet .a4.pp-a4 .pp-sheet（氏名は線）・判定は走らない・afterprint で外す: ' + JSON.stringify({ pr17, af17 }));
+    expect(pr17.calls.length === 1 && pr17.calls[0].cls && pr17.calls[0].sheet && pr17.calls[0].a4 && !pr17.calls[0].report && pr17.calls[0].nameLine && pr17.j === null && pr17.step === 1 && !af17.cls && af17.host === 0 &&
+      pr17.calls[0].date === '2026/10/10',
+      'E17 (9) ① の「記入シート」（氏名が空でも）: 印刷の瞬間に body.print-checklist と #clSheet .a4.pp-a4 .pp-sheet（氏名は線・面接日は ① の欄のとおり）・判定は走らない・afterprint で外す: ' + JSON.stringify({ pr17, af17 }));
+    //   ① で面接日を空にすると記入シートの面接日は記入用の線（前もって刷っておく白紙）。印刷で今日の日付を入れない（記録・① の欄・右サマリーは空のまま。docs/SPEC-persona.md 11-9 補完 3）
+    await page.fill('#saDate', '');
+    await wait(150);
+    const pdt17a = await st(() => ({ date: window.RecruitApp.state.checklist.header.date, dirty: window.RecruitApp.state.dirty }));
+    await stubPrint17();
+    await page.click('#saPaperBtn');
+    await wait(150);
+    const pdt17 = await page.evaluate(() => ({ calls: window.__pp.slice(), date: window.RecruitApp.state.checklist.header.date, input: document.getElementById('saDate').value,
+      side: (document.querySelector('#sumDate .sum-val') || {}).textContent, dirty: window.RecruitApp.state.dirty, j: window.RecruitApp.state.judgment }));
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await wait(100);
+    const pdt17b = await st(() => ({ date: window.RecruitApp.state.checklist.header.date, input: document.getElementById('saDate').value, side: (document.querySelector('#sumDate .sum-val') || {}).textContent }));
+    expect(pdt17a.date === '' && pdt17.calls.length === 1 && pdt17.calls[0].sheet && pdt17.calls[0].date === 'LINE' && !pdt17.calls[0].who.includes('2026/10/10') && pdt17.date === '' && pdt17.input === '' && pdt17.side === '—' &&
+      pdt17.dirty === pdt17a.dirty && pdt17.j === null && pdt17b.date === '' && pdt17b.input === '' && pdt17b.side === '—',
+      'E17 (9) ① で面接日を空にした記入シートは面接日が記入用の線（今日の日付を印字しない）・印刷の前後で記録・① の欄・右サマリーの面接日は空のまま: ' + JSON.stringify({ pdt17a, pdt17, pdt17b }));
+    //   記入欄（.pp-fields の 1 欄）の中身の右端が欄の右端を越える量（Range で文字・□ の右端を測る。越えた欄だけ [id, px]）
+    const defFieldsOver17 = () => page.evaluate(() => { window.__ppFieldsOver = (sh) => Array.from(sh.querySelectorAll('.pp-fields > div')).map(d => {
+      const rg = document.createRange(); rg.selectNodeContents(d.querySelector('dd'));
+      return [d.dataset.ppItem, +(Math.max.apply(null, Array.from(rg.getClientRects()).map(x => x.right)) - d.getBoundingClientRect().right).toFixed(1)]; }).filter(x => x[1] > 0.5); });
+    await defFieldsOver17();
     await st(() => window.RecruitApp.preparePaperSheet(true));
     const pd17 = await page.evaluate(() => { const sh = document.querySelector('#clSheet .pp-sheet'); sh.classList.add('pp-measure'); const h = sh.getBoundingClientRect().height; sh.classList.remove('pp-measure');
       const lines = sh.querySelector('.pp-notes .pp-lines'), lb = lines.getBoundingClientRect().bottom, a4 = document.querySelector('#clSheet .a4'), mm = 96 / 25.4;
       return { cls: sh.className, h: Math.round(h), fill: Math.round(sh.getBoundingClientRect().height), a4w: +(a4.getBoundingClientRect().width / mm).toFixed(1), a4h: +(a4.getBoundingClientRect().height / mm).toFixed(1),
-        nameLine: !!sh.querySelector('.pp-f-name .pp-line'), ps: sh.querySelectorAll('tr[data-pp-ps]').length, psCells: Array.from(sh.querySelectorAll('tr[data-pp-ps] .pp-sc')).every(td => td.textContent === '12345'),
+        nameLine: !!sh.querySelector('.pp-f-name .pp-line'), date: window.__ppDate(sh), ps: sh.querySelectorAll('tr[data-pp-ps]').length, psCells: Array.from(sh.querySelectorAll('tr[data-pp-ps] .pp-sc')).every(td => td.textContent === '12345'),
         rate: sh.querySelectorAll('.pp-rate tr[data-pp-item]').length, rateMk: Array.from(sh.querySelectorAll('.pp-rate .pp-mk')).every(td => td.textContent === '○△×'), must: sh.querySelectorAll('.pp-must tr[data-pp-item]').length,
         notes: Array.from(lines.querySelectorAll('i')).filter(i => i.getBoundingClientRect().bottom <= lb + 0.5).length, ov: Array.from(sh.querySelectorAll('.pp-ov-o')).map(e => e.textContent),
-        cols: Array.from(sh.querySelectorAll('.pp-col')).map(c => Array.from(c.querySelectorAll('.pp-sec')).map(x => x.dataset.sec).join(',')), title: (sh.querySelector('.cl-title-t') || {}).textContent }; });
+        cols: Array.from(sh.querySelectorAll('.pp-col')).map(c => Array.from(c.querySelectorAll('.pp-sec')).map(x => x.dataset.sec).join(',')), title: (sh.querySelector('.cl-title-t') || {}).textContent,
+        fieldsOver: window.__ppFieldsOver(sh), termWrap: (() => { const d = sh.querySelector('[data-pp-item="term"]'); return d ? d.querySelector('dd').getBoundingClientRect().top - d.querySelector('dt').getBoundingClientRect().bottom >= -1 : null; })() }; });
     await page.emulateMedia({ media: 'print' });
     const pdf17p = path.join(OUT, 'p12-paper-sheet.pdf');
     await page.pdf({ path: pdf17p, format: 'A4', preferCSSPageSize: true, printBackground: true });
@@ -3348,10 +3468,12 @@ const pdfTextOf = (f) => {
     const n17p = pdfPagesOf(pdf17p), t17p = pdfTextOf(pdf17p);
     if (hasPpm14) png14(pdf17p, path.join(OUT, 'p12-paper-sheet'));
     const want17p = ['面接記入シート', '人物像（接客）', '12345', '○', '△', '×', '一致', '不一致', '面接者の総合判断', '採用', '保留', '不採用', '面接所見', '指定繁忙期間すべて可', '総評'].concat(PSL17);
-    expect(pd17.h <= 1052 && Math.abs(pd17.a4w - 210) <= 0.5 && Math.abs(pd17.a4h - 297) <= 0.5 && pd17.nameLine && pd17.ps === 7 && pd17.psCells && pd17.rate === 6 && pd17.rateMk && pd17.must === 2 && pd17.notes >= 4 &&
+    //   記入欄（2 列）の中身は欄の中（右端を越えない）。見出しと □選択肢 が 1 行に入らない「短期／長期の希望」は □短期希望 □長期希望 を次の行へ（隣の「契約開始日の希望」とつながって見えない）
+    expect(pd17.fieldsOver.length === 0 && pd17.termWrap === true, 'E17 (9) 記入シートの記入欄は欄からはみ出さない（「短期／長期の希望」の □選択肢 は次の行）: ' + JSON.stringify({ over: pd17.fieldsOver, termWrap: pd17.termWrap }));
+    expect(pd17.h <= 1052 && Math.abs(pd17.a4w - 210) <= 0.5 && Math.abs(pd17.a4h - 297) <= 0.5 && pd17.nameLine && pd17.date === 'LINE' && pd17.ps === 7 && pd17.psCells && pd17.rate === 6 && pd17.rateMk && pd17.must === 2 && pd17.notes >= 4 &&
       JSON.stringify(pd17.ov) === '["採用","保留","不採用"]' && JSON.stringify(pd17.cols) === JSON.stringify(['conditions,continuity', 'job,teamwork,reverse']) && pd17.title === '面接記入シート' &&
       (n17p === -1 || n17p === 1) && (t17p === null || want17p.filter(t => !t17p.includes(t)).length === 0),
-      'E17 (9) 記入シート（白紙）: A4 縦 1 枚（210×297mm・内容 1052px 以内）・氏名は線・人物像 7 行×1〜5・確認点 6 行（○△×）・必須条件 2 行・総合判断 3 つ・面接所見の罫線 4 本以上・2 段（①② ｜ ③④⑤）・PDF 1 ページ: ' +
+      'E17 (9) 記入シート（白紙）: A4 縦 1 枚（210×297mm・内容 1052px 以内）・氏名と面接日は線・人物像 7 行×1〜5・確認点 6 行（○△×）・必須条件 2 行・総合判断 3 つ・面接所見の罫線 4 本以上・2 段（①② ｜ ③④⑤）・PDF 1 ページ: ' +
       JSON.stringify({ pd17, pages: n17p, missing: t17p === null ? null : want17p.filter(t => !t17p.includes(t)) }));
     //   ① に入力 → ② の上部の「記入シート」でも印刷できる・氏名・区分/年齢/性別・担当・短期求人・タクシーを印字（② の回答は印字しない）
     await fillScript({ name: '記入 太郎', age: 21, gender: '男性', category: '大学3年生', posting: 'short', taxi: '可・2,500円', interviewer: '笹川 晴央' });
@@ -3367,7 +3489,7 @@ const pdfTextOf = (f) => {
     await wait(100);
     await st(() => window.RecruitApp.preparePaperSheet(true));
     const pf17 = await page.evaluate(() => { const sh = document.querySelector('#clSheet .pp-sheet'); sh.classList.add('pp-measure'); const h = sh.getBoundingClientRect().height; sh.classList.remove('pp-measure');
-      return { h: Math.round(h), who: sh.querySelector('.pp-who').textContent, txt: sh.textContent.includes('回答メモは記入シートに印字しない') }; });
+      return { h: Math.round(h), who: sh.querySelector('.pp-who').textContent, txt: sh.textContent.includes('回答メモは記入シートに印字しない'), fieldsOver: window.__ppFieldsOver(sh) }; });
     await page.emulateMedia({ media: 'print' });
     const pdf17f = path.join(OUT, 'p12-paper-sheet-filled.pdf');
     await page.pdf({ path: pdf17f, format: 'A4', preferCSSPageSize: true, printBackground: true });
@@ -3375,9 +3497,47 @@ const pdfTextOf = (f) => {
     await st(() => window.RecruitApp.preparePaperSheet(false));
     const n17f = pdfPagesOf(pdf17f), t17f = pdfTextOf(pdf17f);
     if (hasPpm14) png14(pdf17f, path.join(OUT, 'p12-paper-sheet-filled'));
-    expect(pr17b.length === 1 && pr17b[0].cls && pr17b[0].sheet && pr17b[0].who.includes('記入 太郎') && pf17.h <= 1052 && ['記入 太郎', '大学3年生・21歳・男性', '2026/10/10', '笹川 晴央', '短期求人', '可・2,500円'].every(t => pf17.who.includes(t)) &&
+    expect(pr17b.length === 1 && pr17b[0].cls && pr17b[0].sheet && pr17b[0].who.includes('記入 太郎') && pf17.h <= 1052 && pf17.fieldsOver.length === 0 && ['記入 太郎', '大学3年生・21歳・男性', '2026/10/10', '笹川 晴央', '短期求人', '可・2,500円'].every(t => pf17.who.includes(t)) &&
       !pf17.txt && (n17f === -1 || n17f === 1) && (t17f === null || ['記入太郎', '大学3年生・21歳・男性', '笹川晴央', '短期求人', '可・2,500円'].every(t => t17f.includes(t))),
       'E17 (9) ① に入力した記入シート（② の「記入シート」）: 氏名・区分/年齢/性別・面接日・担当・短期求人・タクシーを印字・② の回答は印字しない・PDF 1 ページ: ' + JSON.stringify({ pr17b: pr17b.length, pf17, pages: n17f }));
+    //   本物の印刷の経路（window.print をスタブにしない。docs/SPEC-persona.md 11-9 補完 9）: ヘッドレスの Chromium の window.print はダイアログを出さずに beforeprint → afterprint を送る。
+    //   beforeprint の時点の印刷ホストは記入シート（beforeprint の自動切替で報告書に替えない）・afterprint で片付ける・判定は走らない・面接日は変えない。
+    //   afterprint が来ないとき（スタブ）は 3 秒で片付け、片付けは印刷ごとに 1 回だけ（前の印刷の 3 秒のタイマーが次の印刷の用紙を消さない）。時計は page.clock で進める
+    const rp17p = await ctx.newPage();
+    const e17p = [];
+    rp17p.on('pageerror', e => e17p.push(e.message));
+    rp17p.on('console', m => { if (m.type() === 'error') e17p.push('console: ' + m.text()); });
+    rp17p.on('dialog', d => d.accept());
+    await rp17p.clock.install({ time: NOW });
+    await rp17p.goto(FILE);
+    await rp17p.clock.runFor(500);
+    const snap17p = () => rp17p.evaluate(() => ({ cls: document.body.classList.contains('print-checklist'), pp: !!document.querySelector('#clSheet .a4.pp-a4 .pp-sheet'), host: document.getElementById('clSheet').innerHTML.length }));
+    await rp17p.evaluate(() => {
+      window.__ev = [];
+      const snap = (k) => window.__ev.push({ k, cls: document.body.classList.contains('print-checklist'), pp: !!document.querySelector('#clSheet .a4.pp-a4 .pp-sheet'), report: !!document.querySelector('#clSheet .cl-sheet'),
+        nameLine: !!document.querySelector('#clSheet .pp-f-name .pp-line') });
+      addEventListener('beforeprint', () => snap('before'));
+      addEventListener('afterprint', () => snap('after'));
+    });
+    await rp17p.click('#saPaperBtn');
+    const real17 = { ev: await rp17p.evaluate(() => window.__ev.slice()), now: await snap17p(), st: await rp17p.evaluate(() => ({ j: window.RecruitApp.state.judgment, date: window.RecruitApp.state.checklist.header.date, step: window.RecruitApp.state.step })) };
+    //   スタブ（afterprint を送らない）の 2 回目: 1 回目の 1 秒後に印刷 → 1 回目の 3 秒（3.1 秒時点）では消えない → 2 回目の 3 秒（4.1 秒時点）で片付け
+    await rp17p.clock.runFor(1000);
+    await rp17p.evaluate(() => { window.print = function () {}; });
+    await rp17p.click('#saPaperBtn');
+    const g17 = { on: await snap17p() };
+    await rp17p.clock.runFor(2100);
+    g17.t3 = await snap17p();
+    await rp17p.clock.runFor(800);
+    g17.t39 = await snap17p();
+    await rp17p.clock.runFor(200);
+    g17.t41 = await snap17p();
+    await rp17p.close();
+    expect(real17.ev.length === 2 && real17.ev[0].k === 'before' && real17.ev[0].cls && real17.ev[0].pp && !real17.ev[0].report && real17.ev[0].nameLine && real17.ev[1].k === 'after' && real17.ev[1].pp &&
+      !real17.now.cls && real17.now.host === 0 && real17.st.j === null && real17.st.date === '2026-10-10' && real17.st.step === 1,
+      'E17 (9) 本物の window.print（スタブなし）: beforeprint の時点の印刷ホストは記入シート（報告書に替えない・氏名は線）・afterprint で片付け・判定は走らない・面接日はそのまま: ' + JSON.stringify(real17));
+    expect(g17.on.cls && g17.on.pp && g17.t3.cls && g17.t3.pp && g17.t39.cls && g17.t39.pp && !g17.t41.cls && g17.t41.host === 0 && e17p.length === 0,
+      'E17 (9) afterprint が来ない印刷は 3 秒で片付ける・前の印刷の 3 秒のタイマーは次の印刷の用紙を消さない（片付けは印刷ごとに 1 回）・ページエラーなし: ' + JSON.stringify({ g17, e17p }));
     // (11) 設定: 人物像の節（data-bind 7 種）・項目を 3 行にして保存 → ② の行 3・満点 15・A4・記入シート。並べ替えても点が残る・検証エラー・OFF
     await setPs('ps_greeting', 4);
     await setPs('ps_smile', 5);
@@ -3445,6 +3605,12 @@ const pdfTextOf = (f) => {
     expect(!off17.ps && !off17.off && !off17.side && !off17.nav.includes('人物像') && off17.guide === '面接中はメモを中心に。○△×・総合判断は面接後にまとめて入力できます' && j17off.result === 'recommend' && w17off === 0 &&
       JSON.stringify(t17off) === JSON.stringify(['結果', '総合判断', '必須条件', '確認点']),
       'E17 (11) 人物像を OFF にして保存すると ② に人物像（注記も）なし・右サマリーなし・総合判断「採用」で採用推奨（人物像の警告なし・A4 は 4 タイル）: ' + JSON.stringify({ off17, j17off, w17off, t17off }));
+    //   使い方も設定に合わせる（OFF なら人物像のカードの先頭と「結果（推奨）の決まり方」の 1 行に「いまの設定では人物像を使いません」）
+    await toView('help');
+    const help17off = await page.evaluate(() => ({ off: (document.getElementById('helpPersonaOff') || {}).textContent || '',
+      rule: Array.from(document.querySelectorAll('#view-help li')).map(li => li.textContent).find(t => t.indexOf('人物像（1〜5 点）の合計が低い') === 0) || '' }));
+    expect(help17off.off.includes('いまの設定では人物像を使いません') && help17off.rule.includes('いまの設定では人物像を使いません'),
+      'E17 (11) 人物像を OFF にすると使い方にも「いまの設定では人物像を使いません」（人物像のカード・結果の決まり方の 1 行）: ' + JSON.stringify(help17off));
     await toView('settings');
     await page.click('#view-settings [data-action="cl-default"]');
     await wait(150);
@@ -3485,13 +3651,169 @@ const pdfTextOf = (f) => {
     const re17 = await st(() => { const s = window.RecruitApp.state; return { ps: s.checklist.persona, res: s.judgment && s.judgment.result, w: ((s.judgment || {}).warnings || []).length }; });
     expect(sv17.rec.checklist.persona === null && !!sv17.rec.checklistDef.persona && sv17.rec.step === 4 && re17.ps === null && re17.res === 'recommend' && re17.w === 0,
       'E17 (12) 人物像の導入前の記録を保存し直しても persona は null のまま（もう一度読み込んでも採用推奨・警告なし）: ' + JSON.stringify({ rec: sv17.rec.checklist.persona, re17 }));
+    //   人物像の導入前に ① だけ保存した記録（② の回答なし。fixture を ① の段階に戻したもの）は、これから面接するので人物像を使う（{}。docs/SPEC-persona.md 11-9 補完 1）:
+    //   導入前の toast・注記は出さず、② に人物像 7 行（記入シートと同じ並び）→ 点を入れれば採用推奨（5 タイル）→ 保存し直しても点が残る
+    const fx17 = fs.readFileSync(path.join(FIX, 'legacy-pre-persona.html'), 'utf8');
+    const lp17 = parseRecord(fx17);
+    Object.assign(lp17, { step: 1, judgment: null, management: {}, decision: null, interviewNotes: '' });
+    Object.assign(lp17.checklist, { values: {}, notes: {}, overall: '' });
+    const f17s1 = path.join(OUT, 'p12-legacy-pre-persona-step1.html');
+    fs.writeFileSync(f17s1, fx17.replace(/(<script type="application\/json" id="recruit-record">)[\s\S]*?(<\/script>)/,
+      (m, a, b) => a + JSON.stringify(lp17).replace(/[<>&\u2028\u2029]/g, ch => '\\u' + ('000' + ch.charCodeAt(0).toString(16)).slice(-4)) + b));
+    await page.click('#btnNew');
+    await wait(200);
+    await page.setInputFiles('#fileInput', f17s1);
+    await wait(500);
+    const s1x17 = Object.assign({ toast: await toastText(), defPs: 'persona' in lp17.checklistDef, keyPs: 'persona' in lp17.checklist },
+      await st(() => { const s = window.RecruitApp.state; return { ps: s.checklist.persona, step: s.step, name: s.applicant.name }; }));
+    await page.click('[data-action="script-next"]');
+    await wait(400);
+    Object.assign(s1x17, await st(() => ({ rows: document.querySelectorAll('#clPersona .cl-ps-row').length, off: !!document.getElementById('clPersonaOff'),
+      guide: (document.querySelector('#clGuide .cl-guide-t') || {}).textContent })));
+    await st(() => window.RecruitApp.preparePaperSheet(true));
+    s1x17.paper = await st(() => document.querySelectorAll('#clSheet tr[data-pp-ps]').length);
+    await st(() => window.RecruitApp.preparePaperSheet(false));
+    await rateAll('good');
+    await judge();
+    s1x17.res = (await judgment()).result;
+    s1x17.tiles = await page.$$eval('#appPaper .cl-tile-k', els => els.map(e => e.textContent));
+    const sv17s1 = await saveRecord('p12-legacy-pre-persona-step1-resaved.html');
+    await page.click('#btnNew');
+    await wait(200);
+    await page.setInputFiles('#fileInput', sv17s1.file);
+    await wait(500);
+    s1x17.re = await st(() => { const s = window.RecruitApp.state; return { ps: s.checklist.persona, res: s.judgment && s.judgment.result }; });
+    expect(!s1x17.defPs && !s1x17.keyPs && s1x17.step === 1 && s1x17.name === '保存 花子' && JSON.stringify(s1x17.ps) === '{}' && !s1x17.toast.includes('人物像（1〜5 点）の導入前') &&
+      s1x17.rows === 7 && !s1x17.off && s1x17.paper === 7 && s1x17.guide.includes('人物像') && s1x17.res === 'recommend' && JSON.stringify(s1x17.tiles) === JSON.stringify(['結果', '総合判断', '必須条件', '確認点', '人物像']) &&
+      PS17.every(id => sv17s1.rec.checklist.persona[id] === 4) && keyed17(s1x17.re.ps) === keyed17(sv17s1.rec.checklist.persona) && s1x17.re.res === 'recommend',
+      'E17 (12) 人物像の導入前に ① だけ保存した記録（② の回答なし）は人物像を使う（{}・導入前の toast と注記なし）・② に人物像 7 行（記入シートと同じ）・点を入れれば採用推奨（5 タイル）・保存し直しても点が残る: ' + JSON.stringify(s1x17));
+    //   人物像の項目が保存時と違う記録（両方に人物像あり。docs/SPEC-persona.md 1-7・D19）: 志望動機を外して「電話応対の丁寧さ」を足した設定で、既定の 7 項目すべて 4 点の保存 HTML（(7) の p12-persona-report.html）を読み込む
+    //   → toast「保存時と人物像の項目が異なります（追加 1・削除 1）。現在の項目で再判定します」・現在の項目で再判定（足した項目は未入力 → 上長最終判断要）。既定の項目に戻すと同じ記録でも出ない
+    await toView('settings');
+    const it17d = (await page.inputValue('[data-bind="checklist.persona.items"]')).split('\n');
+    await page.fill('[data-bind="checklist.persona.items"]', it17d.slice(0, 6).concat(['電話応対の丁寧さ|電話']).join('\n'));
+    await page.locator('[data-bind="checklist.persona.items"]').blur();
+    await wait(150);
+    await saveSettings();
+    const ids17d = (await storedProfile()).checklist.persona.items.map(it => it.id);
+    await toView('judge');
+    await page.click('#btnNew');
+    await wait(200);
+    await page.setInputFiles('#fileInput', saved17.file);
+    await wait(500);
+    const d19 = Object.assign({ toast: await toastText() }, await st(() => { const s = window.RecruitApp.state, j = s.judgment || {};
+      return { step: s.step, res: j.result, adj: (j.adjustments || []).map(a => a.code), w: (j.warnings || []).slice(), motivation: s.checklist.persona && s.checklist.persona.ps_motivation }; }));
+    expect(it17d.length === 7 && ids17d.length === 7 && ids17d.slice(0, 6).join() === PS17.slice(0, 6).join() && !ids17d.includes('ps_motivation') &&
+      d19.toast.includes('保存時と人物像の項目が異なります（追加 1・削除 1）。現在の項目で再判定します') && d19.toast.includes('保存時の判定（採用推奨）と現在の設定での再判定（上長最終判断要）が異なります') &&
+      d19.step === 4 && d19.res === 'review' && JSON.stringify(d19.adj) === '["persona_unscored"]' && d19.w.includes('人物像に未入力が 1 項目あります（電話）。') && d19.motivation === 4,
+      'E17 (12) 人物像の項目が保存時と違う記録: toast「保存時と人物像の項目が異なります（追加 1・削除 1）。現在の項目で再判定します」・現在の項目で再判定（足した「電話」は未入力 → 上長最終判断要。記録の点はそのまま）: ' + JSON.stringify({ ids17d, d19 }));
+    await toView('settings');
+    await page.click('#view-settings [data-action="cl-default"]');
+    await wait(150);
+    await saveSettings();
+    await toView('judge');
+    await page.click('#btnNew');
+    await wait(200);
+    await page.setInputFiles('#fileInput', saved17.file);
+    await wait(500);
+    const d19b = { toast: await toastText(), res: await st(() => (window.RecruitApp.state.judgment || {}).result) };
+    expect(!d19b.toast.includes('人物像の項目が異なります') && d19b.res === 'recommend', 'E17 (12) 既定の項目に戻すと同じ記録でも人物像の項目の toast は出ない（採用推奨）: ' + JSON.stringify(d19b));
     // (13) 使い方
     await toView('help');
     const help17 = await page.evaluate(() => ({ card: (document.getElementById('helpPersona') || {}).textContent || '', steps: document.querySelectorAll('#view-help .help-step').length,
-      step2: (document.querySelectorAll('#view-help .help-step')[1] || {}).textContent || '', rule: Array.from(document.querySelectorAll('#view-help .card')).map(c => c.textContent).find(t => t.includes('結果（推奨）の決まり方')) || '' }));
-    expect(help17.steps === 3 && ['人物像（1〜5 点）と記入シート', '面接中はメモを中心に', '1 対 1 でなくても', '記入シート（手書き用）', '70% 以上はそのまま', '40% 未満は不採用推奨', '最低限の話し方、敬語が可能か'].every(t => help17.card.includes(t)) &&
-      help17.step2.includes('総評（人物像 1〜5 点') && help17.step2.includes('面接中はメモを中心に') && help17.rule.includes('人物像（1〜5 点）の合計が低い'),
+      step2: (document.querySelectorAll('#view-help .help-step')[1] || {}).textContent || '', step3: (document.querySelectorAll('#view-help .help-step')[2] || {}).textContent || '',
+      rule: Array.from(document.querySelectorAll('#view-help .card')).map(c => c.textContent).find(t => t.includes('結果（推奨）の決まり方')) || '',
+      settings: Array.from(document.querySelectorAll('#view-help .card')).map(c => c.textContent).find(t => t.includes('設定（劇場プロファイル）')) || '',
+      off: !!document.getElementById('helpPersonaOff') }));
+    expect(help17.steps === 3 && ['人物像（1〜5 点）と記入シート', '面接中はメモを中心に', '記入シート（手書き用）', '70% 以上はそのまま', '40% 未満は不採用推奨', '最低限の話し方、敬語が可能か'].every(t => help17.card.includes(t)) &&
+      help17.step2.includes('総評（人物像 1〜5 点') && help17.step2.includes('面接中はメモを中心に') && help17.rule.includes('人物像（1〜5 点）の合計が低い') &&
+      help17.rule.includes('40% 未満なら不採用推奨') && !help17.off && !help17.rule.includes('いまの設定では人物像を使いません'),
       'E17 (13) 使い方に「人物像（1〜5 点）と記入シート」（面接中はメモ中心・判定への反映・記入シート・rt_manner を外した理由）・ステップ 2 と結果の決まり方にも 1 行（.help-step は 3 つのまま）: ' + JSON.stringify({ steps: help17.steps, len: help17.card.length }));
+    //   面接中はメモ中心は 1 対 1 の面接のとき。1 対 1 でない面接は記入シートに書いて面接後に転記（フィードバック ①②。「1 対 1 でなくても回せます」と逆に案内しない。docs/SPEC-persona.md 11-9 補完 2）
+    expect(help17.card.includes('面接中はメモを中心に：1 対 1 の面接なら、質問の回答などはメモ欄に書き、確認点の ○△×・人物像・総合判断は面接のあとでまとめて入力できます。') &&
+      help17.card.includes('1 対 1 でない面接は、面接しながらアプリに入力するのが難しいので、記入シート（手書き用。下）に書いて、面接のあとでアプリに転記してください。') && !help17.card.includes('1 対 1 でなくても'),
+      'E17 (13) 使い方の「面接中はメモを中心に」は 1 対 1 の面接のときの案内・1 対 1 でない面接は記入シートに書いて転記: ' + JSON.stringify(help17.card.slice(0, 260)));
+    //   使い方のほかの箇所も人物像・記入シートに合わせる（ステップ 3 の印刷の中身・① の記入シートのボタンの場所・設定のカード。docs/SPEC-persona.md 11-9 補完 5）
+    expect(help17.step3.includes('「A4 で印刷」で 1 枚（結果・必須条件・確認点・人物像・面接メモ・押印）に印刷できます') &&
+      help17.card.includes('Step① の「🖨 記入シート（手書き用）」（カードの下、「面接チェックリストへ進む →」の左）か、Step② の上部の同じボタンで A4 1 枚を印刷できます') && !help17.card.includes('Step① と Step② の上部') &&
+      help17.settings.includes('面接チェックリスト（台本の文言・項目・確認点・人物像）') && help17.card.includes('台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます'),
+      'E17 (13) 使い方のステップ 3（印刷の中身に人物像）・記入シートのボタンの場所（① はカードの下の操作行・② は上部）・設定のカード（人物像）・前書きの話し方・敬語の付け先: ' + JSON.stringify({ step3: help17.step3, settings: help17.settings }));
+    //   項目名は「、」でつなぐ（「笑顔・表情」の「・」と区別。D6）・「結果（推奨）の決まり方」の人物像の 1 行は既定ではこの文言
+    const lis17 = () => page.evaluate(() => Array.from(document.querySelectorAll('#view-help li')).map(li => li.textContent));
+    const RULE17 = '人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます（下げる方向だけ。設定で変更可）。';
+    const hl17a = await lis17();
+    expect(hl17a.some(t => t.includes('7 項目（挨拶、身だしなみ、笑顔・表情、声のトーン、目線、言葉遣い、志望動機）に 1〜5 点を付けます（1 不採用レベル・2 やや不安・3 普通・4 良い・5 とても良い）')) && hl17a.includes(RULE17),
+      'E17 (13) 使い方の人物像の項目名は「、」でつなぐ（7 項目が 8 つに読めない）・結果の決まり方の人物像の 1 行（既定）: ' + JSON.stringify(hl17a.filter(t => t.includes('人物像'))));
+    //   1 点・未入力・境界の設定を変えると、「判定への反映」と「結果（推奨）の決まり方」の 1 行が同じ内容になる（1 点＝不採用推奨・未入力＝調整しない・境界 60/30）
+    await toView('settings');
+    await page.selectOption('[data-bind="checklist.persona.onePointResult"]', 'reject');
+    await page.selectOption('[data-bind="checklist.persona.unscoredResult"]', 'none');
+    //   境界の欄は change で設定画面を描き直す（data-repaint）ので、1 欄ずつ入れて描き直しを待つ
+    for (const [k, v] of [['keepPct', '60'], ['rejectBelowPct', '30']]) {
+      await page.fill('[data-bind="checklist.persona.' + k + '"]', v);
+      await page.locator('[data-bind="checklist.persona.' + k + '"]').blur();
+      await wait(150);
+    }
+    await saveSettings();
+    const sp17r = (await storedProfile()).checklist.persona;
+    await toView('help');
+    const hl17b = await lis17();
+    expect(sp17r.onePointResult === 'reject' && sp17r.unscoredResult === 'none' && sp17r.keepPct === 60 && sp17r.rejectBelowPct === 30 &&
+      hl17b.some(t => t.includes('得点率 60% 以上はそのまま・30% 以上 60% 未満は上長最終判断要まで・30% 未満は不採用推奨。1 点の項目が 1 つでもあれば不採用推奨、未入力があれば下げない')) &&
+      hl17b.includes('人物像（1〜5 点）の合計が低いと、結果を上長最終判断要（合計が 30% 未満・1 点の項目があるなら不採用推奨）まで下げます（下げる方向だけ。設定で変更可）。') && !hl17b.includes(RULE17),
+      'E17 (13) 1 点＝不採用推奨・未入力＝調整しない・境界 60/30 にすると、結果の決まり方の人物像の 1 行も「判定への反映」と同じ内容: ' + JSON.stringify(hl17b.filter(t => t.includes('人物像'))));
+    //   ② の総評の説明・人物像の状態も同じ設定から（docs/SPEC-persona.md 11-9 補完 4）: 読み込んだ記録（7 項目すべて 4 点＝80%）→ 緑「60% 以上」・
+    //   1 項目を未入力に戻す（未入力＝調整しない）→ 灰「未入力 1」（下がらない）・笑顔・表情を 1 点（1 点＝不採用推奨）→ 赤「未入力 1・不採用推奨」と警告
+    await toView('judge');
+    await navStep(3);
+    const ov17r = async () => Object.assign(await psUi17(), { hint: await st(() => Array.from(document.querySelectorAll('#clOverall > .hint')).map(h => h.textContent).join(' ')) });
+    const ov17a = await ov17r();
+    await setPs('ps_greeting', 0);
+    await wait(80);
+    const ov17b = await ov17r();
+    await setPs('ps_smile', 1);
+    await wait(80);
+    const ov17c = await ov17r();
+    expect(ov17a.hint.includes('人物像（1〜5 点）の合計が低いと、結果を上長最終判断要（合計が 30% 未満・1 点の項目があるなら不採用推奨）まで下げます。') && !ov17a.hint.includes('未入力がある') &&
+      ov17a.state === '60% 以上' && ov17a.stateCls.includes('ok') && ov17b.state === '未入力 1' && ov17b.stateCls.includes('muted') &&
+      ov17c.state === '未入力 1・不採用推奨' && ov17c.stateCls.includes('danger') && ov17c.warn === '1 点の項目があります（笑顔・表情）。結果は不採用推奨になります。',
+      'E17 (13) 1 点＝不採用推奨・未入力＝調整しない・境界 60/30 の設定では、② の総評の説明と人物像の状態もその設定どおり（未入力だけなら灰・1 点ありは赤「不採用推奨」）: ' + JSON.stringify({ ov17a, ov17b, ov17c }));
+    //   人物像の項目名・目盛りの文言・結果の表示名は設定（画面・JSON の読み込み）から入る → 使い方・設定・② では文字として出す（img を作らない・onerror は走らない）
+    await toView('settings');
+    await page.click('#view-settings [data-action="cl-default"]');
+    await wait(150);
+    const xi17 = (await page.inputValue('[data-bind="checklist.persona.items"]')).split('\n');
+    xi17[0] = '<img src=x onerror="window.__x17a=1">';
+    await page.fill('[data-bind="checklist.persona.items"]', xi17.join('\n'));
+    await page.locator('[data-bind="checklist.persona.items"]').blur();
+    await wait(150);
+    await saveSettings();
+    await toView('help');
+    await wait(200);
+    const xs17a = await page.evaluate(() => ({ ran: window.__x17a === 1, img: document.querySelectorAll('#view-help img').length,
+      txt: ((document.getElementById('helpPersona') || {}).textContent || '').includes('<img src=x onerror="window.__x17a=1">') }));
+    //   JSON の読み込み: 人物像の短い名前・目盛りの文言・結果の表示名（texts.review.title）に img。あわせて境界 keepPct 500（範囲外）は既定（70/40）に戻す
+    const xj17 = await page.evaluate(() => { const p = window.RecruitStorage.defaults();
+      p.checklist.persona.items[2].short = '<img src=x onerror="window.__x17b=1">'; p.checklist.persona.scaleLabels[0] = '<img src=x onerror="window.__x17c=1">';
+      p.texts.review.title = '<img src=x onerror="window.__x17d=1">'; p.checklist.persona.keepPct = 500; return JSON.stringify(p); });
+    const xf17 = path.join(OUT, 'p12-xss-profile.json');
+    fs.writeFileSync(xf17, xj17);
+    await toView('settings');
+    await page.setInputFiles('#profileFileInput', xf17);
+    await wait(600);
+    const xs17b = await page.evaluate(() => ({ view: ['judge', 'settings', 'help'].find(v => !document.getElementById('view-' + v).classList.contains('hidden')), img: document.querySelectorAll('#view-settings img').length,
+      keep: (document.querySelector('[data-bind="checklist.persona.keepPct"]') || {}).value, issues: !!document.getElementById('settingsIssues') }));
+    const sp17x = (await storedProfile()).checklist.persona;
+    await toView('help');
+    await wait(200);
+    const xs17c = await page.evaluate(() => ({ img: document.querySelectorAll('#view-help img').length, txt: ((document.getElementById('helpPersona') || {}).textContent || '') }));
+    await toView('judge');
+    await navStep(3);
+    await wait(200);
+    const xs17d = await page.evaluate(() => ({ img: document.querySelectorAll('#view-judge img').length, ran: [window.__x17a, window.__x17b, window.__x17c, window.__x17d].filter(Boolean).length }));
+    expect(!xs17a.ran && xs17a.img === 0 && xs17a.txt && xs17b.view === 'settings' && xs17b.img === 0 && xs17b.keep === '70' && !xs17b.issues && sp17x.keepPct === 70 && sp17x.rejectBelowPct === 40 &&
+      xs17c.img === 0 && ['<img src=x onerror="window.__x17b=1">', '1 <img src=x onerror="window.__x17c=1">', '<img src=x onerror="window.__x17d=1">'].every(t => xs17c.txt.includes(t)) && xs17d.img === 0 && xs17d.ran === 0,
+      'E17 (13) 人物像の項目名（設定の画面）・短い名前・目盛りの文言・結果の表示名（JSON の読み込み）に img を入れても、使い方・設定・② では文字のまま（onerror は走らない）。読み込んだ境界 500% は既定（70/40）に戻す: ' + JSON.stringify({ xs17a, xs17b, keep: [sp17x.keepPct, sp17x.rejectBelowPct], xs17c: xs17c.img, xs17d }));
     await toView('judge');
     expect(e17.length === 0, 'E17 保存 HTML のページエラー・console error なし: ' + (e17.join(' / ') || 'none'));
   }

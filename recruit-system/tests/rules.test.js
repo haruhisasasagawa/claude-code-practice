@@ -1971,6 +1971,32 @@ test('94 人物像の設定（normalizeProfile・normalizeChecklistDef・validat
   assert.deepStrictEqual(plain(S.validateProfile(off)), { errors: [], warnings: [] });
   const edge = P(); edge.checklist.persona.rejectBelowPct = 0; edge.checklist.persona.keepPct = 100;
   assert.deepStrictEqual(plain(S.validateProfile(edge)).errors, []);
+  // 得点率の境界が範囲外（0 ≦ 不採用推奨 ＜ そのまま ≦ 100 でない）なら正規化で 2 つとも既定に戻す（JSON の読み込み・保存済みの設定は検証を通らないが、判定を狂わせない）。範囲内はそのまま（数値にする）
+  [[500, 40], [70, -1], [30, 50], [100, 100], [40, 40], [101, 0], [Infinity, 40], ['90', '95']].forEach(function (b) {
+    const q = P(); q.checklist.persona.keepPct = b[0]; q.checklist.persona.rejectBelowPct = b[1];
+    const nq = S.normalizeProfile(q).checklist.persona;
+    assert.ok(nq.keepPct === 70 && nq.rejectBelowPct === 40, JSON.stringify(b) + ' → ' + JSON.stringify([nq.keepPct, nq.rejectBelowPct]));
+    assert.deepStrictEqual(plain(S.validateProfile(S.normalizeProfile(q))).errors, [], '正規化した設定は検証を通る ' + JSON.stringify(b));
+  });
+  [[60, 30, 60, 30], [100, 0, 100, 0], ['80', '20', 80, 20], [70.5, 39.5, 70.5, 39.5]].forEach(function (b) {
+    const q = P(); q.checklist.persona.keepPct = b[0]; q.checklist.persona.rejectBelowPct = b[1];
+    const nq = S.normalizeProfile(q).checklist.persona;
+    assert.ok(nq.keepPct === b[2] && nq.rejectBelowPct === b[3], JSON.stringify(b) + ' → ' + JSON.stringify([nq.keepPct, nq.rejectBelowPct]));
+  });
+  //   JSON の読み込み（parseProfileJSON。validateProfile を通さない）でも同じ: keepPct 500 の JSON を読み込んでも、人物像すべて 5 点は採用推奨のまま（500 のままだと上長最終判断要になっていた）。
+  //   100/100 の JSON でも全部 4 点は採用推奨（100/100 のままだと不採用推奨になっていた）。記録の台本（normalizeChecklistDef）も同じ
+  const pj = P(); pj.checklist.persona.keepPct = 500;
+  const rj0 = {};
+  const nj = S.parseProfileJSON(JSON.stringify(pj), rj0);
+  assert.ok(nj.checklist.persona.keepPct === 70 && nj.checklist.persona.rejectBelowPct === 40, JSON.stringify(plain(nj.checklist.persona)));
+  const cl5 = clAll('good', 'hire', null, nj); Object.keys(cl5.persona).forEach(function (k) { cl5.persona[k] = 5; });
+  const j5 = judgeS(cl5, nj);
+  assert.ok(j5.result === 'recommend' && j5.adjustments.length === 0 && j5.persona.pct === 100, JSON.stringify(plain([j5.result, j5.adjustments])));
+  const pj2 = P(); pj2.checklist.persona.keepPct = 100; pj2.checklist.persona.rejectBelowPct = 100;
+  const nj2 = S.parseProfileJSON(JSON.stringify(pj2));
+  assert.strictEqual(judgeS(clAll('good', 'hire', null, nj2), nj2).result, 'recommend');
+  const dj = S.normalizeChecklistDef(plain(pj2.checklist), P().checklist);
+  assert.ok(dj.persona.keepPct === 70 && dj.persona.rejectBelowPct === 40, '記録の台本の境界も');
 });
 
 test('95 evaluateScript の人物像（docs/SPEC-persona.md 2 章: 未入力 → 得点率 → 1 点・下げる方向だけ・必須条件の不一致・旧い記録）', function () {
@@ -2124,20 +2150,78 @@ test('96 確認点 rt_manner の移行（既定の台本と同じ保存済みの
   const rf = {};
   const nf = S.normalizeProfile(JSON.parse(fs.readFileSync(path.join(FIX, 'legacy-profile-full.json'), 'utf8')), rf);
   assert.ok(rf.mannerMoved && rf.fullModeRemoved && !hasManner(nf) && nf.checklist.persona.enabled === true, JSON.stringify(plain(rf)));
+  //   本物の直前の既定（c0d20ce の config.default.js の台本そのもの。fixture legacy-pre-persona.html の checklistDef）を持つ保存済みの設定も移行し、
+  //   設定全体が新しい既定とバイト単位で同じになる（上の prevProfile は組み立て直した見本。実物とずれていないことをここで押さえる）
+  const realPrev = plain(fixtureRecord('legacy-pre-persona.html').checklistDef);
+  assert.ok(R.checklistItems(realPrev, 'rating').some(function (x) { return x.item.id === 'rt_manner'; }) && !('persona' in realPrev), 'fixture の台本は c0d20ce の既定（rt_manner あり・persona なし）');
+  const pr = P(); pr.checklist = realPrev;
+  const rr = {};
+  const nr0 = S.normalizeProfile(pr, rr);
+  assert.ok(rr.mannerMoved === true && JSON.stringify(nr0) === JSON.stringify(P()), '本物の直前の既定は新しい既定にそのまま置き換わる: ' + JSON.stringify(plain(rr)));
+  //   その前の既定（2026-10-13〜14。6f32341〜95737b5）: 質問・合否連絡・記入欄にも short が無い（df3b339 で既定に足した）。その版で保存した設定は
+  //   short が無いまま残る（fillChecklist の deepMerge は配列を保存値で置き換える）ので、short を 1 つも持たない台本は short を全部外した直前の既定と比べて移行する。
+  //   c0d20ce の既定（fixture）から short を全部外したものが、その版の保存済みの台本そのもの（6f32341〜95737b5 の normalizeProfile(defaults()) と照合済み。docs/SPEC-persona.md 11-8）
+  const stripShorts = function (secs) { secs.forEach(function (sec) { sec.blocks.forEach(function (b) { b.items.forEach(function (it) { delete it.short; }); }); }); return secs; };
+  const old13 = P(); old13.checklist = plain(realPrev); stripShorts(old13.checklist.sections);
+  assert.ok(R.checklistItems(old13.checklist, 'question').every(function (x) { return !('short' in x.item); }) && !('short' in R.checklistItems(old13.checklist, 'fields').find(function (x) { return x.item.id === 'first_end'; }).item));
+  const r13 = {};
+  const n13 = S.normalizeProfile(old13, r13);
+  assert.ok(r13.mannerMoved === true && !hasManner(n13) && JSON.stringify(n13) === JSON.stringify(P()), '2026-10-13〜14 の既定も移行する: ' + JSON.stringify(plain(r13)));
+  //   冪等（移行した設定をもう一度正規化しても同じ・2 回目は移行の印なし）
+  const r13b = {};
+  assert.ok(JSON.stringify(S.normalizeProfile(plain(n13), r13b)) === JSON.stringify(n13) && !r13b.mannerMoved);
+  //   short が 1 つも無くても、文言を 1 つ変えた台本・確認点を足した台本は編集した台本として rt_manner を残す（short が無いことだけでは移行しない）
+  const o1 = plain(old13); o1.checklist.sections[0].blocks[0].items[0].label = '土日を含む週3日以上（各5時間以上）';
+  const o2 = plain(old13); o2.checklist.sections[3].blocks[2].items.push({ id: 'rt_x', label: '追加' });
+  //   質問の short を 1 つだけ足した台本（ほかの short は無い）も編集した台本
+  const o3 = plain(old13); o3.checklist.sections[1].blocks[1].items[0].short = '前職';
+  [o1, o2, o3].forEach(function (e, i) { const r = {}; const ne = S.normalizeProfile(e, r); assert.ok(hasManner(ne) && !r.mannerMoved, '2026-10-13〜14 の版で編集した台本 ' + i); });
   // 記録の台本（checklistDef）は移行しない（保存時の台本で表示する）
   const recDef = prevProfile().checklist;
   const nd = S.normalizeChecklistDef(recDef, P().checklist);
   assert.ok(R.checklistItems(nd, 'rating').some(function (x) { return x.item.id === 'rt_manner'; }) && !('persona' in nd));
-  // normalizeRecord の persona（D2）: キーなし＋台本に persona なし → null・キーなし＋台本に persona あり → {}・明示の null → null・object → そのまま・壊れた値 → null
+  // normalizeRecord の persona（D2）: キーなし＋台本に persona なし＋② の回答あり → null・キーなし＋台本に persona あり → {}・明示の null → null・object → そのまま・壊れた値 → null
   const base = function (cl, def) { const r = { schemaVersion: 2, checklist: cl }; if (def !== undefined) r.checklistDef = def; return r; };
   const defNo = prevProfile().checklist, defPs = P().checklist;
-  assert.strictEqual(S.normalizeRecord(base({ values: {} }, defNo)).checklist.persona, null);
-  assert.strictEqual(S.normalizeRecord(base({ values: {} })).checklist.persona, null, 'checklistDef なし（v1・旧い記録）');
+  //   ② の回答（○△×・一致／不一致・説明のチェック・メモ・総合判断のどれか 1 つでも）がある導入前の記録は null（保存時の判定を変えない）
+  const answered = [{ values: { must_weekly: 'match' } }, { values: { ex_fare: true } }, { values: {}, notes: { conditions_q: '土日両日可' } }, { values: {}, overall: 'hold' }];
+  answered.forEach(function (cl, i) {
+    assert.strictEqual(S.normalizeRecord(base(plain(cl), defNo)).checklist.persona, null, '② の回答あり ' + i);
+    assert.strictEqual(S.normalizeRecord(base(plain(cl))).checklist.persona, null, 'checklistDef なし（v1・旧い記録）で ② の回答あり ' + i);
+  });
+  //   ② の回答がまだ無い記録（① だけ保存した導入前の記録・評価し直す v1 など）は {}（守る保存時の判定が無い。これから面接して人物像も入れる。docs/SPEC-persona.md 11-9 補完 1）。
+  //   ① の入力（面接日・担当・求人・タクシー）は ② の回答に数えない
+  const hdr = { date: '2026-10-10', interviewer: '笹川 晴央', posting: 'short', taxi: '可' };
+  assert.deepStrictEqual(plain(S.normalizeRecord(base({ header: plain(hdr), values: {}, notes: {}, overall: '' }, defNo)).checklist.persona), {}, '① だけ保存した導入前の記録');
+  assert.deepStrictEqual(plain(S.normalizeRecord(base({ values: {} })).checklist.persona), {}, 'checklistDef なし・② の回答なし');
+  assert.deepStrictEqual(plain(S.normalizeRecord({ schemaVersion: 1, step: 4, judgment: { result: 'recommend' } }).checklist.persona), {}, 'v1（checklist なし。② で評価し直す）');
+  assert.deepStrictEqual(plain(S.normalizeRecord(null).checklist.persona), {});
   assert.deepStrictEqual(plain(S.normalizeRecord(base({ values: {} }, defPs)).checklist.persona), {});
   assert.strictEqual(S.normalizeRecord(base({ values: {}, persona: null }, defPs)).checklist.persona, null, '明示の null は台本に persona があっても null');
+  assert.strictEqual(S.normalizeRecord(base({ values: {}, persona: null }, defNo)).checklist.persona, null, '明示の null は ② の回答が無くても null');
   assert.deepStrictEqual(plain(S.normalizeRecord(base({ persona: { ps_smile: 3 } }, defNo)).checklist.persona), { ps_smile: 3 });
   assert.strictEqual(S.normalizeRecord(base({ persona: 'x' }, defPs)).checklist.persona, null);
-  assert.strictEqual(S.normalizeRecord(null).checklist.persona, null);
+  assert.strictEqual(S.normalizeRecord(base({ values: { must_weekly: 'match' }, persona: 7 }, defNo)).checklist.persona, null);
+  //   fixture（c0d20ce で保存した導入前の記録）を ① だけ保存した形にすると {}: 現在の設定の人物像で判定し（未入力 7 → 上長最終判断要）、点を入れれば採用推奨。
+  //   保存し直した記録（台本に人物像あり）も {} のまま往復する
+  const lp1 = fixtureRecord('legacy-pre-persona.html');
+  assert.ok(!('persona' in lp1.checklistDef) && !('persona' in lp1.checklist));
+  lp1.step = 1; lp1.checklist.values = {}; lp1.checklist.notes = {}; lp1.checklist.overall = ''; lp1.judgment = null; lp1.management = {}; lp1.decision = null; lp1.interviewNotes = '';
+  const nl1 = S.normalizeRecord(lp1);
+  assert.deepStrictEqual(plain(nl1.checklist.persona), {});
+  assert.ok(nl1.checklist.header.date === lp1.checklist.header.date && nl1.step === 1, '① の入力はそのまま');
+  const cl1 = plain(nl1.checklist);
+  R.checklistItems(P().checklist, 'must').forEach(function (x) { cl1.values[x.item.id] = 'match'; });
+  R.checklistItems(P().checklist, 'rating').forEach(function (x) { cl1.values[x.item.id] = 'good'; });
+  cl1.overall = 'hire';
+  const jl1 = judgeS(cl1);
+  assert.ok(jl1.result === 'review' && JSON.stringify(codes(jl1)) === '["persona_unscored"]' && jl1.persona && jl1.persona.unscored === 7, JSON.stringify(plain([jl1.result, codes(jl1)])));
+  PS_IDS.forEach(function (id) { cl1.persona[id] = 4; });
+  const jl2 = judgeS(cl1);
+  assert.ok(jl2.result === 'recommend' && jl2.adjustments.length === 0 && jl2.persona.total === 28, JSON.stringify(plain([jl2.result, codes(jl2)])));
+  const st1 = scriptState({ applicant: nl1.applicant, checklist: plain(nl1.checklist), judgment: null, management: {}, step: 1 });
+  const rt1 = S.normalizeRecord(plain(S.buildRecord(st1)));
+  assert.ok(rt1.checklistDef && rt1.checklistDef.persona && JSON.stringify(plain(rt1.checklist.persona)) === '{}', '保存し直した記録（台本に人物像あり）も {}');
   //   null は buildRecord → normalizeRecord で残る（保存し直しても判定が変わらない）
   const stN = scriptState(); stN.checklist.persona = null;
   const rtN = S.normalizeRecord(plain(S.buildRecord(stN)));
@@ -2213,11 +2297,15 @@ test('97 A4 の人物像（5 タイル・確認点｜人物像の 2 カラム）
   assert.deepStrictEqual(tilesOf(S.checklistSheetHtml(Object.assign({}, mk([4]), { checklistDef: pT.checklist }), pT, {})).slice(4), ['接客の印象']);
   // CSS（足すだけ。@media なし）
   const css = S.checklistSheetCss();
-  ['.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr))}', 'max-width:36%', '.cl-mode-sheet .cl-cols.cl-cols-eval{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}',
+  //   5 枚のタイルは中身の幅（min-content）より狭くならず、足りないときは最終合否欄が縮む（担当者名が長くても「上長最終判断要」「未入力 3・1点あり」を「…」で切らない。e2e E8 dec39 で実測）
+  ['.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(min-content,1.5fr) repeat(4,minmax(min-content,1fr))}', 'max-width:36%',
+    '.cl-mode-sheet .cl-judge-main{flex-basis:0%;min-width:min-content}.cl-mode-sheet .cl-decision{flex-shrink:1}', '.cl-mode-sheet .cl-cols.cl-cols-eval{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}',
     '.cl-mode-sheet table.cl-ps{', '.cl-mode-sheet .cl-ps-bar i.on{', '.cl-mode-sheet .cl-rt col.c-lbl{width:auto}', '.cl-sheet .cl-ps-bar i{-webkit-print-color-adjust:exact;print-color-adjust:exact}'].forEach(function (t) { assert.ok(css.indexOf(t) >= 0, 'CSS に ' + t); });
-  ['max-width:48%', '@media', 'print-checklist', 'n5', '</' + 'script'].forEach(function (t) { assert.ok(css.indexOf(t) < 0, 'CSS に無い: ' + t); });
-  // 保存 HTML の窓: 確認点のメモの行（.cl-nm-rt）は 1 項目 1 行の全文（a4PageScript の memoOf）
-  assert.ok(S.generateReportHTML(mk([4, 4, 4, 4, 4, 4, 4]), P()).indexOf('row.classList.contains("cl-nm-rt")') > 0);
+  //   確認点のメモの列（.cl-rt-nt）は 2026-10-16 に外したので、その CSS も無い（旧い保存 HTML は保存時の CSS を自分で持つ）
+  ['max-width:48%', '@media', 'print-checklist', 'n5', '</' + 'script', '.cl-rt-nt'].forEach(function (t) { assert.ok(css.indexOf(t) < 0, 'CSS に無い: ' + t); });
+  // 保存 HTML の窓: 確認点のメモの行（.cl-nm-rt）は 1 項目 1 行の全文（a4PageScript の memoOf）。確認点の表の行（tr）のメモの窓は無い（メモの列が無いため）
+  const html97 = S.generateReportHTML(mk([4, 4, 4, 4, 4, 4, 4]), P());
+  assert.ok(html97.indexOf('row.classList.contains("cl-nm-rt")') > 0 && html97.indexOf('tr[data-cl-item]') < 0 && html97.indexOf('".cl-nm-v,.cl-rt-nt"') < 0 && html97.indexOf('sheet.querySelectorAll(".cl-nm-v")') > 0);
 
   // ---- 面接記入シート（手書き用） ----
   const blank = S.paperSheetHtml(S.buildRecord({ profile: P(), applicant: SA(), checklist: R.emptyChecklist(), management: {}, step: 1 }), P(), { now: NOW });

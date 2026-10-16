@@ -834,7 +834,17 @@
   function clPageHeadHtml(no, sum) {
     const pg = (sum.pages || []).find(function (x) { return U.isObj(x) && Number(x.no) === no; });
     return '<div class="cl-page-head" data-page="' + no + '"><div><b>' + no + '枚目</b>' + (pg && pg.title ? '　' + esc(pg.title) : '') + '</div>' +
-      (pg && pg.lead ? '<div class="hint">' + esc(pg.lead) + '</div>' : '') + '</div>';
+      (pg && pg.lead ? '<div class="hint">' + esc(pg.lead) + '</div>' + clLeadPsHtml(String(pg.lead), sum) : '') + '</div>';
+  }
+  // 台本 1 枚目の前書きの「最低限の話し方、敬語が可能か」は、確認点から外して人物像の「言葉遣い・説明のわかりやすさ」で付ける（2026-10-16。台本の文言は変えない）。
+  //   前書きが話し方・敬語に触れ、確認点に話し方・敬語の項目が無く、人物像に言葉遣いの項目があるとき、付ける場所を前書きの下に 1 行で示す（docs/SPEC-persona.md 11-9 補完 6）
+  const CL_MANNER_RE = /敬語|話し方/;
+  function clLeadPsHtml(lead, sum) {
+    const ps = sum.persona;
+    if (!ps || !CL_MANNER_RE.test(lead)) return '';
+    if (R.checklistItems(sum.def, 'rating').some(function (x) { return CL_MANNER_RE.test(String(x.item.label || '')); })) return '';
+    const it = ps.items.find(function (x) { return x.id === 'ps_speech'; }) || ps.items.find(function (x) { return /言葉遣い|敬語/.test(x.label); });
+    return it ? '<div class="hint cl-lead-ps" data-ps-ref="' + esc(it.id) + '">→ 話し方・敬語は確認点ではなく、最後の総評の' + esc(ps.title) + '「' + esc(it.label) + '」で 1〜5 点を付けます。</div>' : '';
   }
 
   // ブロックの見出し【…】（title は【】なしで書く。必須条件・確認点・合否連絡は空でも既定の見出しを出す）
@@ -964,9 +974,10 @@
 
   // 総評の人物像（1〜5 点。docs/SPEC-persona.md 3-2）。各行は 1 つのタブ位置（押下中のボタン、無ければ 1。updateChecklistUI が付け直す）
   function clPersonaHtml(ps) {
-    const legend = ps.scaleLabels.map(function (l, i) { return (i + 1) + ' ' + l; }).join('　');
+    //   凡例は「点 意味」ごとに折り返さない span（狭い画面でも「5 とても／良い」と語の途中で割れない。文字は全角空白でつなぐ）
+    const legend = ps.scaleLabels.map(function (l, i) { return '<span>' + esc((i + 1) + ' ' + l) + '</span>'; }).join('　');
     return '<section class="cl-persona" id="clPersona" aria-labelledby="clPersonaH">' +
-      '<div class="cl-ps-head"><h3 id="clPersonaH">' + esc(ps.title) + '</h3><span class="cl-ps-legend" id="clPsLegend">' + esc(legend) + '</span></div>' +
+      '<div class="cl-ps-head"><h3 id="clPersonaH">' + esc(ps.title) + '</h3><span class="cl-ps-legend" id="clPsLegend">' + legend + '</span></div>' +
       '<div class="cl-ps-rows">' + ps.items.map(function (it, i) {
         let btns = '';
         for (let n = 1; n <= ps.scaleMax; n++) {
@@ -990,10 +1001,10 @@
     const def = sum.def;
     const oo = U.isObj(def.overallOptions) ? def.overallOptions : {};
     const ps = sum.persona;
-    // 総合判断がそのまま結果になる（必須条件の不一致は除く）。人物像があれば合計・1 点の項目で下がることも書く
+    // 総合判断がそのまま結果になる（必須条件の不一致は除く）。人物像があれば、結果が下がる条件（合計・1 点・未入力。設定から）も書く（docs/SPEC-persona.md 11-9 補完 4）
     const hint = [def.overallHint || '', '「' + (oo.hire || overallLabelNow('hire')) + '」は' + resultTitle('recommend') + '、「' + (oo.hold || overallLabelNow('hold')) + '」は' + resultTitle('review') +
       '、「' + (oo.reject || overallLabelNow('reject')) + '」は' + resultTitle('reject') + 'として報告します（必須条件が不一致なら' + resultTitle(def.mustFailResult === 'review' ? 'review' : 'reject') + '）。',
-      ps ? '人物像の合計・1 点の項目で結果が下がることがあります。' : ''].filter(Boolean).join(' ');
+      ps ? personaRuleText() + '。' : ''].filter(Boolean).join(' ');
     const off = !ps && ensureChecklist().persona === null && personaOnNow();
     return '<div class="card" id="clOverall"><div class="card-head"><h2>総評</h2></div>' +
       (ps ? clPersonaHtml(ps) : '') +
@@ -1029,7 +1040,7 @@
     html += clOverallHtml(sum);
     html += '<div class="actions between">' +
       '<button type="button" class="btn" id="backToApplicant" data-action="to-step" data-step="1">← 応募者に戻る</button>' +
-      '<div class="actions"><button type="button" class="btn" id="clPrintBtn" data-action="print-checklist" title="結果・必須条件・確認点・面接メモ・押印を A4 1 枚に印刷">🖨 面接チェックリスト報告（A4）</button>' +
+      '<div class="actions"><button type="button" class="btn" id="clPrintBtn" data-action="print-checklist" title="結果・必須条件・確認点・人物像・面接メモ・押印を A4 1 枚に印刷">🖨 面接チェックリスト報告（A4）</button>' +
       '<button type="button" class="btn primary" id="toReportBtn" data-action="judge">報告書へ進む →</button></div></div>';
     return html;
   }
@@ -1085,10 +1096,18 @@
     setText('#clPsPct', ps.complete ? '（' + ps.pct + '%）' : '');
     const stEl = $('#clPsState');
     if (stEl) {
-      const st = ps.unscored ? ['muted', '未入力 ' + ps.unscored] : ps.band === 'keep' ? ['ok', ps.keepPct + '% 以上']
-        : ps.band === 'review' ? ['warn', resultTitle('review') + 'まで'] : ['danger', resultTitle('reject')];
-      stEl.className = 'badge ' + st[0];
-      stEl.textContent = st[1];
+      // 人物像で下がる結果の上限（未入力・合計・1 点の項目のうちいちばん低いもの。設定で「調整しない」のものは数えない）。
+      //   下がるなら 琥珀「上長最終判断要まで」／赤「不採用推奨」（未入力があれば「未入力 n・」を前に）、下がらなければ 緑「70% 以上」／灰「未入力 n」（docs/SPEC-persona.md 11-9 補完 4）
+      const caps = [];
+      if (ps.unscored && ps.unscoredResult !== 'none') caps.push(ps.unscoredResult);
+      if (ps.complete && ps.band !== 'keep') caps.push(ps.band);
+      if (ps.ones.length && ps.onePointResult !== 'none') caps.push(ps.onePointResult);
+      const cap = caps.indexOf('reject') >= 0 ? 'reject' : caps.length ? 'review' : '';
+      const capText = cap === 'reject' ? resultTitle('reject') : cap ? resultTitle('review') + 'まで' : '';
+      const tone = cap === 'reject' ? 'danger' : cap ? 'warn' : ps.unscored ? 'muted' : 'ok';
+      const st = ps.unscored ? '未入力 ' + ps.unscored + (cap ? '・' + capText : '') : cap ? capText : ps.keepPct + '% 以上';
+      stEl.className = 'badge ' + tone;
+      stEl.textContent = st;
     }
     show('#clPsWarn', ps.ones.length > 0);
     if (ps.ones.length) {
@@ -1601,7 +1620,8 @@
         return false;
       }
       injectChecklistSheetCss();
-      fillChecklistDefaults();
+      // ① の入力をそのまま印字する（面接日を空にしていれば記入用の線。今日の日付で埋めない＝印刷で記録を書き換えない。docs/SPEC-persona.md 11-9 補完 3）
+      ensureChecklist();
       host.innerHTML = '<div class="a4 pp-a4">' + S.paperSheetHtml(S.buildRecord(state), state.profile, {}) + '</div>';
       document.body.classList.add('print-checklist');
       const sh = $('#clSheet .pp-sheet');
@@ -1884,7 +1904,8 @@
       esc(decisionLabelOf(d, dcfg) + '・' + (d.by.short || Stamp.shortName(d.by.name))) + '</span></span></div>';
   }
 
-  // 使い方の「人物像（1〜5 点）と記入シート」（docs/SPEC-persona.md 6-3）。境界・結果は現在の設定から
+  // 使い方の「人物像（1〜5 点）と記入シート」（docs/SPEC-persona.md 6-3）。境界・結果は現在の設定から。設定で OFF ならそのことも書く。
+  //   項目名・目盛りの文言・結果の表示名は設定（JSON の読み込みを含む）から入るので esc を通す。項目名は「、」でつなぐ（「笑顔・表情」の「・」と区別。D6）
   function helpPersonaHtml() {
     const pd = (clDefNow().persona) || {};
     const ps = R.personaModel(clDefNow(), { persona: {} });
@@ -1892,13 +1913,30 @@
     const keep = R.num(pd.keepPct, 70), rej = R.num(pd.rejectBelowPct, 40);
     const labels = ps ? ps.scaleLabels : ['不採用レベル', 'やや不安', '普通', '良い', 'とても良い'];
     return '<div class="card" id="helpPersona"><div class="card-head"><h3>人物像（1〜5 点）と記入シート</h3></div><ol class="list-plain">' +
-      '<li><b>面接中はメモを中心に</b>：質問の回答などはメモ欄に書き、確認点の ○△×・人物像・総合判断は面接のあとでまとめて入力できます（1 対 1 でなくても回せます）。</li>' +
-      '<li><b>人物像</b>：Step② の総評で、' + (ps ? ps.items.length + ' 項目（' + ps.items.map(function (it) { return it.name; }).join('・') + '）' : '接客の項目') + 'に 1〜5 点を付けます（' +
-        labels.map(function (l, i) { return (i + 1) + ' ' + l; }).join('・') + '）。' + (ps ? '満点は ' + ps.max + ' 点です。' : '') + 'クリックのほか、数字キー 1〜5 でも入力できます（次の行へ進みます）。</li>' +
-      '<li><b>判定への反映</b>：得点率 ' + keep + '% 以上はそのまま・' + rej + '% 以上 ' + keep + '% 未満は' + resultTitle('review') + 'まで・' + rej + '% 未満は' + resultTitle('reject') + '。1 点の項目が 1 つでもあれば' +
-        capName(pd.onePointResult || 'review') + '、未入力があれば' + capName(pd.unscoredResult || 'review') + '（下げる方向だけ。上げることはありません。設定の「面接チェックリスト」で変更できます）。</li>' +
-      '<li><b>記入シート（手書き用）</b>：Step① と Step② の上部の「🖨 記入シート（手書き用）」で A4 1 枚を印刷できます（Step② と同じ並び。① に入力した氏名などは印字）。紙に書いて面接し、終わったらアプリに転記します。</li>' +
-      '<li>確認点「最低限の話し方、敬語が可能か」は人物像の「言葉遣い・説明のわかりやすさ」と重なるため、既定の台本から外しました。</li></ol></div>';
+      (ps ? '' : '<li id="helpPersonaOff"><b>いまの設定では人物像を使いません</b>（設定「面接チェックリスト」の「人物像を使う」で ON にできます）。Step②・報告書・記入シートに人物像は出ず、判定にも使いません。</li>') +
+      //   フィードバック ①「1 対 1 でなければ面接しながらの運用は苦慮するかも。メモを有効活用すれば 1 対 1 は問題なさそう」・②「紙で書いて報告の際に転記」（docs/SPEC-persona.md 11-9 補完 2）
+      '<li><b>面接中はメモを中心に</b>：1 対 1 の面接なら、質問の回答などはメモ欄に書き、確認点の ○△×・人物像・総合判断は面接のあとでまとめて入力できます。' +
+        '1 対 1 でない面接は、面接しながらアプリに入力するのが難しいので、記入シート（手書き用。下）に書いて、面接のあとでアプリに転記してください。</li>' +
+      '<li><b>人物像</b>：Step② の総評で、' + (ps ? ps.items.length + ' 項目（' + esc(ps.items.map(function (it) { return it.name; }).join('、')) + '）' : '接客の項目') + 'に 1〜5 点を付けます（' +
+        esc(labels.map(function (l, i) { return (i + 1) + ' ' + l; }).join('・')) + '）。' + (ps ? '満点は ' + ps.max + ' 点です。' : '') + 'クリックのほか、数字キー 1〜5 でも入力できます（次の行へ進みます）。</li>' +
+      '<li><b>判定への反映</b>：得点率 ' + keep + '% 以上はそのまま・' + rej + '% 以上 ' + keep + '% 未満は' + esc(resultTitle('review')) + 'まで・' + rej + '% 未満は' + esc(resultTitle('reject')) + '。1 点の項目が 1 つでもあれば' +
+        esc(capName(pd.onePointResult || 'review')) + '、未入力があれば' + esc(capName(pd.unscoredResult || 'review')) + '（下げる方向だけ。上げることはありません。設定の「面接チェックリスト」で変更できます）。</li>' +
+      '<li><b>記入シート（手書き用）</b>：Step① の「🖨 記入シート（手書き用）」（カードの下、「面接チェックリストへ進む →」の左）か、Step② の上部の同じボタンで A4 1 枚を印刷できます（Step② と同じ並び。① に入力した氏名などは印字）。紙に書いて面接し、終わったらアプリに転記します。</li>' +
+      '<li>確認点「最低限の話し方、敬語が可能か」は人物像の「言葉遣い・説明のわかりやすさ」と重なるため、既定の台本から外しました（台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます）。</li></ol></div>';
+  }
+  // 人物像で結果が下がる条件の文（文字列。HTML にするときは esc）。上長最終判断要まで下げる条件と不採用推奨にする条件を、1 点・未入力の設定（onePointResult・unscoredResult）と境界から組み立てる。
+  //   使い方の「結果（推奨）の決まり方」と ② の総評の説明で共用（既定: 「人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます」）
+  function personaRuleText() {
+    const pd = (clDefNow().persona) || {};
+    const one = R.PERSONA_RESULTS.indexOf(pd.onePointResult) >= 0 ? pd.onePointResult : 'review';
+    const uns = R.PERSONA_RESULTS.indexOf(pd.unscoredResult) >= 0 ? pd.unscoredResult : 'review';
+    const toReview = ['合計が低い'], toReject = ['合計が ' + R.num(pd.rejectBelowPct, 40) + '% 未満'];
+    (one === 'review' ? toReview : one === 'reject' ? toReject : []).push('1 点の項目がある');
+    (uns === 'review' ? toReview : uns === 'reject' ? toReject : []).push('未入力がある');
+    return '人物像（1〜5 点）の' + toReview.join('・') + 'と、結果を' + resultTitle('review') + '（' + toReject.join('・') + 'なら' + resultTitle('reject') + '）まで下げます';
+  }
+  function helpPersonaRuleLi() {
+    return '<li>' + esc(personaRuleText()) + '（下げる方向だけ。設定で変更可' + (R.personaModel(clDefNow(), { persona: {} }) ? '' : '。いまの設定では人物像を使いません') + '）。</li>';
   }
 
   // 使い方（docs/SPEC-script-mode.md 5 章）
@@ -1908,7 +1946,7 @@
       '<div class="help-steps">' +
         '<div class="help-step"><span class="n">1</span><h3>応募者</h3><p>1 枚のカードに 3 行だけ。氏名（必須）・年齢・性別・区分（学生は卒業予定年月）、面接日・面接担当者・応募した求人（通常／短期）、タクシー可否・料金とメモを、分かる範囲で入力します。</p></div>' +
         '<div class="help-step"><span class="n">2</span><h3>面接チェックリスト</h3><p>①勤務条件 → ②継続性・報連相 → ③仕事内容の説明 → ④集団行動特性 → ⑤逆質問 の順に、必須条件（一致／不一致）・説明のチェック・質問のメモ・確認点の ○△×・総評（人物像 1〜5 点・総合判断〔採用／保留／不採用〕・面接所見）を入力します。面接中はメモを中心に、○△×・人物像・総合判断は面接後にまとめて入力できます。必須条件が 1 つでも不一致なら不採用推奨です。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（面接対応者／最終確認）の「面接対応者」に電子印を押して「報告書を保存（HTML）」します（最終確認と最終合否は、副支配人が保存した HTML で押します。最終承認のパスワードがあるときはその入力が必要です）。「A4 で印刷」で 1 枚（結果・必須条件・確認点・面接メモ・押印）に印刷できます。保存した HTML も同じ A4 縦の用紙 1 枚です。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（面接対応者／最終確認）の「面接対応者」に電子印を押して「報告書を保存（HTML）」します（最終確認と最終合否は、副支配人が保存した HTML で押します。最終承認のパスワードがあるときはその入力が必要です）。「A4 で印刷」で 1 枚（結果・必須条件・確認点・人物像・面接メモ・押印）に印刷できます。保存した HTML も同じ A4 縦の用紙 1 枚です。</p></div>' +
       '</div></div>' +
       '<div class="card" id="helpScriptFlow"><div class="card-head"><h3>報告書（HTML）の流れ</h3></div><ol class="list-plain">' +
         '<li>面接者が「面接対応者」に押印して保存し、社内スレッドに添付します。</li>' +
@@ -1919,13 +1957,13 @@
       '<div class="card"><div class="card-head"><h3>結果（推奨）の決まり方</h3></div><ul class="list-plain">' +
         '<li>必須条件に不一致がある → 不採用推奨（設定で上長最終判断要に変更可）。</li>' +
         '<li>それ以外は面接者の総合判断のとおり（採用 → 採用推奨、保留 → 上長最終判断要、不採用 → 不採用推奨）。総合判断が未入力なら上長最終判断要です。</li>' +
-        '<li>人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます（下げる方向だけ。設定で変更可）。</li>' +
+        helpPersonaRuleLi() +
         '<li>確認点の ○△× は面接評価（点数）として報告書に載ります。最終合否（採用／不採用のスタンプ）はこの推奨とは別の、最終確認者の決定です。</li></ul></div>' +
       '<div class="card"><div class="card-head"><h3>保存と読み込み</h3></div><ul class="list-plain">' +
         '<li>応募者ごとに 1 ファイル（HTML）。途中で保存しても、読み込むと続きから再開できます。</li>' +
         '<li>応募者データはこの端末のブラウザには残りません（保存したファイルのみが記録です）。</li></ul></div>' +
       '<div class="card"><div class="card-head"><h3>設定（劇場プロファイル）</h3></div><ul class="list-plain">' +
-        '<li>劇場情報・応募者の区分と性別・面接チェックリスト（台本の文言・項目・確認点）・押印欄と担当者名簿・最終合否を画面から変更できます。</li>' +
+        '<li>劇場情報・応募者の区分と性別・面接チェックリスト（台本の文言・項目・確認点・人物像）・押印欄と担当者名簿・最終合否を画面から変更できます。</li>' +
         '<li>設定は端末のブラウザに保存されます。他の劇場・端末へ展開するときは JSON を書き出して読み込んでください。</li></ul></div>' +
       '<div class="card" id="helpFinalLock"><div class="card-head"><h3>最終承認のパスワード</h3></div><ul class="list-plain">' +
         '<li>設定の「応募者の管理（押印）」でパスワードを決めると、最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（③ 報告書と保存した HTML の両方。面接対応者の押印には要りません）。一度正しく入れると、そのページを閉じる（読み込み直す）まで続けて押せます。</li>' +

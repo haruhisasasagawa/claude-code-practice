@@ -25,6 +25,7 @@
   --accent-hover: #184c99;
   --accent-soft: #e6eefb;
   --on-accent: #ffffff;
+  --on-status: #ffffff;   /* 押下中の ○△×・一致／不一致・採用／保留／不採用・人物像の点（--ok/--warn/--danger の地）の文字 */
 
   --ok: #0e9f6e;      --ok-soft: #e3f6ee;
   --warn: #d97706;    --warn-soft: #fdf1dc;
@@ -56,6 +57,7 @@
   --accent-hover: #7cb0ff;
   --accent-soft: #1b2a44;
   --on-accent: #0b1220;
+  --on-status: #0b1220;   /* ダークの --ok/--warn/--danger は明るいので濃い文字（白では 2.0〜3.1:1） */
   --ok: #34c38f;      --ok-soft: #12302a;
   --warn: #f5a623;    --warn-soft: #3a2a12;
   --danger: #f06565;  --danger-soft: #3b1a1d;
@@ -79,6 +81,7 @@
     --accent-hover: #7cb0ff;
     --accent-soft: #1b2a44;
     --on-accent: #0b1220;
+    --on-status: #0b1220;
     --ok: #34c38f;      --ok-soft: #12302a;
     --warn: #f5a623;    --warn-soft: #3a2a12;
     --danger: #f06565;  --danger-soft: #3b1a1d;
@@ -545,9 +548,9 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .badge.muted { background: var(--surface-3); color: var(--muted); border-color: var(--border); }
 .seg-btn.wide { width: auto; min-width: 46px; padding: 0 12px; font-size: 13.5px; white-space: nowrap; }
 .seg-btn.cl-mark { width: 48px; height: 40px; font-size: 18px; }
-.seg-btn.active.match, .seg-btn.active.good, .seg-btn.active.hire { background: var(--ok); color: #fff; }
-.seg-btn.active.fair, .seg-btn.active.hold { background: var(--warn); color: #fff; }
-.seg-btn.active.mismatch, .seg-btn.active.poor, .seg-btn.active.reject { background: var(--danger); color: #fff; }
+.seg-btn.active.match, .seg-btn.active.good, .seg-btn.active.hire { background: var(--ok); color: var(--on-status); }
+.seg-btn.active.fair, .seg-btn.active.hold { background: var(--warn); color: var(--on-status); }
+.seg-btn.active.mismatch, .seg-btn.active.poor, .seg-btn.active.reject { background: var(--danger); color: var(--on-status); }
 .cl-seg.lg .seg-btn { height: 44px; font-size: 15px; padding: 0 18px; }
 .cl-seg { flex: none; max-width: 100%; }
 .field > .cl-seg { align-self: flex-start; }
@@ -574,6 +577,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 
 .cl-page-head { padding: 6px 4px 0; border-bottom: 2px solid var(--accent); font-size: 14px; color: var(--accent); }
 .cl-page-head .hint { margin: 2px 0 6px; }
+.cl-page-head .hint.cl-lead-ps { margin-top: -4px; font-weight: 600; }   /* 前書きの話し方・敬語を付ける場所（人物像の言葉遣い。docs/SPEC-persona.md 11-9 補完 6） */
 .cl-sec { scroll-margin-top: 120px; }
 #clOverall { scroll-margin-top: 120px; }
 .cl-no { display: inline-block; margin-right: 6px; color: var(--accent); font-weight: 800; }
@@ -638,19 +642,22 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 
 /* ② の上部の案内（面接中はメモ中心）・総評の人物像（1〜5 点）・質問の 1 行表示（docs/SPEC-persona.md 3 章） */
 .cl-guide { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 13.5px; font-weight: 600; }
+/*   文言は残りの幅で折り返す（1 行に入らない幅でもボタンを 2 行目へ追い出さない）。ボタンと並べられないほど狭い画面（文言が 16em 未満）だけボタンを次の行へ（💡 は文言の行に残る） */
+.cl-guide-t { flex: 1 1 0; min-width: 16em; }
 .cl-guide .btn { margin-left: auto; }
 .cl-persona { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
 .cl-ps-head { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .cl-ps-head h3 { font-size: 14.5px; font-weight: 700; }
 .cl-ps-legend { font-size: 12px; font-weight: 600; color: var(--muted); }
+.cl-ps-legend > span { white-space: nowrap; }
 .cl-ps-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: 6px; }
 .cl-ps-row.is-one { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); background: var(--danger-soft); }
 .cl-ps-main { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .cl-ps-no { color: var(--muted); font-weight: 800; }
 .seg-btn.cl-ps-btn { width: 44px; height: 38px; font-size: 16px; font-weight: 800; }
-.seg-btn.cl-ps-btn.active.s1 { background: var(--danger); color: #fff; }
-.seg-btn.cl-ps-btn.active.s2 { background: var(--warn); color: #fff; }
-.seg-btn.cl-ps-btn.active.s4, .seg-btn.cl-ps-btn.active.s5 { background: var(--ok); color: #fff; }
+.seg-btn.cl-ps-btn.active.s1 { background: var(--danger); color: var(--on-status); }
+.seg-btn.cl-ps-btn.active.s2 { background: var(--warn); color: var(--on-status); }
+.seg-btn.cl-ps-btn.active.s4, .seg-btn.cl-ps-btn.active.s5 { background: var(--ok); color: var(--on-status); }
 .cl-ps-btn:focus-visible, .cl-q:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .cl-ps-total { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 14px; font-weight: 600; }
 .cl-ps-total #clPsSum { font-size: 22px; }
@@ -2434,6 +2441,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     } else out.items = U.deepClone(Array.isArray(base.items) ? base.items : []);
     out.keepPct = isNum(src.keepPct) ? Number(src.keepPct) : base.keepPct;
     out.rejectBelowPct = isNum(src.rejectBelowPct) ? Number(src.rejectBelowPct) : base.rejectBelowPct;
+    //   得点率の境界は判定（結果を下げる）に効くので、範囲外（0 ≦ 不採用推奨 ＜ そのまま ≦ 100 でない）なら 2 つとも既定に戻す
+    //   （設定画面は保存前の検証〔validateChecklist〕で止めるが、JSON の読み込み・保存済みの設定は検証を通らない。結果の設定〔onePointResult など〕と同じ扱い）
+    if (!(out.rejectBelowPct >= 0 && out.rejectBelowPct < out.keepPct && out.keepPct <= 100)) { out.keepPct = base.keepPct; out.rejectBelowPct = base.rejectBelowPct; }
     out.onePointResult = PERSONA_RESULT_VALUES.indexOf(src.onePointResult) >= 0 ? src.onePointResult : base.onePointResult;
     out.unscoredResult = PERSONA_RESULT_VALUES.indexOf(src.unscoredResult) >= 0 ? src.unscoredResult : base.unscoredResult;
     Object.keys(src).forEach(function (k) { if (!(k in out)) out[k] = U.deepClone(src[k]); });
@@ -2442,15 +2452,18 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
   // ---- 確認点 rt_manner の移行（docs/SPEC-persona.md 1-6・D17。プロファイルだけ） ----
   //   「最低限の話し方、敬語が可能か」（rt_manner）は人物像の「言葉遣い・説明のわかりやすさ」と重なるため 2026-10-16 に既定の台本から外した。
-  //   保存済みの設定の台本（sections）が直前の既定（c0d20ce。rt_manner あり・説明と確認点に short なし）と同じなら、新しい既定の台本に置き換える
-  //   （編集した台本はそのまま。記録の台本〔checklistDef〕は移行しない）
+  //   保存済みの設定の台本（sections）が直前の既定（rt_manner あり）と同じなら、新しい既定の台本に置き換える
+  //   （編集した台本はそのまま。記録の台本〔checklistDef〕は移行しない）。直前の既定は 2 つの版がある:
+  //   - 2026-10-14〜15（df3b339〜c0d20ce）: 説明と確認点に short が無い（質問・合否連絡・記入欄の short はある）
+  //   - 2026-10-13〜14（6f32341〜95737b5）: どの項目にも short が無い（質問・合否連絡・記入欄の short は df3b339 で既定に足した。
+  //     fillChecklist の deepMerge は配列を保存値で置き換えるので、その版で保存した設定は今も short が無いまま）
   const MANNER_ITEM = { id: 'rt_manner', label: '最低限の話し方、敬語が可能か', hint: '面接全体を通して（台本1枚目の冒頭）' };
-  // 説明（explain）・確認点（rating）の項目の short を外した sections の JSON（直前の既定には説明・確認点の short が無かった）
-  function scriptSig(sections) {
+  // short を外した sections の JSON。all でなければ説明（explain）・確認点（rating）の項目だけ、all ならすべての項目から外す
+  function scriptSig(sections, all) {
     const secs = U.deepClone(Array.isArray(sections) ? sections : []);
     secs.forEach(function (sec) {
       (U.isObj(sec) && Array.isArray(sec.blocks) ? sec.blocks : []).forEach(function (b) {
-        if (!U.isObj(b) || (b.type !== 'explain' && b.type !== 'rating')) return;
+        if (!U.isObj(b) || (!all && b.type !== 'explain' && b.type !== 'rating')) return;
         (Array.isArray(b.items) ? b.items : []).forEach(function (it) { if (U.isObj(it)) delete it.short; });
       });
     });
@@ -2464,7 +2477,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (!rb || !Array.isArray(rb.items) || rb.items.some(function (it) { return U.isObj(it) && it.id === MANNER_ITEM.id; })) return false;
     rb.items.splice(1, 0, U.deepClone(MANNER_ITEM));
     const prevN = normalizeChecklistDef(Object.assign({}, base, { sections: prev }), base).sections;
-    return scriptSig(sections) === scriptSig(prevN);
+    if (scriptSig(sections) === scriptSig(prevN)) return true;
+    //   2026-10-13〜14 の版: short が 1 つも無い台本（short を全部外しても変わらない）が、short を全部外した直前の既定と同じ
+    //   （質問などの short を 1 つでも持つ台本は上の比較だけ＝質問の short を変えた台本は編集した台本として残す）
+    const bare = scriptSig(sections, true);
+    return bare === JSON.stringify(Array.isArray(sections) ? sections : []) && bare === scriptSig(prevN, true);
   }
 
   // 旧プロファイル（checklist なし・壊れた checklist）には既定の台本を補う。report を渡すと rt_manner の移行で report.mannerMoved を立てる
@@ -2795,11 +2812,12 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const scores = U.isObj(rec.scores) ? rec.scores : {};
     const checklist = U.deepMerge(R.emptyChecklist(), U.isObj(rec.checklist) ? U.deepClone(rec.checklist) : {});
     ['header', 'values', 'notes'].forEach(function (k) { if (!U.isObj(checklist[k])) checklist[k] = k === 'header' ? R.emptyChecklist().header : {}; });
-    // 人物像の回答（docs/SPEC-persona.md 1-3・D2）: 明示の null は null（人物像を使わない記録）・object はそのまま・キーが無ければ、記録の台本に人物像があるときだけ {}、
-    //   無ければ null（v1・詳細モード・人物像の導入前の記録・壊れた値）。deepMerge は無い persona に {} を入れてしまうので元の値で決め直す
+    // 人物像の回答（docs/SPEC-persona.md 1-3・D2）: 明示の null は null（人物像を使わない記録）・object はそのまま・キーが無ければ、記録の台本に人物像があるとき、
+    //   または ② の回答がまだ無いとき（① だけ保存・評価し直す v1 など。守る保存時の判定が無く、これから人物像も入れる。11-9 補完 1）は {}、
+    //   ほか（② の回答がある人物像の導入前の記録・壊れた値）は null。deepMerge は無い persona に {} を入れてしまうので元の値で決め直す
     const rp = U.isObj(rec.checklist) ? rec.checklist.persona : undefined;
     const defHasPs = U.isObj(rec.checklistDef) && U.isObj(rec.checklistDef.persona);
-    checklist.persona = rp === null ? null : U.isObj(rp) ? U.deepClone(rp) : (rp === undefined && defHasPs ? {} : null);
+    checklist.persona = rp === null ? null : U.isObj(rp) ? U.deepClone(rp) : (rp === undefined && (defHasPs || !R.checklistHasInput(checklist)) ? {} : null);
     // 消極属性（2026-10-13 に削除）は読み飛ばす
     delete checklist.header.negatives;
     const step = Number(rec.step);
@@ -3319,8 +3337,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.cl-mode-sheet .cl-tile-v small{font-size:8.5px;font-weight:600;color:#5b6675;margin-left:1px}',
       '.cl-mode-sheet .cl-tile-s{font-size:8.5px;color:#3a4556;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-tile.is-ng .cl-tile-v{color:#b42318}',
-      //   人物像のタイルがあるとき（.has-ps）は 5 枚（docs/SPEC-persona.md 4-1。4 枚の規則は人物像を使わない記録用に残す）
-      '.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr))}',
+      //   人物像のタイルがあるとき（.has-ps）は 5 枚（docs/SPEC-persona.md 4-1。4 枚の規則は人物像を使わない記録用に残す）。
+      //   各タイルは中身（nowrap の値・補足）の幅より狭くしない（min-content）＝「上長最終判断要」「未入力 3・1点あり」を「…」で切らない
+      '.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(min-content,1.5fr) repeat(4,minmax(min-content,1fr))}',
       '.cl-mode-sheet .cl-tile-res{border-width:2px;padding:3px 10px}.cl-mode-sheet .cl-tile-res .cl-tile-v{font-size:14px;line-height:1.3}',
       '.cl-mode-sheet .cl-tile-res.t-ok{border-color:#0b7a55}.cl-mode-sheet .cl-tile-res.t-ok .cl-tile-v{color:#0b7a55}',
       '.cl-mode-sheet .cl-tile-res.t-warn{border-color:#c98a1b}.cl-mode-sheet .cl-tile-res.t-warn .cl-tile-v{color:#9a5b00}',
@@ -3331,6 +3350,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       // 最終合否（ストリップの右端）
       //   幅は結果ストリップの 36% まで（担当者名が改行できない長い文字列でも、左の 5 枚のタイルを潰さない。担当者・日付は「…」で切る。docs/SPEC-persona.md D10）
       '.cl-mode-sheet .cl-decision{flex:0 0 auto;min-width:0;max-width:36%;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid #d5dbe3;border-radius:4px;background:#fff}',
+      //   タイルの列はタイルの中身の幅（min-content）より狭くならず、足りないときは最終合否欄のほうが縮む（担当者名を「…」で切る）。
+      //   タイルの列は flex-basis 0 で残りの幅に広がる（最終合否欄は中身の幅〔36% まで〕のまま。縮むのはタイルの中身が入らないときだけ）
+      '.cl-mode-sheet .cl-judge-main{flex-basis:0%;min-width:min-content}.cl-mode-sheet .cl-decision{flex-shrink:1}',
       '.cl-mode-sheet .cl-dec-stamp{flex:none;display:grid;place-items:center}.cl-mode-sheet .cl-dec-stamp .verdict-stamp{width:64px;height:41px;mix-blend-mode:multiply;filter:none}',
       '.cl-mode-sheet .cl-dec-meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}',
       '.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#5b6675}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}',
@@ -3352,12 +3374,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.cl-mode-sheet dl.cl-kv>div{display:grid;grid-template-columns:9.5em minmax(0,1fr);gap:6px;align-items:baseline;padding:3px 4px;border-bottom:1px solid #e6eaef}',
       '.cl-mode-sheet dl.cl-kv dt{font-size:8.5px;font-weight:600;color:#5b6675}',
       '.cl-mode-sheet dl.cl-kv dd{margin:0;min-width:0;font-weight:700;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}',
-      // 5. 確認点（○緑 △琥珀 ×赤 の丸バッジ。未入力は灰「—」。メモの列は 2026-10-16 に外した＝確認点のメモは面接メモ・所見の枠の 1 行。.cl-rt-nt は旧い保存 HTML 用）
+      // 5. 確認点（○緑 △琥珀 ×赤 の丸バッジ。未入力は灰「—」。メモの列は 2026-10-16 に外した＝確認点のメモは面接メモ・所見の枠の 1 行）
       '.cl-mode-sheet table.cl-rt{width:100%;border-collapse:collapse;table-layout:fixed}',
       '.cl-mode-sheet .cl-rt col.c-no{width:20px}.cl-mode-sheet .cl-rt col.c-lbl{width:auto}.cl-mode-sheet .cl-rt col.c-mk{width:30px}',
       '.cl-mode-sheet .cl-rt td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:middle}',
       '.cl-mode-sheet .cl-rt-no{font-size:8.5px;color:#5b6675;text-align:center}.cl-mode-sheet .cl-rt-lbl{font-weight:600}.cl-mode-sheet .cl-rt-mk{text-align:center}',
-      '.cl-mode-sheet .cl-rt-nt{color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-mark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:10px;font-weight:800;line-height:1;color:#fff;background:#8a94a3}',
       '.cl-mode-sheet .cl-mark.m-good{background:#0b7a55}.cl-mode-sheet .cl-mark.m-fair{background:#c98a1b}.cl-mode-sheet .cl-mark.m-poor{background:#b42318}.cl-mode-sheet .cl-mark.m-none{color:#8a94a3;background:#eef1f5}',
       // 5b. 確認点｜人物像の 2 カラム（50:50）・人物像の表（項目名・5 段の目盛り・点。1 点は赤・2 点は琥珀・3〜5 点は濃い灰色。docs/SPEC-persona.md 4-2）
@@ -3573,7 +3594,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '.pp-t .pp-mk{white-space:nowrap;text-align:right;width:62px}',
       '.pp-mk span{display:inline-block;width:18px;text-align:center;font-size:11.5px;font-weight:700}',
       '.pp-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 8px;margin:0}',
-      '.pp-fields>div{display:flex;align-items:baseline;gap:4px;min-width:0;padding:2px 3px;border-bottom:1px solid #e6eaef}',
+      //   記入欄は 2 列。見出しと □選択肢 が 1 行に入らない欄（既定の「短期／長期の希望 □短期希望 □長期希望」）は □選択肢 を次の行へ（欄からはみ出して隣の欄の見出しとつながらない）
+      '.pp-fields>div{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 4px;min-width:0;padding:2px 3px;border-bottom:1px solid #e6eaef}',
       '.pp-fields dt{flex:none;font-size:8.5px;font-weight:700;color:#5b6675}',
       '.pp-fields dd{margin:0;min-width:0;flex:1 1 auto;white-space:nowrap}',
       '.pp-fields dd .pp-line{width:100%}',
@@ -3773,7 +3795,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       });
       var dec = canDecide ? document.getElementById("a4Decision") : null;
       if (dec) mark(dec, "decision", D.label || "最終合否");
-      each(sheet.querySelectorAll(".cl-nm-v,.cl-rt-nt"), function (el) {
+      each(sheet.querySelectorAll(".cl-nm-v"), function (el) {
         if (el.classList.contains("cl-cut")) mark(el, "memo", "メモの全文を表示"); else if (el.getAttribute("data-a4-t")) unmark(el);
       });
       var ref = sheet.querySelector(".cl-nm-ref");
@@ -3827,7 +3849,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     function changed() { dirty = true; saved = false; render(); }
 
     function memoOf(el) {
-      var notes = (rec.checklist && rec.checklist.notes) || {}, row = el.closest(".cl-nm-row"), tr = el.closest("tr[data-cl-item]"), k = "", v = null, b;
+      var notes = (rec.checklist && rec.checklist.notes) || {}, row = el.closest(".cl-nm-row"), k = "", v = null, b;
       if (row) {
         k = (row.querySelector(".cl-nm-k") || {}).textContent || "メモ";
         b = row.getAttribute("data-cl-block");
@@ -3835,9 +3857,6 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         else if (row.classList.contains("cl-nm-iv")) v = rec.interviewNotes;
         else if (row.classList.contains("cl-nm-memo")) v = (rec.applicant || {}).reviewerNotes;
         else if (row.classList.contains("cl-nm-rt")) { v = []; each(row.querySelectorAll(".cl-nm-rt-i"), function (s) { v.push(s.textContent); }); v = v.join("\n"); }
-      } else if (tr) {
-        k = ((tr.querySelector(".cl-rt-no") || {}).textContent || "") + " " + ((tr.querySelector(".cl-rt-lbl") || {}).textContent || "") + " のメモ";
-        v = notes[tr.getAttribute("data-cl-item")];
       }
       if (v == null || v === "") v = el.textContent;
       return { k: k || "メモ", v: String(v) };
@@ -4383,7 +4402,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       return parts.join('|');
     }).join('\n');
     const personaHtml = '<h3 class="sub" id="s-persona">人物像（1〜5 点）</h3>' +
-      '<div class="hint">' + stepRef(3) + ' の総評で項目ごとに 1〜5 点（' + [0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・') + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</div>' +
+      '<div class="hint">' + stepRef(3) + ' の総評で項目ごとに 1〜5 点（' + esc([0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・')) + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</div>' +
       sCheck('checklist.persona.enabled', '人物像を使う', 'OFF にすると ' + stepRef(3) + ' に出さず、判定にも使いません。保存済みの報告書（HTML）は保存したときのままです。') +
       '<div class="s-cl-max" id="clPsMaxNote">人物像 <b>' + psItems.length + '</b> 項目 × 5 点 ＝ 満点 <b>' + psMax + '</b> 点</div>' +
       '<div class="field-row">' + sInput('checklist.persona.title', '見出し（' + stepRef(3) + ' と報告書）') + '</div>' +
@@ -5740,7 +5759,17 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   function clPageHeadHtml(no, sum) {
     const pg = (sum.pages || []).find(function (x) { return U.isObj(x) && Number(x.no) === no; });
     return '<div class="cl-page-head" data-page="' + no + '"><div><b>' + no + '枚目</b>' + (pg && pg.title ? '　' + esc(pg.title) : '') + '</div>' +
-      (pg && pg.lead ? '<div class="hint">' + esc(pg.lead) + '</div>' : '') + '</div>';
+      (pg && pg.lead ? '<div class="hint">' + esc(pg.lead) + '</div>' + clLeadPsHtml(String(pg.lead), sum) : '') + '</div>';
+  }
+  // 台本 1 枚目の前書きの「最低限の話し方、敬語が可能か」は、確認点から外して人物像の「言葉遣い・説明のわかりやすさ」で付ける（2026-10-16。台本の文言は変えない）。
+  //   前書きが話し方・敬語に触れ、確認点に話し方・敬語の項目が無く、人物像に言葉遣いの項目があるとき、付ける場所を前書きの下に 1 行で示す（docs/SPEC-persona.md 11-9 補完 6）
+  const CL_MANNER_RE = /敬語|話し方/;
+  function clLeadPsHtml(lead, sum) {
+    const ps = sum.persona;
+    if (!ps || !CL_MANNER_RE.test(lead)) return '';
+    if (R.checklistItems(sum.def, 'rating').some(function (x) { return CL_MANNER_RE.test(String(x.item.label || '')); })) return '';
+    const it = ps.items.find(function (x) { return x.id === 'ps_speech'; }) || ps.items.find(function (x) { return /言葉遣い|敬語/.test(x.label); });
+    return it ? '<div class="hint cl-lead-ps" data-ps-ref="' + esc(it.id) + '">→ 話し方・敬語は確認点ではなく、最後の総評の' + esc(ps.title) + '「' + esc(it.label) + '」で 1〜5 点を付けます。</div>' : '';
   }
 
   // ブロックの見出し【…】（title は【】なしで書く。必須条件・確認点・合否連絡は空でも既定の見出しを出す）
@@ -5870,9 +5899,10 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
   // 総評の人物像（1〜5 点。docs/SPEC-persona.md 3-2）。各行は 1 つのタブ位置（押下中のボタン、無ければ 1。updateChecklistUI が付け直す）
   function clPersonaHtml(ps) {
-    const legend = ps.scaleLabels.map(function (l, i) { return (i + 1) + ' ' + l; }).join('　');
+    //   凡例は「点 意味」ごとに折り返さない span（狭い画面でも「5 とても／良い」と語の途中で割れない。文字は全角空白でつなぐ）
+    const legend = ps.scaleLabels.map(function (l, i) { return '<span>' + esc((i + 1) + ' ' + l) + '</span>'; }).join('　');
     return '<section class="cl-persona" id="clPersona" aria-labelledby="clPersonaH">' +
-      '<div class="cl-ps-head"><h3 id="clPersonaH">' + esc(ps.title) + '</h3><span class="cl-ps-legend" id="clPsLegend">' + esc(legend) + '</span></div>' +
+      '<div class="cl-ps-head"><h3 id="clPersonaH">' + esc(ps.title) + '</h3><span class="cl-ps-legend" id="clPsLegend">' + legend + '</span></div>' +
       '<div class="cl-ps-rows">' + ps.items.map(function (it, i) {
         let btns = '';
         for (let n = 1; n <= ps.scaleMax; n++) {
@@ -5896,10 +5926,10 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const def = sum.def;
     const oo = U.isObj(def.overallOptions) ? def.overallOptions : {};
     const ps = sum.persona;
-    // 総合判断がそのまま結果になる（必須条件の不一致は除く）。人物像があれば合計・1 点の項目で下がることも書く
+    // 総合判断がそのまま結果になる（必須条件の不一致は除く）。人物像があれば、結果が下がる条件（合計・1 点・未入力。設定から）も書く（docs/SPEC-persona.md 11-9 補完 4）
     const hint = [def.overallHint || '', '「' + (oo.hire || overallLabelNow('hire')) + '」は' + resultTitle('recommend') + '、「' + (oo.hold || overallLabelNow('hold')) + '」は' + resultTitle('review') +
       '、「' + (oo.reject || overallLabelNow('reject')) + '」は' + resultTitle('reject') + 'として報告します（必須条件が不一致なら' + resultTitle(def.mustFailResult === 'review' ? 'review' : 'reject') + '）。',
-      ps ? '人物像の合計・1 点の項目で結果が下がることがあります。' : ''].filter(Boolean).join(' ');
+      ps ? personaRuleText() + '。' : ''].filter(Boolean).join(' ');
     const off = !ps && ensureChecklist().persona === null && personaOnNow();
     return '<div class="card" id="clOverall"><div class="card-head"><h2>総評</h2></div>' +
       (ps ? clPersonaHtml(ps) : '') +
@@ -5935,7 +5965,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     html += clOverallHtml(sum);
     html += '<div class="actions between">' +
       '<button type="button" class="btn" id="backToApplicant" data-action="to-step" data-step="1">← 応募者に戻る</button>' +
-      '<div class="actions"><button type="button" class="btn" id="clPrintBtn" data-action="print-checklist" title="結果・必須条件・確認点・面接メモ・押印を A4 1 枚に印刷">🖨 面接チェックリスト報告（A4）</button>' +
+      '<div class="actions"><button type="button" class="btn" id="clPrintBtn" data-action="print-checklist" title="結果・必須条件・確認点・人物像・面接メモ・押印を A4 1 枚に印刷">🖨 面接チェックリスト報告（A4）</button>' +
       '<button type="button" class="btn primary" id="toReportBtn" data-action="judge">報告書へ進む →</button></div></div>';
     return html;
   }
@@ -5991,10 +6021,18 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     setText('#clPsPct', ps.complete ? '（' + ps.pct + '%）' : '');
     const stEl = $('#clPsState');
     if (stEl) {
-      const st = ps.unscored ? ['muted', '未入力 ' + ps.unscored] : ps.band === 'keep' ? ['ok', ps.keepPct + '% 以上']
-        : ps.band === 'review' ? ['warn', resultTitle('review') + 'まで'] : ['danger', resultTitle('reject')];
-      stEl.className = 'badge ' + st[0];
-      stEl.textContent = st[1];
+      // 人物像で下がる結果の上限（未入力・合計・1 点の項目のうちいちばん低いもの。設定で「調整しない」のものは数えない）。
+      //   下がるなら 琥珀「上長最終判断要まで」／赤「不採用推奨」（未入力があれば「未入力 n・」を前に）、下がらなければ 緑「70% 以上」／灰「未入力 n」（docs/SPEC-persona.md 11-9 補完 4）
+      const caps = [];
+      if (ps.unscored && ps.unscoredResult !== 'none') caps.push(ps.unscoredResult);
+      if (ps.complete && ps.band !== 'keep') caps.push(ps.band);
+      if (ps.ones.length && ps.onePointResult !== 'none') caps.push(ps.onePointResult);
+      const cap = caps.indexOf('reject') >= 0 ? 'reject' : caps.length ? 'review' : '';
+      const capText = cap === 'reject' ? resultTitle('reject') : cap ? resultTitle('review') + 'まで' : '';
+      const tone = cap === 'reject' ? 'danger' : cap ? 'warn' : ps.unscored ? 'muted' : 'ok';
+      const st = ps.unscored ? '未入力 ' + ps.unscored + (cap ? '・' + capText : '') : cap ? capText : ps.keepPct + '% 以上';
+      stEl.className = 'badge ' + tone;
+      stEl.textContent = st;
     }
     show('#clPsWarn', ps.ones.length > 0);
     if (ps.ones.length) {
@@ -6507,7 +6545,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         return false;
       }
       injectChecklistSheetCss();
-      fillChecklistDefaults();
+      // ① の入力をそのまま印字する（面接日を空にしていれば記入用の線。今日の日付で埋めない＝印刷で記録を書き換えない。docs/SPEC-persona.md 11-9 補完 3）
+      ensureChecklist();
       host.innerHTML = '<div class="a4 pp-a4">' + S.paperSheetHtml(S.buildRecord(state), state.profile, {}) + '</div>';
       document.body.classList.add('print-checklist');
       const sh = $('#clSheet .pp-sheet');
@@ -6790,7 +6829,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       esc(decisionLabelOf(d, dcfg) + '・' + (d.by.short || Stamp.shortName(d.by.name))) + '</span></span></div>';
   }
 
-  // 使い方の「人物像（1〜5 点）と記入シート」（docs/SPEC-persona.md 6-3）。境界・結果は現在の設定から
+  // 使い方の「人物像（1〜5 点）と記入シート」（docs/SPEC-persona.md 6-3）。境界・結果は現在の設定から。設定で OFF ならそのことも書く。
+  //   項目名・目盛りの文言・結果の表示名は設定（JSON の読み込みを含む）から入るので esc を通す。項目名は「、」でつなぐ（「笑顔・表情」の「・」と区別。D6）
   function helpPersonaHtml() {
     const pd = (clDefNow().persona) || {};
     const ps = R.personaModel(clDefNow(), { persona: {} });
@@ -6798,13 +6838,30 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const keep = R.num(pd.keepPct, 70), rej = R.num(pd.rejectBelowPct, 40);
     const labels = ps ? ps.scaleLabels : ['不採用レベル', 'やや不安', '普通', '良い', 'とても良い'];
     return '<div class="card" id="helpPersona"><div class="card-head"><h3>人物像（1〜5 点）と記入シート</h3></div><ol class="list-plain">' +
-      '<li><b>面接中はメモを中心に</b>：質問の回答などはメモ欄に書き、確認点の ○△×・人物像・総合判断は面接のあとでまとめて入力できます（1 対 1 でなくても回せます）。</li>' +
-      '<li><b>人物像</b>：Step② の総評で、' + (ps ? ps.items.length + ' 項目（' + ps.items.map(function (it) { return it.name; }).join('・') + '）' : '接客の項目') + 'に 1〜5 点を付けます（' +
-        labels.map(function (l, i) { return (i + 1) + ' ' + l; }).join('・') + '）。' + (ps ? '満点は ' + ps.max + ' 点です。' : '') + 'クリックのほか、数字キー 1〜5 でも入力できます（次の行へ進みます）。</li>' +
-      '<li><b>判定への反映</b>：得点率 ' + keep + '% 以上はそのまま・' + rej + '% 以上 ' + keep + '% 未満は' + resultTitle('review') + 'まで・' + rej + '% 未満は' + resultTitle('reject') + '。1 点の項目が 1 つでもあれば' +
-        capName(pd.onePointResult || 'review') + '、未入力があれば' + capName(pd.unscoredResult || 'review') + '（下げる方向だけ。上げることはありません。設定の「面接チェックリスト」で変更できます）。</li>' +
-      '<li><b>記入シート（手書き用）</b>：Step① と Step② の上部の「🖨 記入シート（手書き用）」で A4 1 枚を印刷できます（Step② と同じ並び。① に入力した氏名などは印字）。紙に書いて面接し、終わったらアプリに転記します。</li>' +
-      '<li>確認点「最低限の話し方、敬語が可能か」は人物像の「言葉遣い・説明のわかりやすさ」と重なるため、既定の台本から外しました。</li></ol></div>';
+      (ps ? '' : '<li id="helpPersonaOff"><b>いまの設定では人物像を使いません</b>（設定「面接チェックリスト」の「人物像を使う」で ON にできます）。Step②・報告書・記入シートに人物像は出ず、判定にも使いません。</li>') +
+      //   フィードバック ①「1 対 1 でなければ面接しながらの運用は苦慮するかも。メモを有効活用すれば 1 対 1 は問題なさそう」・②「紙で書いて報告の際に転記」（docs/SPEC-persona.md 11-9 補完 2）
+      '<li><b>面接中はメモを中心に</b>：1 対 1 の面接なら、質問の回答などはメモ欄に書き、確認点の ○△×・人物像・総合判断は面接のあとでまとめて入力できます。' +
+        '1 対 1 でない面接は、面接しながらアプリに入力するのが難しいので、記入シート（手書き用。下）に書いて、面接のあとでアプリに転記してください。</li>' +
+      '<li><b>人物像</b>：Step② の総評で、' + (ps ? ps.items.length + ' 項目（' + esc(ps.items.map(function (it) { return it.name; }).join('、')) + '）' : '接客の項目') + 'に 1〜5 点を付けます（' +
+        esc(labels.map(function (l, i) { return (i + 1) + ' ' + l; }).join('・')) + '）。' + (ps ? '満点は ' + ps.max + ' 点です。' : '') + 'クリックのほか、数字キー 1〜5 でも入力できます（次の行へ進みます）。</li>' +
+      '<li><b>判定への反映</b>：得点率 ' + keep + '% 以上はそのまま・' + rej + '% 以上 ' + keep + '% 未満は' + esc(resultTitle('review')) + 'まで・' + rej + '% 未満は' + esc(resultTitle('reject')) + '。1 点の項目が 1 つでもあれば' +
+        esc(capName(pd.onePointResult || 'review')) + '、未入力があれば' + esc(capName(pd.unscoredResult || 'review')) + '（下げる方向だけ。上げることはありません。設定の「面接チェックリスト」で変更できます）。</li>' +
+      '<li><b>記入シート（手書き用）</b>：Step① の「🖨 記入シート（手書き用）」（カードの下、「面接チェックリストへ進む →」の左）か、Step② の上部の同じボタンで A4 1 枚を印刷できます（Step② と同じ並び。① に入力した氏名などは印字）。紙に書いて面接し、終わったらアプリに転記します。</li>' +
+      '<li>確認点「最低限の話し方、敬語が可能か」は人物像の「言葉遣い・説明のわかりやすさ」と重なるため、既定の台本から外しました（台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます）。</li></ol></div>';
+  }
+  // 人物像で結果が下がる条件の文（文字列。HTML にするときは esc）。上長最終判断要まで下げる条件と不採用推奨にする条件を、1 点・未入力の設定（onePointResult・unscoredResult）と境界から組み立てる。
+  //   使い方の「結果（推奨）の決まり方」と ② の総評の説明で共用（既定: 「人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます」）
+  function personaRuleText() {
+    const pd = (clDefNow().persona) || {};
+    const one = R.PERSONA_RESULTS.indexOf(pd.onePointResult) >= 0 ? pd.onePointResult : 'review';
+    const uns = R.PERSONA_RESULTS.indexOf(pd.unscoredResult) >= 0 ? pd.unscoredResult : 'review';
+    const toReview = ['合計が低い'], toReject = ['合計が ' + R.num(pd.rejectBelowPct, 40) + '% 未満'];
+    (one === 'review' ? toReview : one === 'reject' ? toReject : []).push('1 点の項目がある');
+    (uns === 'review' ? toReview : uns === 'reject' ? toReject : []).push('未入力がある');
+    return '人物像（1〜5 点）の' + toReview.join('・') + 'と、結果を' + resultTitle('review') + '（' + toReject.join('・') + 'なら' + resultTitle('reject') + '）まで下げます';
+  }
+  function helpPersonaRuleLi() {
+    return '<li>' + esc(personaRuleText()) + '（下げる方向だけ。設定で変更可' + (R.personaModel(clDefNow(), { persona: {} }) ? '' : '。いまの設定では人物像を使いません') + '）。</li>';
   }
 
   // 使い方（docs/SPEC-script-mode.md 5 章）
@@ -6814,7 +6871,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '<div class="help-steps">' +
         '<div class="help-step"><span class="n">1</span><h3>応募者</h3><p>1 枚のカードに 3 行だけ。氏名（必須）・年齢・性別・区分（学生は卒業予定年月）、面接日・面接担当者・応募した求人（通常／短期）、タクシー可否・料金とメモを、分かる範囲で入力します。</p></div>' +
         '<div class="help-step"><span class="n">2</span><h3>面接チェックリスト</h3><p>①勤務条件 → ②継続性・報連相 → ③仕事内容の説明 → ④集団行動特性 → ⑤逆質問 の順に、必須条件（一致／不一致）・説明のチェック・質問のメモ・確認点の ○△×・総評（人物像 1〜5 点・総合判断〔採用／保留／不採用〕・面接所見）を入力します。面接中はメモを中心に、○△×・人物像・総合判断は面接後にまとめて入力できます。必須条件が 1 つでも不一致なら不採用推奨です。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（面接対応者／最終確認）の「面接対応者」に電子印を押して「報告書を保存（HTML）」します（最終確認と最終合否は、副支配人が保存した HTML で押します。最終承認のパスワードがあるときはその入力が必要です）。「A4 で印刷」で 1 枚（結果・必須条件・確認点・面接メモ・押印）に印刷できます。保存した HTML も同じ A4 縦の用紙 1 枚です。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>報告書</h3><p>A4「面接チェックリスト報告」のプレビューを確認し、押印欄（面接対応者／最終確認）の「面接対応者」に電子印を押して「報告書を保存（HTML）」します（最終確認と最終合否は、副支配人が保存した HTML で押します。最終承認のパスワードがあるときはその入力が必要です）。「A4 で印刷」で 1 枚（結果・必須条件・確認点・人物像・面接メモ・押印）に印刷できます。保存した HTML も同じ A4 縦の用紙 1 枚です。</p></div>' +
       '</div></div>' +
       '<div class="card" id="helpScriptFlow"><div class="card-head"><h3>報告書（HTML）の流れ</h3></div><ol class="list-plain">' +
         '<li>面接者が「面接対応者」に押印して保存し、社内スレッドに添付します。</li>' +
@@ -6825,13 +6882,13 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '<div class="card"><div class="card-head"><h3>結果（推奨）の決まり方</h3></div><ul class="list-plain">' +
         '<li>必須条件に不一致がある → 不採用推奨（設定で上長最終判断要に変更可）。</li>' +
         '<li>それ以外は面接者の総合判断のとおり（採用 → 採用推奨、保留 → 上長最終判断要、不採用 → 不採用推奨）。総合判断が未入力なら上長最終判断要です。</li>' +
-        '<li>人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます（下げる方向だけ。設定で変更可）。</li>' +
+        helpPersonaRuleLi() +
         '<li>確認点の ○△× は面接評価（点数）として報告書に載ります。最終合否（採用／不採用のスタンプ）はこの推奨とは別の、最終確認者の決定です。</li></ul></div>' +
       '<div class="card"><div class="card-head"><h3>保存と読み込み</h3></div><ul class="list-plain">' +
         '<li>応募者ごとに 1 ファイル（HTML）。途中で保存しても、読み込むと続きから再開できます。</li>' +
         '<li>応募者データはこの端末のブラウザには残りません（保存したファイルのみが記録です）。</li></ul></div>' +
       '<div class="card"><div class="card-head"><h3>設定（劇場プロファイル）</h3></div><ul class="list-plain">' +
-        '<li>劇場情報・応募者の区分と性別・面接チェックリスト（台本の文言・項目・確認点）・押印欄と担当者名簿・最終合否を画面から変更できます。</li>' +
+        '<li>劇場情報・応募者の区分と性別・面接チェックリスト（台本の文言・項目・確認点・人物像）・押印欄と担当者名簿・最終合否を画面から変更できます。</li>' +
         '<li>設定は端末のブラウザに保存されます。他の劇場・端末へ展開するときは JSON を書き出して読み込んでください。</li></ul></div>' +
       '<div class="card" id="helpFinalLock"><div class="card-head"><h3>最終承認のパスワード</h3></div><ul class="list-plain">' +
         '<li>設定の「応募者の管理（押印）」でパスワードを決めると、最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（③ 報告書と保存した HTML の両方。面接対応者の押印には要りません）。一度正しく入れると、そのページを閉じる（読み込み直す）まで続けて押せます。</li>' +

@@ -27,7 +27,7 @@ P1 データ `profile.checklist.persona`・回答 `record.checklist.persona` ／
 | # | 決定 |
 | --- | --- |
 | D1 | 人物像は**面接評価（○△×＋総合判断の点・帯）には入れない**。`interviewModel` は変えない（確認点 6 項目＝面接評価 14 点満点）。人物像は別の合計（35 点満点）と別の規則 |
-| D2 | 「人物像を使わない記録」の印は **`record.checklist.persona === null`**。新しい記録は `{}`（未入力）から始まる。`normalizeRecord` が「回答のキーが無く、その記録の `checklistDef` にも `persona` が無い」記録を `null` にする（1-3）。`null` は保存し直しても残る＝読み込み直しても判定が変わらない |
+| D2 | 「人物像を使わない記録」の印は **`record.checklist.persona === null`**。新しい記録は `{}`（未入力）から始まる。`normalizeRecord` が「回答のキーが無く、その記録の `checklistDef` にも `persona` が無い」記録を `null` にする（1-3）。`null` は保存し直しても残る＝読み込み直しても判定が変わらない。**補完 1（11-9）**: ② の回答がまだ無い記録（① だけ保存した記録・② で評価し直す v1 など。守る保存時の判定が無い）は台本に `persona` が無くても `{}`（これから面接して人物像も入れる） |
 | D3 | `normalizeChecklistDef` は **`persona` のキーがあるときだけ**正規化する（無ければ足さない＝旧レコードの台本は人物像なしのまま）。プロファイルは `fillChecklist` の `deepMerge(base.checklist, rc)` で既定の `persona` が入る |
 | D4 | 判定の順: 既存の (a) 必須条件の不一致 → (b) 未確認 → (c) 総合判断の上限 → **(e) 人物像（未入力 → 得点率 → 1 点）** → (d) × の警告。必須条件で不採用推奨に固定（`mustGate`）したときは人物像の規則も警告も使わない |
 | D5 | 得点率の比較は整数で厳密に（`total*100 < keepPct*max` など）。表示の % は **切り捨て**（`Math.floor(total*100/max)`。20/35 → 57%）。境界: 25/35（71%）そのまま・24/35（68%）上長最終判断要・14/35（40%）上長最終判断要・13/35（37%）不採用推奨 |
@@ -35,14 +35,14 @@ P1 データ `profile.checklist.persona`・回答 `record.checklist.persona` ／
 | D7 | ② の総評カードは `#clOverall` のまま。見出し「総評」、上から 人物像 → 総合判断 → 面接所見。人物像のボタンは `data-action="ps-set" data-persona=<id> data-score=<n>`（もう一度押すと未入力に戻す。他の `cl-set` と同じ） |
 | D8 | キーボード: 各行は 1 つのタブ位置（押下中のボタン、無ければ 1）。数字キー 1〜5 で入力して次の行へ、←→ で行内、↑↓ で上下の行に移動（入力はしない）。Enter／Space はボタンの押下（同じ点なら未入力に戻す） |
 | D9 | 質問は 1 行（`button.cl-q`）。短い名前を太字＋全文を薄く・はみ出しは「…」。クリック／Enter で全文（`.open`）。ブロック見出しに「全文」⇔「たたむ」。開閉は画面の状態だけ（記録・設定に入れない。描き直すとたたむ） |
-| D10 | A4 の結果ストリップは 5 タイル（結果・総合判断・必須条件・確認点・**人物像**）＋最終合否。タイルの並びのクラスは `.cl-tiles.has-ps`（`n5` は使わない。単体 #80・#87 が禁じている）。**最終合否欄の上限を 48% → 36%** にして、長い担当者名でも 5 タイルを「…」で切らない（試作で確認） |
+| D10 | A4 の結果ストリップは 5 タイル（結果・総合判断・必須条件・確認点・**人物像**）＋最終合否。タイルの並びのクラスは `.cl-tiles.has-ps`（`n5` は使わない。単体 #80・#87 が禁じている）。**最終合否欄の上限を 48% → 36%** にして、長い担当者名でも 5 タイルを「…」で切らない（試作で確認）。**レビュー指摘 5 で追加**: 各タイルは中身の幅（min-content）より狭くせず、足りないときは最終合否欄のほうが縮む（11-8） |
 | D11 | A4 の本文は 必須条件｜勤務条件 の下を `div.cl-cols.cl-cols-eval`（確認点｜人物像。50:50）。確認点の表から**メモの列を外し**、確認点のメモは面接メモ・所見の枠の 1 行「確認点のメモ」に。人物像が無い記録（`null`・設定で OFF）は確認点の表だけ（全幅・メモの列なし） |
 | D12 | 確認点のメモの行は **`div.cl-nm-row.cl-nm-b.cl-nm-rt`**（`.cl-nm-b`＝ブロックのメモと同じ行数・広げる順に乗る）。`clFitSheet` の関数・セレクタは**変えない**（単体 #93 の疑似 DOM がセレクタ文字列で照合している） |
 | D13 | 記入シートは `storage.paperSheetHtml(record, profile, o)`／`paperSheetCss()`／`fitPaperSheet(sheet, limit)`。用紙の箱は報告書と同じ `.a4`、見出しは同じ `.cl-title`（ロゴ・題・版／劇場／日付）。本文は 2 段（台本の 1 枚目 ①② ｜ 2 枚目 ③④⑤）＋全幅の総評。1 ページに収めるのは質問の罫線の本数（3 → 2 → 1）→ 詰め → 縮小 |
 | D14 | 記入シートの印刷は報告書の印刷と同じ仕組み（印刷ホスト `#clSheet`・`body.print-checklist`・`@page a4sheet` 余白 0）。`app.preparePaperSheet(on)` / `printPaperSheet()`。保存しない。Ctrl+P は従来どおり報告書 |
 | D15 | 記入シートは**白紙の記入用**: 印字するのは ① の応募者（氏名・区分/年齢/性別・面接日・担当・求人・タクシー）だけ。② の回答は印字しない。人物像の行は設定（`def.persona`）で決める（記録の `persona === null` は見ない） |
 | D16 | 既定の台本に `short` を足す: 説明（explain）14 項目と確認点（rating）6 項目（表 1-2）。記入シートの説明・確認点のメモの行で使う。設定画面の短い名前の欄を説明・確認点にも出す |
-| D17 | `rt_manner` の移行は**プロファイルだけ**（`fillChecklist`）。保存済みの台本の `sections` が「直前の既定（c0d20ce。rt_manner あり）」と同じ（説明・確認点の項目の `short` は比べない）なら新しい既定の `sections` に置き換え、`report.mannerMoved = true` → toast 1 回。記録の `checklistDef` は移行しない |
+| D17 | `rt_manner` の移行は**プロファイルだけ**（`fillChecklist`）。保存済みの台本の `sections` が「直前の既定（c0d20ce。rt_manner あり）」と同じ（説明・確認点の項目の `short` は比べない）なら新しい既定の `sections` に置き換え、`report.mannerMoved = true` → toast 1 回。記録の `checklistDef` は移行しない。**レビュー指摘 3 で追加**: その前の既定（2026-10-13〜14。short が 1 つも無い）と同じ台本も移行する（11-8） |
 | D18 | 旧レコードの読み込み（`persona === null`）: ② は人物像の行を出さず 1 行の注記 `#clPersonaOff`。③ の用紙は 4 タイル・確認点の表だけ。toast に「人物像の導入前に保存された記録のため、人物像は使いません」 |
 | D19 | 人物像の項目が保存時と違う記録（両方に人物像あり）は toast「保存時と人物像の項目が異なります（追加 a・削除 r）。現在の項目で再判定します」（`R.personaDiff`。確認点の差の toast と同じ扱い） |
 | D20 | 設定の人物像の項目は 1 行「項目名|短い名前|説明」の textarea（`data-type="persona"`）。id は**項目名が同じ既存の項目の id を引き継ぐ**（並べ替え・短い名前の変更では点が消えない）。新しい行は `U.uid('ps')` |
@@ -109,9 +109,9 @@ config の先頭コメント（判定に効くもの・short の説明）に人�
   ```js
   const rp = U.isObj(rec.checklist) ? rec.checklist.persona : undefined;
   const defHas = U.isObj(rec.checklistDef) && U.isObj(rec.checklistDef.persona);
-  checklist.persona = rp === null ? null : U.isObj(rp) ? U.deepClone(rp) : (rp === undefined && defHas ? {} : null);
+  checklist.persona = rp === null ? null : U.isObj(rp) ? U.deepClone(rp) : (rp === undefined && (defHas || !R.checklistHasInput(checklist)) ? {} : null);   // 補完 1（11-9）で !checklistHasInput を足した
   ```
-  ＝明示の `null` は `null`／object はそのまま／キーが無ければ、記録の台本に人物像があるときだけ `{}`、無ければ `null`（v1・詳細モード・2026-10-16 より前の記録・壊れた値）。戻り値のキーは増やさない（`legacy` も変えない。単体 #85 の `deepStrictEqual(now.legacy, …)` を壊さない）
+  ＝明示の `null` は `null`／object はそのまま／キーが無ければ、記録の台本に人物像があるとき、**または ② の回答がまだ無いとき（補完 1）**は `{}`、ほかは `null`（② の回答がある v1・詳細モード・2026-10-16 より前の記録・壊れた値）。戻り値のキーは増やさない（`legacy` も変えない。単体 #85 の `deepStrictEqual(now.legacy, …)` を壊さない）
 - `storage.buildRecord`: 変更なし（`state.checklist` の `persona`〔`null` を含む〕と `state.profile.checklist`〔`persona` を含む〕をそのまま書く）
 - `app.ensureChecklist()`: `if (cl.persona !== null && !U.isObj(cl.persona)) cl.persona = {};` を足す（`null` を `{}` に戻さない）
 
@@ -126,7 +126,7 @@ config の先頭コメント（判定に効くもの・short の説明）に人�
 | scaleMax | 常に 5 |
 | scaleLabels | 長さ 5 の配列で各要素が文字列ならそれ（trim）、足りない・文字列以外の要素は既定の同じ位置 |
 | items | 配列でなければ既定の複製。配列なら object だけ残し、各項目を `{ id, label, short?, hint? }` に: `id` は `CL_ID_RE` に合い persona の中で重複しなければそれ、ほかは `'ps_' + (i+1)`（使用済みなら `_2`…）／`label` は `asStr`（空も残す＝検証）／`short`・`hint` は空でない文字列なら trim して残す、ほかは外す。空の配列は空のまま（検証でエラー） |
-| keepPct・rejectBelowPct | 数値として読める（`isNum`）なら `Number`、ほかは既定（範囲は検証） |
+| keepPct・rejectBelowPct | 数値として読める（`isNum`）なら `Number`、ほかは既定（範囲は検証）。**範囲外（0 ≦ 不採用推奨 ＜ そのまま ≦ 100 でない）なら 2 つとも既定**（JSON の読み込みは検証を通らないため。レビュー指摘 2。11-8） |
 | onePointResult・unscoredResult | `none`／`review`／`reject` のどれかでなければ既定 |
 
 - `fillChecklist(raw, base, report)`（`normalizeProfile` から report を渡す）: 既存どおり `deepMerge(base.checklist, rc)` → `normalizeChecklistDef`（旧い設定にも既定の persona が入る）→ 1-6 の移行
@@ -160,6 +160,7 @@ function isPrevDefaultScript(sections, base) {
 if (isPrevDefaultScript(out.sections, base.checklist)) { out.sections = U.deepClone(base.checklist.sections); if (report) report.mannerMoved = true; }
 ```
 - 比べるのは `sections` だけ（`mustFailResult`・総合判断・ヘッダー・版・ページ・persona の変更は残す）。質問・合否連絡・記入欄の `short` は比べる（c0d20ce の既定にあった）＝それを変えた台本は「編集した台本」として rt_manner を残す
+- （レビュー指摘 3 で追加）2026-10-13〜14（6f32341〜95737b5）の既定には質問・合否連絡・記入欄の `short` も無い（df3b339 で既定に足した）。その版で保存した設定は `deepMerge` が配列を保存値で置き換えるので今も short が無い。そこで、**short を 1 つも持たない台本**は short を全部外した直前の既定と比べる（`scriptSig(sections, true)`）。short を 1 つでも持つ台本は上の比較だけ（質問の short を変えた台本は今までどおり残す）
 - `tests/fixtures/legacy-profile-full.json` の台本は直前の既定と同じ（確認済み）→ 移行される（7-2 E1 で確かめる）
 - `app.profileNotice(rep)`: `rep.mannerMoved` なら `確認点「最低限の話し方、敬語が可能か」は人物像の「言葉遣い・説明のわかりやすさ」と重なるため、既定の台本から外しました。` を足す（`init`・JSON の読み込みの toast。`stripped` も立つので init は保存し直す＝次からは出ない）
 - 記録の台本（`checklistDef`）・`normalizeChecklistDef` 単体では移行しない（保存時の台本で表示）
@@ -266,7 +267,7 @@ if (ps && !mustGate) {
   <!-- ここから既存のまま: .cl-overall-row（総合判断）・hint・#clScore・#clMustSummary・#overallWarn・面接所見 -->
 ```
 - 凡例は `scaleLabels` から（`n + ' ' + label` を全角空白で）。見出しは `title`。設定で OFF なら `#clPersona`・`#clPersonaOff` とも出さない
-- 総合判断の hint の末尾（人物像が有効なとき）に `人物像の合計・1 点の項目で結果が下がることがあります。` を足す
+- 総合判断の hint の末尾（人物像が有効なとき）に `人物像の合計・1 点の項目で結果が下がることがあります。` を足す（**補完 4（11-9）で設定から組み立てる文に変えた**: `personaRuleText()`＝使い方の「結果（推奨）の決まり方」の 1 行と同じ。既定「人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます。」）
 - 目次の最後のチップの文字を「総合判断」→「総評」（`data-sec="__overall"` は同じ）
 - `#clNavScore` の末尾に（人物像があるとき）`　人物像 {scored ? total : '—'}/{max}`
 
@@ -282,7 +283,7 @@ if (ps && !mustGate) {
 
 ### 3-4. 入力と表示の更新
 - `onContentClick` の `case 'ps-set'`: `psSet(id, psGet(id) === n ? 0 : n)`。`psSet` は `cl.persona` が object のときだけ、1〜5 は数値で入れ、0 は `delete` → `touchChecklist()`（dirty・判定の無効化）→ `updateChecklistUI()`。全体は描き直さない（フォーカスを保つ）
-- `updateChecklistUI`（`sum.persona` があるとき）: 各行の `.is-set`・`.is-one`、ボタンの `.active`・`aria-pressed`・`tabindex`／`#clPsSum`＝`scored ? total : '—'`、`#clPsMax`＝max、`#clPsPct`＝`complete ? '（' + pct + '%）' : ''`／`#clPsState`: 未入力あり → `badge muted`「未入力 {n}」、`band` keep → `badge ok`「{keepPct}% 以上」、review → `badge warn`「{resultTitle('review')}まで」、reject → `badge danger`「{resultTitle('reject')}」／`#clPsWarn`: `ones` があるとき表示、文言 `1 点の項目があります（{names}）。` ＋（onePointResult が review なら `結果は{上長最終判断要}以下になります。`、reject なら `結果は{不採用推奨}になります。`、none なら付けない）
+- `updateChecklistUI`（`sum.persona` があるとき）: 各行の `.is-set`・`.is-one`、ボタンの `.active`・`aria-pressed`・`tabindex`／`#clPsSum`＝`scored ? total : '—'`、`#clPsMax`＝max、`#clPsPct`＝`complete ? '（' + pct + '%）' : ''`／`#clPsState`: 未入力あり → `badge muted`「未入力 {n}」、`band` keep → `badge ok`「{keepPct}% 以上」、review → `badge warn`「{resultTitle('review')}まで」、reject → `badge danger`「{resultTitle('reject')}」（**補完 4（11-9）で、人物像で下がる結果の上限〔未入力・合計・1 点のいちばん低いもの。「調整しない」は数えない〕を出すように変えた**: 上限 review → `warn`「{review}まで」・reject → `danger`「{reject}」、未入力があれば前に「未入力 {n}・」、下がらなければ `ok`「{keepPct}% 以上」／未入力だけなら `muted`「未入力 {n}」）／`#clPsWarn`: `ones` があるとき表示、文言 `1 点の項目があります（{names}）。` ＋（onePointResult が review なら `結果は{上長最終判断要}以下になります。`、reject なら `結果は{不採用推奨}になります。`、none なら付けない）
 - ③ の `#scriptWarnings` の「面接チェックリストで入力する」ボタンは、総合判断が未入力**または人物像に未入力がある**ときに出す
 
 ### 3-5. 質問の 1 行表示（P4・D9。`clBlockHtml` の `case 'question'`）
@@ -300,19 +301,21 @@ if (ps && !mustGate) {
 ### 3-6. CSS（styles.css。ダークテーマは既存の変数で追従）
 ```css
 .cl-guide { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 13.5px; font-weight: 600; }
+.cl-guide-t { flex: 1 1 0; min-width: 16em; }   /* レビュー指摘 8 で追加（11-8） */
 .cl-guide .btn { margin-left: auto; }
 .cl-persona { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
 .cl-ps-head { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .cl-ps-head h3 { font-size: 14.5px; font-weight: 700; }
 .cl-ps-legend { font-size: 12px; font-weight: 600; color: var(--muted); }
+.cl-ps-legend > span { white-space: nowrap; }   /* レビュー指摘 9 で追加（凡例は「点 意味」ごとの span。11-8） */
 .cl-ps-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: 6px; }
 .cl-ps-row.is-one { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); background: var(--danger-soft); }
 .cl-ps-main { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .cl-ps-no { color: var(--muted); font-weight: 800; }
 .seg-btn.cl-ps-btn { width: 44px; height: 38px; font-size: 16px; font-weight: 800; }
-.seg-btn.cl-ps-btn.active.s1 { background: var(--danger); color: #fff; }
-.seg-btn.cl-ps-btn.active.s2 { background: var(--warn); color: #fff; }
-.seg-btn.cl-ps-btn.active.s4, .seg-btn.cl-ps-btn.active.s5 { background: var(--ok); color: #fff; }
+.seg-btn.cl-ps-btn.active.s1 { background: var(--danger); color: var(--on-status); }   /* 文字色はレビュー指摘 10 で #fff → --on-status（ライト #fff・ダーク #0b1220。11-8） */
+.seg-btn.cl-ps-btn.active.s2 { background: var(--warn); color: var(--on-status); }
+.seg-btn.cl-ps-btn.active.s4, .seg-btn.cl-ps-btn.active.s5 { background: var(--ok); color: var(--on-status); }
 .cl-ps-btn:focus-visible, .cl-q:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .cl-ps-total { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 14px; font-weight: 600; }
 .cl-ps-total #clPsSum { font-size: 22px; }
@@ -346,7 +349,7 @@ if (ps && !mustGate) {
   - タイルの名前 = `title` の末尾の「（…）」を外したもの（既定「人物像」。空なら「人物像」）
   - 全部入力: v `{total}<small>/{max}点</small>`・s `{pct}%`（1 点ありなら `・1点あり`）／一部: v 同じ・s `未入力 {n}`（1 点ありなら `・1点あり`）／入力なし: v `未入力`・s なし
   - `ones` があれば `is-ng`（既存の `.cl-tile.is-ng .cl-tile-v` で値が赤）
-- CSS: `.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr))}` を**足す**（既存の `.cl-tiles` の規則は 4 タイル用に残す）。`.cl-decision` の `max-width:48%` を **`max-width:36%`** に（規則の文字列ごと置き換え。コメントも「5 枚のタイルを潰さない」に）
+- CSS: `.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr))}`（レビュー指摘 5 で `minmax(min-content,…)` に。11-8）を**足す**（既存の `.cl-tiles` の規則は 4 タイル用に残す）。`.cl-decision` の `max-width:48%` を **`max-width:36%`** に（規則の文字列ごと置き換え。コメントも「5 枚のタイルを潰さない」に）
 
 ### 4-2. 確認点｜人物像の 2 カラム（D11）
 確認点の表（`rateHtml`）から `<col class="c-nt">` とメモのセル `td.cl-rt-nt` を外す（`colgroup` は `c-no`・`c-lbl`・`c-mk`）。`ps` があれば:
@@ -384,7 +387,7 @@ if (ps && !mustGate) {
 - 最終合否欄 36% で 5 タイルに「…」が出ないこと（E8 の長い担当者名の確認）・重いサンプル・面接所見 4,000 字・押印欄 4 件・縮小の段階でも 1 ページ・押印行は下端（E8・E16 の既存の確認がそのまま通ること）
 
 ### 4-6. 保存 HTML の窓（`a4PageScript` の `memoOf`。ES5・関数内にコメントを書かない）
-`row` の分岐に `.cl-nm-rt` を足す: `else if (row.classList.contains("cl-nm-rt")) { v = []; each(row.querySelectorAll(".cl-nm-rt-i"), function (s) { v.push(s.textContent); }); v = v.join("\n"); }`（窓の見出しは「確認点のメモ」、本文は 1 項目 1 行の全文。`.cl-nm-rt` は `data-cl-block` を持たないので既存の分岐の後ろでよい）。`markTargets` は変えない（`.cl-nm-v` の `.cl-cut` で押せる）
+`row` の分岐に `.cl-nm-rt` を足す: `else if (row.classList.contains("cl-nm-rt")) { v = []; each(row.querySelectorAll(".cl-nm-rt-i"), function (s) { v.push(s.textContent); }); v = v.join("\n"); }`（窓の見出しは「確認点のメモ」、本文は 1 項目 1 行の全文。`.cl-nm-rt` は `data-cl-block` を持たないので既存の分岐の後ろでよい）。`markTargets` は変えない（`.cl-nm-v` の `.cl-cut` で押せる）。レビュー指摘 13 で、確認点の表のメモの列（`.cl-rt-nt`）用に残っていた `memoOf` の `tr` の分岐・`markTargets` のセレクタ・`checklistSheetCss` の規則を削除（今のコードはその列を出さない。旧い保存 HTML は保存時の CSS・スクリプトを自分で持つ。`clFitSheet` のセレクタは D12 のとおり残す）
 
 ---
 
@@ -441,7 +444,7 @@ if (ps && !mustGate) {
 ```js
 function preparePaperSheet(on) {   // 印刷ホスト #clSheet に記入シートの用紙を描いて計測（off で片付け）
   const host = $('#clSheet'); if (!host) return false;
-  if (on) { injectChecklistSheetCss(); fillChecklistDefaults(); host.innerHTML = '<div class="a4 pp-a4">' + S.paperSheetHtml(S.buildRecord(state), state.profile, {}) + '</div>';
+  if (on) { injectChecklistSheetCss(); ensureChecklist(); /* 補完 3（11-9）: fillChecklistDefaults から。今日の日付で埋めない */ host.innerHTML = '<div class="a4 pp-a4">' + S.paperSheetHtml(S.buildRecord(state), state.profile, {}) + '</div>';
     document.body.classList.add('print-checklist'); const sh = $('#clSheet .pp-sheet'); if (sh) S.fitPaperSheet(sh); }
   else { document.body.classList.remove('print-checklist'); host.innerHTML = ''; }
   return true;
@@ -483,7 +486,7 @@ field-row: sSelect('checklist.persona.onePointResult', '1 点の項目がある�
 
 ### 6-3. 使い方（`helpHtml`。`.help-step` は 3 つのまま）
 - ステップ 2 の文: 「…確認点の ○△×・**総評（人物像 1〜5 点・総合判断・面接所見）**を入力します。面接中はメモを中心に、○△×・人物像・総合判断は面接後にまとめて入力できます。…」
-- 新しいカード `#helpPersona`「人物像（1〜5 点）と記入シート」（`#helpScriptFlow` の後ろ）: ① 面接中はメモ中心（1 対 1 でなくても回せる）／② 人物像 7 項目と 1〜5 の目安・35 点満点／③ 判定への反映（70% 以上はそのまま・40% 以上 70% 未満は上長最終判断要まで・40% 未満は不採用推奨・1 点が 1 つでもあれば上長最終判断要まで・未入力があれば上長最終判断要まで。下げる方向だけ。設定で変更可）／④ 記入シート（① と ② の上部の「🖨 記入シート（手書き用）」で A4 1 枚。② と同じ並び。面接後にアプリへ転記）／⑤ 確認点「最低限の話し方、敬語が可能か」は人物像の言葉遣いと重なるため既定から外した
+- 新しいカード `#helpPersona`「人物像（1〜5 点）と記入シート」（`#helpScriptFlow` の後ろ）: ① 面接中はメモ中心（~~1 対 1 でなくても回せる~~ → **補完 2（11-9）**: 1 対 1 の面接のとき。1 対 1 でない面接は記入シートに書いて面接後に転記〔フィードバック ①②〕）／② 人物像 7 項目と 1〜5 の目安・35 点満点／③ 判定への反映（70% 以上はそのまま・40% 以上 70% 未満は上長最終判断要まで・40% 未満は不採用推奨・1 点が 1 つでもあれば上長最終判断要まで・未入力があれば上長最終判断要まで。下げる方向だけ。設定で変更可）／④ 記入シート（① と ② の上部の「🖨 記入シート（手書き用）」で A4 1 枚〔**補完 5（11-9）**: ① のボタンはカードの下の操作行。使い方は「Step① の…（カードの下、「面接チェックリストへ進む →」の左）か、Step② の上部の同じボタン」〕。② と同じ並び。面接後にアプリへ転記）／⑤ 確認点「最低限の話し方、敬語が可能か」は人物像の言葉遣いと重なるため既定から外した
 - 「結果（推奨）の決まり方」カードに 1 行: 人物像の合計・1 点・未入力で下がる（③ の内容を短く）。確認点の行は「確認点の ○△× は面接評価（点数）として報告書に載ります」のまま
 
 ---
@@ -574,7 +577,7 @@ field-row: sSelect('checklist.persona.onePointResult', '1 点の項目がある�
 - **docs/HANDOFF.md**: 冒頭の一覧に「2026-10-16: 人物像（1〜5 点）・記入シート・面接中はメモ中心（フィードバック ①②③）。docs/SPEC-persona.md」／1-1 ②（案内・総評・質問の 1 行表示・記入シートのボタン）・右サマリー（人物像）／1-2 `personaModel`・evaluateScript の (e)／1-3 設定の人物像の節・rt_manner の移行／1-5 A4（5 タイル・2 カラム・確認点のメモ）・記入シートの印刷／1-6 テスト件数（単体 37・e2e の件数）・fixture `legacy-pre-persona.html`／2 章の決定事項の表に「N. 人物像」「O. 記入シート」の行を足し、「I.」の「確認点 7 項目（16 点満点）」を「6 項目（面接評価 14 点満点。2026-10-16 に rt_manner を人物像と重なるため外した）」に／3-1 TODO の帯の境界の例を 14 点満点（10 点以上が高・6 点以上が中）に・「空欄のチェックリストも印刷できると便利か」は記入シートで済み／4 章の触る場所に「人物像（config `checklist.persona`・rules `personaModel`・evaluateScript (e)・storage `normalizePersonaDef`・A4 の `clOnePageHtml`・app の総評カード `clOverallHtml`・`onPersonaKey`・settings の人物像の節）」「記入シート（storage `paperSheetHtml`・`paperSheetCss`・`fitPaperSheet`、app `preparePaperSheet`・`printPaperSheet`）」「質問の 1 行表示（app `clBlockHtml` の question・`q-toggle`／`q-all`）」
 - **README.md**: 使い方の ①（記入シートのボタン）・②（案内・質問の 1 行表示・確認点 6 項目・総評〔人物像・総合判断・面接所見〕）／「結果（推奨）の決まり方」に人物像の規則と例の表（2-4）、面接評価の例の表を 14 点満点に（全○＋採用 14/100/高・○4△2＋採用 12/85.7/高・○3△2×1＋採用 10/71.4/高・○2△3×1＋採用 9/64.3/中・全△＋採用 8/57.1/中・○1△2×3＋保留 5/35.7/低）／「印刷」に記入シート（手書き用）の節・A4 の並び 3（5 タイル）・5（確認点｜人物像）・6（確認点のメモ）／設定の 3 に人物像の節
 - **docs/SPEC-a4.md**: 13 章の後ろに「14. 人物像の追加による用紙の変更（2026-10-16 追記）」: 結果ストリップの 5 タイルと `has-ps`・最終合否欄 36%（F9 の 48% を置き換え）・確認点｜人物像の 2 カラム・確認点のメモの行（`.cl-nm-b.cl-nm-rt`。窓は 1 項目 1 行）・用紙の並び（1-2 の並びの更新）・clFitSheet は変えていない・記入シートは同じ用紙の部品を使う別の用紙（本書 5 章）
-- 本書の末尾に「11. 実装メモ」を作り、実装で決めたこと・本書からの差分を書く
+- 本書の末尾に「11. 実装時の差分」を作り、実装で決めたこと・本書からの差分を書く
 
 ---
 
@@ -609,7 +612,7 @@ table.pp-t{width:100%;border-collapse:collapse}
 .pp-t .pp-mk{white-space:nowrap;text-align:right;width:62px}
 .pp-mk span{display:inline-block;width:18px;text-align:center;font-size:11.5px;font-weight:700}
 .pp-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 8px;margin:0}
-.pp-fields>div{display:flex;align-items:baseline;gap:4px;min-width:0;padding:2px 3px;border-bottom:1px solid #e6eaef}
+.pp-fields>div{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 4px;min-width:0;padding:2px 3px;border-bottom:1px solid #e6eaef}   ← レビュー指摘 6 で flex-wrap（11-8）
 .pp-fields dt{flex:none;font-size:8.5px;font-weight:700;color:#5b6675}
 .pp-fields dd{margin:0;min-width:0;flex:1 1 auto;white-space:nowrap}
 .pp-fields dd .pp-line{width:100%}
@@ -652,7 +655,8 @@ table.pp-ps-t{width:100%;border-collapse:collapse}
 ## 付録 B. A4 報告の追加・変更の CSS（`checklistSheetCss()`）
 変更（2 つだけ）: `.cl-mode-sheet .cl-rt col.c-lbl{width:40%}` → `{width:auto}`／`.cl-mode-sheet .cl-decision{…;max-width:48%;…}` → `max-width:36%`。追加:
 ```
-.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr))}
+.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(min-content,1.5fr) repeat(4,minmax(min-content,1fr))}   ← レビュー指摘 5 で minmax(0,…) から（11-8）
+.cl-mode-sheet .cl-judge-main{flex-basis:0%;min-width:min-content}.cl-mode-sheet .cl-decision{flex-shrink:1}   ← レビュー指摘 5 で追加（11-8）
 .cl-mode-sheet .cl-cols.cl-cols-eval{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .cl-mode-sheet .cl-blk-persona .cl-h{display:flex;align-items:baseline}.cl-mode-sheet .cl-ps-sum{margin-left:auto;font-size:9px;font-weight:800;color:#1a2233}
 .cl-mode-sheet table.cl-ps{width:100%;border-collapse:collapse;table-layout:fixed}
@@ -673,10 +677,12 @@ table.pp-ps-t{width:100%;border-collapse:collapse}
 
 ---
 
-## 11. 実装メモ（2026-10-16。実装で決めたこと・本書からの差分）
+## 11. 実装時の差分（2026-10-16。実装で決めたこと・本書からの差分・仕上げ）
+
+実装は本書（1〜7 章・D1〜D20）とオーケストレータの決定 P1〜P10 のとおりで、未実装は無い（照合の結果は 11-7）。以下は本書に無かった細部・本書と変えたところ・テストの書き換え・仕上げで直したもの。
 
 ### 11-1. 結果
-- `node tests/rules.test.js` 単体 37 件（#94〜#97 を追加）・`node build.js && node tests/e2e.js` e2e E1〜E17・308 件、すべて緑（`dist/toho-recruit-judge.html` 453.3 KB）
+- `node tests/rules.test.js` 単体 37 件（#94〜#97 を追加）・`node build.js && node tests/e2e.js` e2e E1〜E17・326 件、すべて緑（`dist/toho-recruit-judge.html` 461.5 KB）。途中経過のコミット（07998d1）の時点は 308 件で、仕上げ（11-7）で E17 に 1 件、レビュー指摘の修正（11-8）で E17 に 8 件、補完（11-9）で E8 に 1 件・E17 に 8 件足した
 - 判定（2-4 の表のとおり。単体 #95・e2e E17 (4)〜(6)）: 全部 4 → 採用推奨 28/35（80%）／4,4,4,4,3,3,3 → 採用推奨 25/35（71%）／全部 3 → 上長最終判断要（`persona_total`「人物像の合計 21/35（60%）のため、採用推奨ではなく上長最終判断要として扱います。」）／4,4,4,4,4,4,1 → 上長最終判断要（`persona_one`「人物像に 1 点の項目（志望動機）があるため、…」）／全部 2 → 上長最終判断要 14/35（40%）／1,1,2,2,2,2,2 → 不採用推奨 12/35（34%）／3 項目だけ → 上長最終判断要（`persona_unscored`）＋警告「人物像に未入力が 4 項目あります（声のトーン、目線、言葉遣い、志望動機）。」／保留＋全部 1 → 不採用推奨 7/35（20%）／必須条件の不一致＋全部 1 → 不採用推奨（`must_conditions` だけ・人物像の警告なし）
 - A4 報告（E17 (7)。Chromium・既定の台本・1440px）: 全部 4 点・確認点すべて ○ → `.cl-roomy` 880px（上限 1052px）・確認点｜人物像 351px／351px・押印行は用紙の内寸の下端・保存 HTML の PDF 1 ページ・画面と印刷の画像が同じ様式・アプリの A4 印刷も同じ段階で 1 ページ。重いサンプル（確認点のメモ 300 字×6・人物像 4,5,1,3,4,2,5）→ `.cl-compact` 1044px・1 ページ
 - 記入シート（E17 (9)）: 白紙 `pp-q3` 933px（用紙の内寸いっぱいで 1062px）・210×297mm・面接所見の罫線 9 本・PDF 1 ページ。① 入力あり（記入 太郎・短期求人・タクシー）`pp-q3` 916px・PDF 1 ページ。試作（0-5）と同じ値
@@ -693,11 +699,11 @@ table.pp-ps-t{width:100%;border-collapse:collapse}
 - ② の上部の案内は、人物像を使わない記録（`null`）・設定で OFF のとき「面接中はメモを中心に。○△×・総合判断は面接後にまとめて入力できます」（人物像を外す）
 - キーボード: 数字はテンキー（`Numpad1`〜`Numpad5`）も。6〜9・0 は何もしない（既定の動作のまま）。最後の行で数字を押したときは、その行の押したボタンにフォーカス（次の行が無いため）。Ctrl・Alt・Meta 付きは触らない
 - ③ の確認事項の「面接チェックリストで入力する」は、総合判断の未入力に加えて人物像の未入力の警告があるときも出す
-- 目次の右の点数は「面接評価 n/14　人物像 n/35」。1440px では目次のチップと点数が 2 行に折り返すことがある（文言は本書どおり。sticky の高さが 1 行ぶん増える）
+- 目次の右の点数は「面接評価 n/14　人物像 n/35」。1280〜1440px では目次が 2 行（1440px はチップの行と点数の行で高さ 75px）。c0d20ce でも 2 行（「総合判断」のチップが 2 行目に回って 84px）だったので、人物像の追加で目次は高くなっていない（チップの名前が「総評」に短くなった分 9px 低い。1366・1280px は 84px で同じ）
 - 印刷の片付けは `afterPrintOnce(cleanup)`（afterprint と 3 秒の早い方で 1 回だけ。遅れて来たほうが次の印刷の用紙を消さない）を報告書（`printChecklistSheet`）と記入シート（`printPaperSheet`）で共用。`paperSheetHtml` が無い（古い storage）ときは toast でやめる
 - 設定の人物像の項目（`coerce` の `persona`）: id は項目名が同じ項目を**下書きと保存済みの設定の両方**から探して引き継ぐ（同じ項目名が 2 行あれば 2 行目は新しい id）。「既定の台本に戻す」の確認に「（人物像の項目・境界も既定に戻ります）」を足した
 - 設定の境界の欄の後ろに「（n 点以上）」「（n 点未満）」（満点×% の切り上げ。既定 25 点以上・14 点未満）。満点の注記 `#clPsMaxNote`
-- 使い方のカード `#helpPersona` の数字（項目数・満点・境界・1 点のときの結果）は設定から描く
+- 使い方のカード `#helpPersona` の数字（項目数・満点・境界・1 点のときの結果）は設定から描く。設定で人物像を OFF にしたときはカードの先頭に「いまの設定では人物像を使いません」（`#helpPersonaOff`）、「結果（推奨）の決まり方」の人物像の 1 行の末尾にも同じ断り。その 1 行の不採用推奨の境界（既定 40%）も設定から（仕上げで追加。11-7）
 
 ### 11-4. A4・記入シート
 - 記入シートの説明・合否連絡の見出しはブロックの `title`（無ければ「説明」「合否連絡」）。表は `<tbody>` 付き（5-2 の DOM と同じ要素・クラス。テストはセレクタで見る）
@@ -711,6 +717,76 @@ table.pp-ps-t{width:100%;border-collapse:collapse}
 - e2e E16 (3b): 上限近くのゆったりの見本を面接所見 40〜600 字・20 字刻みで探す（9 章の 13。今は 140 字・1051px）
 - e2e E17 (3) の点の比べ方はキーの順を問わない（未入力に戻すとキーを消し、入れ直すと最後に付く）。E17 (9) の PDF の本文の確認は「必須条件」ではなく必須条件の項目名（5-2 の DOM に「必須条件」の見出しは無い）。E17 (12) は ③ に進んでから保存し直す（② で保存した記録は ② で開き、判定は ③ で走る）
 
-### 11-6. できていないこと・確かめていないこと
-- 実機のブラウザ（Edge / Chrome）の印刷ダイアログでの記入シート・報告書の印刷は確かめていない（Playwright の PDF・`window.print` のスタブで確認）
-- 目次の 2 行の折り返し（11-3）は直していない
+### 11-6. できていないこと・確かめていないこと・そのままにした動き
+- 実機のブラウザ（Edge / Chrome）の印刷ダイアログでの記入シート・報告書の印刷は確かめていない（Playwright の PDF・`window.print` のスタブで確認）。補完 9（11-9）でヘッドレスの Chromium の本物の `window.print`（スタブなし）の経路と 3 秒の片付けは確かめた。残る確認の手順は 11-9 の末尾
+- 人物像を OFF にした設定で保存した記録（`checklist.persona` は `{}`・保存時の台本の `persona.enabled` は false）を、ON の設定のアプリで読み込むと、人物像は「未入力」として現在の設定で再判定する（上長最終判断要＋未入力の警告。導入前の記録〔`null`〕とは違い、人物像を使う）。③ で保存した記録なら既存の toast「保存時の判定（…）と現在の設定での再判定（…）が異なります」で分かる。D19 の項目の差の toast は両方の台本で人物像が ON のときだけ（本書どおり）
+- 台本 1 枚目の前書き（`pages[0].lead`）には「最低限の話し方、敬語が可能か」が残る（台本の文言は変えない＝1-2。確認点の rt_manner だけを外した）。補完 6（11-9）で、② の前書きの下に付ける場所（人物像の「言葉遣い・説明のわかりやすさ」）を 1 行で示す
+
+### 11-7. 仕上げ（2026-10-16。照合の結果と、仕上げで直したもの）
+中断した実装（07998d1）を、本書の 1〜7 章・D1〜D20 とオーケストレータの決定 P1〜P10 に 1 つずつ照らした結果、**未実装・途中のものは無かった**（下の表）。直したのは使い方の 1 か所・スクリーンショットの撮り方・テストの補強・docs の誤り。
+
+| 決定・章 | 実装（主な場所） | テスト |
+| --- | --- | --- |
+| P1 データ（本書 1-1・1-3・1-4・D2・D3） | config `checklist.persona`・rules `emptyChecklist`／`personaScore`／`checklistHasInput`・storage `normalizePersonaDef`／`normalizeChecklistDef`／`normalizeRecord`・app `ensureChecklist` | 単体 #94・#96 |
+| P2 判定（2 章・D1・D4〜D6） | rules `personaModel`・`personaDiff`・`evaluateScript` の (e)・戻り値の `persona` | 単体 #95・e2e E17 (4)〜(6)・(12) |
+| P3 rt_manner（1-2・1-6・D16・D17） | config（確認点 6 項目・説明と確認点の short）・storage `isPrevDefaultScript`（`fillChecklist`）・app `profileNotice` | 単体 #54・#96・e2e E1・E12 |
+| P4 ②（3 章・D7〜D9） | app `interviewStepHtml`（`#clGuide`・`#clPaperBtn`）・`clOverallHtml`／`clPersonaHtml`・`psSet`／`updatePersonaUI`・`onPersonaKey`・`clBlockHtml` の question（`q-toggle`／`q-all`）・styles.css | e2e E17 (1)〜(3)・(10) |
+| P5 A4（4 章・D10〜D12） | storage `clOnePageHtml`（タイル・`.cl-cols-eval`・確認点のメモの行）・`checklistSheetCss`・`a4PageScript` の `memoOf`。`clFitSheet` は変えていない | 単体 #80・#97・e2e E2・E8・E14・E16・E17 (7) |
+| P6 記入シート（5 章・D13〜D15） | storage `clTitleHtml`・`paperSheetHtml`・`paperSheetCss`・`fitPaperSheet`・app `preparePaperSheet`／`printPaperSheet`／`afterPrintOnce`・`#saPaperBtn` | 単体 #97・e2e E13・E17 (9) |
+| P7 右サマリー・設定・使い方（6 章・D20） | app `personaSummaryRow`・settings の人物像の節（`coerce` の `persona`・説明と確認点の短い名前の欄）・app `helpPersonaHtml` | e2e E10・E17 (8)・(11)・(13) |
+| 1-7 読み込みの toast（D18・D19） | app `applyRecord` | e2e E17 (12)（D18: 旧い記録 3 件。D19: 項目を変えた設定で人物像ありの保存 HTML を読み込む〔レビュー指摘 11 で追加。仕上げの時点では D19 を通るテストが無く、この行は誤りだった〕） |
+| P8 テスト（7 章） | 単体 37 件（#94〜#97 を追加）・e2e E17 を追加し E1・E2・E8・E10・E12〜E14・E16 を書き換え（11-5）。確認点 7→6・16→14 点の期待値の書き換えのほかは、確かめる性質を落としていない（落とした確認は無く、E14 (4) の確認点のメモの窓・E12 の満点の増減は新しい並びで同じことを確かめる） | — |
+| P9 docs（10 章） | 本書 11 章・`docs/HANDOFF.md`・`README.md`・`docs/SPEC-a4.md` 14 章 | — |
+| P10 スクリーンショット（7-4） | `tests/shots/p12-*.png` の 6 枚（e2e E17 が出力） | — |
+
+仕上げで直したもの:
+1. **使い方**: 設定で人物像を OFF にしても「人物像（1〜5 点）と記入シート」のカードが人物像を使う前提のままだった → OFF のときはカードの先頭に「いまの設定では人物像を使いません」（`#helpPersonaOff`）、「結果（推奨）の決まり方」の 1 行にも同じ断り。その 1 行の不採用推奨の境界（40%）を設定から描く。e2e E17 (11) に 1 件（308 → 309 件）、E17 (13) に「ON では断りが無い・境界 40%」を足した
+2. **スクリーンショット** `p12-step2-persona.png`・`p12-step2-questions.png`: sticky のトップバー・目次が要素の上端に重なり、「総評」の見出しが隠れていた。マウスのホバー（総合判断の「不採用」）と面接所見の入力欄のフォーカス枠も写っていた → e2e E17 の `shotEl17`（撮るあいだだけ sticky を外す・マウスを外す・要素の中のフォーカスを外す）
+3. **単体 #96**: 移行の見本（新しい既定から組み立て直した直前の既定）に加えて、本物の c0d20ce の既定の台本（fixture `legacy-pre-persona.html` の `checklistDef`＝c0d20ce の config.default.js の台本そのもの）を持つ設定が移行され、設定全体が新しい既定とバイト単位で同じになることを確かめる（組み立て直した見本が実物とずれても気づける）
+4. **docs**: 本書 11 章の名前（実装メモ → 実装時の差分）と目次の 2 行の記述（11-3。c0d20ce から 2 行）、`docs/SPEC-a4.md` 14 章の未入力の行のクラス（`s-n` → `s-0`）、README の e2e の E12 の満点（14／16 → 12／14）と件数、HANDOFF の決定事項に「P. 確認点 rt_manner の整理」
+
+### 11-8. レビュー指摘の修正（2026-10-16。13 件）
+仕上げのあとのレビューで確定した指摘を、最小の差分で直した。テストは緩めていない（期待値を書き換えたのは、直した CSS の文字列〔単体 #97〕と、常に真だった E12 の `manner` を外したことだけ。E8 dec39・E14 (4) は確かめる内容を足した）。各項目の「テスト」は直す前のコードで FAIL することを確かめた（単体は変異で、e2e はこの節の末尾。12 の E12 は外しただけなので対象外）。
+
+| # | 指摘 | 直したこと | テスト |
+| --- | --- | --- | --- |
+| 1 | 使い方（`helpPersonaHtml`）と設定の人物像の節の説明が、人物像の項目名・目盛りの文言・結果の表示名を esc せずに HTML にしていた（設定の画面・JSON の読み込みから `<img onerror>` が入り、使い方・設定で実行された） | `helpPersonaHtml` の項目名・目盛りの文言・`resultTitle`・`capName` と、settings.js の人物像の節の説明（`psLabels`）を `esc` に通す | e2e E17 (13): 設定の画面で項目名に img → 使い方・② で実行されない・文字のまま。JSON の読み込みで短い名前・目盛りの文言・`texts.review.title` に img → 設定・使い方・② で実行されない |
+| 2 | JSON で読み込んだ人物像の境界（`keepPct`・`rejectBelowPct`）が範囲外でも検証されずに判定に効いた（keepPct 500 で全部 5 点が上長最終判断要・100/100 で全部 4 点が不採用推奨） | `normalizePersonaDef`: 0 ≦ 不採用推奨 ＜ そのまま ≦ 100 でなければ 2 つとも既定（70/40）に戻す（結果の設定〔`onePointResult` など〕と同じく正規化で直す。設定画面は保存前の検証で止めるのは今までどおり）。保存済みの設定・記録の台本も同じ | 単体 #94（範囲外 8 組 → 70/40・範囲内 4 組はそのまま・`parseProfileJSON` の 500 で全部 5 点が採用推奨・100/100 で全部 4 点が採用推奨・記録の台本も）。e2e E17 (13)（読み込んだ 500 → 70） |
+| 3 | rt_manner の移行が c0d20ce の既定だけを見ていて、2026-10-13〜14（6f32341〜95737b5）の版で保存した設定（質問・合否連絡・記入欄にも short が無い）は移行されなかった（確認点 7 項目・16 点満点のまま） | `isPrevDefaultScript`: short を 1 つも持たない台本は、short を全部外した直前の既定と比べる（`scriptSig(sections, true)`）。short を 1 つでも持つ台本は従来の比較だけ（質問の short を変えた台本は残す。1-6） | 単体 #96（c0d20ce の既定から short を全部外した台本 → 移行して設定全体が新しい既定と同じ・冪等・文言の変更／確認点の追加／質問の short を 1 つ足した台本は残す）。scratchpad の `p12b/fix/scripts/vers-migrate.js` で 6f32341〜c0d20ce の 11 版の既定（そのまま・その版の `normalizeProfile` で保存したもの、c0d20ce を経由したもの）がすべて移行することを確認 |
+| 4 | 使い方の「結果（推奨）の決まり方」の人物像の 1 行が、1 点・未入力のときの設定を反映せず、同じページの「判定への反映」と食い違った | `helpPersonaRuleLi()`: 上長最終判断要まで下げる条件と不採用推奨にする条件を、`onePointResult`・`unscoredResult`・不採用推奨の境界から組み立てる（既定は従来と同じ文言） | e2e E17 (13)（既定の文言・1 点＝不採用推奨・未入力＝調整しない・60/30 で「人物像（1〜5 点）の合計が低いと、結果を上長最終判断要（合計が 30% 未満・1 点の項目があるなら不採用推奨）まで下げます（…）。」） |
+| 5 | A4 の結果ストリップ: 最終合否の担当者名（氏名＋役職）が 18 文字前後で、結果「上長最終判断要」・人物像「未入力 3・1点あり」が「…」で切れた（c0d20ce では切れない） | `.cl-tiles.has-ps` の列を `minmax(min-content, …)` に（タイルは中身の幅より狭くならない）。`.cl-judge-main{flex-basis:0%;min-width:min-content}`・`.cl-decision{flex-shrink:1}`（タイルの中身が入らないときだけ最終合否欄が縮んで担当者名を「…」で切る。36% の上限はそのまま）。4 タイル（人物像なし）の規則は変えない | e2e E8 dec39（結果「上長最終判断要」・人物像「未入力 3・1点あり」・確認点「○3 △1 ×0 未入力2」と採用推奨の 2 つの状態 × 担当者名 4 種〔5・18・80・184 文字〕: タイルは切れない・36% 以下・用紙からはみ出さない・ストリップの高さ 58px・18 文字の担当者名は切れない）。単体 #97（CSS）。scratchpad の `p12b/fix/rv/m-strip.js`（総合判断 4 種〔採用・保留・不採用・未入力〕× 人物像 6 種 × 確認点 2 種 × 担当者名 6 種に、必須条件の未確認・不一致を足した 360 通り）で、直す前は 112 通りで切れ、直した後は 0。最終合否欄が直す前より狭くなったのは 3 通り（担当者名 23 文字以上で、もとから「…」）・新しく切れる担当者名は 0 |
+| 6 | 記入シート ①: 「短期／長期の希望 □短期希望 □長期希望」が欄から 7.2px はみ出し、隣の欄の見出し「契約開始日の希望」とつながって見えた | `.pp-fields>div` に `flex-wrap:wrap`（見出しと □選択肢 が 1 行に入らない欄は □選択肢 を次の行へ。入る欄は 1 行のまま）。記入シートの高さは変わらない（白紙 933px・入力あり 916px・`pp-q3`） | e2e E17 (9)（白紙・① 入力ありとも記入欄の中身が欄の右端を越えない・「短期／長期の希望」は □選択肢 が見出しの下の行） |
+| 7 | 使い方の人物像のカードが項目名を「・」でつなぎ、「7 項目（挨拶・身だしなみ・笑顔・表情・…）」が 8 項目に読めた | 「、」でつなぐ（D6・判定の理由と同じ） | e2e E17 (13)（「7 項目（挨拶、身だしなみ、笑顔・表情、声のトーン、目線、言葉遣い、志望動機）」） |
+| 8 | ② の上部の案内が 1440px 未満で 2 段（ボタンだけの行。高さ 80px）・390px で 💡 だけの行 | `.cl-guide-t{flex:1 1 0;min-width:16em}`（文言は残りの幅で折り返し、ボタンと同じ行に並ぶ。文言が 16em 未満になるほど狭い画面だけボタンを次の行へ）。高さ 768〜1366px 61px（80px から）・390px 101px（131px から）・1440px 50px（1 行のまま） | e2e E17 (10)（1440px は 1 行・1280px はボタンが文言と同じ行・高さ 64px 以下・390px は 💡 と文言が同じ行でボタンは次の行） |
+| 9 | 390px で人物像の凡例が「5 とても／良い」と語の途中で折り返した | 凡例を「点 意味」ごとの `span`（`white-space:nowrap`）にし、全角空白でつなぐ（`textContent` は従来と同じ） | e2e E17 (10)（390・1280・1440px で 5 つの span がどれも 2 行に割れない） |
+| 10 | ダークモードで押下中の人物像のボタン・○△×・一致／不一致・総合判断の白字のコントラストが低い（2.0〜3.1:1） | トークン `--on-status`（ライト `#ffffff`・ダーク `#0b1220`。`:root[data-theme="dark"]` と `prefers-color-scheme: dark` の両方）を足し、押下中の `.seg-btn.active.{match,good,hire,fair,hold,mismatch,poor,reject}` と `.cl-ps-btn.active.s1/s2/s4/s5` の文字色に使う。ダークは 6.0〜9.2:1（ライトは白字のまま＝見た目は変えない） | e2e E17 (10)（data-theme と prefers-color-scheme のダークで 人物像 1〜5・○△×・一致・保留 が 4.5:1 以上・ライトは白字） |
+| 11 | D19 の toast「保存時と人物像の項目が異なります」を確かめるテストが無く、11-7 の表は E17 (12) で確かめたことにしていた | テストを追加し、11-7 の表を直した | e2e E17 (12)（志望動機を外して「電話応対の丁寧さ」を足した設定で、7 項目すべて 4 点の保存 HTML を読み込む → toast「保存時と人物像の項目が異なります（追加 1・削除 1）。現在の項目で再判定します」・足した項目は未入力 → 上長最終判断要〔persona_unscored〕・記録の点はそのまま。既定の項目に戻すと出ない） |
+| 12 | E14 (4) の全メモの窓の期待値で、確認点のメモの行（`rt`）の期待値が `notes['rt']`（undefined）になり、しかもその分岐を通る記録が無かった。E12 の `!cl12.manner` は常に真 | E14 (4): 記録に確認点のメモ（`rn`）を入れ、`rt` の期待値を「番号＋短い名前：メモ」を台本順に 1 行ずつ（記録の `checklistDef` と `notes` から組み立て）に。行に `rt` があること・見出し「確認点のメモ」・行数（6＋足した確認点）も確かめる。E12 の `manner` は外した（削除したのが rt_turnover になったので、その確認は `turnover`） | e2e E14 (4)・E12 |
+| 13 | storage.js に確認点のメモの列（`.cl-rt-nt`）を扱う死んだコード（CSS・`markTargets` のセレクタ・`memoOf` の `tr` の分岐）と誤ったコメント「旧い保存 HTML 用」 | 3 か所を削除・コメントを直した。`clFitSheet` の `.cl-nm-v,.cl-rt-nt` は D12（単体 #93 の疑似 DOM）のため残す | 単体 #97（CSS に `.cl-rt-nt` が無い・保存 HTML に `tr[data-cl-item]` の分岐と `".cl-nm-v,.cl-rt-nt"` が無い） |
+
+テスト件数: 単体 37 件（件数は同じ。#94・#96・#97 に確認を足した）・e2e E1〜E17・317 件（309 件から、E17 に 8 件〔(9) 記入欄・(10) 案内と凡例・ダークのコントラスト・(12) D19 の toast と既定に戻したとき・(13) 項目名の区切りと決まり方・設定を変えたときの決まり方・XSS と境界〕を足した。E8 dec39・E14 (4)・E12 は同じ件数で確かめる内容を足した）。e2e の変異（scratchpad の作業コピーで 1・2・4〜11 の修正をまとめて直す前に戻し、確認点のメモの窓を改行でなく空白でつなぐ変異を足した版）: 317 件中 12 件が FAIL（E8 dec39・E14 (4) の 2 件・E17 (9) 記入欄の 2 件・E17 (10) 案内と凡例・ダークのコントラスト・E17 (12) D19 の toast・E17 (13) の 3 件・ERRORS〔img の読み込みの失敗〕）。足した・書き換えた確認はすべて FAIL し（D19 の「既定に戻すと出ない」は否定の確認なので PASS のまま）、ほかの 305 件は PASS。3 と 2 の正規化・13 は単体の変異で確かめた（#94・#96・#97 が FAIL）
+
+### 11-9. 補完（2026-10-16。照合で見つかった抜け 9 件）
+11-8 のあとの照合（副支配人の選択・P1〜P10・フィードバック ①〜③ と実装・使い方・README の突き合わせ）で見つかった抜けを、最小の差分で埋めた。テストは緩めていない。期待値を書き換えたのは、直した表示・文言（E17 (1)(2) の人物像の状態の表示・(1) の総合判断の説明・(13) の「1 対 1」）と、② の回答が無い導入前の記録の `normalizeRecord` の結果（単体 #96。`null` を確かめていた 3 行は、② の回答がある記録で `null` を確かめる形に置き換えた）だけ。
+
+| # | 抜け | 直したこと | テスト |
+| --- | --- | --- | --- |
+| 1 | 人物像の導入前に ① だけ保存した記録（② の回答なし）を面接の日に読み込むと、`normalizeRecord` が `null`（導入前の記録）にして、これから行う面接でも人物像を入力できなかった（記入シートには人物像の行が出るので、紙で丸を付けても転記する場所が無い。保存し直しても `null` のまま） | `normalizeRecord`: persona のキーが無い記録は、記録の台本に人物像がある**か、② の回答がまだ無い**（`!R.checklistHasInput`）とき `{}`。② の回答（○△×・一致／不一致・説明のチェック・メモ・総合判断のどれか）がある導入前の記録は従来どおり `null`（保存時の判定を変えない。D2・P2）。① の入力（面接日・担当・求人・タクシー）は回答に数えない。② で評価し直す v1（checklist なし）も `{}`。明示の `null`・壊れた値は従来どおり `null` | 単体 #96（② の回答 4 種 × 台本の人物像なし／台本なしで `null`・① だけ・回答なし・v1・`normalizeRecord(null)` で `{}`・明示の `null` は回答が無くても `null`・fixture を ① の段階に戻した記録 → `{}`・未入力 7 で上長最終判断要〔persona_unscored〕・全部 4 で採用推奨・保存し直しても `{}`）。e2e E17 (12)（fixture を ① の段階に戻した保存 HTML を読み込む → 導入前の toast・注記なし・② に人物像 7 行・記入シートも 7 行・点を入れて採用推奨〔5 タイル〕・保存し直して読み込んでも点が残る） |
+| 2 | 使い方の「（1 対 1 でなくても回せます）」がフィードバック ①（1 対 1 でなければ面接しながらの運用は苦慮・1 対 1 ならメモを活用すれば問題ない）・README と逆の案内（本書 6-3 が由来） | 「1 対 1 の面接なら、質問の回答などはメモ欄に書き、…面接のあとでまとめて入力できます。1 対 1 でない面接は、面接しながらアプリに入力するのが難しいので、記入シート（手書き用。下）に書いて、面接のあとでアプリに転記してください。」（フィードバック ②）。README の記入シートの節の末尾も同じ趣旨に | e2e E17 (13)（新しい 2 文・「1 対 1 でなくても」が無い） |
+| 3 | ① で面接日を消しても記入シートに今日の日付が印字され、印刷すると記録の面接日が今日で書き戻された（① の欄・右サマリーは空のまま＝画面と記録が食い違う）。面接日を手書きにする白紙を作れなかった | `preparePaperSheet` は `fillChecklistDefaults()` をやめて `ensureChecklist()` だけ（印刷で記録を書き換えない）。① の面接日が空なら記入用の線（前もって刷っておく白紙）。② を開いたとき面接日を今日で埋めるのは従来どおり（`renderStep`。画面に出ているとおりに印字） | e2e E17 (9)（既定は今日の日付を印字・① で面接日を空にすると線・印刷の前後で記録・① の欄・右サマリーの面接日は空のまま・白紙の PDF〔p12-paper-sheet.png〕は面接日も線） |
+| 4 | ② の総評: 総合判断の説明が固定文「人物像の合計・1 点の項目で結果が下がることがあります。」（既定で結果を下げる「未入力」に触れない・1 点を「調整しない」にしても出る）。人物像の状態の表示は、未入力なら灰「未入力 n」だけ（そのまま ③ に進むと上長最終判断要になることが分からない）、1 点の項目があっても合計が 70% 以上なら緑「70% 以上」（すぐ下の警告と色の意味が逆。p12-step2-persona.png がこの状態） | 説明は使い方の「結果（推奨）の決まり方」の 1 行と同じ文を設定から組み立てる（`personaRuleText()` を共用。既定「人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます。」）。状態の表示は人物像で下がる結果の上限（未入力・合計・1 点のうちいちばん低いもの。設定で「調整しない」のものは数えない）: 琥珀「上長最終判断要まで」・赤「不採用推奨」、未入力があれば前に「未入力 n・」。下がらなければ緑「70% 以上」（全部入力）・灰「未入力 n」 | e2e E17 (1)（既定の説明・入力前は琥珀「未入力 7・上長最終判断要まで」）・(2)（「未入力 6・上長最終判断要まで」）・(4)（1 点ありで 71% → 琥珀「上長最終判断要まで」・緑にしない）・(13)（1 点＝不採用推奨・未入力＝調整しない・60/30: 説明がその設定の文・全部 4 は緑「60% 以上」・1 項目を未入力に戻すと灰「未入力 1」・1 点を入れると赤「未入力 1・不採用推奨」と警告「…結果は不採用推奨になります。」） |
+| 5 | 使い方のほかの箇所: ステップ 3「「A4 で印刷」で 1 枚（結果・必須条件・確認点・面接メモ・押印）」に人物像が無い／「Step① と Step② の上部の「🖨 記入シート（手書き用）」」（① のボタンはカードの下の操作行で、上部ではない）／設定のカード「面接チェックリスト（台本の文言・項目・確認点）」に人物像が無い | ステップ 3「（結果・必須条件・確認点・人物像・面接メモ・押印）」／「Step① の「🖨 記入シート（手書き用）」（カードの下、「面接チェックリストへ進む →」の左）か、Step② の上部の同じボタンで…」／「面接チェックリスト（台本の文言・項目・確認点・人物像）」。② の「🖨 面接チェックリスト報告（A4）」の title にも人物像を足した | e2e E17 (13)（3 か所の文言・古い文言が無い）・(1)（① のボタンはカードの下で「進む」の左＝使い方の説明どおり） |
+| 6 | ② の 1 枚目の前書き「必須条件と報連相の意識・具体性を確認。最低限の話し方、敬語が可能か。…」が残り（台本の文言は変えない＝1-2）、確認点から外した話し方・敬語をどこで付けるのか ② では分からない | 前書きの下に 1 行「→ 話し方・敬語は確認点ではなく、最後の総評の人物像（接客）「言葉遣い・説明のわかりやすさ」で 1〜5 点を付けます。」（`clLeadPsHtml`。前書きが話し方・敬語に触れ、確認点に話し方・敬語の項目が無く〔rt_manner を残した台本では出さない〕、人物像に言葉遣いの項目〔`ps_speech`、無ければ項目名に言葉遣い・敬語〕があるときだけ。人物像を使わない記録・OFF では出さない）。使い方の rt_manner の行にも「台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます」 | e2e E17 (1)（1 枚目の前書きの直後にだけ出る・2 枚目には出ない）・(13)（使い方） |
+| 7 | README の記入シートの説明「（① に入れた氏名・区分/年齢/性別・面接日・…。空なら記入用の線・□）」が区分・年齢・性別（空なら何も出さない）と面接日（3 のとおり空にならなかった）に当てはまらない | 実装（本書 5-2・D15。空の氏名は線＋「さん」だけ）に合わせて README を直した: 空の氏名・面接日・担当・タクシー可否・料金は記入用の線、未選択の求人は □通常求人 □短期求人、区分/年齢/性別は入力があるときだけ氏名の横（空なら欄も出さない）。面接日は ① の欄のとおり（3 で空にできるようにした。前もって刷る白紙の作り方も README に） | —（文書。3 のテストで面接日の線を確かめる） |
+| 8 | 人物像のタイルが無い 4 タイルの結果ストリップで長い担当者名を確かめる e2e が無くなっていた（c0d20ce の E8 dec39 は 4 タイルを見ていた。最終合否欄の上限 48% → 36% と `.cl-judge-main`／`.cl-decision` の flex〔11-8 の 5〕は 4 タイルにも効く） | E8 dec39 に 4 タイルの 3 状態（人物像の導入前の記録＝`persona: null` の採用推奨・上長最終判断要、設定で人物像を OFF の上長最終判断要）× 担当者名 4 種（5・18・80・184 文字）の 12 通りを足した（5 タイルの 8 通りは従来どおり） | e2e E8（4 タイル: タイルは「…」で切れない・最終合否欄は 36% 以下・用紙からはみ出さない・最終合否欄とタイルの間 5px 以上・ストリップ 58px・18 文字の担当者名は切れない・5 文字より 80 文字の担当者名の欄が広い） |
+| 9 | 記入シートの印刷を本物の `window.print`（印刷ダイアログ）で通していなかった（E17 (9) はスタブ、PDF は `preparePaperSheet(true)`＋`page.pdf`） | 実装は変えていない。ヘッドレスの Chromium の本物の `window.print`（スタブなし。ダイアログを出さずに beforeprint → afterprint を送る）で通した: beforeprint の時点の印刷ホストは記入シート（beforeprint の自動切替で報告書に替えない・氏名は線）・afterprint で片付け・判定は走らない・面接日は変わらない。afterprint が来ないとき（スタブ）は 3 秒で片付け、前の印刷の 3 秒のタイマーが次の印刷の用紙を消さない（`afterPrintOnce` の 1 回だけ）ことを `page.clock` で確かめた。用紙の設定は `page.pdf` の引数で代用した（scratchpad `p12c/look/print2.js`）: CSS の用紙（A4 縦・余白 0）・A4・倍率 90%・背景なしは 1 ページ、Letter は 1 ページのまま下端（約 18mm）が切れる。`page.pdf` の余白の指定（10mm）は CSS の `@page` の余白 0 が優先されて出力が変わらず、実機の「余白: 最小／カスタム」の代わりにはならない。**実機の印刷ダイアログは未確認のまま**（下の手順） | e2e E17 (9) 2 件（本物の window.print の経路・3 秒の片付けと 1 回だけ） |
+
+実機（Edge / Chrome）の印刷ダイアログで確かめること（ヘッドレスでは確かめられない。報告書の印刷も同じ仕組み）:
+1. ① の「🖨 記入シート（手書き用）」→ 印刷プレビューが A4 縦 1 枚（2 枚目が無い）・罫線と □ が出る（用紙 A4・余白「デフォルト」・倍率 100%）
+2. 印刷プレビューを 3 秒以上開いたままにしてから印刷・PDF に保存しても、記入シートが出る（白紙・報告書にならない）。`window.print` がダイアログの間スクリプトを止めない環境では、3 秒の片付けが先に走るため
+3. キャンセルで閉じると画面は元のまま（① の入力・面接日が変わらない。印刷用の用紙が画面に残らない）
+4. ② の上部の同じボタン、③ の「🖨 A4 で印刷」（報告書）も 1〜3 と同じ
+5. 余白「最小」「カスタム」・倍率「ページに合わせる」にしたときに 1 枚に収まるか（収まらなければ README の「余白はデフォルト・倍率 100%」の案内のまま運用する）
+
+テスト件数: 単体 37 件（件数は同じ。#96 に確認を足した）・e2e E1〜E17・326 件（317 件から、E8 に 4 タイル 1 件、E17 に (1) 前書きの注記 1 件・(9) 面接日 1 件と本物の印刷 2 件・(12) ① だけ保存した導入前の記録 1 件・(13) 「1 対 1」1 件・使い方のほかの箇所 1 件・② の説明と状態 1 件の 9 件）。
+変異（各項目のテストが直す前のコードで FAIL すること）: scratchpad の作業コピー `p12c/mutA`（src を補完の前に戻し、4 タイルの列を `minmax(0,0.6fr) repeat(3,minmax(0,1fr))` に・`afterPrintOnce` の 1 回だけの印を外した版）で e2e 326 件中 13 件が FAIL（E8 の 4 タイル・E17 (1) の総合判断の説明と前書きの注記と入力前の状態・(2)・(4)・(9) の面接日の線 2 件と 3 秒の片付け・(12) の ① だけ保存した記録・(13) の 3 件）、ほかの 313 件は PASS。`p12c/mutB`（3 秒の片付けを外した版）は (9) の 3 秒の 1 件だけ FAIL。(9) の本物の window.print の確認と同じ手順（scratchpad `p12c/look/real17.js`）は、beforeprint の自動切替が記入シートを報告書に替える変異（`p12c/mutC`。beforeprint の `print-checklist` の条件を外す）で FAIL する（スタブで印刷する従来の確認では捕まらない）。単体 #96 は直す前の `normalizeRecord` で FAIL（「① だけ保存した導入前の記録」）。

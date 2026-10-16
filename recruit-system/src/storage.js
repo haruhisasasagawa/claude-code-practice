@@ -317,6 +317,9 @@
     } else out.items = U.deepClone(Array.isArray(base.items) ? base.items : []);
     out.keepPct = isNum(src.keepPct) ? Number(src.keepPct) : base.keepPct;
     out.rejectBelowPct = isNum(src.rejectBelowPct) ? Number(src.rejectBelowPct) : base.rejectBelowPct;
+    //   得点率の境界は判定（結果を下げる）に効くので、範囲外（0 ≦ 不採用推奨 ＜ そのまま ≦ 100 でない）なら 2 つとも既定に戻す
+    //   （設定画面は保存前の検証〔validateChecklist〕で止めるが、JSON の読み込み・保存済みの設定は検証を通らない。結果の設定〔onePointResult など〕と同じ扱い）
+    if (!(out.rejectBelowPct >= 0 && out.rejectBelowPct < out.keepPct && out.keepPct <= 100)) { out.keepPct = base.keepPct; out.rejectBelowPct = base.rejectBelowPct; }
     out.onePointResult = PERSONA_RESULT_VALUES.indexOf(src.onePointResult) >= 0 ? src.onePointResult : base.onePointResult;
     out.unscoredResult = PERSONA_RESULT_VALUES.indexOf(src.unscoredResult) >= 0 ? src.unscoredResult : base.unscoredResult;
     Object.keys(src).forEach(function (k) { if (!(k in out)) out[k] = U.deepClone(src[k]); });
@@ -325,15 +328,18 @@
 
   // ---- 確認点 rt_manner の移行（docs/SPEC-persona.md 1-6・D17。プロファイルだけ） ----
   //   「最低限の話し方、敬語が可能か」（rt_manner）は人物像の「言葉遣い・説明のわかりやすさ」と重なるため 2026-10-16 に既定の台本から外した。
-  //   保存済みの設定の台本（sections）が直前の既定（c0d20ce。rt_manner あり・説明と確認点に short なし）と同じなら、新しい既定の台本に置き換える
-  //   （編集した台本はそのまま。記録の台本〔checklistDef〕は移行しない）
+  //   保存済みの設定の台本（sections）が直前の既定（rt_manner あり）と同じなら、新しい既定の台本に置き換える
+  //   （編集した台本はそのまま。記録の台本〔checklistDef〕は移行しない）。直前の既定は 2 つの版がある:
+  //   - 2026-10-14〜15（df3b339〜c0d20ce）: 説明と確認点に short が無い（質問・合否連絡・記入欄の short はある）
+  //   - 2026-10-13〜14（6f32341〜95737b5）: どの項目にも short が無い（質問・合否連絡・記入欄の short は df3b339 で既定に足した。
+  //     fillChecklist の deepMerge は配列を保存値で置き換えるので、その版で保存した設定は今も short が無いまま）
   const MANNER_ITEM = { id: 'rt_manner', label: '最低限の話し方、敬語が可能か', hint: '面接全体を通して（台本1枚目の冒頭）' };
-  // 説明（explain）・確認点（rating）の項目の short を外した sections の JSON（直前の既定には説明・確認点の short が無かった）
-  function scriptSig(sections) {
+  // short を外した sections の JSON。all でなければ説明（explain）・確認点（rating）の項目だけ、all ならすべての項目から外す
+  function scriptSig(sections, all) {
     const secs = U.deepClone(Array.isArray(sections) ? sections : []);
     secs.forEach(function (sec) {
       (U.isObj(sec) && Array.isArray(sec.blocks) ? sec.blocks : []).forEach(function (b) {
-        if (!U.isObj(b) || (b.type !== 'explain' && b.type !== 'rating')) return;
+        if (!U.isObj(b) || (!all && b.type !== 'explain' && b.type !== 'rating')) return;
         (Array.isArray(b.items) ? b.items : []).forEach(function (it) { if (U.isObj(it)) delete it.short; });
       });
     });
@@ -347,7 +353,11 @@
     if (!rb || !Array.isArray(rb.items) || rb.items.some(function (it) { return U.isObj(it) && it.id === MANNER_ITEM.id; })) return false;
     rb.items.splice(1, 0, U.deepClone(MANNER_ITEM));
     const prevN = normalizeChecklistDef(Object.assign({}, base, { sections: prev }), base).sections;
-    return scriptSig(sections) === scriptSig(prevN);
+    if (scriptSig(sections) === scriptSig(prevN)) return true;
+    //   2026-10-13〜14 の版: short が 1 つも無い台本（short を全部外しても変わらない）が、short を全部外した直前の既定と同じ
+    //   （質問などの short を 1 つでも持つ台本は上の比較だけ＝質問の short を変えた台本は編集した台本として残す）
+    const bare = scriptSig(sections, true);
+    return bare === JSON.stringify(Array.isArray(sections) ? sections : []) && bare === scriptSig(prevN, true);
   }
 
   // 旧プロファイル（checklist なし・壊れた checklist）には既定の台本を補う。report を渡すと rt_manner の移行で report.mannerMoved を立てる
@@ -678,11 +688,12 @@
     const scores = U.isObj(rec.scores) ? rec.scores : {};
     const checklist = U.deepMerge(R.emptyChecklist(), U.isObj(rec.checklist) ? U.deepClone(rec.checklist) : {});
     ['header', 'values', 'notes'].forEach(function (k) { if (!U.isObj(checklist[k])) checklist[k] = k === 'header' ? R.emptyChecklist().header : {}; });
-    // 人物像の回答（docs/SPEC-persona.md 1-3・D2）: 明示の null は null（人物像を使わない記録）・object はそのまま・キーが無ければ、記録の台本に人物像があるときだけ {}、
-    //   無ければ null（v1・詳細モード・人物像の導入前の記録・壊れた値）。deepMerge は無い persona に {} を入れてしまうので元の値で決め直す
+    // 人物像の回答（docs/SPEC-persona.md 1-3・D2）: 明示の null は null（人物像を使わない記録）・object はそのまま・キーが無ければ、記録の台本に人物像があるとき、
+    //   または ② の回答がまだ無いとき（① だけ保存・評価し直す v1 など。守る保存時の判定が無く、これから人物像も入れる。11-9 補完 1）は {}、
+    //   ほか（② の回答がある人物像の導入前の記録・壊れた値）は null。deepMerge は無い persona に {} を入れてしまうので元の値で決め直す
     const rp = U.isObj(rec.checklist) ? rec.checklist.persona : undefined;
     const defHasPs = U.isObj(rec.checklistDef) && U.isObj(rec.checklistDef.persona);
-    checklist.persona = rp === null ? null : U.isObj(rp) ? U.deepClone(rp) : (rp === undefined && defHasPs ? {} : null);
+    checklist.persona = rp === null ? null : U.isObj(rp) ? U.deepClone(rp) : (rp === undefined && (defHasPs || !R.checklistHasInput(checklist)) ? {} : null);
     // 消極属性（2026-10-13 に削除）は読み飛ばす
     delete checklist.header.negatives;
     const step = Number(rec.step);
@@ -1202,8 +1213,9 @@
       '.cl-mode-sheet .cl-tile-v small{font-size:8.5px;font-weight:600;color:#5b6675;margin-left:1px}',
       '.cl-mode-sheet .cl-tile-s{font-size:8.5px;color:#3a4556;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-tile.is-ng .cl-tile-v{color:#b42318}',
-      //   人物像のタイルがあるとき（.has-ps）は 5 枚（docs/SPEC-persona.md 4-1。4 枚の規則は人物像を使わない記録用に残す）
-      '.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr))}',
+      //   人物像のタイルがあるとき（.has-ps）は 5 枚（docs/SPEC-persona.md 4-1。4 枚の規則は人物像を使わない記録用に残す）。
+      //   各タイルは中身（nowrap の値・補足）の幅より狭くしない（min-content）＝「上長最終判断要」「未入力 3・1点あり」を「…」で切らない
+      '.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(min-content,1.5fr) repeat(4,minmax(min-content,1fr))}',
       '.cl-mode-sheet .cl-tile-res{border-width:2px;padding:3px 10px}.cl-mode-sheet .cl-tile-res .cl-tile-v{font-size:14px;line-height:1.3}',
       '.cl-mode-sheet .cl-tile-res.t-ok{border-color:#0b7a55}.cl-mode-sheet .cl-tile-res.t-ok .cl-tile-v{color:#0b7a55}',
       '.cl-mode-sheet .cl-tile-res.t-warn{border-color:#c98a1b}.cl-mode-sheet .cl-tile-res.t-warn .cl-tile-v{color:#9a5b00}',
@@ -1214,6 +1226,9 @@
       // 最終合否（ストリップの右端）
       //   幅は結果ストリップの 36% まで（担当者名が改行できない長い文字列でも、左の 5 枚のタイルを潰さない。担当者・日付は「…」で切る。docs/SPEC-persona.md D10）
       '.cl-mode-sheet .cl-decision{flex:0 0 auto;min-width:0;max-width:36%;display:flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid #d5dbe3;border-radius:4px;background:#fff}',
+      //   タイルの列はタイルの中身の幅（min-content）より狭くならず、足りないときは最終合否欄のほうが縮む（担当者名を「…」で切る）。
+      //   タイルの列は flex-basis 0 で残りの幅に広がる（最終合否欄は中身の幅〔36% まで〕のまま。縮むのはタイルの中身が入らないときだけ）
+      '.cl-mode-sheet .cl-judge-main{flex-basis:0%;min-width:min-content}.cl-mode-sheet .cl-decision{flex-shrink:1}',
       '.cl-mode-sheet .cl-dec-stamp{flex:none;display:grid;place-items:center}.cl-mode-sheet .cl-dec-stamp .verdict-stamp{width:64px;height:41px;mix-blend-mode:multiply;filter:none}',
       '.cl-mode-sheet .cl-dec-meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}',
       '.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#5b6675}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}',
@@ -1235,12 +1250,11 @@
       '.cl-mode-sheet dl.cl-kv>div{display:grid;grid-template-columns:9.5em minmax(0,1fr);gap:6px;align-items:baseline;padding:3px 4px;border-bottom:1px solid #e6eaef}',
       '.cl-mode-sheet dl.cl-kv dt{font-size:8.5px;font-weight:600;color:#5b6675}',
       '.cl-mode-sheet dl.cl-kv dd{margin:0;min-width:0;font-weight:700;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}',
-      // 5. 確認点（○緑 △琥珀 ×赤 の丸バッジ。未入力は灰「—」。メモの列は 2026-10-16 に外した＝確認点のメモは面接メモ・所見の枠の 1 行。.cl-rt-nt は旧い保存 HTML 用）
+      // 5. 確認点（○緑 △琥珀 ×赤 の丸バッジ。未入力は灰「—」。メモの列は 2026-10-16 に外した＝確認点のメモは面接メモ・所見の枠の 1 行）
       '.cl-mode-sheet table.cl-rt{width:100%;border-collapse:collapse;table-layout:fixed}',
       '.cl-mode-sheet .cl-rt col.c-no{width:20px}.cl-mode-sheet .cl-rt col.c-lbl{width:auto}.cl-mode-sheet .cl-rt col.c-mk{width:30px}',
       '.cl-mode-sheet .cl-rt td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:middle}',
       '.cl-mode-sheet .cl-rt-no{font-size:8.5px;color:#5b6675;text-align:center}.cl-mode-sheet .cl-rt-lbl{font-weight:600}.cl-mode-sheet .cl-rt-mk{text-align:center}',
-      '.cl-mode-sheet .cl-rt-nt{color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-mark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:10px;font-weight:800;line-height:1;color:#fff;background:#8a94a3}',
       '.cl-mode-sheet .cl-mark.m-good{background:#0b7a55}.cl-mode-sheet .cl-mark.m-fair{background:#c98a1b}.cl-mode-sheet .cl-mark.m-poor{background:#b42318}.cl-mode-sheet .cl-mark.m-none{color:#8a94a3;background:#eef1f5}',
       // 5b. 確認点｜人物像の 2 カラム（50:50）・人物像の表（項目名・5 段の目盛り・点。1 点は赤・2 点は琥珀・3〜5 点は濃い灰色。docs/SPEC-persona.md 4-2）
@@ -1456,7 +1470,8 @@
       '.pp-t .pp-mk{white-space:nowrap;text-align:right;width:62px}',
       '.pp-mk span{display:inline-block;width:18px;text-align:center;font-size:11.5px;font-weight:700}',
       '.pp-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 8px;margin:0}',
-      '.pp-fields>div{display:flex;align-items:baseline;gap:4px;min-width:0;padding:2px 3px;border-bottom:1px solid #e6eaef}',
+      //   記入欄は 2 列。見出しと □選択肢 が 1 行に入らない欄（既定の「短期／長期の希望 □短期希望 □長期希望」）は □選択肢 を次の行へ（欄からはみ出して隣の欄の見出しとつながらない）
+      '.pp-fields>div{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 4px;min-width:0;padding:2px 3px;border-bottom:1px solid #e6eaef}',
       '.pp-fields dt{flex:none;font-size:8.5px;font-weight:700;color:#5b6675}',
       '.pp-fields dd{margin:0;min-width:0;flex:1 1 auto;white-space:nowrap}',
       '.pp-fields dd .pp-line{width:100%}',
@@ -1656,7 +1671,7 @@
       });
       var dec = canDecide ? document.getElementById("a4Decision") : null;
       if (dec) mark(dec, "decision", D.label || "最終合否");
-      each(sheet.querySelectorAll(".cl-nm-v,.cl-rt-nt"), function (el) {
+      each(sheet.querySelectorAll(".cl-nm-v"), function (el) {
         if (el.classList.contains("cl-cut")) mark(el, "memo", "メモの全文を表示"); else if (el.getAttribute("data-a4-t")) unmark(el);
       });
       var ref = sheet.querySelector(".cl-nm-ref");
@@ -1710,7 +1725,7 @@
     function changed() { dirty = true; saved = false; render(); }
 
     function memoOf(el) {
-      var notes = (rec.checklist && rec.checklist.notes) || {}, row = el.closest(".cl-nm-row"), tr = el.closest("tr[data-cl-item]"), k = "", v = null, b;
+      var notes = (rec.checklist && rec.checklist.notes) || {}, row = el.closest(".cl-nm-row"), k = "", v = null, b;
       if (row) {
         k = (row.querySelector(".cl-nm-k") || {}).textContent || "メモ";
         b = row.getAttribute("data-cl-block");
@@ -1718,9 +1733,6 @@
         else if (row.classList.contains("cl-nm-iv")) v = rec.interviewNotes;
         else if (row.classList.contains("cl-nm-memo")) v = (rec.applicant || {}).reviewerNotes;
         else if (row.classList.contains("cl-nm-rt")) { v = []; each(row.querySelectorAll(".cl-nm-rt-i"), function (s) { v.push(s.textContent); }); v = v.join("\n"); }
-      } else if (tr) {
-        k = ((tr.querySelector(".cl-rt-no") || {}).textContent || "") + " " + ((tr.querySelector(".cl-rt-lbl") || {}).textContent || "") + " のメモ";
-        v = notes[tr.getAttribute("data-cl-item")];
       }
       if (v == null || v === "") v = el.textContent;
       return { k: k || "メモ", v: String(v) };

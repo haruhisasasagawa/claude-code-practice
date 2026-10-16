@@ -287,7 +287,7 @@
       return parts.join('|');
     }).join('\n');
     const personaHtml = '<h3 class="sub" id="s-persona">人物像（1〜5 点）</h3>' +
-      '<div class="hint">' + stepRef(3) + ' の総評で項目ごとに 1〜5 点（' + [0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・') + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</div>' +
+      '<div class="hint">' + stepRef(3) + ' の総評で項目ごとに 1〜5 点（' + esc([0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・')) + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</div>' +
       sCheck('checklist.persona.enabled', '人物像を使う', 'OFF にすると ' + stepRef(3) + ' に出さず、判定にも使いません。保存済みの報告書（HTML）は保存したときのままです。') +
       '<div class="s-cl-max" id="clPsMaxNote">人物像 <b>' + psItems.length + '</b> 項目 × 5 点 ＝ 満点 <b>' + psMax + '</b> 点</div>' +
       '<div class="field-row">' + sInput('checklist.persona.title', '見出し（' + stepRef(3) + ' と報告書）') + '</div>' +
