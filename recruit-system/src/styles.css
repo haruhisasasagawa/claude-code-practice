@@ -382,6 +382,10 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .help-step .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 13px; margin-bottom: 8px; }
 .help-step h3 { font-size: 14.5px; margin-bottom: 4px; }
 .help-step p { font-size: 13px; color: var(--muted); }
+/* 使い方の上と下の「← （手順）の画面に戻る」 */
+.help-back { display: flex; margin-bottom: 12px; }
+.help-back[data-where="bottom"] { margin: 12px 0 0; }
+@media print { .help-back { display: none !important; } }
 
 /* ---------- トースト ---------- */
 .toast {
@@ -478,10 +482,10 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 
 /* ---------- 準備・報告書（docs/SPEC-script-mode.md・docs/SPEC-flow.md 2 章・5 章） ---------- */
 /* 準備の応募者（1 枚・3 行。docs/SPEC-script-mode.md 12 章） */
-#scriptApplicantCard { padding: 16px 20px 4px; }
-#scriptApplicantCard .card-head { margin-bottom: 10px; align-items: baseline; }
+#scriptApplicantCard { padding: 14px 20px 2px; }
+#scriptApplicantCard .card-head { margin-bottom: 8px; align-items: baseline; }
 #scriptApplicantCard .card-head p { width: auto; flex: 1; min-width: 14em; }
-#scriptApplicantCard .field { margin-bottom: 12px; }
+#scriptApplicantCard .field { margin-bottom: 10px; }
 #scriptApplicantCard textarea { min-height: 0; resize: vertical; }
 /* 1 行目は flex（卒業予定年月は学生の区分のときだけ末尾に出る）。狭くて入らないときだけ卒業予定年月が次の行へ回る */
 .sa-row1 { display: flex; flex-wrap: wrap; gap: 0 10px; }
@@ -524,8 +528,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .field > .cl-seg { align-self: flex-start; }
 .cl-must-row { grid-template-columns: minmax(0, 1fr) auto 4.6em; }
 
-.cl-sec { scroll-margin-top: 120px; }
-#clOverall { scroll-margin-top: 120px; }
 .cl-no { display: inline-block; margin-right: 6px; color: var(--accent); font-weight: 800; }
 .cl-sec-state:empty { display: none; }
 .cl-skip-note { display: none; font-size: 12px; font-weight: 700; color: var(--danger); align-self: center; }
@@ -592,44 +594,62 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .step-lead > b { flex: none; padding: 1px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 800; }
 .judge-layout.no-summary { grid-template-columns: minmax(0, 1fr); }
 .judge-layout.no-summary .summary { display: none; }
-/* 操作行: 左に戻る・右端に主ボタン（面接・評価は画面の下に固定） */
+/* 操作行: 左に戻る・右端に主ボタン（4 つの画面とも画面の右下の同じ位置）。狭くて折り返したときも主ボタンは右端（margin-left:auto） */
+/*   DOM は主ボタンが先（Tab で最後の入力欄の次は主ボタン。Enter で前に戻らない）。見た目の並びは order: 左に戻る・記入シート（.ff-start）→ 右にほかのボタン → 右端に主ボタン（docs/SPEC-flow.md 15 章） */
 .flow-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.flow-foot .spacer { flex: 1 1 auto; }
-.flow-foot.is-sticky { position: sticky; bottom: 0; z-index: 12; padding: 12px 0; background: linear-gradient(to bottom, transparent, var(--bg) 12px); }
+.flow-foot .spacer { flex: 1 1 auto; order: 1; }
+.flow-foot > .btn { order: 2; }
+.flow-foot > .btn.ff-start { order: 0; }
+.flow-foot > .btn.primary.lg { order: 3; margin-left: auto; }
+.flow-foot.is-sticky { position: sticky; bottom: 0; z-index: 12; padding: 8px 0 10px; background: linear-gradient(to bottom, transparent, var(--bg) 8px); }
+/*   準備・報告書（右サマリーのある画面）は画面の下端に固定して、面接・評価の操作行と同じ位置にする（左右は本文の余白 28px。15 章）。
+     本文の下に操作行の高さ（--flow-foot-h）の余白を取り、最後のカード（押印・最終合否）・右サマリー・著作権の行が操作行に隠れないようにする */
+.flow-foot.is-pinned { position: fixed; left: calc(var(--sidebar-w) + 28px); right: 28px; bottom: 0; z-index: 12; padding: 8px 0 10px; background: linear-gradient(to bottom, transparent, var(--bg) 8px); }
+html.foot-pin #view-judge { padding-bottom: calc(var(--flow-foot-h, 64px) + 12px); }
+html.foot-pin { scroll-padding-top: calc(var(--topbar-h, 57px) + 8px); scroll-padding-bottom: calc(var(--flow-foot-h, 64px) + 8px); }
+#stepContent[data-step="1"] ~ .summary { position: static; }   /* 準備の右サマリーは固定しない（低い画面で操作行に掛かっても、スクロールすれば見える） */
 /*   面接・評価は本文の高さを画面いっぱいにして、内容が短い段階でも操作行（主ボタン）を画面の右下の同じ位置に置く（docs/SPEC-flow.md G8） */
-/*   画面の下の余白と著作権の 1 行は面接・評価では出さない（出すと短い段階でも縦にスクロールする） */
-html.flow-pad #view-judge { padding-bottom: 0; }
+/*   画面の下の余白と著作権の 1 行は面接・評価では出さない（出すと短い段階でも縦にスクロールする）。上の余白・部品の間も詰める（ノート PC の表示の高さ 650px 前後で ②〜⑤ がスクロールなし。14 章） */
+html.flow-pad #view-judge { padding-top: 14px; padding-bottom: 0; }
 html.flow-pad #view-judge > .view-footer { display: none; }
-html.flow-pad #stepContent { min-height: calc(100vh - var(--topbar-h, 57px) - 22px); }
+html.flow-pad #stepContent { min-height: calc(100vh - var(--topbar-h, 57px) - 14px); }
 html.flow-pad #stepContent > .flow-foot.is-sticky { margin-top: auto; }
+#stepContent[data-step="1"], html.flow-pad #stepContent { gap: 12px; }
 .btn.lg { padding: 11px 22px; font-size: 15.5px; border-radius: 9px; }
-@media (min-width: 841px) { html.flow-pad { scroll-padding-top: calc(var(--topbar-h, 57px) + 80px); scroll-padding-bottom: 84px; } }
+/*   Tab のフォーカス・クリックの先が上の帯（必須条件の案内・結果カードで高さが変わる。--flow-top-h）・下の操作行に隠れないように */
+@media (min-width: 841px) { html.flow-pad { scroll-padding-top: calc(var(--topbar-h, 57px) + var(--flow-top-h, 72px) + 8px); scroll-padding-bottom: 84px; } }
 /* はじめての方へ（準備の画面。初回だけ） */
-.intro { padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: var(--radius); background: var(--accent-soft); }
+.intro { padding: 9px 16px 10px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: var(--radius); background: var(--accent-soft); }
+/*   見出し・説明・［使い方を見る］［わかった］は 1 行（ノート PC の表示の高さでも「面接を始める →」まで見える。14 章） */
+.intro-head { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .intro h2 { font-size: 15px; font-weight: 800; }
-.intro-lead { margin: 2px 0 8px; font-size: 13px; color: var(--muted); }
+.intro-lead { margin: 0; flex: 1 1 12em; font-size: 13px; color: var(--muted); }
 .intro-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; counter-reset: intro; }
-.intro-steps li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface); font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.intro-steps li { display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--surface); font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .intro-steps li b { font-size: 14px; color: var(--text); }
 .intro-steps li b::before { counter-increment: intro; content: counter(intro) " "; color: var(--accent); }
-.intro-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.intro-foot { display: flex; justify-content: flex-end; gap: 8px; margin-left: auto; }
 @media (max-width: 840px) { .intro-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .intro-steps { grid-template-columns: minmax(0, 1fr); } }
 /* 面接（1 段階ずつの進行画面）: 上の帯（段階のチップ・タイマー・必須条件の案内。トップバーの下に固定）・本文（1100px 以上は 2 列） */
-.iv-top, .ev-top { position: sticky; top: var(--topbar-h, 57px); z-index: 15; display: flex; flex-direction: column; gap: 8px; margin-top: -8px; padding-top: 8px; background: var(--bg); }
-.iv-bar { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.iv-top, .ev-top { position: sticky; top: var(--topbar-h, 57px); z-index: 15; display: flex; flex-direction: column; gap: 6px; margin-top: -6px; padding-top: 6px; background: var(--bg); }
+.iv-bar { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .iv-chips { display: flex; gap: 5px; flex-wrap: wrap; min-width: 0; }
-.iv-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 3px 11px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.iv-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .iv-chip:hover { background: var(--surface-3); }
 .iv-chip-s { font-size: 11.5px; font-weight: 800; }
 .iv-chip-s:empty { display: none; }
 .iv-chip.is-done .iv-chip-s { color: var(--ok); }
+.iv-chip.is-unconf { border-color: var(--warn); }
+.iv-chip.is-unconf .iv-chip-s { color: var(--warn-text); }
 .iv-chip.is-skip { border-style: dashed; color: var(--muted); }
 .iv-chip.is-skip .iv-chip-s { color: var(--danger); }
 .iv-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .iv-chip.is-current .iv-chip-s { color: inherit; }
-.iv-timer { margin-left: auto; display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.iv-timer { margin-left: auto; display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .iv-timer b { font-size: 20px; font-weight: 800; color: var(--text); }
+/*   目安（「/ 目安 10分」）は経過と並べて読む数字なので本文の色・14px（超過の色は下の .is-over・.is-late） */
+.iv-timer small { font-size: 14px; font-weight: 700; color: var(--text); }
 .iv-t-stage { padding: 1px 10px; border-radius: 8px; }
 .iv-t-stage.is-over { background: var(--warn-soft); }
 .iv-t-stage.is-over b, .iv-t-stage.is-over small { color: var(--warn-text); }
@@ -638,16 +658,20 @@ html.flow-pad #stepContent > .flow-foot.is-sticky { margin-top: auto; }
 .iv-must { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 14px; border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent); border-radius: var(--radius-sm); background: var(--danger-soft); font-size: 14.5px; font-weight: 700; line-height: 1.5; }
 .iv-must .ico { color: var(--danger); }
 .iv-must .btn { margin-left: auto; }
-.iv-stage { padding: 14px 22px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
-.iv-stage-head { display: flex; align-items: baseline; gap: 4px 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.iv-must-short { display: none; }
+/*   スマホの幅は短い文（必須条件が不一致＋案内先のボタン）で 1〜2 行に（タイマーと一緒にトップバーの下に固定する。docs/SPEC-flow.md 15 章） */
+@media (max-width: 480px) { #ivMustAlertText { display: none; } .iv-must-short { display: block; flex: 1 1 auto; min-width: 0; } }
+.iv-stage { padding: 12px 20px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.iv-stage-head { display: flex; align-items: baseline; gap: 4px 14px; flex-wrap: wrap; margin-bottom: 8px; }
 .iv-stage-head h2 { font-size: 20px; font-weight: 800; outline: none; }
 .iv-no { color: var(--accent); margin-right: 6px; }
 .iv-who { margin-left: auto; min-width: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .iv-who b { font-size: 15px; color: var(--text); }
 .iv-lead { width: 100%; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .iv-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 32px; align-items: start; }
-@media (min-width: 1100px) { .iv-cols.is-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-.iv-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/*   列の幅の比は既定で 1:1。① のように質問のカードを動かせない段階は app.js ivWeightCols が --iv-cols（2:3 など）で高さをそろえる（15 章） */
+@media (min-width: 1100px) { .iv-cols.is-two { grid-template-columns: var(--iv-cols, minmax(0, 1fr) minmax(0, 1fr)); } }
+.iv-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .iv-grp { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .iv-grp.k-check { --k: var(--k-check); }
 .iv-grp.k-say { --k: var(--k-say); }
@@ -679,9 +703,13 @@ html.flow-pad #stepContent > .flow-foot.is-sticky { margin-top: auto; }
 .btn.iv-said { min-width: 8.5em; padding: 7px 16px; font-size: 14.5px; }
 .btn.iv-said[aria-pressed="true"] { background: var(--ok-strong); border-color: var(--ok-strong); color: var(--on-status); }
 .btn.iv-said[aria-pressed="mixed"] { background: var(--warn-soft); border-color: var(--warn); color: var(--warn-text); }
-.iv-q { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-left: 3px solid var(--k-ask); border-radius: var(--radius-sm); background: var(--surface-2); }
-.iv-q-text { font-size: 17px; font-weight: 700; line-height: 1.55; overflow-wrap: anywhere; }
-textarea.iv-q-memo { min-height: 0; height: 42px; resize: none; overflow: hidden; padding: 8px 12px; font-size: 15px; line-height: 1.5; }
+.iv-q { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--k-ask); border-radius: var(--radius-sm); background: var(--surface-2); }
+.iv-q-text { font-size: 17px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+textarea.iv-q-memo { min-height: 0; height: 38px; resize: none; overflow: hidden; padding: 6px 12px; font-size: 15px; line-height: 1.5; }
+.iv-ask-fields { padding-bottom: 2px; }
+/*   操作行に隠れている項目の数（▼ 下にあと n 項目。押すとその分スクロール）。狭い画面は 1 列で長いので出さない */
+.btn.iv-more { border-color: var(--warn); background: var(--warn-soft); color: var(--warn-text); font-weight: 700; }
+.btn.iv-more:hover { background: var(--warn-soft); filter: brightness(.97); }
 .iv-oldmemo, .iv-memo { margin-bottom: 0; }
 .iv-oldmemo textarea, .iv-memo textarea { min-height: 60px; }
 .iv-flow { padding: 8px 12px; border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 13.5px; font-weight: 600; }
@@ -700,6 +728,12 @@ textarea.iv-q-memo { min-height: 0; height: 42px; resize: none; overflow: hidden
 .ev-time-k { font-weight: 700; color: var(--text); }
 .ev-time input { width: 5.5em; min-width: 0; padding: 5px 8px; }
 .ev-time-st { display: inline-flex; gap: 10px; flex-wrap: wrap; }
+/*   常に見える 1 行（紙から転記した面接・中断した面接は実際の分を）・目安から大きく外れているときは欄を琥珀に（結果カードの「面接時間を確かめてください」と一緒に。15 章） */
+.ev-time-hint { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
+.ev-time.is-check input { border-color: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.ev-time.is-check .ev-time-hint { color: var(--warn-text); font-weight: 700; }
+.ev-res-time { width: 100%; padding: 0; border: 0; background: none; color: var(--warn-text); font: inherit; font-size: 13px; font-weight: 700; text-align: left; cursor: pointer; }
+.ev-res-time:hover { text-decoration: underline; }
 .ev-sec .card-head { align-items: baseline; margin-bottom: 10px; }
 .ev-sec-time { font-size: 12.5px; color: var(--muted); }
 .ev-fix { margin-left: auto; }
@@ -728,6 +762,18 @@ dl.ev-qa .is-empty dd { color: var(--muted); }
 .is-missing .ev-miss { display: inline-flex; }
 @media (max-width: 840px) {
   .iv-top, .ev-top { position: static; margin-top: 0; padding-top: 0; }
+  /* 面接: 段階のチップはスクロールで流し、タイマーと必須条件の案内だけを細い帯にしてトップバーの下に固定する（質問しているあいだも経過と不一致の案内が見える。
+     docs/SPEC-flow.md 15 章。それまでは上の帯ごと固定しなかった）。.iv-top・.iv-bar は箱を作らない（タイマー・案内が #stepContent の中で固定できる） */
+  .iv-top, .iv-bar { display: contents; }
+  .iv-timer { position: sticky; top: var(--topbar-h, 57px); z-index: 15; padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }
+  .iv-timer b { font-size: 17px; }
+  .iv-timer small { font-size: 13px; }
+  .iv-must { position: sticky; top: calc(var(--topbar-h, 57px) + var(--iv-timer-h, 34px)); z-index: 15; flex-wrap: nowrap; gap: 4px 8px; padding: 5px 10px; font-size: 13px; line-height: 1.45; }
+  #ivMustAlertText { flex: 1 1 auto; min-width: 0; }
+  .iv-must .btn { flex: none; }
+  html.flow-pad { scroll-padding-top: calc(var(--topbar-h, 57px) + var(--flow-top-h, 0px) + 8px); scroll-padding-bottom: calc(var(--flow-foot-h, 64px) + 8px); }
+  .flow-foot.is-pinned { left: 16px; right: 16px; }
+  .btn.iv-more { display: none; }
   .iv-timer { margin-left: 0; }
   .iv-fields { grid-template-columns: minmax(0, 1fr); }
   .iv-stage { padding: 12px 14px 14px; }

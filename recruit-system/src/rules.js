@@ -323,7 +323,8 @@
     (Array.isArray(def.sections) ? def.sections : []).filter(function (s) { return U.isObj(s); }).forEach(function (sec, i) {
       const minutes = Math.max(0, Math.floor(num(sec.minutes, 0)));
       minutesTotal += minutes;
-      let mustMismatch = 0, gradable = 0, answered = 0, checkable = 0, checked = 0;
+      //   mustUnknown: 未確認の必須条件の数。input: 面接の画面で付ける入力（必須条件・説明・合否連絡・記入欄・質問のメモ・ブロックのメモ。確認点とそのメモは評価の画面なので数えない）が 1 つでもある
+      let mustMismatch = 0, mustUnknown = 0, input = false;
       const blocks = (Array.isArray(sec.blocks) ? sec.blocks : []).filter(function (b) { return U.isObj(b); }).map(function (b) {
         const items = (Array.isArray(b.items) ? b.items : []).filter(function (it) { return U.isObj(it); }).map(function (it) {
           const r = Object.assign({}, it);
@@ -332,23 +333,23 @@
           if (b.type === 'must') {
             const v = mustValue(cl, it.id), mv = MUST_VALUES[v];
             r.value = v; r.valueLabel = mv.label; r.mark = mv.mark; r.tone = mv.tone;
-            gradable++; if (v) answered++;
+            if (v) input = true; else mustUnknown++;
             if (v === 'mismatch') mustMismatch++;
             r.effective = mv.label;
           } else if (b.type === 'rating') {
             const v = ratingValue(cl, it.id), rm = RATING_MARKS[v];
             r.value = v; r.mark = rm ? rm.mark : ''; r.points = rm ? rm.points : null; r.tone = rm ? rm.tone : 'muted';
-            gradable++; if (v) answered++;
             r.effective = r.mark;
           } else if (b.type === 'explain' || b.type === 'notify') {
             r.value = vals[it.id] === true;
             r.dim = b.type === 'explain' && it.shortOnly === true && posting !== 'short';
-            checkable++; if (r.value) checked++;
+            if (r.value) input = true;
             r.effective = r.value;
           } else if (b.type === 'fields') {
             const v = clStr(vals[it.id]);
             r.value = v;
             r.effective = v;
+            if (v.trim()) input = true;
             if (it.kind === 'choice') {
               const opt = (Array.isArray(it.options) ? it.options : []).find(function (x) { return x && x.value === r.effective; });
               r.effectiveLabel = opt ? clStr(opt.label) : clStr(r.effective);
@@ -356,9 +357,11 @@
           } else {
             r.value = vals[it.id] == null ? '' : vals[it.id];
             r.effective = r.value;
+            if (b.type === 'question' && r.note.trim()) input = true;
           }
           return r;
         });
+        if (b.type !== 'rating' && clStr(notes[b.id]).trim()) input = true;
         return {
           id: b.id, type: b.type, title: clStr(b.title), note: clStr(b.note), memo: b.memo === true, memoLabel: clStr(b.memoLabel),
           memoText: clStr(notes[b.id]), items: items
@@ -369,9 +372,7 @@
         id: sec.id, no: no, noMark: circled(no), title: clStr(sec.title), minutes: minutes, minutesMax: sec.minutesMax === true,
         minutesText: minutes ? (sec.minutesMax === true ? '最大' : '') + minutes + '分' : '',
         page: Math.max(1, Math.floor(num(sec.page, 1))), lead: clStr(sec.lead),
-        mustMismatch: mustMismatch,
-        done: gradable ? answered === gradable : (checkable ? checked === checkable : false),
-        answered: answered, gradable: gradable,
+        mustMismatch: mustMismatch, mustUnknown: mustUnknown, input: input,
         blocks: blocks
       });
     });

@@ -390,6 +390,10 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .help-step .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 13px; margin-bottom: 8px; }
 .help-step h3 { font-size: 14.5px; margin-bottom: 4px; }
 .help-step p { font-size: 13px; color: var(--muted); }
+/* 使い方の上と下の「← （手順）の画面に戻る」 */
+.help-back { display: flex; margin-bottom: 12px; }
+.help-back[data-where="bottom"] { margin: 12px 0 0; }
+@media print { .help-back { display: none !important; } }
 
 /* ---------- トースト ---------- */
 .toast {
@@ -486,10 +490,10 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 
 /* ---------- 準備・報告書（docs/SPEC-script-mode.md・docs/SPEC-flow.md 2 章・5 章） ---------- */
 /* 準備の応募者（1 枚・3 行。docs/SPEC-script-mode.md 12 章） */
-#scriptApplicantCard { padding: 16px 20px 4px; }
-#scriptApplicantCard .card-head { margin-bottom: 10px; align-items: baseline; }
+#scriptApplicantCard { padding: 14px 20px 2px; }
+#scriptApplicantCard .card-head { margin-bottom: 8px; align-items: baseline; }
 #scriptApplicantCard .card-head p { width: auto; flex: 1; min-width: 14em; }
-#scriptApplicantCard .field { margin-bottom: 12px; }
+#scriptApplicantCard .field { margin-bottom: 10px; }
 #scriptApplicantCard textarea { min-height: 0; resize: vertical; }
 /* 1 行目は flex（卒業予定年月は学生の区分のときだけ末尾に出る）。狭くて入らないときだけ卒業予定年月が次の行へ回る */
 .sa-row1 { display: flex; flex-wrap: wrap; gap: 0 10px; }
@@ -532,8 +536,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .field > .cl-seg { align-self: flex-start; }
 .cl-must-row { grid-template-columns: minmax(0, 1fr) auto 4.6em; }
 
-.cl-sec { scroll-margin-top: 120px; }
-#clOverall { scroll-margin-top: 120px; }
 .cl-no { display: inline-block; margin-right: 6px; color: var(--accent); font-weight: 800; }
 .cl-sec-state:empty { display: none; }
 .cl-skip-note { display: none; font-size: 12px; font-weight: 700; color: var(--danger); align-self: center; }
@@ -600,44 +602,62 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .step-lead > b { flex: none; padding: 1px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 800; }
 .judge-layout.no-summary { grid-template-columns: minmax(0, 1fr); }
 .judge-layout.no-summary .summary { display: none; }
-/* 操作行: 左に戻る・右端に主ボタン（面接・評価は画面の下に固定） */
+/* 操作行: 左に戻る・右端に主ボタン（4 つの画面とも画面の右下の同じ位置）。狭くて折り返したときも主ボタンは右端（margin-left:auto） */
+/*   DOM は主ボタンが先（Tab で最後の入力欄の次は主ボタン。Enter で前に戻らない）。見た目の並びは order: 左に戻る・記入シート（.ff-start）→ 右にほかのボタン → 右端に主ボタン（docs/SPEC-flow.md 15 章） */
 .flow-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.flow-foot .spacer { flex: 1 1 auto; }
-.flow-foot.is-sticky { position: sticky; bottom: 0; z-index: 12; padding: 12px 0; background: linear-gradient(to bottom, transparent, var(--bg) 12px); }
+.flow-foot .spacer { flex: 1 1 auto; order: 1; }
+.flow-foot > .btn { order: 2; }
+.flow-foot > .btn.ff-start { order: 0; }
+.flow-foot > .btn.primary.lg { order: 3; margin-left: auto; }
+.flow-foot.is-sticky { position: sticky; bottom: 0; z-index: 12; padding: 8px 0 10px; background: linear-gradient(to bottom, transparent, var(--bg) 8px); }
+/*   準備・報告書（右サマリーのある画面）は画面の下端に固定して、面接・評価の操作行と同じ位置にする（左右は本文の余白 28px。15 章）。
+     本文の下に操作行の高さ（--flow-foot-h）の余白を取り、最後のカード（押印・最終合否）・右サマリー・著作権の行が操作行に隠れないようにする */
+.flow-foot.is-pinned { position: fixed; left: calc(var(--sidebar-w) + 28px); right: 28px; bottom: 0; z-index: 12; padding: 8px 0 10px; background: linear-gradient(to bottom, transparent, var(--bg) 8px); }
+html.foot-pin #view-judge { padding-bottom: calc(var(--flow-foot-h, 64px) + 12px); }
+html.foot-pin { scroll-padding-top: calc(var(--topbar-h, 57px) + 8px); scroll-padding-bottom: calc(var(--flow-foot-h, 64px) + 8px); }
+#stepContent[data-step="1"] ~ .summary { position: static; }   /* 準備の右サマリーは固定しない（低い画面で操作行に掛かっても、スクロールすれば見える） */
 /*   面接・評価は本文の高さを画面いっぱいにして、内容が短い段階でも操作行（主ボタン）を画面の右下の同じ位置に置く（docs/SPEC-flow.md G8） */
-/*   画面の下の余白と著作権の 1 行は面接・評価では出さない（出すと短い段階でも縦にスクロールする） */
-html.flow-pad #view-judge { padding-bottom: 0; }
+/*   画面の下の余白と著作権の 1 行は面接・評価では出さない（出すと短い段階でも縦にスクロールする）。上の余白・部品の間も詰める（ノート PC の表示の高さ 650px 前後で ②〜⑤ がスクロールなし。14 章） */
+html.flow-pad #view-judge { padding-top: 14px; padding-bottom: 0; }
 html.flow-pad #view-judge > .view-footer { display: none; }
-html.flow-pad #stepContent { min-height: calc(100vh - var(--topbar-h, 57px) - 22px); }
+html.flow-pad #stepContent { min-height: calc(100vh - var(--topbar-h, 57px) - 14px); }
 html.flow-pad #stepContent > .flow-foot.is-sticky { margin-top: auto; }
+#stepContent[data-step="1"], html.flow-pad #stepContent { gap: 12px; }
 .btn.lg { padding: 11px 22px; font-size: 15.5px; border-radius: 9px; }
-@media (min-width: 841px) { html.flow-pad { scroll-padding-top: calc(var(--topbar-h, 57px) + 80px); scroll-padding-bottom: 84px; } }
+/*   Tab のフォーカス・クリックの先が上の帯（必須条件の案内・結果カードで高さが変わる。--flow-top-h）・下の操作行に隠れないように */
+@media (min-width: 841px) { html.flow-pad { scroll-padding-top: calc(var(--topbar-h, 57px) + var(--flow-top-h, 72px) + 8px); scroll-padding-bottom: 84px; } }
 /* はじめての方へ（準備の画面。初回だけ） */
-.intro { padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: var(--radius); background: var(--accent-soft); }
+.intro { padding: 9px 16px 10px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: var(--radius); background: var(--accent-soft); }
+/*   見出し・説明・［使い方を見る］［わかった］は 1 行（ノート PC の表示の高さでも「面接を始める →」まで見える。14 章） */
+.intro-head { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .intro h2 { font-size: 15px; font-weight: 800; }
-.intro-lead { margin: 2px 0 8px; font-size: 13px; color: var(--muted); }
+.intro-lead { margin: 0; flex: 1 1 12em; font-size: 13px; color: var(--muted); }
 .intro-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; counter-reset: intro; }
-.intro-steps li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface); font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.intro-steps li { display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--surface); font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .intro-steps li b { font-size: 14px; color: var(--text); }
 .intro-steps li b::before { counter-increment: intro; content: counter(intro) " "; color: var(--accent); }
-.intro-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.intro-foot { display: flex; justify-content: flex-end; gap: 8px; margin-left: auto; }
 @media (max-width: 840px) { .intro-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .intro-steps { grid-template-columns: minmax(0, 1fr); } }
 /* 面接（1 段階ずつの進行画面）: 上の帯（段階のチップ・タイマー・必須条件の案内。トップバーの下に固定）・本文（1100px 以上は 2 列） */
-.iv-top, .ev-top { position: sticky; top: var(--topbar-h, 57px); z-index: 15; display: flex; flex-direction: column; gap: 8px; margin-top: -8px; padding-top: 8px; background: var(--bg); }
-.iv-bar { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.iv-top, .ev-top { position: sticky; top: var(--topbar-h, 57px); z-index: 15; display: flex; flex-direction: column; gap: 6px; margin-top: -6px; padding-top: 6px; background: var(--bg); }
+.iv-bar { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .iv-chips { display: flex; gap: 5px; flex-wrap: wrap; min-width: 0; }
-.iv-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 3px 11px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.iv-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .iv-chip:hover { background: var(--surface-3); }
 .iv-chip-s { font-size: 11.5px; font-weight: 800; }
 .iv-chip-s:empty { display: none; }
 .iv-chip.is-done .iv-chip-s { color: var(--ok); }
+.iv-chip.is-unconf { border-color: var(--warn); }
+.iv-chip.is-unconf .iv-chip-s { color: var(--warn-text); }
 .iv-chip.is-skip { border-style: dashed; color: var(--muted); }
 .iv-chip.is-skip .iv-chip-s { color: var(--danger); }
 .iv-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .iv-chip.is-current .iv-chip-s { color: inherit; }
-.iv-timer { margin-left: auto; display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.iv-timer { margin-left: auto; display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .iv-timer b { font-size: 20px; font-weight: 800; color: var(--text); }
+/*   目安（「/ 目安 10分」）は経過と並べて読む数字なので本文の色・14px（超過の色は下の .is-over・.is-late） */
+.iv-timer small { font-size: 14px; font-weight: 700; color: var(--text); }
 .iv-t-stage { padding: 1px 10px; border-radius: 8px; }
 .iv-t-stage.is-over { background: var(--warn-soft); }
 .iv-t-stage.is-over b, .iv-t-stage.is-over small { color: var(--warn-text); }
@@ -646,16 +666,20 @@ html.flow-pad #stepContent > .flow-foot.is-sticky { margin-top: auto; }
 .iv-must { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 14px; border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent); border-radius: var(--radius-sm); background: var(--danger-soft); font-size: 14.5px; font-weight: 700; line-height: 1.5; }
 .iv-must .ico { color: var(--danger); }
 .iv-must .btn { margin-left: auto; }
-.iv-stage { padding: 14px 22px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
-.iv-stage-head { display: flex; align-items: baseline; gap: 4px 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.iv-must-short { display: none; }
+/*   スマホの幅は短い文（必須条件が不一致＋案内先のボタン）で 1〜2 行に（タイマーと一緒にトップバーの下に固定する。docs/SPEC-flow.md 15 章） */
+@media (max-width: 480px) { #ivMustAlertText { display: none; } .iv-must-short { display: block; flex: 1 1 auto; min-width: 0; } }
+.iv-stage { padding: 12px 20px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.iv-stage-head { display: flex; align-items: baseline; gap: 4px 14px; flex-wrap: wrap; margin-bottom: 8px; }
 .iv-stage-head h2 { font-size: 20px; font-weight: 800; outline: none; }
 .iv-no { color: var(--accent); margin-right: 6px; }
 .iv-who { margin-left: auto; min-width: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .iv-who b { font-size: 15px; color: var(--text); }
 .iv-lead { width: 100%; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .iv-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 32px; align-items: start; }
-@media (min-width: 1100px) { .iv-cols.is-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-.iv-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/*   列の幅の比は既定で 1:1。① のように質問のカードを動かせない段階は app.js ivWeightCols が --iv-cols（2:3 など）で高さをそろえる（15 章） */
+@media (min-width: 1100px) { .iv-cols.is-two { grid-template-columns: var(--iv-cols, minmax(0, 1fr) minmax(0, 1fr)); } }
+.iv-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .iv-grp { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .iv-grp.k-check { --k: var(--k-check); }
 .iv-grp.k-say { --k: var(--k-say); }
@@ -687,9 +711,13 @@ html.flow-pad #stepContent > .flow-foot.is-sticky { margin-top: auto; }
 .btn.iv-said { min-width: 8.5em; padding: 7px 16px; font-size: 14.5px; }
 .btn.iv-said[aria-pressed="true"] { background: var(--ok-strong); border-color: var(--ok-strong); color: var(--on-status); }
 .btn.iv-said[aria-pressed="mixed"] { background: var(--warn-soft); border-color: var(--warn); color: var(--warn-text); }
-.iv-q { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-left: 3px solid var(--k-ask); border-radius: var(--radius-sm); background: var(--surface-2); }
-.iv-q-text { font-size: 17px; font-weight: 700; line-height: 1.55; overflow-wrap: anywhere; }
-textarea.iv-q-memo { min-height: 0; height: 42px; resize: none; overflow: hidden; padding: 8px 12px; font-size: 15px; line-height: 1.5; }
+.iv-q { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--k-ask); border-radius: var(--radius-sm); background: var(--surface-2); }
+.iv-q-text { font-size: 17px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+textarea.iv-q-memo { min-height: 0; height: 38px; resize: none; overflow: hidden; padding: 6px 12px; font-size: 15px; line-height: 1.5; }
+.iv-ask-fields { padding-bottom: 2px; }
+/*   操作行に隠れている項目の数（▼ 下にあと n 項目。押すとその分スクロール）。狭い画面は 1 列で長いので出さない */
+.btn.iv-more { border-color: var(--warn); background: var(--warn-soft); color: var(--warn-text); font-weight: 700; }
+.btn.iv-more:hover { background: var(--warn-soft); filter: brightness(.97); }
 .iv-oldmemo, .iv-memo { margin-bottom: 0; }
 .iv-oldmemo textarea, .iv-memo textarea { min-height: 60px; }
 .iv-flow { padding: 8px 12px; border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 13.5px; font-weight: 600; }
@@ -708,6 +736,12 @@ textarea.iv-q-memo { min-height: 0; height: 42px; resize: none; overflow: hidden
 .ev-time-k { font-weight: 700; color: var(--text); }
 .ev-time input { width: 5.5em; min-width: 0; padding: 5px 8px; }
 .ev-time-st { display: inline-flex; gap: 10px; flex-wrap: wrap; }
+/*   常に見える 1 行（紙から転記した面接・中断した面接は実際の分を）・目安から大きく外れているときは欄を琥珀に（結果カードの「面接時間を確かめてください」と一緒に。15 章） */
+.ev-time-hint { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
+.ev-time.is-check input { border-color: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.ev-time.is-check .ev-time-hint { color: var(--warn-text); font-weight: 700; }
+.ev-res-time { width: 100%; padding: 0; border: 0; background: none; color: var(--warn-text); font: inherit; font-size: 13px; font-weight: 700; text-align: left; cursor: pointer; }
+.ev-res-time:hover { text-decoration: underline; }
 .ev-sec .card-head { align-items: baseline; margin-bottom: 10px; }
 .ev-sec-time { font-size: 12.5px; color: var(--muted); }
 .ev-fix { margin-left: auto; }
@@ -736,6 +770,18 @@ dl.ev-qa .is-empty dd { color: var(--muted); }
 .is-missing .ev-miss { display: inline-flex; }
 @media (max-width: 840px) {
   .iv-top, .ev-top { position: static; margin-top: 0; padding-top: 0; }
+  /* 面接: 段階のチップはスクロールで流し、タイマーと必須条件の案内だけを細い帯にしてトップバーの下に固定する（質問しているあいだも経過と不一致の案内が見える。
+     docs/SPEC-flow.md 15 章。それまでは上の帯ごと固定しなかった）。.iv-top・.iv-bar は箱を作らない（タイマー・案内が #stepContent の中で固定できる） */
+  .iv-top, .iv-bar { display: contents; }
+  .iv-timer { position: sticky; top: var(--topbar-h, 57px); z-index: 15; padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }
+  .iv-timer b { font-size: 17px; }
+  .iv-timer small { font-size: 13px; }
+  .iv-must { position: sticky; top: calc(var(--topbar-h, 57px) + var(--iv-timer-h, 34px)); z-index: 15; flex-wrap: nowrap; gap: 4px 8px; padding: 5px 10px; font-size: 13px; line-height: 1.45; }
+  #ivMustAlertText { flex: 1 1 auto; min-width: 0; }
+  .iv-must .btn { flex: none; }
+  html.flow-pad { scroll-padding-top: calc(var(--topbar-h, 57px) + var(--flow-top-h, 0px) + 8px); scroll-padding-bottom: calc(var(--flow-foot-h, 64px) + 8px); }
+  .flow-foot.is-pinned { left: 16px; right: 16px; }
+  .btn.iv-more { display: none; }
   .iv-timer { margin-left: 0; }
   .iv-fields { grid-template-columns: minmax(0, 1fr); }
   .iv-stage { padding: 12px 14px 14px; }
@@ -838,7 +884,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
           <button type="button" class="btn sm" id="btnNew">＋ 新規</button>
           <button type="button" class="btn sm" id="btnLoad">📂 読み込み</button>
           <button type="button" class="btn sm primary" id="btnSave">💾 保存（HTML）</button>
-          <button type="button" class="btn sm" id="btnPrint">🖨 印刷</button>
+          <button type="button" class="btn sm" id="btnPrint" title="報告書（A4 の面接チェックリスト報告）を印刷します。紙に書いて面接するときは、準備の画面の「🖨 記入シート（手書き用）」を印刷してください">🖨 報告書を印刷</button>
         </div>
       </header>
 
@@ -1874,7 +1920,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     (Array.isArray(def.sections) ? def.sections : []).filter(function (s) { return U.isObj(s); }).forEach(function (sec, i) {
       const minutes = Math.max(0, Math.floor(num(sec.minutes, 0)));
       minutesTotal += minutes;
-      let mustMismatch = 0, gradable = 0, answered = 0, checkable = 0, checked = 0;
+      //   mustUnknown: 未確認の必須条件の数。input: 面接の画面で付ける入力（必須条件・説明・合否連絡・記入欄・質問のメモ・ブロックのメモ。確認点とそのメモは評価の画面なので数えない）が 1 つでもある
+      let mustMismatch = 0, mustUnknown = 0, input = false;
       const blocks = (Array.isArray(sec.blocks) ? sec.blocks : []).filter(function (b) { return U.isObj(b); }).map(function (b) {
         const items = (Array.isArray(b.items) ? b.items : []).filter(function (it) { return U.isObj(it); }).map(function (it) {
           const r = Object.assign({}, it);
@@ -1883,23 +1930,23 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
           if (b.type === 'must') {
             const v = mustValue(cl, it.id), mv = MUST_VALUES[v];
             r.value = v; r.valueLabel = mv.label; r.mark = mv.mark; r.tone = mv.tone;
-            gradable++; if (v) answered++;
+            if (v) input = true; else mustUnknown++;
             if (v === 'mismatch') mustMismatch++;
             r.effective = mv.label;
           } else if (b.type === 'rating') {
             const v = ratingValue(cl, it.id), rm = RATING_MARKS[v];
             r.value = v; r.mark = rm ? rm.mark : ''; r.points = rm ? rm.points : null; r.tone = rm ? rm.tone : 'muted';
-            gradable++; if (v) answered++;
             r.effective = r.mark;
           } else if (b.type === 'explain' || b.type === 'notify') {
             r.value = vals[it.id] === true;
             r.dim = b.type === 'explain' && it.shortOnly === true && posting !== 'short';
-            checkable++; if (r.value) checked++;
+            if (r.value) input = true;
             r.effective = r.value;
           } else if (b.type === 'fields') {
             const v = clStr(vals[it.id]);
             r.value = v;
             r.effective = v;
+            if (v.trim()) input = true;
             if (it.kind === 'choice') {
               const opt = (Array.isArray(it.options) ? it.options : []).find(function (x) { return x && x.value === r.effective; });
               r.effectiveLabel = opt ? clStr(opt.label) : clStr(r.effective);
@@ -1907,9 +1954,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
           } else {
             r.value = vals[it.id] == null ? '' : vals[it.id];
             r.effective = r.value;
+            if (b.type === 'question' && r.note.trim()) input = true;
           }
           return r;
         });
+        if (b.type !== 'rating' && clStr(notes[b.id]).trim()) input = true;
         return {
           id: b.id, type: b.type, title: clStr(b.title), note: clStr(b.note), memo: b.memo === true, memoLabel: clStr(b.memoLabel),
           memoText: clStr(notes[b.id]), items: items
@@ -1920,9 +1969,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         id: sec.id, no: no, noMark: circled(no), title: clStr(sec.title), minutes: minutes, minutesMax: sec.minutesMax === true,
         minutesText: minutes ? (sec.minutesMax === true ? '最大' : '') + minutes + '分' : '',
         page: Math.max(1, Math.floor(num(sec.page, 1))), lead: clStr(sec.lead),
-        mustMismatch: mustMismatch,
-        done: gradable ? answered === gradable : (checkable ? checked === checkable : false),
-        answered: answered, gradable: gradable,
+        mustMismatch: mustMismatch, mustUnknown: mustUnknown, input: input,
         blocks: blocks
       });
     });
@@ -5106,16 +5153,58 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     { n: 3, no: 3, label: '評価', hint: '面接のあとに ○△×・人物像・総合判断' },
     { n: 4, no: 4, label: '報告書', hint: '押印・合否・保存' }
   ];
-  // 各ステップの最上部の「この画面ですること」（1 行）
+  // 各ステップの最上部の「この画面ですること」（1 行）。準備・評価・報告書は stepLeadText が今の記録・設定に合わせる
   const STEP_LEAD = {
     1: '応募者の名前と面接の情報を入れて、「面接を始める」を押します。',
     2: '台本どおりに話す・聞く・メモ。○△× などの評価は面接のあとで付けます。',
     3: '面接のメモを見ながら、○△×・人物像・総合判断を付けます。',
-    4: '用紙を確かめて押印し、報告書を保存（HTML）します。'
+    4: '「面接対応者」に押印して、報告書を保存（HTML）します（最終確認・最終合否は副支配人が押します）。'
   };
-  function stepLeadHtml(n) {
-    return '<p class="step-lead" id="stepLead"><b>この画面ですること</b><span>' + esc(STEP_LEAD[n] || '') + '</span></p>';
+  // 画面のボタン名・設定に合わせる: 準備は主ボタンの名前（面接を始める／面接に戻る／評価に戻る／報告書に戻る。docs/SPEC-flow.md 15 章）、
+  //   評価は人物像を使わない設定・記録では人物像を言わない（14 章）、報告書は押印欄・最終合否の名前を設定から（15 章）
+  function stepLeadText(n) {
+    if (n === 1) {
+      const x = prepNext();
+      if (!x.fresh) return '応募者の名前と面接の情報を確かめて、「' + x.label + '」を押します。';
+      const s0 = ivSections()[0];
+      return STEP_LEAD[1] + (x.preview && s0 ? '下見で動いたタイマーは 0 に戻り、' + s0.noMark + ' ' + s0.title + 'から始まります。' : '');
+    }
+    if (n === 3) return '面接のメモを見ながら、' + evalWhatText(true) + 'を付けます。';
+    if (n === 4) return reportLeadText();
+    return STEP_LEAD[n] || '';
   }
+  // 報告書の 1 行・はじめての方への手順 4（docs/SPEC-flow.md 15 章）: 面接者が押すのは「面接対応者」の欄だけ（最終確認・最終合否は副支配人が保存した HTML で押す）。
+  //   名前は設定の押印欄（台本の interviewerField の欄）と最終合否から。short: はじめての方へ用の短い文（4 つの手順は各 2 行まで）
+  function reportLeadText(short) {
+    const mg = state.profile.management || {};
+    const fields = (Array.isArray(mg.fields) ? mg.fields : []).filter(function (f) { return U.isObj(f) && f.id; });
+    const ivId = (clDefNow().header || {}).interviewerField || 'interviewer';
+    const ivF = fields.find(function (f) { return f.id === ivId; });
+    const ivName = ivF ? '「' + String(ivF.label || ivF.id) + '」' : '';
+    if (short) return ivName ? ivName + 'だけ押印して保存' : '押印して保存';
+    const others = fields.filter(function (f) { return f !== ivF; }).map(function (f) { return String(f.label || f.id); });
+    const d = decisionCfg();
+    if (d.enabled) others.push(String(d.label || '最終合否'));
+    return (ivName ? ivName + 'に押印して' : '押印して') + '、報告書を保存（HTML）します' + (others.length ? '（' + others.join('・') + 'は副支配人が押します）' : '') + '。';
+  }
+  function stepLeadHtml(n) {
+    return '<p class="step-lead" id="stepLead"><b>この画面ですること</b><span>' + esc(stepLeadText(n)) + '</span></p>';
+  }
+  // 評価の画面で付けるもの（○△×・人物像・総合判断）。forRecord: 今の記録で人物像を使うか（人物像の導入前の記録は使わない）。それ以外は設定で使うか
+  function evalWhatText(forRecord) {
+    const ps = forRecord ? !!R.personaModel(clDefNow(), ensureChecklist()) : personaOnNow();
+    return '○△×・' + (ps ? '人物像・' : '') + '総合判断';
+  }
+  // 準備の主ボタンの行き先と名前（docs/SPEC-flow.md 15 章）。
+  //   回答（面接・評価の入力と面接所見）が無ければ「面接を始める」: 本番の前に面接の画面を下見して戻っても、押すと下見のタイマーを 0 に戻して最初の段階から数える（fresh。preview は下見したか）。
+  //   回答があれば 報告書まで進んだ →「報告書に戻る」／評価まで →「評価に戻る」（氏名を直しに来ても面接のタイマーを動かさない）／面接の途中 →「面接に戻る」
+  function prepNext() {
+    if (!ivHasAnswers()) return { step: 2, label: '面接を始める', fresh: true, preview: !!ivTimingRead().startedAt };
+    if (state.maxStepReached >= 4) return { step: 4, label: '報告書に戻る' };
+    if (state.maxStepReached >= 3) return { step: 3, label: '評価に戻る' };
+    return { step: 2, label: '面接に戻る' };
+  }
+  function ivHasAnswers() { return R.checklistHasInput(state.checklist) || !!String(state.interviewNotes || '').trim(); }
 
   const state = {
     view: 'judge',
@@ -5131,6 +5220,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     decision: null,        // 最終合否（人の決定）: { result, label, date, at, by }。判定とは独立。再判定で消さない（「取消」でだけ消える）
     fileLock: null,        // 読み込んだ保存 HTML の最終承認のロック（{ salt, hash }）。アプリにロックが無いとき、この記録の最終確認・最終合否と保存し直すファイルに使う（docs/SPEC-a4.md 11 章 L7b）
     ivItems: {},           // 面接の「一部説明しなかった」を開いているか（段階 id + ':' + explain|notify → true/false。画面の状態だけ。記録に入れない）
+    ivNoTimer: false,      // タイマー導入前（2026-10-16 より前）に回答して保存した記録を読み込んだ: 面接の画面を開いても面接時間を数えない（直した時間を面接時間にしない。docs/SPEC-flow.md 14 章）
     savedAt: null,
     dirty: false
   };
@@ -5191,25 +5281,33 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
   function bindGlobal() {
     // 画面幅が変わったら報告書の紙プレビューの縮小を合わせ直す。面接・評価の上の帯（sticky）の位置はトップバーの高さ（折り返しで変わる）に合わせる
-    let paperRaf = 0;
+    let paperRaf = 0, moreRaf = 0;
     window.addEventListener('resize', function () {
       syncFlowLayout();
+      ivUpdateMore();
       if (paperRaf || !$('#appPaper')) return;
       paperRaf = requestAnimationFrame(function () { paperRaf = 0; fitReportPaper(); });
     });
+    // 面接の「▼ 下にあと n 項目」はスクロールで見えたら消す（1 フレームに 1 回）
+    window.addEventListener('scroll', function () {
+      if (moreRaf || state.view !== 'judge' || state.step !== 2) return;
+      moreRaf = requestAnimationFrame(function () { moreRaf = 0; ivUpdateMore(); });
+    }, { passive: true });
     $$('.nav-item').forEach(function (b) { b.addEventListener('click', function () { showView(b.dataset.view); }); });
     $('#stepNav').addEventListener('click', function (e) {
       const li = e.target.closest('[data-step]');
       if (!li || li.classList.contains('disabled')) return;
       goStep(Number(li.dataset.step));
     });
+    // 使い方の「← （手順）の画面に戻る」
+    $('#view-help').addEventListener('click', function (e) { if (e.target.closest('[data-action="back-to-judge"]')) showView('judge'); });
     $('#btnNew').addEventListener('click', newRecord);
     $('#btnLoad').addEventListener('click', function () { const f = $('#fileInput'); f.value = ''; f.click(); });
     $('#fileInput').addEventListener('change', onFileChosen);
     $('#profileFileInput').addEventListener('change', onProfileFileChosen);
     $('#btnSave').addEventListener('click', saveRecord);
-    // 印刷は A4 面接チェックリスト報告（docs/SPEC-script-mode.md Y9）
-    $('#btnPrint').addEventListener('click', printChecklistSheet);
+    // 印刷は A4 面接チェックリスト報告（docs/SPEC-script-mode.md Y9）。ボタン名は「🖨 報告書を印刷」（記入シートと取り違えない。docs/SPEC-flow.md 15 章）
+    $('#btnPrint').addEventListener('click', onTopPrint);
     $('#btnTheme').addEventListener('click', toggleTheme);
 
     const content = $('#stepContent');
@@ -5437,11 +5535,29 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
 
   // 面接・評価の上の帯（sticky）はトップバーの下に付ける（--topbar-h）。面接・評価では scroll-padding（html.flow-pad）で
   //   Tab のフォーカスやクリックの先が上の帯・下の操作行に隠れないようにする（付録 A。docs/SPEC-flow.md 1-1）
+  //   上の帯の高さ（--flow-top-h）は必須条件の案内・結果カードの折り返しで変わるので測って scroll-padding に足す（docs/SPEC-flow.md 14 章）
+  //   準備・報告書の操作行も画面の右下に固定する（html.foot-pin・.flow-foot.is-pinned。本文の下に操作行の高さ --flow-foot-h の余白。15 章）。
+  //   840px 以下の面接はタイマーと必須条件の案内だけを細い帯にして固定する（段階のチップは流す。--iv-timer-h は案内を固定する位置。15 章）
   function syncFlowLayout() {
     const html = document.documentElement;
-    html.classList.toggle('flow-pad', state.view === 'judge' && (state.step === 2 || state.step === 3));
+    const judge = state.view === 'judge';
+    html.classList.toggle('flow-pad', judge && (state.step === 2 || state.step === 3));
+    html.classList.toggle('foot-pin', judge && (state.step === 1 || state.step === 4));
     const tb = $('.topbar');
     if (tb && tb.offsetHeight) html.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
+    const narrow = !!(window.matchMedia && window.matchMedia('(max-width: 840px)').matches);
+    const timer = judge ? $('#ivTimer') : null;
+    if (timer && timer.offsetHeight) html.style.setProperty('--iv-timer-h', timer.offsetHeight + 'px');
+    if (judge && narrow) {
+      //   狭い画面: 固定しているのは面接のタイマーと必須条件の案内だけ（評価の結果カードは流す）
+      const al = $('#ivMustAlert');
+      html.style.setProperty('--flow-top-h', (timer ? timer.offsetHeight + (al ? al.offsetHeight : 0) : 0) + 'px');
+    } else {
+      const band = judge ? $('#ivTop') || $('#evTop') : null;
+      if (band && band.offsetHeight) html.style.setProperty('--flow-top-h', band.offsetHeight + 'px');
+    }
+    const foot = judge ? $('#stepContent > .flow-foot') : null;
+    if (foot && foot.offsetHeight) html.style.setProperty('--flow-foot-h', foot.offsetHeight + 'px');
   }
 
   // =====================================================================
@@ -5466,7 +5582,9 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     renderStepNav(); renderStep(); renderSummary();
     // 面接は段階の見出しにフォーカスしてページの先頭へ（3-9）
     if (n === 2) { ivFocusHead(); return; }
-    const top = Math.max(0, $('#view-judge').getBoundingClientRect().top + window.scrollY - 70);
+    //   ほかは本文の先頭（「この画面ですること」）がトップバー（固定。狭い画面では折り返して高くなる）の下に見える位置へ
+    const tb = $('.topbar');
+    const top = Math.max(0, $('#view-judge').getBoundingClientRect().top + window.scrollY - (tb ? tb.offsetHeight : 57) - 8);
     // 評価は縦に長いので、遠くからはすぐに移動する（長いスムーズスクロールを避ける）
     window.scrollTo({ top: top, behavior: Math.abs(window.scrollY - top) > 1500 ? 'auto' : 'smooth' });
   }
@@ -5494,14 +5612,16 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       if (s.n === state.step) cls.push('current');
       else if (s.n < state.step) cls.push('done');
       if (s.n > state.maxStepReached) cls.push('disabled');
+      const hint = s.n === 3 ? '面接のあとに ' + evalWhatText(false) : s.hint;   // 人物像を使わない設定では人物像を言わない
       return '<li class="' + cls.join(' ') + '" data-step="' + s.n + '" role="button" tabindex="0">' +
         '<span class="step-num">' + (s.n < state.step ? '✓' : s.no) + '</span>' +
-        '<span><span class="step-label">' + esc(s.label) + '</span><br><span class="step-hint">' + esc(s.hint) + '</span></span></li>';
+        '<span><span class="step-label">' + esc(s.label) + '</span><br><span class="step-hint">' + esc(hint) + '</span></span></li>';
     }).join('');
   }
 
   function renderStep() {
     const c = $('#stepContent');
+    c.setAttribute('data-step', String(state.step));   // 準備・面接・評価は部品の間を詰める（styles.css）
     // 右サマリーは準備と報告書だけ（面接・評価は 1 列で広く使う。docs/SPEC-flow.md F2）。紙の下に回すのは報告書だけ（fitReportPaper が付け直す）
     const layout = $('#view-judge .judge-layout');
     if (layout) {
@@ -5530,6 +5650,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         break;
       default: c.innerHTML = '';
     }
+    syncFlowLayout();   // 描いた画面の操作行・上の帯の高さ（--flow-foot-h・--flow-top-h）
   }
 
   // =====================================================================
@@ -5614,17 +5735,18 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (nm) nm.focus();
   }
   function introHtml() {
+    //   見出し・説明・ボタンは 1 行、4 つの手順は各 2 行まで（ノート PC の表示の高さでも「面接を始める →」まで見える。docs/SPEC-flow.md 14 章）
     return '<section class="intro no-print" id="introCard" aria-labelledby="introH">' +
-      '<h2 id="introH">はじめての方へ</h2>' +
-      '<p class="intro-lead">面接台本のとおりに 4 つの手順で進めると、A4 1 枚の報告書ができます。</p>' +
+      '<div class="intro-head"><h2 id="introH">はじめての方へ</h2>' +
+        '<p class="intro-lead">4 つの手順で、A4 1 枚の報告書ができます。</p>' +
+        '<div class="intro-foot"><button type="button" class="btn sm ghost" data-action="show-help">使い方を見る</button>' +
+          '<button type="button" class="btn sm primary" id="introOk" data-action="intro-ok">わかった</button></div></div>' +
       '<ol class="intro-steps">' +
-        '<li><b>準備</b><span>応募者の名前と面接の情報を入れる（氏名だけ必須）</span></li>' +
-        '<li><b>面接</b><span>台本の ①〜⑤ を 1 段階ずつ。話す・聞く・メモだけ</span></li>' +
-        '<li><b>評価</b><span>面接のあとに、メモを見ながら ○△×・人物像・総合判断</span></li>' +
-        '<li><b>報告書</b><span>用紙を確かめて押印し、保存（HTML）</span></li>' +
+        '<li><b>準備</b><span>名前と面接の情報を入れる（氏名だけ必須）</span></li>' +
+        '<li><b>面接</b><span>台本の ①〜⑤ を 1 段階ずつ話す・聞く・メモ</span></li>' +
+        '<li><b>評価</b><span>' + esc('面接のあとに ' + evalWhatText()) + '</span></li>' +
+        '<li><b>報告書</b><span>' + esc(reportLeadText(true)) + '</span></li>' +   // 面接者が押すのは「面接対応者」だけ（docs/SPEC-flow.md 15 章）
       '</ol>' +
-      '<div class="intro-foot"><button type="button" class="btn sm ghost" data-action="show-help">使い方を見る</button>' +
-        '<button type="button" class="btn sm primary" id="introOk" data-action="intro-ok">わかった</button></div>' +
     '</section>';
   }
 
@@ -5645,7 +5767,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const cats = (o.categories || []).filter(function (c) { return c && c.value; }).map(function (c) { return { value: c.value, label: c.value }; });
     // 求人のボタンは「通常」「短期」（表示名の末尾の「求人」を省く。報告書では表示名のまま）
     const pBtn = function (x) { const full = String(x.label || x.value); return { value: x.value, label: full.replace(/求人$/, '') || full, title: full, cls: 'wide' }; };
-    const started = !!(U.isObj(state.checklist.timing) && state.checklist.timing.startedAt);
+    const nx = prepNext();
     return stepLeadHtml(1) + (introShown() ? introHtml() : '') +
       '<div class="card" id="scriptApplicantCard">' +
       '<div class="card-head"><h2>応募者</h2><p>氏名だけ必須です。あとは分かる範囲で入力してください。</p></div>' +
@@ -5673,10 +5795,12 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         fTextarea('reviewerNotes', 'メモ（任意）', { rows: 2, placeholder: '例：電話の受け答えが丁寧。' }) +
       '</div>' +
     '</div>' +
-    // 記入シート（手書き用。docs/SPEC-flow.md 5-3）: 氏名が空でも印刷できる（紙に書いて面接し、あとでアプリに転記する）。主ボタンは右下
-    '<div class="flow-foot" id="saActions"><button type="button" class="btn" id="saPaperBtn" data-action="print-paper" title="' + esc(PAPER_BTN_TITLE) + '">🖨 記入シート（手書き用）</button>' +
-      '<span class="spacer"></span>' +
-      '<button type="button" class="btn primary lg" id="saNext" data-action="script-next">' + (started ? '面接に戻る →' : '面接を始める →') + '</button></div>';
+    // 記入シート（手書き用。docs/SPEC-flow.md 5-3）: 氏名が空でも印刷できる（紙に書いて面接し、あとでアプリに転記する）。
+    //   操作行は面接・評価と同じ画面の右下に固定（.is-pinned）。DOM は主ボタンが先（Tab で最後の入力欄の次は主ボタン。見た目の左右は CSS の order。15 章）
+    '<div class="flow-foot is-pinned" id="saActions">' +
+      '<button type="button" class="btn primary lg" id="saNext" data-action="script-next">' + esc(nx.label + ' →') + '</button>' +
+      '<button type="button" class="btn ff-start" id="saPaperBtn" data-action="print-paper" title="' + esc(PAPER_BTN_TITLE) + '">🖨 記入シート（手書き用）</button>' +
+      '<span class="spacer"></span></div>';
   }
 
   // 準備 → 面接: 氏名（必須）と年齢の形式だけ止める
@@ -5761,11 +5885,19 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   function onContentClick(e) {
     const b = e.target.closest('[data-action]');
     if (!b) return;
+    // ダブルクリック（e.detail は続けたクリックの回数）の 2 回目以降は押さなかったことにする。［次へ］などは押すと画面を描き直し、
+    //   次のボタンが同じ位置（右下）に出るため、2 回目が次の画面のボタンに当たって段階・画面を飛ばす。トグル（一致・説明した・1〜5 点）も 2 回目で戻さない。
+    //   キーボード（Enter・Space）と click() は 0 なので止めない
+    if (e.detail > 1) return;
     switch (b.dataset.action) {
-      case 'script-next':
-        // 準備 → 面接（面接の表示でタイマーが始まる。docs/SPEC-flow.md 2-2）
-        if (validateScriptApplicant()) goStep(2);
+      case 'script-next': {
+        // 準備の主ボタン（docs/SPEC-flow.md 2-2・15 章）: 面接を始める（下見のタイマーは 0 に戻して最初の段階から）／面接・評価・報告書に戻る
+        if (!validateScriptApplicant()) break;
+        const nx = prepNext();
+        if (nx.fresh) ivRestart();
+        goStep(nx.step);
         break;
+      }
       case 'intro-ok':
         closeIntro();
         break;
@@ -5800,6 +5932,17 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         // 面接を終えて評価へ（面接の終了時刻を入れてタイマーを止める）
         goStep(3);
         break;
+      case 'iv-more':
+        // 「▼ 下にあと n 項目」: 操作行に隠れている分を見せる
+        ivShowMore();
+        break;
+      case 'ev-time': {
+        // 「面接時間を確かめてください」（評価の結果カード・報告書の確認事項）: 評価の面接時間の欄へ（docs/SPEC-flow.md 15 章）
+        if (state.step !== 3) goStep(3);
+        const tm = $('#evTimeMin');
+        if (tm) { tm.scrollIntoView({ block: 'center' }); tm.focus({ preventScroll: true }); tm.select(); }
+        break;
+      }
       case 'iv-said':
         ivSaid(b.dataset.sec, b.dataset.kind);
         break;
@@ -5816,10 +5959,16 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         const path = b.dataset.cl;
         const v = b.dataset.value || '';
         ensureChecklist();
+        // 面接で必須条件の案内が出る・消えると、その分だけ本文が上下にずれる（狭い画面では上の帯が固定でないので、押した行が画面の外へ出る）。押したボタンを同じ位置に保つ
+        const y0 = b.getBoundingClientRect().top;
         clSet(path, String(clGet(path)) === v ? '' : v);
         touchChecklist();
         syncClButtons(path);   // 準備（応募した求人）は updateChecklistUI の対象外のため
         updateChecklistUI();
+        if (state.step === 2 && b.isConnected) {
+          const dy = b.getBoundingClientRect().top - y0;
+          if (Math.abs(dy) > 1) window.scrollBy(0, dy);
+        }
         break;
       }
       case 'print-checklist':
@@ -5901,7 +6050,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const t = e.target;
     if (state.step === 2 && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing && e.keyCode !== 229) {
       const nx = $('#ivNext');
-      if (nx) { e.preventDefault(); nx.click(); }
+      if (nx) { e.preventDefault(); if (!e.repeat) nx.click(); }   // 押しっぱなし（キーリピート）で段階を飛ばさない
       return;
     }
     if (t && t.dataset && t.dataset.persona) { onPersonaKey(e, t); return; }
@@ -6084,14 +6233,26 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const cl = state.checklist;
     if (ended && U.isObj(cl) && U.isObj(cl.timing) && cl.timing.startedAt) cl.timing.endedAt = new Date(Date.now()).toISOString();
   }
-  // 面接の段階 sec を数え始める（面接を初めて表示したら startedAt。「面接を始める」以外の経路〔サイドバー・読み込み〕でも）
+  // 面接の段階 sec を数え始める（面接を初めて表示したら startedAt。「面接を始める」以外の経路〔サイドバー・読み込み〕でも）。
+  //   タイマー導入前に回答して保存した記録（state.ivNoTimer）は数えない（段階の移動だけ。直した時間を面接時間として報告書に載せない）
   function ivStart(sec) {
     ivStop(false);
     const t = ivTiming();
-    if (!t.startedAt) t.startedAt = new Date(Date.now()).toISOString();
     t.stage = sec;
+    if (state.ivNoTimer) return;   // タイマー導入前の記録（読み込んだ回答のある記録で timing が無い）は数えない
+    if (!t.startedAt) t.startedAt = new Date(Date.now()).toISOString();
     if (!Object.prototype.hasOwnProperty.call(t.perStage, sec)) t.perStage[sec] = 0;
     ivClock = { sec: sec, since: Date.now(), iv: setInterval(ivTick, 1000) };
+  }
+  // 準備の「面接を始める」（回答がまだ無いとき。docs/SPEC-flow.md 15 章）: 本番の前に面接・評価の画面を下見していても、その時間・最後に見た段階・終了時刻を捨てて
+  //   最初の段階から数え直す（goStep(2) の ivStart が startedAt を入れ直す）。評価・報告書は下見の前と同じく、また進むまで押せない
+  function ivRestart() {
+    ivStop(false);
+    const cl = ensureChecklist();
+    if (U.isObj(cl.timing)) delete cl.timing;
+    state.ivItems = {};
+    state.ivNoTimer = false;
+    state.maxStepReached = 1;
   }
   function ivStageSec(sec) { const p = ivTimingRead().perStage || {}; return (Number(p[sec]) || 0) + (ivClock && ivClock.sec === sec ? ivElapsed() : 0); }
   function ivTotalSec() { const p = ivTimingRead().perStage || {}; return Object.keys(p).reduce(function (a, k) { return a + (Number(p[k]) || 0); }, 0) + ivElapsed(); }
@@ -6189,9 +6350,11 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   }
 
   // ---------- 聞くこと（質問ごとのカード。docs/SPEC-flow.md 3-5・F8） ----------
+  //   質問ブロックの直前の記入欄（台本の【質問】の記入欄。既定は ① の短期／長期の希望・契約開始日の希望など）は、その質問の答えを書く欄なので「聞くこと」の先頭に置く（docs/SPEC-flow.md 14 章）
   function ivQText(label) { const t = String(label == null ? '' : label).trim(); return /^「/.test(t) ? t : '「' + t + '」'; }
   function ivAskGroupHtml(blocks) {
     return '<div class="iv-grp k-ask" data-kind="ask"><h3 class="iv-k"><span>聞くこと</span></h3>' + blocks.map(function (b) {
+      if (b.type === 'fields') return ivFieldsHtml(b, ' iv-ask-fields') + (b.memo ? blockMemoHtml(b) : '');
       return (b.note ? '<p class="iv-note">' + esc(b.note) + '</p>' : '') + b.items.map(function (it) {
         //   カードの中のタブ位置はメモ欄だけ（Tab で次の質問のメモへ）。メモを取らない質問ブロック（memo: false）は質問文だけ
         return '<div class="iv-q" data-item="' + esc(it.id) + '"><div class="iv-q-text">' + esc(ivQText(it.label)) + '</div>' +
@@ -6203,36 +6366,42 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     }).join('') + '</div>';
   }
   // ---------- 確かめること（必須条件・記入欄） ----------
+  //   記入欄（choice は cl-set のボタン、text/date/month は input[data-cl]。ラベルは全文）
+  function ivFieldsHtml(b, cls) {
+    return '<div class="iv-fields' + (cls || '') + '" data-block="' + esc(b.id) + '">' + b.items.map(function (it) {
+      const path = 'values.' + it.id;
+      let ctl;
+      if (it.kind === 'choice') {
+        ctl = clSegHtml(path, (Array.isArray(it.options) ? it.options : []).map(function (o) { return { value: o.value, label: o.label || o.value, cls: 'wide' }; }), { aria: it.label });
+      } else {
+        const type = it.kind === 'date' ? 'date' : it.kind === 'month' ? 'month' : 'text';
+        ctl = '<input type="' + type + '" data-cl="' + esc(path) + '" value="' + esc(clGet(path)) + '" aria-label="' + esc(it.label) + '">';
+      }
+      return '<div class="field cl-field" data-item="' + esc(it.id) + '"><label>' + esc(it.label) + '</label>' + ctl + '</div>';
+    }).join('') + '</div>';
+  }
   function ivCheckGroupHtml(blocks) {
     const mustNotes = blocks.filter(function (b) { return b.type === 'must' && b.note; }).map(function (b) { return b.note; }).join('　');
     return '<div class="iv-grp k-check" data-kind="check"><h3 class="iv-k"><span>確かめること</span>' + (mustNotes ? '<small>' + esc(mustNotes) + '</small>' : '') + '</h3>' + blocks.map(function (b) {
-      let h = '';
-      if (b.type === 'must') h = b.items.map(function (it) { return mustRowHtml(it, false); }).join('');
-      else {
-        h = '<div class="iv-fields" data-block="' + esc(b.id) + '">' + b.items.map(function (it) {
-          const path = 'values.' + it.id;
-          let ctl;
-          if (it.kind === 'choice') {
-            ctl = clSegHtml(path, (Array.isArray(it.options) ? it.options : []).map(function (o) { return { value: o.value, label: o.label || o.value, cls: 'wide' }; }), { aria: it.label });
-          } else {
-            const type = it.kind === 'date' ? 'date' : it.kind === 'month' ? 'month' : 'text';
-            ctl = '<input type="' + type + '" data-cl="' + esc(path) + '" value="' + esc(clGet(path)) + '" aria-label="' + esc(it.label) + '">';
-          }
-          return '<div class="field cl-field" data-item="' + esc(it.id) + '"><label>' + esc(it.label) + '</label>' + ctl + '</div>';
-        }).join('') + '</div>';
-      }
+      const h = b.type === 'must' ? b.items.map(function (it) { return mustRowHtml(it, false); }).join('') : ivFieldsHtml(b, '');
       return h + (b.memo ? blockMemoHtml(b) : '');
     }).join('') + '</div>';
   }
 
-  // ---------- 段階の本文（列の分け方・見出し。docs/SPEC-flow.md 3-3・F4・F5） ----------
-  //   rating（確認点）は出さない。最初の質問ブロックより前を左の列、それ以降を右の列（1100px 以上。台本の順のまま「左 → 右」）。
-  //   続けて同じ種類（確かめる・聞く）なら見出しは 1 つ。話すことは段階×種類に 1 つ（説明と合否連絡はボタンが別なので分ける）。note は流れの 1 行
+  // ---------- 段階の本文（列の分け方・見出し。docs/SPEC-flow.md 3-3・F4・F5・14 章） ----------
+  //   rating（確認点）は出さない。最初の質問ブロック（その直前の記入欄＝【質問】の記入欄があればそこから）より前を左の列、それ以降を右の列（1100px 以上。台本の順のまま「左 → 右」）。
+  //   続けて同じ種類（確かめる・聞く）なら見出しは 1 つ。話すことは段階×種類に 1 つ（説明と合否連絡はボタンが別なので分ける）。note は流れの 1 行。
+  //   質問ブロックの直前の記入欄は「聞くこと」に入れる（答えを書く欄を質問の隣に置く）
   const IV_KIND = { must: 'check', fields: 'check', explain: 'say', notify: 'say', question: 'ask', note: 'flow' };
   function ivColsHtml(s) {
     const blocks = s.blocks.filter(function (b) { return IV_KIND[b.type] && (b.type === 'note' || b.items.length || b.memo); });
-    const qi = blocks.findIndex(function (b) { return b.type === 'question'; });
-    const cols = qi > 0 ? [blocks.slice(0, qi), blocks.slice(qi)] : [blocks];
+    const askFields = function (i) { return blocks[i].type === 'fields' && !!blocks[i + 1] && blocks[i + 1].type === 'question'; };
+    let qi = blocks.findIndex(function (b) { return b.type === 'question'; });
+    if (qi > 0 && askFields(qi - 1)) qi--;
+    //   質問が先頭の段階（⑤ 逆質問）は、質問のあとに話すこと・確かめること（合否連絡など）があれば、そこから右の列（左 → 右の順のまま。
+    //   必須条件の案内が出ていても合否連絡が操作行に隠れない。docs/SPEC-flow.md 15 章で F4 を変更）
+    const qj = qi === 0 ? blocks.findIndex(function (b, k) { return k > 0 && (IV_KIND[b.type] === 'say' || IV_KIND[b.type] === 'check') && !askFields(k); }) : -1;
+    const cols = qi > 0 ? [blocks.slice(0, qi), blocks.slice(qi)] : qj > 0 ? [blocks.slice(0, qj), blocks.slice(qj)] : [blocks];
     const said = {};
     const colHtml = function (bl) {
       let h = '', grp = null;
@@ -6242,7 +6411,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         grp = null;
       };
       bl.forEach(function (b) {
-        const k = IV_KIND[b.type];
+        const k = IV_KIND[b.type] === 'check' && askFields(blocks.indexOf(b)) ? 'ask' : IV_KIND[b.type];
         if (k === 'flow') { flush(); if (b.note) h += '<p class="iv-flow" data-block="' + esc(b.id) + '">→ ' + esc(b.note) + '</p>'; return; }
         if (k === 'say') {
           if (said[b.type]) return;   // 同じ種類の 2 つ目以降のブロックは最初のブロックのリストに入れた
@@ -6271,16 +6440,18 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const a = state.applicant;
     // 上の帯: 段階のチップ（状態は updateInterviewUI）・タイマー・必須条件の案内
     const goal = s.minutes > 0 ? (s.minutesMax ? '/ 最大 ' : '/ 目安 ') + s.minutes + '分' : '';
+    const noT = !!state.ivNoTimer;   // タイマー導入前の記録（数えない）
     const jump = ss.find(function (x) { return x.id === def.mustFailJumpTo; });
     const top = '<div class="iv-top" id="ivTop"><div class="iv-bar" id="ivBar">' +
         '<nav class="iv-chips" id="ivChips" aria-label="面接の段階">' + ss.map(function (x) {
           return '<button type="button" class="iv-chip" data-action="iv-go" data-sec="' + esc(x.id) + '"><span class="iv-chip-no">' + x.noMark + '</span><span class="iv-chip-t">' + esc(x.title) + '</span><span class="iv-chip-s"></span></button>';
         }).join('') + '</nav>' +
-        '<div class="iv-timer" id="ivTimer" role="timer" aria-live="off">' +
-          '<span class="iv-t-stage" id="ivTStage">この段階 <b class="num" id="ivTStageVal">' + fmtClock(ivStageSec(s.id)) + '</b> <small id="ivTStageGoal">' + esc(goal) + '</small></span>' +
-          '<span class="iv-t-total">合計 <b class="num" id="ivTTotal">' + fmtClock(ivTotalSec()) + '</b></span></div>' +
+        '<div class="iv-timer" id="ivTimer" role="timer" aria-live="off"' + (noT ? ' title="タイマーの導入前に保存した記録のため、面接時間は数えません（評価の画面で分を入れられます）"' : '') + '>' +
+          '<span class="iv-t-stage" id="ivTStage">この段階 <b class="num" id="ivTStageVal">' + (noT ? '—' : fmtClock(ivStageSec(s.id))) + '</b> <small id="ivTStageGoal">' + esc(goal) + '</small></span>' +
+          '<span class="iv-t-total">合計 <b class="num" id="ivTTotal">' + (noT ? '—' : fmtClock(ivTotalSec())) + '</b></span></div>' +
       '</div>' +
-      '<div class="iv-must hidden" id="ivMustAlert" role="alert"><span class="ico" aria-hidden="true">⚠</span><span id="ivMustAlertText"></span>' +
+      //   必須条件の案内。スマホの幅（480px 以下）は短い文 #ivMustShort（タイマーと一緒に固定する細い帯に収める。docs/SPEC-flow.md 15 章）
+      '<div class="iv-must hidden" id="ivMustAlert" role="alert"><span class="ico" aria-hidden="true">⚠</span><span id="ivMustAlertText"></span><span class="iv-must-short" id="ivMustShort"></span>' +
         (jump ? '<button type="button" class="btn sm" id="ivMustJump" data-action="iv-go" data-sec="' + esc(jump.id) + '">' + esc(jump.noMark + ' ' + jump.title + 'へ') + '</button>' : '') + '</div>' +
     '</div>';
     // 見出し・応募者（氏名・区分・年齢・求人。空の項目は省く）・前書き（台本のページの最初の段階ならページの前書き＋段階の前書き。1 行・…）
@@ -6293,13 +6464,16 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         '<span class="iv-who" id="ivWho">' + (a.name ? '<b>' + esc(a.name) + '</b>さん' : '<b>氏名未入力</b>') + (who.length ? '・' + esc(who.join('・')) : '') + '</span>' +
         (lead ? '<p class="iv-lead" title="' + esc(lead) + '">' + esc(lead) + '</p>' : '') + '</header>' +
       ivColsHtml(s) + '</section>';
-    // 下の操作行: 左に戻る・右端に主ボタン（最後の段階は「面接を終えて評価へ →」）。面接を一度終えた後は「評価に戻る」も
+    // 下の操作行: 左に戻る・右端に主ボタン（最後の段階は「面接を終えて評価へ →」）。評価まで進んだことがあれば（面接を終えた・評価から直しに来た・旧い記録）「評価に戻る」も。
+    //   段階の下の部分が操作行に隠れているあいだは「▼ 下にあと n 項目」（押すとその分スクロール。ivUpdateMore）。
+    //   DOM は主ボタン → 評価に戻る → 前の段階（最後の質問のメモから Tab で主ボタンへ。Enter で戻らない）。見た目の左右は CSS の order（docs/SPEC-flow.md 15 章）
     const next = ss[i + 1];
     const foot = '<div class="flow-foot is-sticky" id="ivFoot">' +
-      '<button type="button" class="btn" id="ivPrev" data-action="iv-prev">' + (i > 0 ? '← 前の段階' : '← 準備に戻る') + '</button><span class="spacer"></span>' +
-      (ivTimingRead().endedAt && next ? '<button type="button" class="btn" id="ivToEval" data-action="iv-end">評価に戻る</button>' : '') +
       (next ? '<button type="button" class="btn primary lg" id="ivNext" data-action="iv-next">' + esc('次へ：' + next.noMark + ' ' + next.title + ' →') + '</button>'
         : '<button type="button" class="btn primary lg" id="ivNext" data-action="iv-end">面接を終えて評価へ →</button>') +
+      (state.maxStepReached >= 3 && next ? '<button type="button" class="btn" id="ivToEval" data-action="iv-end">評価に戻る</button>' : '') +
+      '<button type="button" class="btn ff-start" id="ivPrev" data-action="iv-prev">' + (i > 0 ? '← 前の段階' : '← 準備に戻る') + '</button>' +
+      '<button type="button" class="btn sm iv-more ff-start hidden" id="ivMore" data-action="iv-more" aria-controls="ivStage"></button><span class="spacer"></span>' +
     '</div>';
     return stepLeadHtml(2) + top + stage + foot;
   }
@@ -6308,15 +6482,98 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   function ivAutosize(el) {
     if (!el || !el.style) return;
     el.style.height = 'auto';
-    const h = Math.max(42, el.scrollHeight + 2);
+    const h = Math.max(38, el.scrollHeight + 2);
     el.style.height = Math.min(h, 168) + 'px';
     el.style.overflowY = h > 168 ? 'auto' : 'hidden';
   }
-  // 描いた直後: メモの高さ・トップバーの高さ・タイマーの表示（00:00 から始めない）
+  // 描いた直後: メモの高さ・2 列の高さをそろえる・トップバーと上の帯の高さ・タイマーの表示（00:00 から始めない）・「▼ 下にあと n 項目」
   function ivAfterRender() {
     $$('#stepContent textarea.iv-q-memo').forEach(ivAutosize);
+    ivBalanceCols();
     syncFlowLayout();
     ivTick();
+    ivUpdateMore();
+  }
+  // 2 列の高さをそろえる（docs/SPEC-flow.md 14 章・15 章）: 右の列が「聞くこと」の質問カードで始まり、左の列（話すことだけ、など）よりずっと長いとき、
+  //   先頭の質問カードを左の列の末尾（「聞くこと」の見出しを付けて）へ移す（ivMoveCards）。台本の順（左の列 → 右の列）は変えない。右の列に残した見出しは「聞くこと（つづき）」。
+  //   カードを動かせないとき（① は右の列が【質問】の記入欄で始まる）は列の幅の比を変える（ivWeightCols）。
+  //   描いたときに 1 回だけ（入力でメモが伸びても動かさない＝カードが入力中に列を移らない）。1100px 未満の 1 列では何もしない
+  function ivBalanceCols() {
+    const cols = $('#ivStage .iv-cols.is-two');
+    if (!cols || cols.children.length !== 2 || getComputedStyle(cols).gridTemplateColumns.trim().split(/\s+/).length < 2) return;
+    const left = cols.children[0], right = cols.children[1];
+    if (!ivMoveCards(left, right)) ivWeightCols(cols, left, right);
+  }
+  // 列の幅の比で高さをそろえる（docs/SPEC-flow.md 15 章）: 質問のカードを動かせない・動かしても変わらない段階（① は右の列が【質問】の記入欄で始まる。
+  //   記入欄は 1 問目のすぐ上に置くので動かさない）。高いほうの列を広くする比（2:3・3:5・1:2）のうち最も低くなるものを選ぶ（同じなら 1:1 に近いもの。
+  //   24px 未満しか変わらなければ 1:1 のまま）。台本の順・列の中身は変えない。幅は CSS 変数 --iv-cols（1100px 以上の 2 列のときだけ効く）
+  const IV_RATIOS = [[2, 3], [3, 5], [1, 2]];
+  function ivWeightCols(cols, left, right) {
+    const tall = function () { return Math.max(left.offsetHeight, right.offsetHeight); };
+    const before = tall(), wideRight = right.offsetHeight > left.offsetHeight;
+    let best = before, pick = '';
+    IV_RATIOS.forEach(function (r) {
+      const v = 'minmax(0, ' + (wideRight ? r[0] : r[1]) + 'fr) minmax(0, ' + (wideRight ? r[1] : r[0]) + 'fr)';
+      cols.style.setProperty('--iv-cols', v);
+      const h = tall();
+      if (h < best) { best = h; pick = v; }
+    });
+    if (pick && before - best >= 24) cols.style.setProperty('--iv-cols', pick);
+    else cols.style.removeProperty('--iv-cols');
+  }
+  // 右の列の先頭の質問カードを左の列の末尾へ（② ③ ④）。動かしたら true
+  function ivMoveCards(left, right) {
+    const ask = right.firstElementChild;
+    if (!ask || !ask.classList.contains('k-ask') || !ask.children[1] || !ask.children[1].classList.contains('iv-q')) return false;
+    const tall = function () { return Math.max(left.offsetHeight, right.offsetHeight); };
+    const before = tall();
+    const grp = document.createElement('div');
+    grp.className = ask.className;
+    grp.setAttribute('data-kind', 'ask');
+    grp.appendChild(ask.firstElementChild.cloneNode(true));
+    left.appendChild(grp);
+    let best = before, moved = 0;
+    // 1 枚ずつ移して、いちばん低くなるところで止める（右の列には少なくとも 1 枚残す）
+    while (ask.children[1] && ask.children[1].classList.contains('iv-q') && ask.querySelectorAll(':scope > .iv-q').length > 1) {
+      grp.appendChild(ask.children[1]);
+      const h = tall();
+      if (h >= best) { ask.insertBefore(grp.lastElementChild, ask.children[1]); break; }
+      best = h; moved++;
+    }
+    if (!moved || before - best < 24) {   // ほとんど変わらないなら元のまま
+      while (grp.children.length > 1) ask.insertBefore(grp.lastElementChild, ask.children[1]);
+      grp.remove();
+      return false;
+    }
+    const hd = $('.iv-k', ask);
+    if (hd) hd.insertAdjacentHTML('beforeend', '<small class="iv-k-cont">（つづき）</small>');
+    return true;
+  }
+  // 段階の下の部分が下の操作行に隠れているとき、操作行の左に「▼ 下にあと n 項目」（押すと隠れている分だけスクロール）。見えたら消す。
+  //   面接の画面を描いたとき・入力でメモが伸びたとき・スクロール・画面の大きさが変わったとき（docs/SPEC-flow.md 14 章）
+  const IV_MORE_SEL = '.cl-must-row, .iv-fields .field, .iv-say-list, .iv-q, .iv-oldmemo, .iv-memo, .iv-flow';
+  function ivHiddenBelow() {
+    const st = $('#ivStage'), foot = $('#ivFoot');
+    if (!st || !foot || getComputedStyle(foot).position !== 'sticky') return [];
+    const ft = foot.getBoundingClientRect().top;
+    return $$(IV_MORE_SEL, st).filter(function (el) { return el.getBoundingClientRect().bottom > ft + 2 && el.offsetParent !== null; });
+  }
+  function ivUpdateMore() {
+    const b = $('#ivMore');
+    if (!b) return;
+    const n = ivHiddenBelow().length;
+    if (n) b.textContent = '▼ 下にあと ' + n + ' 項目';
+    show(b, n > 0);
+  }
+  function ivShowMore() {
+    const hid = ivHiddenBelow(), foot = $('#ivFoot'), top = $('#ivTop');
+    if (!hid.length || !foot) return;
+    // 隠れている最後の項目の下端が操作行の上に来るまで（上の帯の下から見えなくなる量を超えない＝読み飛ばさない）
+    const ft = foot.getBoundingClientRect().top;
+    const room = ft - (top && getComputedStyle(top).position === 'sticky' ? top.getBoundingClientRect().bottom : 0) - 40;
+    const need = Math.max.apply(null, hid.map(function (el) { return el.getBoundingClientRect().bottom; })) - ft + 12;
+    window.scrollBy(0, Math.max(40, Math.min(need, room)));
+    ivUpdateMore();
   }
 
   // 面接の画面の表示の更新（ボタンの押下・「説明した」・必須条件の案内・チップ。段階の中身は描き直さない。3-10）
@@ -6346,32 +6603,46 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (alert) {
       show(alert, g.mm);
       if (g.mm) {
-        let txt;
-        if (!g.gateReject) txt = '必須条件が合いません。追加で確認してください（このまま続けると、結果は' + resultTitle('review') + '以下になります）';
-        else if (g.jump) {
+        let txt, short;
+        if (!g.gateReject) {
+          txt = '必須条件が合いません。追加で確認してください（このまま続けると、結果は' + resultTitle('review') + '以下になります）';
+          short = '必須条件が不一致（追加で確認）';
+        } else if (g.jump) {
           const mt = String(g.jump.minutesText || '').replace(/(\d+)分/, ' $1 分').trim();
           txt = '必須条件が合いません。追加で確認し、解消しなければ ' + g.jump.noMark + ' ' + g.jump.title + 'へ進んで' + (mt ? mt + 'で' : '') + '終了します';
-        } else txt = '必須条件が合いません。追加で確認し、解消しなければ面接を終了します';
+          short = '必須条件が不一致' + (cur === g.jump.id ? '（' + (mt ? mt + 'で' : '') + '終了）' : '');   // 案内先へのボタンが横に並ぶ
+        } else {
+          txt = '必須条件が合いません。追加で確認し、解消しなければ面接を終了します';
+          short = '必須条件が不一致（解消しなければ終了）';
+        }
         setText('#ivMustAlertText', txt);
+        setText('#ivMustShort', short);
         alert.title = '不一致: ' + sum.must.mismatchLabels.join('、');
       } else alert.removeAttribute('title');
     }
     const jb = $('#ivMustJump');
     if (jb) show(jb, g.mm && g.gateReject && !!g.jump && cur !== g.jump.id);
-    // 段階のチップ: 今の段階 ＞ 省略可 ＞ 済み（表示したことがある＝perStage にキーがある）
+    // 段階のチップ: 今の段階 ＞ 省略可 ＞ 未確認（必須条件が未確認のまま離れた・入力した段階。琥珀）＞ 済み ✓（その段階で入力した＝必須条件・説明・記入欄・メモが 1 つでもあり、
+    //   未確認の必須条件が無い）。表示しただけ（チップで見た・前へ／次へで通った）の段階には付けない（docs/SPEC-flow.md 14 章）
     const ps = ivTimingRead().perStage || {};
     sum.sections.forEach(function (x, i) {
       const chip = $('#ivChips [data-sec="' + x.id + '"]');
       if (!chip) return;
-      const isCur = x.id === cur, skip = !isCur && g.skippable(i), done = !isCur && !skip && Object.prototype.hasOwnProperty.call(ps, x.id);
+      const isCur = x.id === cur, skip = !isCur && g.skippable(i);
+      const mustOpen = x.mustUnknown > 0 && !g.gateReject;   // 不一致で打ち切り（不採用推奨に固定）なら残りの必須条件は任意
+      const unconf = !isCur && !skip && mustOpen && (Object.prototype.hasOwnProperty.call(ps, x.id) || x.input);
+      const done = !isCur && !skip && !mustOpen && x.input;
       chip.classList.toggle('is-current', isCur);
       chip.classList.toggle('is-skip', skip);
+      chip.classList.toggle('is-unconf', unconf);
       chip.classList.toggle('is-done', done);
       if (isCur) chip.setAttribute('aria-current', 'step'); else chip.removeAttribute('aria-current');
-      chip.title = x.noMark + ' ' + x.title + (skip ? '（必須条件不一致のため省略可）' : done ? '（済み）' : '');
+      chip.title = x.noMark + ' ' + x.title + (skip ? '（必須条件不一致のため省略可）' : unconf ? '（必須条件が未確認）' : done ? '（記録あり）' : '');
       const sEl = $('.iv-chip-s', chip);
-      if (sEl) sEl.textContent = skip ? '省略可' : done ? '✓' : '';
+      if (sEl) sEl.textContent = skip ? '省略可' : unconf ? '未確認' : done ? '✓' : '';
     });
+    syncFlowLayout();
+    ivUpdateMore();
   }
 
   // =====================================================================
@@ -6385,28 +6656,49 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '<div class="ev-top" id="evTop"><div class="ev-result" id="evResult" data-result="">' +
         '<span class="ev-res-k">いまの結果</span><span class="badge lg" id="evResultTitle"></span>' +
         '<span class="ev-res-why" id="evResultWhy"></span><span class="ev-res-miss" id="evMissing"></span>' +
-        '<span class="ev-res-score" id="clNavScore"></span></div></div>' +
+        '<span class="ev-res-score" id="clNavScore"></span>' +
+        //   面接時間が目安から大きく外れているとき（ivTimeCheck）。押すと下の面接時間の欄へ
+        '<button type="button" class="ev-res-time hidden" id="evTimeWarn" data-action="ev-time"></button></div></div>' +
       evTimeHtml(sum) +
       sum.sections.map(function (s) { return evSecHtml(s, sum); }).join('') +
       clOverallHtml(sum) +
-      '<div class="flow-foot is-sticky" id="evFoot"><button type="button" class="btn" id="evBack" data-action="to-step" data-step="2">← 面接に戻る</button>' +
-        '<span class="spacer"></span><button type="button" class="btn primary lg" id="toReportBtn" data-action="judge">報告書へ →</button></div>';
+      // 操作行（DOM は主ボタンが先。面接所見から Tab で「報告書へ →」。docs/SPEC-flow.md 15 章）
+      '<div class="flow-foot is-sticky" id="evFoot"><button type="button" class="btn primary lg" id="toReportBtn" data-action="judge">報告書へ →</button>' +
+        '<button type="button" class="btn ff-start" id="evBack" data-action="to-step" data-step="2">← 面接に戻る</button><span class="spacer"></span></div>';
   }
-  // 面接時間の行（docs/SPEC-flow.md 4-5）: 手入力の分（空ならタイマーの値）・タイマーの合計・目安・段階ごとの時間（表示したことのない段階は「—」）
+  // 面接時間の行（docs/SPEC-flow.md 4-5・15 章）: 手入力の分（空ならタイマーの値）・タイマーの合計・目安・段階ごとの時間（表示したことのない段階は「—」）。
+  //   下に常に見える 1 行「紙から転記した面接・中断した面接は、実際の分を入れてください」（記入シートの「面接時間 ___分」を写す欄。title だけにしない）
+  function fmtMinSec(sec) { sec = Math.max(0, Math.floor(Number(sec) || 0)); return Math.floor(sec / 60) + '分' + pad2(sec % 60) + '秒'; }
   function evTimeHtml(sum) {
     const tm = sum.timing;
     const t = ivTimingRead();
     const ps = U.isObj(t.perStage) ? t.perStage : {};
     const total = tm ? tm.totalSec : 0;
-    const sub = tm && tm.startedAt ? '（タイマー ' + Math.floor(total / 60) + '分' + pad2(total % 60) + '秒・目安 ' + sum.minutesTotal + '分）' : '（タイマーの記録なし・目安 ' + sum.minutesTotal + '分）';
+    const sub = tm && tm.startedAt ? '（タイマー ' + fmtMinSec(total) + '・目安 ' + sum.minutesTotal + '分）' : '（タイマーの記録なし・目安 ' + sum.minutesTotal + '分）';
     return '<div class="ev-time" id="evTime"><label class="ev-time-k" for="evTimeMin">面接時間</label>' +
       '<input type="number" id="evTimeMin" data-cl="timing.min" min="1" max="600" step="1" inputmode="numeric" placeholder="' + (tm && tm.timerMin != null ? tm.timerMin : '') + '"' +
-        ' value="' + (t.min != null ? esc(t.min) : '') + '" aria-label="面接時間（分）" title="紙から転記したときなどは、実際の時間（分）を入れてください。空にするとタイマーの値を使います"><span>分</span>' +
+        ' value="' + (t.min != null ? esc(t.min) : '') + '" aria-label="面接時間（分）" aria-describedby="evTimeHint" title="紙から転記したときなどは、実際の時間（分）を入れてください。空にするとタイマーの値を使います"><span>分</span>' +
       '<span class="ev-time-sub" id="evTimeSub">' + esc(sub) + '</span>' +
       '<span class="ev-time-st">' + sum.sections.map(function (s) {
-        const v = Object.prototype.hasOwnProperty.call(ps, s.id);
-        return '<span class="ev-t-i" data-sec="' + esc(s.id) + '">' + s.noMark + ' ' + (v ? fmtMs(ps[s.id]) : '—') + '</span>';
-      }).join('') + '</span></div>';
+        return '<span class="ev-t-i" data-sec="' + esc(s.id) + '">' + s.noMark + ' ' + evSecTime(s, ps) + '</span>';
+      }).join('') + '</span>' +
+      '<span class="ev-time-hint" id="evTimeHint">紙（記入シート）から転記した面接・中断した面接は、実際の分を入れてください（空欄ならタイマーの分を使います）</span></div>';
+  }
+  // 面接時間を確かめる（docs/SPEC-flow.md 15 章）: 手入力の分が無く、タイマーの合計が目安の 1/4 未満か 2 倍を超えるとき（紙からの転記で数分・PC のスリープで何十分も、など）。
+  //   目安は段階の分の合計（必須条件の不一致で打ち切ったときは省略できる段階を除く）。報告書に面接時間を出さない（タイマーの記録なし・0 秒）ときは確かめない。
+  //   → null か { text: '面接時間を確かめてください（タイマー 1分30秒・目安 41分）' }
+  function ivTimeCheck(sum) {
+    const tm = sum && sum.timing;
+    if (!tm || tm.manualMin != null || !tm.text || !(tm.totalSec > 0)) return null;
+    const g = mustGateInfo(sum);
+    const goal = sum.sections.reduce(function (a, s, i) { return a + (g.skippable(i) ? 0 : s.minutes || 0); }, 0);
+    if (!goal || (tm.totalSec * 4 >= goal * 60 && tm.totalSec <= goal * 120)) return null;
+    return { text: '面接時間を確かめてください（タイマー ' + fmtMinSec(tm.totalSec) + '・目安 ' + goal + '分）' };
+  }
+  // 段階ごとの時間（6:12）。表示しただけ（0 秒で入力なし＝チップで見た・前へ／次へで通った）の段階・表示したことのない段階は「—」
+  function evSecTime(s, ps) {
+    const v = Object.prototype.hasOwnProperty.call(ps, s.id), sec = Number(ps[s.id]) || 0;
+    return v && (sec > 0 || s.input) ? fmtMs(sec) : '—';
   }
   // 記入欄の値（日付は 2026/10/10・月は 2026年10月・選択肢は表示名・空は —）
   function evFieldVal(it) {
@@ -6443,19 +6735,20 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
   // 段階のカード: 面接のメモ（必須条件〔ここでも直せる〕・記入欄・説明・質問ごとのメモ・以前のメモ）→ 確認点 ○△×（未入力は updateEvalUI が強調）
   function evSecHtml(s, sum) {
     const ps = U.isObj(ivTimingRead().perStage) ? ivTimingRead().perStage : {};
-    const visited = Object.prototype.hasOwnProperty.call(ps, s.id);
     const goal = s.minutes ? '（' + (s.minutesMax ? '最大 ' : '目安 ') + s.minutes + '分）' : '';
     const musts = [], kv = [], qa = [], extra = [], rates = [];
     s.blocks.forEach(function (b) {
       if (b.type === 'must') b.items.forEach(function (it) { musts.push(mustRowHtml(it, true)); });
       else if (b.type === 'fields') b.items.forEach(function (it) { kv.push('<div data-item="' + esc(it.id) + '"><dt>' + esc(shortLabel(it)) + '</dt><dd>' + evFieldVal(it) + '</dd></div>'); });
       else if (b.type === 'question') {
+        //   2026-10-16 より前の記録はブロックにメモが 1 つ（以前のメモ）。そのブロックは以前のメモを先に出し、質問ごとの「（メモなし）」は出さない（答えが無いと読み違えないように）
+        const old = String(b.memoText || '').trim();
+        if (old) qa.push('<div class="ev-oldmemo" data-block="' + esc(b.id) + '"><dt class="ev-memo-k">（以前のメモ）</dt><dd class="ev-memo-v">' + esc(b.memoText) + '</dd></div>');
         b.items.forEach(function (it) {
           const v = String(it.note || '').trim();
-          if (!b.memo && !v) return;
+          if ((!b.memo || old) && !v) return;
           qa.push('<div data-item="' + esc(it.id) + '"' + (v ? '' : ' class="is-empty"') + '><dt>' + esc(shortLabel(it)) + '</dt><dd>' + (v ? esc(v) : '（メモなし）') + '</dd></div>');
         });
-        if (String(b.memoText || '').trim()) extra.push('<div class="ev-oldmemo" data-block="' + esc(b.id) + '"><span class="ev-memo-k">（以前のメモ）</span><div class="ev-memo-v">' + esc(b.memoText) + '</div></div>');
       } else if (b.type === 'rating') {
         b.items.forEach(function (it) { rates.push(rateRowHtml(it)); });
         if (b.memo) rates.push(blockMemoHtml(b));
@@ -6468,7 +6761,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       evSaidHtml(s, 'explain', posting) + evSaidHtml(s, 'notify', posting) + (qa.length ? '<dl class="ev-qa">' + qa.join('') + '</dl>' : '') + extra.join('');
     return '<section class="card cl-sec ev-sec" id="cl-' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' +
       '<div class="card-head"><h2><span class="cl-no">' + s.noMark + '</span>' + esc(s.title) + '</h2>' +
-        '<span class="ev-sec-time">' + esc((visited ? fmtMs(ps[s.id]) : '—') + goal) + '</span><span class="cl-sec-state" id="clState-' + esc(s.id) + '"></span>' +
+        '<span class="ev-sec-time">' + esc(evSecTime(s, ps) + goal) + '</span><span class="cl-sec-state" id="clState-' + esc(s.id) + '"></span>' +
         '<span class="cl-skip-note">必須条件不一致のため省略可</span>' +
         '<button type="button" class="btn sm ghost ev-fix" data-action="iv-go" data-sec="' + esc(s.id) + '">✎ 面接の画面で直す</button></div>' +
       (memo ? '<div class="ev-memo">' + memo + '</div>' : '') +
@@ -6527,6 +6820,12 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       mEl.classList.toggle('is-none', !gate && !parts.length);
       mEl.classList.toggle('is-gate', gate);
     }
+    // 面接時間を確かめる（紙からの転記・中断など。docs/SPEC-flow.md 15 章）: 結果カードに 1 行・面接時間の欄を琥珀に。分を入れると消える
+    const tc = ivTimeCheck(sum);
+    const twEl = $('#evTimeWarn');
+    if (twEl) { show(twEl, !!tc); twEl.textContent = tc ? '⚠ ' + tc.text + ' → 面接時間の欄へ' : ''; }
+    const etEl = $('#evTime');
+    if (etEl) etEl.classList.toggle('is-check', !!tc);
     // 未入力の行の強調（必須条件の不一致で不採用推奨に固定したときは付けない）
     sum.must.items.forEach(function (m) {
       const row = $('.ev-memo .cl-must-row[data-item="' + m.id + '"]', root);
@@ -6542,13 +6841,17 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     });
     const ovRow = $('.cl-overall-row', root);
     if (ovRow) ovRow.classList.toggle('is-missing', !gate && !sum.overall.value);
-    // 段階の状態（不一致あり／確認点が全部入力「済」／一部「未入力 n」。確認点の無い段階は空）・省略可
+    // 段階の状態（不一致あり／必須条件の「未確認 n」・確認点の「未入力 n」〔琥珀〕／必須条件・確認点が全部入力「済」。どちらも無い段階は空）・省略可。
+    //   必須条件の不一致で不採用推奨に固定（gate）したときは、未確認・未入力を出さない（ほかの入力は任意）
     sum.sections.forEach(function (s, i) {
       const stEl = $('#clState-' + s.id);
       if (stEl) {
         const rs = sum.ratings.filter(function (r) { return r.sectionId === s.id; });
         const blank = rs.filter(function (r) { return !r.value; }).length;
-        stEl.innerHTML = s.mustMismatch ? clBadge('danger', '不一致あり') : !rs.length ? '' : !blank ? clBadge('ok', '済') : gate ? '' : clBadge('warn', '未入力 ' + blank);
+        const hasMust = s.blocks.some(function (b) { return b.type === 'must' && b.items.length; });
+        const open = gate ? [] : [s.mustUnknown ? '未確認 ' + s.mustUnknown : '', blank ? '未入力 ' + blank : ''].filter(Boolean);
+        stEl.innerHTML = s.mustMismatch ? clBadge('danger', '不一致あり') : open.length ? clBadge('warn', open.join('・'))
+          : (rs.length || hasMust) && !blank && !s.mustUnknown ? clBadge('ok', '済') : '';
       }
       const el = $('#cl-' + s.id);
       if (el) el.classList.toggle('cl-skippable', g.skippable(i));
@@ -6560,6 +6863,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const ov = sum.overall.value;
     show('#overallWarn', ov === 'hold' || ov === 'reject');
     if (ov === 'hold' || ov === 'reject') setText('#overallWarnText', '面接者の総合判断が「' + sum.overall.label + '」です。');
+    syncFlowLayout();   // 結果カード（上の帯）の高さが変わったら scroll-padding も合わせる
   }
 
   // 総評の人物像（1〜5 点。docs/SPEC-persona.md 3-2）。各行は 1 つのタブ位置（押下中のボタン、無ければ 1。updatePersonaUI が付け直す）
@@ -6769,13 +7073,21 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const j = state.judgment;
     const ovMissing = !R.OVERALL_POINTS.hasOwnProperty(ensureChecklist().overall);
     let html = stepLeadHtml(4);
-    if (j && j.warnings && j.warnings.length) {
-      // 「評価で入力する」: 総合判断が未入力、または人物像に未入力があるとき（docs/SPEC-persona.md 3-4）
+    const sum = clSummary();
+    const tc = ivTimeCheck(sum);   // 面接時間が目安から大きく外れている（紙からの転記・中断など。docs/SPEC-flow.md 15 章）
+    const warns = j && j.warnings ? j.warnings : [];
+    if (warns.length || tc) {
+      // 「評価で入力する」: 総合判断が未入力、または人物像に未入力があるとき（docs/SPEC-persona.md 3-4）。
+      //   必須条件の不一致で不採用推奨に固定したときは出さない（評価の画面は「ほかの入力は任意です」。docs/SPEC-flow.md F15・14 章）
       const psm = R.personaModel(clDefNow(), ensureChecklist());
-      const psMissing = !!(psm && psm.unscored) && j.warnings.some(function (w) { return w.indexOf('人物像に未入力') === 0; });
+      const psMissing = !!(psm && psm.unscored) && warns.some(function (w) { return w.indexOf('人物像に未入力') === 0; });
+      const gate = mustGateInfo(sum).gateReject;
+      const acts = ((ovMissing || psMissing) && !gate ? '<button type="button" class="btn sm" data-action="to-step" data-step="3">評価で入力する</button>' : '') +
+        (tc ? '<button type="button" class="btn sm" id="rpTimeFix" data-action="ev-time">評価で面接時間を直す</button>' : '');
       html += '<div class="card" id="scriptWarnings"><div class="card-head"><h3>確認事項</h3></div><ul class="list-x">' +
-        j.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' +
-        (ovMissing || psMissing ? '<div class="actions"><button type="button" class="btn sm" data-action="to-step" data-step="3">評価で入力する</button></div>' : '') +
+        warns.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') +
+        (tc ? '<li id="rpTimeWarn">' + esc(tc.text + '。紙（記入シート）から転記した面接・中断した面接は、評価の画面で実際の分を入れてください。') + '</li>' : '') + '</ul>' +
+        (acts ? '<div class="actions">' + acts + '</div>' : '') +
       '</div>';
     }
     html += '<div class="report-paper-wrap" id="appPaperWrap">' +
@@ -6783,11 +7095,12 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
       '<div class="a4" id="appPaper">' + reportPaperInnerHtml() + '</div></div>';
     html += managementCardHtml();
     html += decisionCardHtml();
-    // 操作行（左に戻る・右端に主ボタン。印刷・押印カードのクリックと重ねないよう固定しない。docs/SPEC-flow.md 5-1）
-    html += '<div class="flow-foot no-print" id="rpFoot">' +
-      '<button type="button" class="btn" id="backToChecklist" data-action="to-step" data-step="3">← 評価に戻る</button><span class="spacer"></span>' +
+    // 操作行（左に戻る・右端に主ボタン）。面接・評価と同じ画面の右下に固定し（.is-pinned）、本文の下に操作行の高さの余白（押印・合否のカードのボタンが操作行に隠れない）。
+    //   DOM は主ボタンが先（Tab の順）。見た目の左右は CSS の order（docs/SPEC-flow.md 15 章。5-1 の「固定しない」を変更）
+    html += '<div class="flow-foot is-pinned no-print" id="rpFoot">' +
+      '<button type="button" class="btn primary lg" id="reportSaveBtn" data-action="save">💾 報告書を保存（HTML）</button>' +
       '<button type="button" class="btn" id="reportPrintBtn" data-action="print-checklist">🖨 A4 で印刷</button>' +
-      '<button type="button" class="btn primary lg" id="reportSaveBtn" data-action="save">💾 報告書を保存（HTML）</button></div>';
+      '<button type="button" class="btn ff-start" id="backToChecklist" data-action="to-step" data-step="3">← 評価に戻る</button><span class="spacer"></span></div>';
     return html;
   }
 
@@ -6919,6 +7232,8 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const sj = n.judgment;
     const hasCl = R.checklistHasInput(state.checklist);
     const tm = U.isObj(state.checklist.timing) ? state.checklist.timing : null;
+    //   回答があるのにタイマーの記録が無い（タイマー導入前に面接した記録）: 面接の画面で直しても面接時間を数えない
+    state.ivNoTimer = hasCl && !(tm && tm.startedAt);
     // 再開先（docs/SPEC-flow.md 6-5）。2026-10-16 より前の記録の step 3 は旧 ②（面接チェックリスト）＝回答があれば評価・無ければ面接
     let target;
     if (n.legacy.full || n.legacy.v1) target = hasCl && sj ? 4 : hasCl ? 3 : 2;   // 旧い形式の記録は評価を入れ直す前提
@@ -7005,6 +7320,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (state.dirty && !window.confirm('入力中の内容を破棄して新規作成しますか？')) return;
     ivStop(false);
     state.ivItems = {};
+    state.ivNoTimer = false;
     state.applicant = emptyApplicant();
     state.checklist = R.emptyChecklist(); state.interviewNotes = ''; state.judgment = null; state.judgmentStale = false;
     state.management = {};
@@ -7057,6 +7373,17 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     if (!prepareChecklistSheet(true)) return;
     afterPrintOnce(function () { prepareChecklistSheet(false); });
     window.print();
+  }
+  // トップバーの「🖨 報告書を印刷」（docs/SPEC-flow.md 15 章）: まだ回答が無い（面接の前・下見の）ときは、紙に書いて面接するための記入シートと取り違えていないか確かめる。
+  //   ［キャンセル］なら印刷せず、準備の画面なら「🖨 記入シート（手書き用）」にフォーカス。回答があれば確かめずに印刷する（Ctrl+P は確かめない）
+  const TOP_PRINT_ASK = 'まだ面接の回答がありません。報告書（A4 の面接チェックリスト報告）を印刷しますか？\n\n紙に書いて面接するときは［キャンセル］を押して、準備の画面の「🖨 記入シート（手書き用）」を印刷してください。';
+  function onTopPrint() {
+    if (!ivHasAnswers() && !window.confirm(TOP_PRINT_ASK)) {
+      const pb = $('#saPaperBtn');
+      if (pb) pb.focus();
+      return;
+    }
+    printChecklistSheet();
   }
 
   // =====================================================================
@@ -7402,22 +7729,25 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
     const lastDef = last ? (def.sections || []).find(function (x) { return U.isObj(x) && x.id === last.id; }) : null;
     const lastNotify = !!lastDef && (lastDef.blocks || []).some(function (b) { return U.isObj(b) && b.type === 'notify'; });
     const sName = function (x) { return x ? x.noMark + ' ' + x.title : ''; };
-    return '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>面接台本のとおりに 準備 → 面接 → 評価 → 報告書 の 4 つの手順で進めると、A4 1 枚の報告書ができます。</p></div>' +
+    // 読み終えたら元の画面へ（サイドバーの手順は使い方では隠れるので、上と下にボタン。docs/SPEC-flow.md 14 章）
+    const cur = STEPS.find(function (x) { return x.n === state.step; }) || STEPS[0];
+    const back = function (where) { return '<div class="help-back" data-where="' + where + '"><button type="button" class="btn" data-action="back-to-judge">' + esc('← ' + cur.label + 'の画面に戻る') + '</button></div>'; };
+    return back('top') + '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>面接台本のとおりに 準備 → 面接 → 評価 → 報告書 の 4 つの手順で進めると、A4 1 枚の報告書ができます。</p></div>' +
       '<div class="help-steps">' +
-        '<div class="help-step"><span class="n">1</span><h3>準備</h3><p>応募者の名前（必須）・年齢・性別・区分、面接日・面接担当者・応募した求人、タクシー可否とメモを入れて「面接を始める」。紙に書いて面接するときは「🖨 記入シート（手書き用）」を印刷します。</p></div>' +
+        '<div class="help-step"><span class="n">1</span><h3>準備</h3><p>応募者の名前（必須）・年齢・性別・区分、面接日・面接担当者・応募した求人、タクシー可否とメモを入れて「面接を始める」。紙に書いて面接するときは「🖨 記入シート（手書き用）」を印刷します（上の「🖨 報告書を印刷」は報告書の用紙です）。</p></div>' +
         '<div class="help-step"><span class="n">2</span><h3>面接</h3><p>台本の ①〜⑤ を 1 段階ずつ表示します。上から 確かめること（必須条件は［一致］［不一致］）・話すこと（読み上げたら［説明した］）・聞くこと（答えを短くメモ）。［次へ］で次の段階へ。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>評価</h3><p>面接のあとに、段階ごとのメモを見ながら 確認点の ○△×・人物像（1〜5 点）・総合判断（採用／保留／不採用）・面接所見を付けます。上の「いまの結果」で推奨と未入力が分かります。</p></div>' +
+        '<div class="help-step"><span class="n">3</span><h3>評価</h3><p>面接のあとに、段階ごとのメモを見ながら 確認点の ○△×・' + (personaOnNow() ? '人物像（1〜5 点）・' : '') + '総合判断（採用／保留／不採用）・面接所見を付けます。上の「いまの結果」で推奨と未入力が分かります。</p></div>' +
         '<div class="help-step"><span class="n">4</span><h3>報告書</h3><p>A4 1 枚の用紙を確かめ、「面接対応者」に押印して「報告書を保存（HTML）」。最終確認と最終合否は副支配人が保存した HTML で押します（最終承認のパスワードがあるときはその入力が必要です）。</p></div>' +
       '</div></div>' +
       '<div class="card" id="helpInterview"><div class="card-head"><h3>面接の進め方（1 分で読めます）</h3></div><ol class="list-plain">' +
-        '<li>「面接を始める」でタイマーが動き、' + esc(first ? sName(first) + 'から ' : '') + '1 段階ずつ表示します。</li>' +
+        '<li>「面接を始める」でタイマーが動き、' + esc(first ? sName(first) + 'から ' : '') + '1 段階ずつ表示します（回答を入れる前なら、下見して準備に戻っても「面接を始める」で 0 から数え直します）。</li>' +
         '<li>1 つの段階は上から順に進めます：確かめること → 話すこと → 聞くこと（2 列の画面では左の列のあと右の列）。</li>' +
-        '<li>話すことは読み上げたら［説明した］を 1 回。言わなかった項目があるときだけ「一部説明しなかった」から外します（※短期求人のみの項目は、求人が短期のときだけ出ます）。</li>' +
+        '<li>話すことは読み上げたら［説明した］を 1 回。言わなかった項目があるときだけ「一部説明しなかった」から外します（※短期求人のみの項目は、求人が短期なら出し、通常求人では出しません。求人が未選択なら「短期のみ」の印つきで出し、［説明した］の対象にしません）。</li>' +
         '<li>聞くことは質問の下に答えを短くメモします（Tab で次の質問のメモへ）。○△× などの評価は面接のあとでまとめて付けます。</li>' +
-        '<li>上の帯に、この段階の経過時間と目安（過ぎると色が変わります。止まりません）・合計が出ます。段階の番号を押すとその段階へ移れます。</li>' +
+        '<li>上の帯に、この段階の経過時間と目安（過ぎると色が変わります。止まりません）・合計が出ます。段階の番号を押すとその段階へ移れます。入力した段階には ✓（必須条件が未確認なら「未確認」）が付きます。</li>' +
         '<li>必須条件が 1 つでも［不一致］になると赤い案内が出ます。' + esc(jump ? '追加で確認して解消しなければ ' + sName(jump) + 'へ進み、' + (jumpMin ? jumpMin + 'で' : '') + '終えます。' : '追加で確認して解消しなければ面接を終えます。') + '</li>' +
         '<li>' + esc(last && lastNotify ? last.noMark + ' の最後に合否連絡を伝えて［伝えた］を押し、「面接を終えて評価へ」。' : '最後の段階で「面接を終えて評価へ」。') + 'Ctrl＋Enter でも次へ進めます。</li>' +
-        '<li>1 対 1 でない面接は記入シートに書き、終わったら面接の画面に転記してください（報告書の面接時間は評価の画面で直せます）。</li></ol></div>' +
+        '<li>1 対 1 でない面接は記入シートに書き、終わったら面接の画面に転記してください。転記にかかった時間は面接時間ではないので、評価の画面の「面接時間」に記入シートの分を入れます（目安から大きく外れていると「面接時間を確かめてください」と出ます）。</li></ol></div>' +
       '<div class="card" id="helpScriptFlow"><div class="card-head"><h3>報告書（HTML）の流れ</h3></div><ol class="list-plain">' +
         '<li>面接者が「面接対応者」に押印して保存し、社内スレッドに添付します。</li>' +
         '<li>副支配人がファイルをブラウザで開きます（A4 縦の用紙 1 枚。そのまま印刷しても同じ 1 枚です。「…」で切れたメモはクリックすると全文を表示）。</li>' +
@@ -7441,7 +7771,7 @@ body.print-checklist .cl-sheet-host { display: block; position: absolute; left: 
         '<li>パスワードそのものは保存しません（照合用の値〔ハッシュ〕だけを設定と保存した HTML に入れます）。保存した HTML は保存した時点のパスワードで照合します。</li>' +
         '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは管理者に確認してください（公開版には初期パスワードはありません）。</li>' +
         '<li>最終確認の欄は「押印欄と連動」を「連動しない」や別の欄に変えてもパスワードの対象のままです（連動する欄もパスワードの対象）。パスワードがあるときに「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えて保存（JSON の読み込みを含む）するには、現在のパスワードが必要です。押印欄の説明・名簿だけの変更には要りません。</li></ul></div>' +
-      '<div class="view-footer">' + esc(m.footer) + '</div>';
+      back('bottom') + '<div class="view-footer">' + esc(m.footer) + '</div>';
   }
 
   // =====================================================================

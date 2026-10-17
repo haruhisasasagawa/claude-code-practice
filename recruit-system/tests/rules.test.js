@@ -291,7 +291,9 @@ test('63 checklistSummary（ビューモデル）', function () {
   assert.strictEqual(s0.sections[0].noMark, '①');
   assert.strictEqual(s0.sections[4].minutesText, '最大10分');
   assert.strictEqual(s0.sections[0].minutesText, '10分');
-  assert.strictEqual(s0.sections[0].done, false);
+  // 段階の入力（面接の画面で付けるもの）と未確認の必須条件（面接のチップ・評価の段階の状態。docs/SPEC-flow.md 14 章）
+  assert.ok(s0.sections.every(function (s) { return s.input === false; }) && s0.sections[0].mustUnknown === 2 && s0.sections[1].mustUnknown === 0, 'input・mustUnknown');
+  assert.ok(!('done' in s0.sections[0]) && !('answered' in s0.sections[0]) && !('gradable' in s0.sections[0]), '旧 ② の目次用の done・answered・gradable は返さない');
   assert.strictEqual(s0.pages.length, 2);
   // 面接の時間（docs/SPEC-flow.md 6-4）: タイマーの記録も手入力も無ければ null。記録があれば timingSummary と同じ
   assert.strictEqual(s0.timing, null);
@@ -300,13 +302,25 @@ test('63 checklistSummary（ビューモデル）', function () {
   const sT = R.checklistSummary(a, clT, p, {});
   assert.ok(sT.timing && sT.timing.totalSec === 1085 && sT.timing.text === '18分' && sT.timing.goalMin === 41 && sT.timing.stage === 'job', JSON.stringify(plain(sT.timing)));
   assert.deepStrictEqual(plain(sT.timing), plain(R.timingSummary(p.checklist, clT)));
-  // ① の done = 必須条件すべて回答 ＋ 確認点すべて入力（① の確認点は rt_concrete だけ。2026-10-16 に rt_manner を外した）
+  // input は面接の画面の入力だけ（確認点・確認点のメモ・総合判断は数えない）。質問のメモ・記入欄・説明・合否連絡・ブロックのメモ（旧レコード）は数える
+  const inp = function (o, i) { const c = Object.assign(R.emptyChecklist(), o); return R.checklistSummary(a, c, p, {}).sections[i || 0]; };
+  assert.strictEqual(inp({ values: { rt_concrete: 'good' }, notes: { rt_concrete: 'メモ' }, overall: 'hire' }).input, false);
+  assert.strictEqual(inp({ values: { must_weekly: 'match' } }).input, true);
+  assert.strictEqual(inp({ values: { must_weekly: 'match' } }).mustUnknown, 1);
+  assert.strictEqual(inp({ values: { busy_ng: '  ' } }).input, false);
+  assert.strictEqual(inp({ values: { busy_ng: 'なし' } }).input, true);
+  assert.strictEqual(inp({ values: { ex_submit: true } }, 1).input, true);
+  assert.strictEqual(inp({ notes: { q_prev_job: '飲食で1年' } }, 1).input, true);
+  assert.strictEqual(inp({ notes: { q_prev_job: ' ' } }, 1).input, false);
+  assert.strictEqual(inp({ notes: { continuity_q: '旧メモ' } }, 1).input, true);
+  assert.strictEqual(inp({ values: { nt_hire: true } }, 4).input, true);
+  assert.strictEqual(inp({ notes: { q_prev_job: '飲食で1年' } }, 0).input, false, 'ほかの段階の入力は数えない');
   R.checklistItems(p.checklist, 'must').forEach(function (x) { cl.values[x.item.id] = 'match'; });
-  assert.strictEqual(R.checklistSummary(a, cl, p, {}).sections[0].done, false);
+  assert.ok(R.checklistSummary(a, cl, p, {}).sections[0].mustUnknown === 0 && R.checklistSummary(a, cl, p, {}).sections[0].input === true);
   cl.values.rt_concrete = 'good';
   cl.values.must_busy = 'mismatch';
   const s1 = R.checklistSummary(a, cl, p, {});
-  assert.strictEqual(s1.sections[0].done, true);
+  assert.strictEqual(s1.sections[0].mustUnknown, 0);
   assert.strictEqual(s1.sections[0].mustMismatch, 1);
   assert.strictEqual(s1.must.mismatch, 1);
   const mp = s1.must.items.find(function (m) { return m.id === 'must_busy'; });
