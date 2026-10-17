@@ -28,8 +28,8 @@
 
   function R() { return global.RecruitRules || {}; }
 
-  // 区分のグループで変わるのは、学生かどうか（Step① の卒業予定年月の欄）だけ（rules.isStudentGroup）
-  const GROUP_HINT = '学生は highschool（高校）/ university（大学・大学院）/ vocational（専門学校）で、Step① に卒業予定年月の欄を出します。それ以外は other（freeter などほかの値も学生以外として扱います）';
+  // 区分のグループで変わるのは、学生かどうか（準備の卒業予定年月の欄）だけ（rules.isStudentGroup）
+  const GROUP_HINT = '学生は highschool（高校）/ university（大学・大学院）/ vocational（専門学校）で、「準備」に卒業予定年月の欄を出します。それ以外は other（freeter などほかの値も学生以外として扱います）';
 
   // ---------- 描画ヘルパー ----------
   function val(path) {
@@ -109,17 +109,17 @@
     return t.title || { recommend: '採用推奨', review: '上長最終判断要', reject: '不採用推奨' }[r] || r;
   }
 
-  // 画面のステップの呼び方（内部キー 1/3/4 → ①②③）
-  function stepRef(n) { return 'Step' + ({ 1: '①', 3: '②', 4: '③' }[n] || n); }
+  // 画面のステップの呼び方（内部キー 1〜4 → 「準備」「面接」「評価」「報告書」。docs/SPEC-flow.md 8 章）
+  function stepRef(n) { return '「' + ({ 1: '準備', 2: '面接', 3: '評価', 4: '報告書' }[n] || n) + '」'; }
 
-  // ① 応募者で選ぶ区分・性別と卒業予定年月の表示
+  // 準備で選ぶ区分・性別と卒業予定年月の表示
   function applicantHtml() {
-    return section('s-applicant', '応募者の属性', 'Step① 応募者で選ぶ区分・性別と、学生の卒業予定年月の表示です。',
+    return section('s-applicant', '応募者の属性', stepRef(1) + 'で選ぶ区分・性別と、学生の卒業予定年月の表示です。',
       '<div class="field-row">' +
         sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。' + GROUP_HINT }) +
         sLines('options.genders', '性別') +
       '</div>' +
-      sCheck('features.graduationDate', '卒業予定年月（学生）', '学生の区分のとき Step① に卒業予定年月の欄を出します。'));
+      sCheck('features.graduationDate', '卒業予定年月（学生）', '学生の区分のとき' + stepRef(1) + 'に卒業予定年月の欄を出します。'));
   }
 
   // ---------- テンプレート ----------
@@ -287,12 +287,12 @@
       return parts.join('|');
     }).join('\n');
     const personaHtml = '<h3 class="sub" id="s-persona">人物像（1〜5 点）</h3>' +
-      '<div class="hint">' + stepRef(3) + ' の総評で項目ごとに 1〜5 点（' + esc([0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・')) + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</div>' +
-      sCheck('checklist.persona.enabled', '人物像を使う', 'OFF にすると ' + stepRef(3) + ' に出さず、判定にも使いません。保存済みの報告書（HTML）は保存したときのままです。') +
+      '<div class="hint">' + stepRef(3) + 'の総評で項目ごとに 1〜5 点（' + esc([0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・')) + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</div>' +
+      sCheck('checklist.persona.enabled', '人物像を使う', 'OFF にすると' + stepRef(3) + 'に出さず、判定にも使いません。保存済みの報告書（HTML）は保存したときのままです。') +
       '<div class="s-cl-max" id="clPsMaxNote">人物像 <b>' + psItems.length + '</b> 項目 × 5 点 ＝ 満点 <b>' + psMax + '</b> 点</div>' +
-      '<div class="field-row">' + sInput('checklist.persona.title', '見出し（' + stepRef(3) + ' と報告書）') + '</div>' +
+      '<div class="field-row">' + sInput('checklist.persona.title', '見出し（' + stepRef(3) + 'と報告書）') + '</div>' +
       '<div class="field"><label>項目（1 行に「項目名|短い名前|説明」）</label><textarea data-bind="checklist.persona.items" data-type="persona" data-repaint rows="8">' + esc(psText) + '</textarea>' +
-        '<div class="hint">短い名前（判定の理由・記入シート）と説明（' + stepRef(3) + ' に小さく表示）は省略できます。上から表示の順です。項目名を変えなければ、並べ替えても入力済みの点は引き継ぎます。</div></div>' +
+        '<div class="hint">短い名前（判定の理由・記入シート）と説明（' + stepRef(3) + 'に小さく表示）は省略できます。上から表示の順です。項目名を変えなければ、並べ替えても入力済みの点は引き継ぎます。</div></div>' +
       '<div class="field-row">' +
         sInput('checklist.persona.keepPct', 'そのまま（得点率）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（満点 ' + psMax + ' 点では ' + Math.ceil(psMax * n(pd.keepPct, 70) / 100) + ' 点以上）' }) +
         sInput('checklist.persona.rejectBelowPct', '不採用推奨（得点率）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 未満（' + Math.ceil(psMax * n(pd.rejectBelowPct, 40) / 100) + ' 点未満。その間は' + resultTitle('review') + 'まで）' }) +
@@ -317,7 +317,7 @@
       '<h3 class="sub">判定</h3>' +
       '<div class="field-row">' +
         sSelect('checklist.mustFailResult', '必須条件に不一致があるとき', [{ value: 'reject', label: resultTitle('reject') }, { value: 'review', label: resultTitle('review') }],
-          '台本どおりなら「' + resultTitle('reject') + '」。' + stepRef(3) + ' では「不一致のとき案内するセクション」へ進んで面接を終えるよう案内します。「' + resultTitle('review') + '」にすると、ほかのセクションの確認点も評価するよう案内します（どちらも未入力のまま報告書へ進めます）。') +
+          '台本どおりなら「' + resultTitle('reject') + '」。' + stepRef(2) + 'では「不一致のとき案内するセクション」へ進んで面接を終えるよう案内します。「' + resultTitle('review') + '」にすると、ほかのセクションの確認点も評価するよう案内します（どちらも未入力のまま報告書へ進めます）。') +
         sSelect('checklist.mustUnknownResult', '必須条件に未確認が残るとき', [{ value: 'none', label: '警告のみ（判定は変えない）' }, { value: 'review', label: '採用推奨に留めない（' + resultTitle('review') + 'まで）' }]) +
       '</div>' +
       '<div class="field-row">' +
@@ -331,7 +331,7 @@
       bandHtml +
 
       '<h3 class="sub">総合判断</h3>' +
-      '<div class="field-row">' + sInput('checklist.overallLabel', '見出し') + sInput('checklist.overallHint', '説明（' + stepRef(3) + ' に表示）') + '</div>' +
+      '<div class="field-row">' + sInput('checklist.overallLabel', '見出し') + sInput('checklist.overallHint', '説明（' + stepRef(3) + 'に表示）') + '</div>' +
       '<div class="field-row cols-3">' +
         sInput('checklist.overallOptions.hire', '「採用」の表示名') + sInput('checklist.overallOptions.hold', '「保留」の表示名') + sInput('checklist.overallOptions.reject', '「不採用」の表示名') +
       '</div>' +
@@ -503,7 +503,7 @@
         (on ? '<button type="button" class="btn sm ghost danger" data-action="lock-remove" id="finalLockRemove">パスワードを外す</button>' : '') + '</div>';
     }
     return '<h3 class="sub" id="s-finalLock">最終承認のパスワード</h3>' +
-      '<div class="hint">最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（' + stepRef(4) + ' 報告書と保存した HTML の両方。面接対応者の押印には要りません）。' +
+      '<div class="hint">最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（' + stepRef(4) + 'の画面と保存した HTML の両方。面接対応者の押印には要りません）。' +
         '誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げません。パスワードそのものは保存せず、照合用の値（ハッシュ）だけを設定に持ちます。' +
         '保存した HTML は保存した時点のパスワードで照合します。パスワードがあるとき、「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えて保存するには現在のパスワードが要ります（押印欄の説明・名簿だけなら不要）。</div>' +
       '<div class="lock-status" id="finalLockStatus"><span class="badge ' + (on ? 'ok' : 'muted') + '">' + (on ? '設定済み' : '未設定') + '</span>' +
@@ -558,7 +558,7 @@
         St.verdict({ label: dc.rejectLabel, date: today, color: dc.rejectColor, size: 96, id: 'stVdReject', sub: dc.sub })
       : '';
     return '<h3 class="sub">最終合否（採用／不採用のスタンプ）</h3>' +
-      sCheck('management.decision.enabled', '最終合否のスタンプを使う', '保存ファイル（HTML）と ' + stepRef(4) + ' に「採用」「不採用」のボタンを出します。アプリの判定（推奨）とは別の、最終確認者の決定として記録します。') +
+      sCheck('management.decision.enabled', '最終合否のスタンプを使う', '保存ファイル（HTML）と' + stepRef(4) + 'に「採用」「不採用」のボタンを出します。アプリの判定（推奨）とは別の、最終確認者の決定として記録します。') +
       '<div class="field-row">' +
         '<div>' + sInput('management.decision.label', '表示名') +
           sInput('management.decision.hireLabel', '「採用」の表示名', { repaint: true }) +

@@ -671,6 +671,23 @@
     }
   }
 
+  // 面接の時間 record.checklist.timing の正規化（docs/SPEC-flow.md 6-2・6-3。決定的・冪等）。object でなければ null。
+  //   startedAt・endedAt は Date.parse できる文字列だけ（他は ''）・stage は id の形の文字列（他は ''）・
+  //   perStage は id の形のキーで 0 以上の有限の数（小数は切り捨て・86400 秒〔24 時間〕で頭打ち）・min（評価の画面で入れた分）は 1〜600 の整数だけ。ほかのキーは捨てる
+  const TIMING_SEC_MAX = 86400;
+  function normalizeTiming(t) {
+    if (!U.isObj(t)) return null;
+    const iso = function (v) { return typeof v === 'string' && v.trim() !== '' && !isNaN(Date.parse(v)) ? v : ''; };
+    const out = { startedAt: iso(t.startedAt), endedAt: iso(t.endedAt), stage: typeof t.stage === 'string' && CL_ID_RE.test(t.stage) ? t.stage : '', perStage: {} };
+    const ps = U.isObj(t.perStage) ? t.perStage : {};
+    Object.keys(ps).forEach(function (k) {
+      const v = ps[k];
+      if (CL_ID_RE.test(k) && typeof v === 'number' && isFinite(v) && v >= 0) out.perStage[k] = Math.min(TIMING_SEC_MAX, Math.floor(v));
+    });
+    if ((typeof t.min === 'number' || typeof t.min === 'string') && intIn(t.min, 1, 600)) out.min = Number(t.min);
+    return out;
+  }
+
   // 読み込んだレコードを今の形に整える（DOM 非依存）。旧い形式の記録も例外なく読む（docs/SPEC-slim.md 3-2）。
   //   legacy: v1（schemaVersion 1）／scores（旧評価の点数あり）／full（mode: 'full' の記録）／initial（廃止した押印欄の印あり）
   //   full の判別は mode === 'full'、または mode が 'script' でなく旧キー handoff がある（今の記録はどちらも書かない。D12）
@@ -696,6 +713,9 @@
     checklist.persona = rp === null ? null : U.isObj(rp) ? U.deepClone(rp) : (rp === undefined && (defHasPs || !R.checklistHasInput(checklist)) ? {} : null);
     // 消極属性（2026-10-13 に削除）は読み飛ばす
     delete checklist.header.negatives;
+    // 面接の時間（docs/SPEC-flow.md 6-3）: 形を正したものだけ残す（無い・壊れた値はキーごと消す＝タイマーの記録なし）
+    const tm = normalizeTiming(U.isObj(rec.checklist) ? rec.checklist.timing : null);
+    if (tm) checklist.timing = tm; else delete checklist.timing;
     const step = Number(rec.step);
     return {
       applicant: pickApplicant(rec.applicant),
@@ -705,7 +725,8 @@
       management: mg,
       decision: normalizeDecision(rec.decision),
       judgment: U.isObj(rec.judgment) && rec.judgment.result ? rec.judgment : null,
-      step: [1, 3, 4].indexOf(step) >= 0 ? step : 1,
+      // 内部の step は 1 準備・2 面接・3 評価・4 報告書（docs/SPEC-flow.md F1。2026-10-16 より前の記録の 3 は旧 ②＝面接チェックリスト。再開先は app.applyRecord が決める）
+      step: [1, 2, 3, 4].indexOf(step) >= 0 ? step : 1,
       savedAt: rec.savedAt || null,
       theaterName: U.isObj(rec.profile) ? String(rec.profile.theaterName || '') : '',
       legacy: {
@@ -982,6 +1003,9 @@
     kvPush('担当', hd.interviewer);
     kvPush(((def.header || {}).posting || {}).label || '応募した求人', hd.postingLabel);
     kvPush('タクシー可否・料金', hd.taxi && hd.taxi.text);
+    //   面接時間（docs/SPEC-flow.md 5-2・F19）: 評価の画面で入れた分か、タイマーの合計。記録が無い・0 秒なら出さない
+    const tmg = sum.timing;
+    if (tmg && tmg.text) kvPush('面接時間', tmg.text + (tmg.goalMin ? '（目安 ' + tmg.goalMin + '分）' : ''));
     const who = [a.category, a.age ? a.age + '歳' : '', a.gender].filter(Boolean).join('・');
     const grad = asStr(a.graduationDate).trim() ? clFmtMonth(asStr(a.graduationDate).trim()) : '';
     const headHtml = '<div class="cl-sheet-head">' + titleHtml +
@@ -1090,12 +1114,22 @@
       : '';
     const rateHtml = rateOnly && personaHtml ? '<div class="cl-cols cl-cols-eval">' + rateOnly + personaHtml + '</div>' : rateOnly + personaHtml;
 
-    // ---- 6. 面接メモ・所見の枠（記入があるものを上から。質問の回答は「短い名前：回答」2 行まで・面接所見・Step① のメモ。記入が無くても空の枠と罫線） ----
-    //   質問の回答の名前は 1 問目の短い名前＋「ほか n 問」（回答はブロックに 1 つ。3 問の名前を並べると 2 行になり名前が回答より目立つため）
+    // ---- 6. 面接メモ・所見の枠（記入があるものを上から。質問の回答は「短い名前：回答」2 行まで・面接所見・準備のメモ。記入が無くても空の枠と罫線） ----
+    //   質問の回答は質問ごとの行（docs/SPEC-flow.md 5-2・F18。キーは「①＋短い名前」・data-cl-note は質問の id）。
+    //   ブロックのメモ（2026-10-16 より前の記録の質問ブロックのメモ・質問以外のブロックのメモ）は今のまま 1 行（名前は 1 問目の短い名前＋「ほか n 問」。data-cl-block）
     const memoRows = [];
     let qRows = 0;
     sum.sections.forEach(function (s) {
       s.blocks.forEach(function (b) {
+        if (b.type === 'question') {
+          b.items.forEach(function (it) {
+            const qt = asStr(it.note).trim();
+            if (!qt) return;
+            qRows++;
+            memoRows.push('<div class="cl-nm-row cl-nm-q" data-cl-note="' + esc(it.id) + '"><div class="cl-nm-k"><span class="cl-nm-no">' + esc(s.noMark) + '</span>' + esc(shortOf(it)) + '</div>' +
+              '<div class="cl-nm-v">' + esc(qt) + '</div></div>');
+          });
+        }
         const t = asStr(b.memoText).trim();
         if (!b.memo || !t) return;
         const isQ = b.type === 'question' && b.items.length;
@@ -1341,13 +1375,13 @@
     ].join('\n');
   }
 
-  // ---------- 面接記入シート（手書き用。A4 縦 1 枚。docs/SPEC-persona.md 5 章） ----------
-  //   紙に書いて面接し、面接のあとでアプリに転記する人のための白紙の記入用紙（アプリの ② と同じ並び）。用紙の部品（.a4・見出し .cl-title）は報告書と同じ。
-  //   保存しない（印刷だけ）。印字するのは ① の応募者（氏名・区分/年齢/性別・面接日・担当・求人・タクシー）だけで、② の回答は印字しない。
+  // ---------- 面接記入シート（手書き用。A4 縦 1 枚。docs/SPEC-persona.md 5 章・docs/SPEC-flow.md 5-3） ----------
+  //   紙に書いて面接し、面接のあとでアプリに転記する人のための白紙の記入用紙。並びはアプリの面接 → 評価の画面と同じ。用紙の部品（.a4・見出し .cl-title）は報告書と同じ。
+  //   保存しない（印刷だけ）。印字するのは準備の応募者（氏名・区分/年齢/性別・面接日・担当・求人・タクシー）だけで、面接・評価の回答は印字しない。
   //   人物像の行は台本（def.persona）で決める（記録の persona === null は見ない）。DOM 非依存の HTML 文字列。o = { now }（印刷日。既定は今日）
-  //   上から: 見出し → 応募者（1 行）→ 2 段（台本の 1 枚目〔page 1〕｜2 枚目以降）→ 総評（人物像 1〜5・総合判断・面接所見の罫線〔残りの高さいっぱい〕）
+  //   上から: 見出し → 応募者（1 行）→「面接」（2 段: 台本の 1 枚目〔page 1〕｜2 枚目以降。段階ごとに 確かめる〔必須条件・記入欄〕→ 話す〔□〕→ 聞く〔質問ごとに短い名前＋答えの線〕）→
+  //   「評価」（確認点 ○△× 2 列・人物像 1〜5 の 2 列・総合判断〔＋面接時間〕・面接所見の罫線〔残りの高さいっぱい〕）
   const PP_NOTE_LINES = new Array(41).join('<i></i>');   // 面接所見の罫線（7mm 間隔。残りの高さいっぱいに置き、はみ出しは切る）
-  const PP_Q_LINES = '<i></i><i></i><i></i>';            // 質問のメモの罫線（1 ページに収まらなければ fitPaperSheet が 3 → 2 → 1 → 0 本にする）
   function paperSheetHtml(record, profile, o) {
     const R = global.RecruitRules;
     const esc = U.esc;
@@ -1367,7 +1401,7 @@
     const val = function (v) { const t = asStr(v).trim(); return t ? esc(t) : line; };
     // 見出し（報告書と同じ部品。右は 台本の版／劇場名／印刷日）
     const titleHtml = clTitleHtml(meta, def, '面接記入シート', '印刷 ' + clFmtDate(U.fmtDate(o.now ? new Date(o.now) : new Date())));
-    // 応募者（① に入力があれば印字、無ければ空欄の線。求人は未選択なら □通常求人 □短期求人）
+    // 応募者（準備に入力があれば印字、無ければ空欄の線。求人は未選択なら □通常求人 □短期求人）
     const hd = sum.header;
     const posting = U.isObj(def.header) && U.isObj(def.header.posting) ? def.header.posting : {};
     const pOpts = Array.isArray(posting.options) ? posting.options : [];
@@ -1380,9 +1414,10 @@
       '<div class="pp-f"><dt>' + esc(asStr(posting.label) || '応募した求人') + '</dt><dd>' +
         (hd.postingLabel ? esc(hd.postingLabel) : pOpts.map(function (x) { return box(asStr(x.label) || asStr(x.value)); }).join('')) + '</dd></div>' +
       '<div class="pp-f"><dt>タクシー可否・料金</dt><dd>' + val(hd.taxi && hd.taxi.text) + '</dd></div></dl>';
-    // セクション（台本の順・ブロックの順）。必須条件・確認点は全文、記入欄・説明・質問・合否連絡は短い名前。注記・質問文・説明の全文は載せない
+    // 面接の段階（台本の順・ブロックの順）。必須条件は全文、記入欄・説明・質問・合否連絡は短い名前。注記・質問文・説明の全文は載せない。確認点は評価の部分へ
     const secHtml = function (s) {
-      let h = '<section class="pp-sec" data-sec="' + esc(s.id) + '"><h3 class="pp-h"><span>' + esc(s.noMark + ' ' + s.title) + '</span>' + (s.minutesText ? '<small>' + esc(s.minutesText) + '</small>' : '') + '</h3>';
+      let h = '<section class="pp-sec" data-sec="' + esc(s.id) + '"><h3 class="pp-h"><span>' + esc(s.noMark + ' ' + s.title) + '</span>' +
+        (s.minutesText ? '<small>' + esc((s.minutesMax ? '' : '目安 ') + s.minutesText) + '</small>' : '') + '</h3>';
       s.blocks.forEach(function (b) {
         if (!b.items.length) return;
         if (b.type === 'must') {
@@ -1396,17 +1431,15 @@
           }).join('') + '</dl>';
         } else if (b.type === 'explain' || b.type === 'notify') {
           const so = b.type === 'explain' && b.items.some(function (it) { return it.shortOnly === true; });
-          h += '<div class="pp-ex" data-pp-block="' + esc(b.id) + '"><span class="pp-k">' + esc(b.title || (b.type === 'notify' ? '合否連絡' : '説明')) + '</span>' +
+          h += '<div class="pp-ex" data-pp-block="' + esc(b.id) + '"><span class="pp-k">' + (b.type === 'notify' ? '合否連絡' : '話す') + '</span>' +
             b.items.map(function (it) { return '<span class="pp-ck">' + box(shortOf(it) + (b.type === 'explain' && it.shortOnly === true ? '※' : '')) + '</span>'; }).join('') +
             (so ? '<span class="pp-note">※短期求人のみ</span>' : '') + '</div>';
         } else if (b.type === 'question') {
-          h += '<div class="pp-q" data-pp-block="' + esc(b.id) + '"><div class="pp-qn"><span class="pp-k">質問</span>' +
-            b.items.map(function (it) { return '<span class="pp-qi">' + esc(shortOf(it)) + '</span>'; }).join('<span class="pp-qsep">・</span>') + '</div>' +
-            (b.memo ? '<div class="pp-lines" aria-hidden="true">' + PP_Q_LINES + '</div>' : '') + '</div>';
-        } else if (b.type === 'rating') {
-          h += '<table class="pp-t pp-rate"><tbody>' + b.items.map(function (it) {
-            return '<tr data-pp-item="' + esc(it.id) + '"><td class="pp-lbl">' + esc(it.label) + '</td><td class="pp-mk"><span>○</span><span>△</span><span>×</span></td></tr>';
-          }).join('') + '</tbody></table>';
+          //   質問ごとに 短い名前＋答えの線（同じ行）＋次の行の線 2 本（1 ページに収まらなければ fitPaperSheet が 3 → 2 → 1 本にする）。メモを取らない質問ブロック（memo: false）は名前だけ
+          h += '<div class="pp-qs" data-pp-block="' + esc(b.id) + '">' + b.items.map(function (it, qn) {
+            return '<div class="pp-qa" data-pp-q="' + esc(it.id) + '"><span class="pp-k pp-qk">' + (qn ? '' : '聞く') + '</span><span class="pp-qi">' + esc(shortOf(it)) + '</span>' +
+              (b.memo ? '<span class="pp-ql"></span>' : '') + '</div>' + (b.memo ? '<div class="pp-qx" aria-hidden="true"><i></i><i></i></div>' : '');
+          }).join('') + '</div>';
         }
       });
       return h + '</section>';
@@ -1415,30 +1448,47 @@
     const secs = sum.sections;
     let left = secs.filter(function (s) { return s.page === 1; }), right = secs.filter(function (s) { return s.page >= 2; });
     if (!left.length || !right.length) { const half = Math.ceil(secs.length / 2); left = secs.slice(0, half); right = secs.slice(half); }
-    const colsHtml = '<div class="pp-cols"><div class="pp-col">' + left.map(secHtml).join('') + '</div><div class="pp-col">' + right.map(secHtml).join('') + '</div></div>';
-    // 総評: 人物像（1〜5 に丸）・総合判断（採用／保留／不採用に丸）・面接所見の罫線
+    const ivHtml = '<div class="pp-part" data-part="iv">面接<small>台本の順に：確かめる → 話す（□）→ 聞く（答えを線に）</small></div>' +
+      '<div class="pp-cols"><div class="pp-col">' + left.map(secHtml).join('') + '</div><div class="pp-col">' + right.map(secHtml).join('') + '</div></div>';
+    // 評価: 確認点（○△× に丸。2 列）・人物像（1〜5 に丸。2 列）・総合判断（採用／保留／不採用に丸）と面接時間・面接所見の罫線
+    const halves = function (arr) { const n = Math.ceil(arr.length / 2); return [arr.slice(0, n), arr.slice(n)]; };
+    const rates = R.checklistItems(def, 'rating');
+    const rateTable = function (arr) {
+      return '<table class="pp-t pp-rate"><tbody>' + arr.map(function (x) {
+        return '<tr data-pp-item="' + esc(x.item.id) + '"><td class="pp-no">' + esc(x.noMark) + '</td><td class="pp-lbl">' + esc(x.item.label) + '</td><td class="pp-mk"><span>○</span><span>△</span><span>×</span></td></tr>';
+      }).join('') + '</tbody></table>';
+    };
+    const rateHtml = rates.length
+      ? '<div class="pp-k pp-rate-h">確認点（○ できている　△ やや不安　× できていない）</div><div class="pp-ev-cols">' + halves(rates).filter(function (x) { return x.length; }).map(rateTable).join('') + '</div>'
+      : '';
     const pm = R.personaModel(def, { persona: {} });
+    const psTable = function (arr, from) {
+      return '<table class="pp-ps-t"><tbody>' + arr.map(function (it, i) {
+        let sc = '';
+        for (let k = 1; k <= pm.scaleMax; k++) sc += '<span>' + k + '</span>';
+        return '<tr data-pp-ps="' + esc(it.id) + '"><td class="pp-no">' + (from + i + 1) + '</td><td class="pp-lbl">' + esc(it.label) + (it.hint ? '<small>' + esc(it.hint) + '</small>' : '') + '</td><td class="pp-sc">' + sc + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    };
+    const psHalves = pm ? halves(pm.items) : [];
     const psHtml = pm
       ? '<div class="pp-ps"><div class="pp-ps-head"><b>' + esc(pm.title) + '</b><span class="pp-legend">' + esc(pm.scaleLabels.map(function (l, i) { return (i + 1) + ' ' + l; }).join('　')) + '</span>' +
         '<span class="pp-ps-sum">合計 ' + line + ' / ' + pm.max + ' 点</span></div>' +
-        '<table class="pp-ps-t"><tbody>' + pm.items.map(function (it, i) {
-          let sc = '';
-          for (let k = 1; k <= pm.scaleMax; k++) sc += '<span>' + k + '</span>';
-          return '<tr data-pp-ps="' + esc(it.id) + '"><td class="pp-no">' + (i + 1) + '</td><td class="pp-lbl">' + esc(it.label) + (it.hint ? '<small>' + esc(it.hint) + '</small>' : '') + '</td><td class="pp-sc">' + sc + '</td></tr>';
-        }).join('') + '</tbody></table></div>'
+        '<div class="pp-ev-cols">' + psTable(psHalves[0], 0) + (psHalves[1].length ? psTable(psHalves[1], psHalves[0].length) : '') + '</div></div>'
       : '';
     const oo = U.isObj(def.overallOptions) ? def.overallOptions : {};
     const OVL = { hire: '採用', hold: '保留', reject: '不採用' };
     const ovHtml = '<div class="pp-ov"><span class="pp-k">' + esc(asStr(def.overallLabel).trim() || '面接者の総合判断') + '</span>' +
-      ['hire', 'hold', 'reject'].map(function (k) { return '<span class="pp-ov-o">' + esc(asStr(oo[k]).trim() || OVL[k]) + '</span>'; }).join('') + '<small>（○で囲む）</small></div>';
+      ['hire', 'hold', 'reject'].map(function (k) { return '<span class="pp-ov-o">' + esc(asStr(oo[k]).trim() || OVL[k]) + '</span>'; }).join('') + '<small>（○で囲む）</small>' +
+      '<span class="pp-ov-time"><span class="pp-k">面接時間</span>' + line + '分</span></div>';
     const notesHtml = '<div class="pp-notes"><span class="pp-k">面接所見</span><div class="pp-lines" aria-hidden="true">' + PP_NOTE_LINES + '</div></div>';
-    const sumHtml = '<section class="pp-sum"><h3 class="pp-h"><span>総評</span></h3>' + psHtml + ovHtml + notesHtml + '</section>';
-    return '<div class="pp-sheet">' + titleHtml + whoHtml + colsHtml + sumHtml + '</div>';
+    const sumHtml = '<section class="pp-sum"><div class="pp-part" data-part="ev">評価<small>面接のあとに付ける</small></div>' + rateHtml + psHtml + ovHtml + notesHtml + '</section>';
+    return '<div class="pp-sheet">' + titleHtml + whoHtml + ivHtml + sumHtml + '</div>';
   }
 
   // 面接記入シートのスタイル（アプリは起動時に 1 回 <style id="paperSheetCss"> に入れる。用紙の箱 .a4 は checklistSheetCss）。
-  //   本文 9.5px・見出しは報告書と同じ寸法・罫線 7mm の点線・□ 9px の枠・2 段。シートは縦の flex で用紙の内寸いっぱい（面接所見の罫線が残りの高さ）。
-  //   計測中（.pp-measure）は内容の高さ（面接所見の罫線は最低 30mm）。画面幅で変わる規則（@media）を置かない（画面と印刷で同じ）
+  //   本文 11px・見出しは報告書と同じ寸法・罫線は点線・□ 12px の枠・面接は 2 段・評価の確認点と人物像は 2 列。シートは縦の flex で用紙の内寸いっぱい（面接所見の罫線が残りの高さ）。
+  //   計測中（.pp-measure）は内容の高さ（面接所見の罫線は最低 PP_NOTES_MIN）。画面幅で変わる規則（@media）を置かない（画面と印刷で同じ）
+  const PP_NOTES_MIN = '20mm';   // 実測（Chromium・既定の白紙）: 20mm で pp-a2 が 1039px（上限 1052px）・24mm だと 1055px で pp-a1 に落ちる（docs/SPEC-flow.md 13 章）
   function paperSheetCss() {
     return [
       '.pp-sheet{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:11px;line-height:1.4;color:#111;background:#fff;display:flex;flex-direction:column;min-height:100%;max-height:100%}',
@@ -1457,7 +1507,10 @@
       '.pp-f-name .pp-line{width:46mm}',
       '.pp-box{display:inline-block;width:12px;height:12px;border:1px solid #3a4556;margin:0 3px 0 8px;vertical-align:-2px}',
       '.pp-box:first-child{margin-left:0}',
-      '.pp-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 14px;margin-top:7px}',
+      //   「面接」「評価」の帯（濃紺の地に白い文字。紙の上でもどこからが面接のあとに付ける部分か分かる）
+      '.pp-part{display:flex;align-items:baseline;gap:8px;margin:7px 0 4px;padding:2px 6px;border-radius:3px;background:#24324a;color:#fff;font-size:11.5px;font-weight:800;letter-spacing:.06em}',
+      '.pp-part small{font-size:9.5px;font-weight:600;letter-spacing:0;color:#d5dbe3}',
+      '.pp-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 14px}',
       '.pp-col{min-width:0}',
       '.pp-sec{margin-top:7px}.pp-col>.pp-sec:first-child{margin-top:0}',
       '.pp-h{display:flex;align-items:baseline;gap:6px;margin:0 0 2px;padding:0 0 0 6px;border-left:3px solid #24324a;font-size:12px;font-weight:800;line-height:1.35;color:#1a2233}',
@@ -1478,15 +1531,24 @@
       '.pp-ex{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 9px;padding:2px 3px;border-bottom:1px solid #e6eaef}',
       '.pp-ck{white-space:nowrap}',
       '.pp-note{font-size:9px;color:#5b6675}',
-      '.pp-q{padding:2px 3px 0;border-bottom:1px solid #e6eaef}',
-      '.pp-qn{line-height:1.35}',
-      '.pp-qi{white-space:nowrap}.pp-qsep{color:#8a94a3;margin:0 3px}',
+      //   聞く: 質問ごとに 短い名前＋答えの線（同じ行）と次の行の線（.pp-qx。段階 pp-a3＝2 本・pp-a2＝1 本・pp-a1＝なし）
+      '.pp-qs{padding-bottom:2px;border-bottom:1px solid #e6eaef}',
+      '.pp-qa{display:flex;align-items:flex-end;gap:6px;padding:3px 3px 0;min-width:0}',
+      '.pp-qk{flex:none;width:2.6em;margin-right:0}',
+      '.pp-qa .pp-qi{flex:none;max-width:60%;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.pp-qa .pp-ql{flex:1 1 auto;min-width:12mm;height:6.2mm;border-bottom:1px dotted #8a94a3}',
+      '.pp-qx{padding-left:calc(3px + 2.6em + 6px);padding-right:3px}',
+      '.pp-qx i{display:block;height:6.2mm;border-bottom:1px dotted #8a94a3}',
+      '.pp-sheet.pp-a2 .pp-qx i:nth-child(n+2){display:none}',
+      '.pp-sheet.pp-a1 .pp-qx{display:none}',
+      '.pp-sheet.pp-compact .pp-qa .pp-ql,.pp-sheet.pp-compact .pp-qx i{height:5.5mm}',
       '.pp-lines i{display:block;height:7mm;border-bottom:1px dotted #8a94a3}',
-      '.pp-sheet.pp-q2 .pp-q .pp-lines i:nth-child(n+3){display:none}',
-      '.pp-sheet.pp-q1 .pp-q .pp-lines i:nth-child(n+2){display:none}',
-      '.pp-sheet.pp-q0 .pp-q .pp-lines{display:none}',
-      '.pp-sum{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;margin-top:9px}',
-      '.pp-ps{margin-top:1px}',
+      //   評価（残りの高さ）: 確認点 2 列 → 人物像 2 列 → 総合判断・面接時間 → 面接所見の罫線
+      '.pp-sum{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;margin-top:2px}',
+      '.pp-rate-h{display:block;padding:0 3px}',
+      '.pp-ev-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 14px;align-items:start}',
+      '.pp-rate td.pp-no{width:16px;font-size:10px;color:#5b6675;text-align:center}',
+      '.pp-ps{margin-top:5px}',
       '.pp-ps-head{display:flex;align-items:baseline;gap:10px;padding:0 3px 1px}',
       '.pp-ps-head b{font-size:11px}',
       '.pp-legend{font-size:9.5px;color:#3a4556}',
@@ -1495,30 +1557,31 @@
       '.pp-ps-t td{padding:2.5px 3px;border-bottom:1px solid #e6eaef;vertical-align:middle}',
       '.pp-ps-t .pp-no{width:16px;font-size:10px;color:#5b6675;text-align:center}',
       '.pp-ps-t .pp-lbl{font-weight:600}.pp-ps-t .pp-lbl small{font-size:9.5px;font-weight:500;color:#5b6675;margin-left:4px}',
-      '.pp-ps-t .pp-sc{white-space:nowrap;text-align:right;width:50mm}',
-      '.pp-ps-t .pp-sc span{display:inline-block;width:9.5mm;text-align:center;font-size:14px;font-weight:700}',
+      '.pp-ps-t .pp-sc{white-space:nowrap;text-align:right;width:43mm}',
+      '.pp-ps-t .pp-sc span{display:inline-block;width:8.4mm;text-align:center;font-size:14px;font-weight:700}',
       '.pp-ov{display:flex;align-items:baseline;gap:6px;margin-top:5px;padding:2px 3px}',
       '.pp-ov-o{font-size:14px;font-weight:800;padding:0 10px}',
       '.pp-ov small{font-size:9.5px;color:#5b6675}',
+      '.pp-ov-time{margin-left:auto;white-space:nowrap;font-weight:700}.pp-ov-time .pp-line{width:14mm;margin-right:2px}',
       '.pp-notes{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;margin-top:3px;padding:0 3px}',
       '.pp-notes .pp-lines{flex:1 1 0;min-height:0;overflow:hidden}',
-      //   計測中の面接所見の罫線は最低 30mm（4 本分）。flex:none にすると罫線 40 本ぶんの高さを測ってしまう
-      '.pp-sheet.pp-measure .pp-notes .pp-lines{min-height:30mm}',
+      //   計測中の面接所見の罫線は最低 PP_NOTES_MIN（約 3 本分）。flex:none にすると罫線 40 本ぶんの高さを測ってしまう
+      '.pp-sheet.pp-measure .pp-notes .pp-lines{min-height:' + PP_NOTES_MIN + '}',
       '.pp-sheet.pp-compact{font-size:10px;line-height:1.3}',
       '.pp-sheet.pp-compact .pp-sec{margin-top:4px}',
       '.pp-sheet.pp-compact .pp-t td,.pp-sheet.pp-compact .pp-fields>div,.pp-sheet.pp-compact .pp-ex,.pp-sheet.pp-compact .pp-ps-t td{padding-top:1px;padding-bottom:1px}',
       '.pp-sheet.pp-compact .pp-lines i{height:6mm}',
-      '.pp-sheet .pp-box,.pp-sheet .pp-line,.pp-sheet .pp-lines i{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+      '.pp-sheet .pp-box,.pp-sheet .pp-line,.pp-sheet .pp-lines i,.pp-sheet .pp-ql,.pp-sheet .pp-qx i,.pp-sheet .pp-part{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
     ].join('\n');
   }
 
-  // 面接記入シートを 1 ページに収める（docs/SPEC-persona.md 5-4。clFitSheet と同じ形）。.pp-measure を付けた内容の高さが limit 以下になる最初の段階で止める:
-  //   pp-q3（質問のメモの罫線 3 本）→ pp-q2 → pp-q1 → pp-q1 pp-compact（詰める）→ pp-q0 pp-compact（罫線なし）→ 縮小（zoom。最大 12 回・0.3 まで）。
-  //   戻り値は付けた段階（'pp-q3'・…・'zoom'）。高さ 0（描かれていない）なら何もしない（''）
+  // 面接記入シートを 1 ページに収める（docs/SPEC-flow.md 5-3。clFitSheet と同じ形）。.pp-measure を付けた内容の高さが limit 以下になる最初の段階で止める:
+  //   pp-a3（質問ごとに答えの線 3 本）→ pp-a2（2 本）→ pp-a1（1 本）→ pp-a1 pp-compact（詰める）→ 縮小（zoom。最大 12 回・0.3 まで）。
+  //   戻り値は付けた段階（'pp-a3'・…・'zoom'）。高さ 0（描かれていない）なら何もしない（''）
   function fitPaperSheet(sheet, limit) {
     if (!sheet || !sheet.getBoundingClientRect) return '';
     limit = typeof limit === 'number' && limit > 0 ? limit : CL_SHEET_LIMIT_PX;
-    var cls = sheet.classList, lv = [['pp-q3'], ['pp-q2'], ['pp-q1'], ['pp-q1', 'pp-compact'], ['pp-q0', 'pp-compact']], all = ['pp-q3', 'pp-q2', 'pp-q1', 'pp-q0', 'pp-compact'];
+    var cls = sheet.classList, lv = [['pp-a3'], ['pp-a2'], ['pp-a1'], ['pp-a1', 'pp-compact']], all = ['pp-a3', 'pp-a2', 'pp-a1', 'pp-compact'];
     var i, j, h = 0, z = 1, n;
     var hOf = function () { cls.add('pp-measure'); var r = sheet.getBoundingClientRect().height; cls.remove('pp-measure'); return r; };
     var clear = function () { for (j = 0; j < all.length; j++) cls.remove(all[j]); };
@@ -1728,7 +1791,7 @@
       var notes = (rec.checklist && rec.checklist.notes) || {}, row = el.closest(".cl-nm-row"), k = "", v = null, b;
       if (row) {
         k = (row.querySelector(".cl-nm-k") || {}).textContent || "メモ";
-        b = row.getAttribute("data-cl-block");
+        b = row.getAttribute("data-cl-note") || row.getAttribute("data-cl-block");
         if (b && notes[b] != null) v = notes[b];
         else if (row.classList.contains("cl-nm-iv")) v = rec.interviewNotes;
         else if (row.classList.contains("cl-nm-memo")) v = (rec.applicant || {}).reviewerNotes;
@@ -1982,6 +2045,7 @@
     buildRecord: buildRecord,
     parseRecordFromHTML: parseRecordFromHTML,
     normalizeRecord: normalizeRecord,
+    normalizeTiming: normalizeTiming,
     generateReportHTML: generateReportHTML
   };
 })(window);

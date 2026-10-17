@@ -5,6 +5,7 @@
  * 失敗が 1 件でもあれば exit 1。
  * 2026-10-14 の面接特化（docs/SPEC-slim.md 5-1）で、削除した機能のテスト（#01〜#52・#56〜#60・#62・#72）は外した（番号は振り直さない）。
  * 2026-10-16 の人物像（docs/SPEC-persona.md 7-1）: 既定の確認点は 6 項目（面接評価 14 点満点。rt_manner を外した）。#94〜#97 を追加
+ * 2026-10-16 の面接の流れ（docs/SPEC-flow.md 9-1）: 内部の step は 1〜4（#85）・timingSummary（#63・#88・#99）・記入シートの新しい並び（#97）。#98〜#100 を追加
  */
 const vm = require('vm'), fs = require('fs'), path = require('path'), assert = require('assert');
 
@@ -292,6 +293,13 @@ test('63 checklistSummary（ビューモデル）', function () {
   assert.strictEqual(s0.sections[0].minutesText, '10分');
   assert.strictEqual(s0.sections[0].done, false);
   assert.strictEqual(s0.pages.length, 2);
+  // 面接の時間（docs/SPEC-flow.md 6-4）: タイマーの記録も手入力も無ければ null。記録があれば timingSummary と同じ
+  assert.strictEqual(s0.timing, null);
+  const clT = R.emptyChecklist();
+  clT.timing = { startedAt: '2026-10-10T00:00:00.000Z', endedAt: '', stage: 'job', perStage: { conditions: 900, continuity: 185 } };
+  const sT = R.checklistSummary(a, clT, p, {});
+  assert.ok(sT.timing && sT.timing.totalSec === 1085 && sT.timing.text === '18分' && sT.timing.goalMin === 41 && sT.timing.stage === 'job', JSON.stringify(plain(sT.timing)));
+  assert.deepStrictEqual(plain(sT.timing), plain(R.timingSummary(p.checklist, clT)));
   // ① の done = 必須条件すべて回答 ＋ 確認点すべて入力（① の確認点は rt_concrete だけ。2026-10-16 に rt_manner を外した）
   R.checklistItems(p.checklist, 'must').forEach(function (x) { cl.values[x.item.id] = 'match'; });
   assert.strictEqual(R.checklistSummary(a, cl, p, {}).sections[0].done, false);
@@ -1451,7 +1459,8 @@ test('85 normalizeRecord（旧レコードの読み込み: v1・詳細モード�
   assert.deepStrictEqual(Object.keys(s3.management), ['initial', 'interviewer', 'final']);
   const ns = S.normalizeRecord(s3);
   assert.deepStrictEqual(Object.keys(ns.management), ['interviewer', 'final']);
-  assert.ok(ns.legacy.initial && ns.legacy.full && ns.step === 1, JSON.stringify(plain([ns.legacy, ns.step])));
+  //   内部の step は 1〜4 をそのまま通す（docs/SPEC-flow.md F1。この記録の step 2 は 2。再開先〔回答なしの旧い形式 → 面接〕は app.applyRecord が決める）
+  assert.ok(ns.legacy.initial && ns.legacy.full && ns.step === 2, JSON.stringify(plain([ns.legacy, ns.step])));
   // 今の形式の記録（mode・handoff を書かない）は旧扱いにしない（D12）
   const now = S.normalizeRecord(S.buildRecord(scriptState()));
   assert.deepStrictEqual(plain(now.legacy), { v1: false, scores: false, full: false, initial: false });
@@ -1459,9 +1468,10 @@ test('85 normalizeRecord（旧レコードの読み込み: v1・詳細モード�
   assert.strictEqual(Object.keys(now.checklist.persona).length, 7);
   assert.ok(!S.normalizeRecord({ schemaVersion: 2, mode: 'script', handoff: { items: [] } }).legacy.full, 'mode: script は handoff があっても旧扱いにしない');
   assert.ok(S.normalizeRecord({ schemaVersion: 2, handoff: { items: [] } }).legacy.full, 'mode なし＋handoff は詳細モードの記録');
-  // 年齢が数値 → 文字列、step 2 → 1、押印の無い欄は捨てる
+  // 年齢が数値 → 文字列、step 2（面接）は 2 のまま・1〜4 以外は 1、押印の無い欄は捨てる
   const nx = S.normalizeRecord({ schemaVersion: 2, step: 2, applicant: { name: 'x', age: 21, gender: null }, management: { interviewer: { name: '' }, final: 'x', extra: { name: 'A' } } });
-  assert.ok(nx.applicant.age === '21' && nx.applicant.gender === '' && nx.step === 1, JSON.stringify(plain(nx)));
+  assert.ok(nx.applicant.age === '21' && nx.applicant.gender === '' && nx.step === 2, JSON.stringify(plain(nx)));
+  [[1, 1], [2, 2], [3, 3], [4, 4], ['3', 3], [0, 1], [5, 1], [2.5, 1], [null, 1]].forEach(function (x) { assert.strictEqual(S.normalizeRecord({ schemaVersion: 2, step: x[0] }).step, x[1], 'step ' + x[0]); });
   assert.deepStrictEqual(Object.keys(nx.management), ['extra']);
   assert.ok(!nx.legacy.v1 && !nx.legacy.scores);
   // 壊れた値でも例外を出さない
@@ -1526,10 +1536,10 @@ test('88 公開 API（削除した関数が無い・interviewModel の新しい�
   ['V1_DEFAULT_TEXTS', 'checklistSheetLimit', 'CL_SHEET_BODY_PX'].forEach(function (k) { assert.strictEqual(S[k], undefined, 'S.' + k); });
   ['RESULT_RANK', 'num', 'round1', 'bandOf', 'categoryGroup', 'isStudentGroup', 'emptyChecklist', 'checklistHasInput', 'checklistItems', 'interviewModel', 'mustSummary',
     'checklistSummary', 'checklistDiff', 'scriptApplicantRows', 'evaluateScript', 'circled',
-    'personaModel', 'personaScore', 'personaDiff', 'PERSONA_SCALE', 'PERSONA_RESULTS'].forEach(function (k) { assert.ok(R[k] !== undefined, 'R.' + k); });
+    'personaModel', 'personaScore', 'personaDiff', 'PERSONA_SCALE', 'PERSONA_RESULTS', 'timingSummary'].forEach(function (k) { assert.ok(R[k] !== undefined, 'R.' + k); });
   assert.ok(R.PERSONA_SCALE === 5 && JSON.stringify(plain(R.PERSONA_RESULTS)) === '["none","review","reject"]');
   ['normalizeRecord', 'normalizeProfile', 'parseProfileJSON', 'buildRecord', 'generateReportHTML', 'checklistSheetHtml', 'checklistSheetCss', 'fitChecklistSheet', 'brandLogo', 'reportCss',
-    'paperSheetHtml', 'paperSheetCss', 'fitPaperSheet'].forEach(function (k) { assert.strictEqual(typeof S[k], 'function', 'S.' + k); });
+    'paperSheetHtml', 'paperSheetCss', 'fitPaperSheet', 'normalizeTiming'].forEach(function (k) { assert.strictEqual(typeof S[k], 'function', 'S.' + k); });
   assert.strictEqual(S.CL_SHEET_LIMIT_PX, 1052);
   // interviewModel(profile, cl): #55 と同じ点（旧い 3 引数の呼び方だと cl が {} になり 0 点になる）
   const cl = clMarks(['good', 'good', 'good', 'fair', 'fair', 'poor']);
@@ -2245,7 +2255,7 @@ test('96 確認点 rt_manner の移行（既定の台本と同じ保存済みの
   assert.ok(jl.total === 15 && jl.max === 16 && jl.result === 'recommend', JSON.stringify([jl.total, jl.max]));
 });
 
-test('97 A4 の人物像（5 タイル・確認点｜人物像の 2 カラム）と面接記入シート（paperSheetHtml・paperSheetCss・fitPaperSheet。docs/SPEC-persona.md 4・5 章）', function () {
+test('97 A4 の人物像（5 タイル・確認点｜人物像の 2 カラム）と面接記入シート（paperSheetHtml・paperSheetCss・fitPaperSheet。docs/SPEC-persona.md 4 章・docs/SPEC-flow.md 5-3）', function () {
   const mk = function (scores, over) {
     const st = scriptState(over);
     st.checklist = clPs(scores);
@@ -2307,69 +2317,100 @@ test('97 A4 の人物像（5 タイル・確認点｜人物像の 2 カラム）
   const html97 = S.generateReportHTML(mk([4, 4, 4, 4, 4, 4, 4]), P());
   assert.ok(html97.indexOf('row.classList.contains("cl-nm-rt")') > 0 && html97.indexOf('tr[data-cl-item]') < 0 && html97.indexOf('".cl-nm-v,.cl-rt-nt"') < 0 && html97.indexOf('sheet.querySelectorAll(".cl-nm-v")') > 0);
 
-  // ---- 面接記入シート（手書き用） ----
+  // ---- 面接記入シート（手書き用。docs/SPEC-flow.md 5-3: 面接 → 評価の並び・質問ごとに答えの線） ----
   const blank = S.paperSheetHtml(S.buildRecord({ profile: P(), applicant: SA(), checklist: R.emptyChecklist(), management: {}, step: 1 }), P(), { now: NOW });
   assert.ok(blank.indexOf('<div class="pp-sheet"><div class="cl-title"><span class="cl-title-t">面接記入シート</span><span class="cl-title-r">台本 2026-10-08 版 ／ TOHOシネマズ新宿 ／ 印刷 2026/10/10</span></div>') === 0, blank.slice(0, 200));
   assert.ok(blank.indexOf('<div class="pp-f pp-f-name"><dt>氏名</dt><dd><span class="pp-line"></span><small>さん</small></dd></div>') > 0, '空の氏名は線');
   assert.ok(blank.indexOf('<dt>応募した求人</dt><dd><span class="pp-box"></span>通常求人<span class="pp-box"></span>短期求人</dd>') > 0 && blank.indexOf('<dt>面接日</dt><dd><span class="pp-line"></span></dd>') > 0 &&
     blank.indexOf('<dt>担当</dt><dd><span class="pp-line"></span></dd>') > 0 && blank.indexOf('<dt>タクシー可否・料金</dt><dd><span class="pp-line"></span></dd>') > 0, '空の応募者は線と □');
-  //   2 段: 左 ①②（台本の 1 枚目）・右 ③④⑤
+  //   並び: 見出し → 応募者 → 「面接」の帯 → 2 段（左 ①②〔台本の 1 枚目〕・右 ③④⑤）→ 評価（「評価」の帯 → 確認点 2 列 → 人物像 2 列 → 総合判断・面接時間 → 面接所見）
+  const parts = (blank.match(/<div class="pp-part" data-part="[a-z]+">[^<]+/g) || []).map(function (x) { return x.replace(/<[^>]+>/g, ''); });
+  assert.deepStrictEqual(parts, ['面接', '評価']);
+  assert.ok(blank.indexOf('<div class="pp-part" data-part="iv">面接<small>台本の順に：確かめる → 話す（□）→ 聞く（答えを線に）</small></div><div class="pp-cols">') > 0, '面接の帯の直後に 2 段');
+  ['<dl class="pp-who">', '<div class="pp-part" data-part="iv">', '<div class="pp-cols">', '<section class="pp-sum"><div class="pp-part" data-part="ev">評価<small>面接のあとに付ける</small></div>', '<div class="pp-k pp-rate-h">確認点',
+    '<div class="pp-ps">', '<div class="pp-ov">', '<div class="pp-notes">'].forEach(function (t, i, arr) {
+    assert.ok(blank.indexOf(t) > 0 && (i === 0 || blank.indexOf(arr[i - 1]) < blank.indexOf(t)), '並び: ' + t);
+  });
   const colL = blank.slice(blank.indexOf('<div class="pp-col">'), blank.indexOf('</div><div class="pp-col">'));
   const colR = blank.slice(blank.indexOf('</div><div class="pp-col">'), blank.indexOf('<section class="pp-sum">'));
   assert.deepStrictEqual((colL.match(/data-sec="([a-z]+)"/g) || []), ['data-sec="conditions"', 'data-sec="continuity"']);
   assert.deepStrictEqual((colR.match(/data-sec="([a-z]+)"/g) || []), ['data-sec="job"', 'data-sec="teamwork"', 'data-sec="reverse"']);
-  assert.ok(colL.indexOf('<h3 class="pp-h"><span>① 勤務条件</span><small>10分</small></h3>') > 0 && colR.indexOf('<span>⑤ 逆質問</span><small>最大10分</small>') > 0);
-  //   必須条件 2 行（一致／不一致の □）・記入欄 6・確認点 6 行（○△×）・説明は短い名前と □（※短期求人のみ）・質問は短い名前＋罫線・合否連絡
-  assert.strictEqual((blank.match(/<tr data-pp-item="must_[a-z]+"><td class="pp-lbl">[^<]+<\/td><td class="pp-ch"><span class="pp-box"><\/span>一致<span class="pp-box"><\/span>不一致<\/td><\/tr>/g) || []).length, 2);
-  assert.strictEqual((blank.match(/<dl class="pp-fields">/g) || []).length, 2);
-  assert.strictEqual((blank.match(/<div data-pp-item="[a-z_]+"><dt>/g) || []).length, 6);
-  assert.ok(blank.indexOf('<div data-pp-item="weekend"><dt>土日勤務可否</dt><dd><span class="pp-box"></span>いずれか<span class="pp-box"></span>両日</dd></div>') > 0 &&
-    blank.indexOf('<div data-pp-item="first_end"><dt>初回契約終了</dt><dd><span class="pp-line"></span></dd></div>') > 0, '記入欄');
-  assert.strictEqual((blank.match(/<td class="pp-mk"><span>○<\/span><span>△<\/span><span>×<\/span><\/td>/g) || []).length, 6);
-  assert.ok(blank.indexOf('<tr data-pp-item="rt_concrete"><td class="pp-lbl">勤務条件の一致に「具体性」があるか</td>') > 0, '確認点は全文');
-  assert.ok(blank.indexOf('<div class="pp-ex" data-pp-block="conditions_explain"><span class="pp-k">説明</span><span class="pp-ck"><span class="pp-box"></span>交通費</span><span class="pp-ck"><span class="pp-box"></span>営業時間・タクシー</span>' +
-    '<span class="pp-ck"><span class="pp-box"></span>初回契約2か月※</span><span class="pp-ck"><span class="pp-box"></span>長期への切替※</span><span class="pp-note">※短期求人のみ</span></div>') > 0, '説明');
-  assert.ok(blank.indexOf('<div class="pp-q" data-pp-block="continuity_q"><div class="pp-qn"><span class="pp-k">質問</span><span class="pp-qi">前のバイトの期間・退職理由</span><span class="pp-qsep">・</span><span class="pp-qi">週3日出せないと分かったら</span>') > 0 &&
-    (blank.match(/<div class="pp-lines" aria-hidden="true"><i><\/i><i><\/i><i><\/i><\/div>/g) || []).length === 5, '質問は短い名前＋罫線 3 本（5 ブロック）');
-  assert.ok(blank.indexOf('<span class="pp-k">合否連絡</span><span class="pp-ck"><span class="pp-box"></span>採用時</span><span class="pp-ck"><span class="pp-box"></span>不合格</span>') > 0, '合否連絡');
-  ['歌舞伎町ですので', 'シフト提出は木曜23時', '条件一致：2へ', '「大丈夫です」のみ連呼', '1つでも不一致なら不採用'].forEach(function (t) { assert.ok(blank.indexOf(t) < 0, '載せない: ' + t); });
-  //   総評: 人物像 7 行（1〜5）・総合判断の 3 つ・面接所見の罫線
-  assert.strictEqual((blank.match(/<tr data-pp-ps="ps_[a-z]+"><td class="pp-no">\d<\/td><td class="pp-lbl">[^<]+(<small>[^<]+<\/small>)?<\/td><td class="pp-sc"><span>1<\/span><span>2<\/span><span>3<\/span><span>4<\/span><span>5<\/span><\/td><\/tr>/g) || []).length, 7);
-  assert.ok(blank.indexOf('<td class="pp-lbl">第一印象・身だしなみ<small>服装・清潔感</small></td>') > 0 && blank.indexOf('<b>人物像（接客）</b><span class="pp-legend">1 不採用レベル　2 やや不安　3 普通　4 良い　5 とても良い</span><span class="pp-ps-sum">合計 <span class="pp-line"></span> / 35 点</span>') > 0);
-  assert.ok(blank.indexOf('<div class="pp-ov"><span class="pp-k">面接者の総合判断</span><span class="pp-ov-o">採用</span><span class="pp-ov-o">保留</span><span class="pp-ov-o">不採用</span><small>（○で囲む）</small></div>') > 0, '総合判断');
-  assert.ok(blank.indexOf('<div class="pp-notes"><span class="pp-k">面接所見</span><div class="pp-lines" aria-hidden="true">' + new Array(41).join('<i></i>') + '</div></div>') > 0, '面接所見の罫線 40 本');
-  //   ① に入力があれば印字（氏名・区分/年齢/性別・面接日・担当・求人・タクシー）。② の回答（点・メモ）は印字しない
+  assert.ok(colL.indexOf('<h3 class="pp-h"><span>① 勤務条件</span><small>目安 10分</small></h3>') > 0 && colR.indexOf('<span>⑤ 逆質問</span><small>最大10分</small>') > 0, '段階の見出しに目安／最大');
+  //   面接の部分: 必須条件 2 行（一致／不一致の □）・記入欄 6・話す（□ 短い名前。※短期求人のみ）・聞く（質問ごとに 短い名前＋答えの線＋次の行の線 2 本）・合否連絡。確認点は載せない
+  const ivPart = blank.slice(blank.indexOf('<div class="pp-cols">'), blank.indexOf('<section class="pp-sum">'));
+  const evPart = blank.slice(blank.indexOf('<section class="pp-sum">'));
+  assert.strictEqual((ivPart.match(/<tr data-pp-item="must_[a-z]+"><td class="pp-lbl">[^<]+<\/td><td class="pp-ch"><span class="pp-box"><\/span>一致<span class="pp-box"><\/span>不一致<\/td><\/tr>/g) || []).length, 2);
+  assert.strictEqual((ivPart.match(/<dl class="pp-fields">/g) || []).length, 2);
+  assert.strictEqual((ivPart.match(/<div data-pp-item="[a-z_]+"><dt>/g) || []).length, 6);
+  assert.ok(ivPart.indexOf('<div data-pp-item="weekend"><dt>土日勤務可否</dt><dd><span class="pp-box"></span>いずれか<span class="pp-box"></span>両日</dd></div>') > 0 &&
+    ivPart.indexOf('<div data-pp-item="first_end"><dt>初回契約終了</dt><dd><span class="pp-line"></span></dd></div>') > 0, '記入欄');
+  assert.ok(ivPart.indexOf('<div class="pp-ex" data-pp-block="conditions_explain"><span class="pp-k">話す</span><span class="pp-ck"><span class="pp-box"></span>交通費</span><span class="pp-ck"><span class="pp-box"></span>営業時間・タクシー</span>' +
+    '<span class="pp-ck"><span class="pp-box"></span>初回契約2か月※</span><span class="pp-ck"><span class="pp-box"></span>長期への切替※</span><span class="pp-note">※短期求人のみ</span></div>') > 0, '話す');
+  assert.ok(ivPart.indexOf('<span class="pp-k">合否連絡</span><span class="pp-ck"><span class="pp-box"></span>採用時</span><span class="pp-ck"><span class="pp-box"></span>不合格</span>') > 0, '合否連絡');
+  assert.strictEqual((ivPart.match(/<div class="pp-qa" data-pp-q="q_[a-z_0-9]+">/g) || []).length, 13, '質問ごとの行 13');
+  assert.strictEqual((ivPart.match(/<span class="pp-ql"><\/span><\/div><div class="pp-qx" aria-hidden="true"><i><\/i><i><\/i><\/div>/g) || []).length, 13, '全部の質問に答えの線（同じ行＋次の行 2 本）');
+  assert.ok(ivPart.indexOf('<div class="pp-qs" data-pp-block="continuity_q"><div class="pp-qa" data-pp-q="q_prev_job"><span class="pp-k pp-qk">聞く</span><span class="pp-qi">前のバイトの期間・退職理由</span><span class="pp-ql"></span></div>') > 0 &&
+    ivPart.indexOf('<div class="pp-qa" data-pp-q="q_cant_3days"><span class="pp-k pp-qk"></span><span class="pp-qi">週3日出せないと分かったら</span>') > 0, '「聞く」は 1 問目だけ');
+  assert.strictEqual((ivPart.match(/<span class="pp-k pp-qk">聞く<\/span>/g) || []).length, 5, '質問ブロック 5 つ');
+  assert.ok(ivPart.indexOf('pp-mk') < 0 && ivPart.indexOf('data-pp-item="rt_') < 0, '面接の部分に確認点（○△×）は無い');
+  ['歌舞伎町ですので', 'シフト提出は木曜23時', '条件一致：2へ', '「大丈夫です」のみ連呼', '1つでも不一致なら不採用', 'pp-qn', 'pp-qsep', 'pp-q"'].forEach(function (t) { assert.ok(blank.indexOf(t) < 0, '載せない: ' + t); });
+  //   評価の部分: 確認点 6 行（段階の番号・全文・○△×。前半 3 行・後半 3 行の 2 表）・人物像 7 行（1〜5。前半 4・後半 3 の 2 表）・総合判断＋面接時間・面接所見の罫線
+  assert.strictEqual((evPart.match(/<table class="pp-t pp-rate">/g) || []).length, 2);
+  assert.strictEqual((evPart.match(/<td class="pp-mk"><span>○<\/span><span>△<\/span><span>×<\/span><\/td>/g) || []).length, 6);
+  assert.ok(evPart.indexOf('<tr data-pp-item="rt_concrete"><td class="pp-no">①</td><td class="pp-lbl">勤務条件の一致に「具体性」があるか</td>') > 0, '確認点は段階の番号＋全文');
+  const rateT = evPart.match(/<table class="pp-t pp-rate"><tbody>[\s\S]*?<\/tbody><\/table>/g);
+  assert.deepStrictEqual(rateT.map(function (t) { return (t.match(/<tr /g) || []).length; }), [3, 3]);
+  assert.ok(evPart.indexOf('<div class="pp-k pp-rate-h">確認点（○ できている　△ やや不安　× できていない）</div><div class="pp-ev-cols">') > 0);
+  const psT = evPart.match(/<table class="pp-ps-t"><tbody>[\s\S]*?<\/tbody><\/table>/g);
+  assert.deepStrictEqual(psT.map(function (t) { return (t.match(/<tr data-pp-ps=/g) || []).length; }), [4, 3], '人物像は 2 表（4・3）');
+  assert.strictEqual((evPart.match(/<tr data-pp-ps="ps_[a-z]+"><td class="pp-no">\d<\/td><td class="pp-lbl">[^<]+(<small>[^<]+<\/small>)?<\/td><td class="pp-sc"><span>1<\/span><span>2<\/span><span>3<\/span><span>4<\/span><span>5<\/span><\/td><\/tr>/g) || []).length, 7);
+  assert.ok(evPart.indexOf('<tr data-pp-ps="ps_eye"><td class="pp-no">5</td>') > 0, '後半の表の番号は 5 から');
+  assert.ok(evPart.indexOf('<td class="pp-lbl">第一印象・身だしなみ<small>服装・清潔感</small></td>') > 0 && evPart.indexOf('<b>人物像（接客）</b><span class="pp-legend">1 不採用レベル　2 やや不安　3 普通　4 良い　5 とても良い</span><span class="pp-ps-sum">合計 <span class="pp-line"></span> / 35 点</span>') > 0);
+  assert.ok(evPart.indexOf('<div class="pp-ov"><span class="pp-k">面接者の総合判断</span><span class="pp-ov-o">採用</span><span class="pp-ov-o">保留</span><span class="pp-ov-o">不採用</span><small>（○で囲む）</small>' +
+    '<span class="pp-ov-time"><span class="pp-k">面接時間</span><span class="pp-line"></span>分</span></div>') > 0, '総合判断・面接時間');
+  assert.ok(evPart.indexOf('<div class="pp-notes"><span class="pp-k">面接所見</span><div class="pp-lines" aria-hidden="true">' + new Array(41).join('<i></i>') + '</div></div>') > 0, '面接所見の罫線 40 本');
+  //   準備に入力があれば印字（氏名・区分/年齢/性別・面接日・担当・求人・タクシー）。面接・評価の回答（点・メモ）は印字しない
   const st = scriptState();
-  st.checklist.notes = { continuity_q: 'MEMO_SHOULD_NOT_PRINT' };
+  st.checklist.notes = { continuity_q: 'MEMO_SHOULD_NOT_PRINT', q_term: 'QMEMO_SHOULD_NOT_PRINT' };
   const filled = S.paperSheetHtml(S.buildRecord(st), P(), { now: NOW });
   assert.ok(filled.indexOf('<div class="pp-f pp-f-name"><dt>氏名</dt><dd>台本 花子<small>さん</small><span class="pp-who-s">大学2年生・20歳・女性</span></dd></div>') > 0 &&
     filled.indexOf('<dt>面接日</dt><dd>2026/10/10</dd>') > 0 && filled.indexOf('<dt>担当</dt><dd>笹川 晴央</dd>') > 0 && filled.indexOf('<dt>応募した求人</dt><dd>短期求人</dd>') > 0 &&
-    filled.indexOf('<dt>タクシー可否・料金</dt><dd>可・2,500円</dd>') > 0 && filled.indexOf('MEMO_SHOULD_NOT_PRINT') < 0 && filled.indexOf('pp-ov-o on') < 0, filled.slice(0, 600));
+    filled.indexOf('<dt>タクシー可否・料金</dt><dd>可・2,500円</dd>') > 0 && filled.indexOf('SHOULD_NOT_PRINT') < 0 && filled.indexOf('pp-ov-o on') < 0, filled.slice(0, 600));
   //   担当が空なら担当と連動する押印欄の氏名
   const st2 = scriptState(); st2.checklist.header.interviewer = '';
   assert.ok(S.paperSheetHtml(S.buildRecord(st2), P(), {}).indexOf('<dt>担当</dt><dd>笹川 晴央</dd>') > 0);
-  //   設定で項目を 3 つにすると 3 行（満点 15）・OFF なら人物像なし。記録の persona が null でも設定の人物像を出す
+  //   設定で項目を 3 つにすると 3 行（2 表: 2・1。満点 15）・OFF なら人物像なし。記録の persona が null でも設定の人物像を出す
   const p3 = P(); p3.checklist.persona.items = p3.checklist.persona.items.slice(0, 3);
   const h3 = S.paperSheetHtml({ applicant: SA(), checklist: R.emptyChecklist(), checklistDef: p3.checklist }, p3, {});
-  assert.ok((h3.match(/<tr data-pp-ps=/g) || []).length === 3 && h3.indexOf(' / 15 点') > 0);
+  assert.ok((h3.match(/<tr data-pp-ps=/g) || []).length === 3 && h3.indexOf(' / 15 点') > 0 && (h3.match(/<table class="pp-ps-t">/g) || []).length === 2);
   const hOff = S.paperSheetHtml({ applicant: SA(), checklist: R.emptyChecklist(), checklistDef: pOff.checklist }, pOff, {});
   assert.ok(hOff.indexOf('pp-ps') < 0 && hOff.indexOf('<div class="pp-ov">') > 0, 'OFF なら人物像なし（総合判断は出す）');
   const clNull = R.emptyChecklist(); clNull.persona = null;
   assert.strictEqual((S.paperSheetHtml({ applicant: SA(), checklist: clNull, checklistDef: P().checklist }, P(), {}).match(/<tr data-pp-ps=/g) || []).length, 7);
+  //   確認点が無い台本は確認点の部分を出さない。メモを取らない質問ブロック（memo: false）は短い名前だけ（答えの線なし）
+  const hNr = S.paperSheetHtml({ applicant: SA(), checklist: R.emptyChecklist(), checklistDef: pNr.checklist }, pNr, {});
+  assert.ok(hNr.indexOf('pp-rate') < 0 && hNr.indexOf('pp-rate-h') < 0 && hNr.indexOf('<div class="pp-ps">') > 0, '確認点なし');
+  const pM = P(); pM.checklist.sections[1].blocks.find(function (b) { return b.type === 'question'; }).memo = false;
+  const hM = S.paperSheetHtml({ applicant: SA(), checklist: R.emptyChecklist(), checklistDef: pM.checklist }, pM, {});
+  assert.ok(hM.indexOf('<div class="pp-qa" data-pp-q="q_prev_job"><span class="pp-k pp-qk">聞く</span><span class="pp-qi">前のバイトの期間・退職理由</span></div><div class="pp-qa"') > 0 &&
+    (hM.match(/<span class="pp-ql"><\/span>/g) || []).length === 10, 'memo: false は線なし');
   //   全部のページが 1 の台本は前半 ceil(n/2) を左・残りを右
   const p1 = P(); p1.checklist.sections.forEach(function (s) { s.page = 1; });
   const h1 = S.paperSheetHtml({ applicant: SA(), checklist: R.emptyChecklist(), checklistDef: p1.checklist }, p1, {});
   const l1 = h1.slice(h1.indexOf('<div class="pp-col">'), h1.indexOf('</div><div class="pp-col">'));
   assert.deepStrictEqual((l1.match(/data-sec="([a-z]+)"/g) || []), ['data-sec="conditions"', 'data-sec="continuity"', 'data-sec="job"']);
-  //   エスケープ
+  //   エスケープ（応募者・台本の文言）
   const ev2 = S.paperSheetHtml({ applicant: SA({ name: '<b>x</b>' }), checklist: R.emptyChecklist() }, P(), {});
   assert.ok(ev2.indexOf('&lt;b&gt;x&lt;/b&gt;') > 0 && ev2.indexOf('<b>x</b>') < 0);
-  // paperSheetCss（@media・閉じタグなし。用紙の内寸いっぱい・計測中は内容の高さ）
+  const pX = P(); pX.checklist.sections[0].blocks.find(function (b) { return b.type === 'question'; }).items[0].short = '<img src=x onerror=alert(1)>';
+  const hX = S.paperSheetHtml({ applicant: SA(), checklist: R.emptyChecklist(), checklistDef: pX.checklist }, pX, {});
+  assert.ok(hX.indexOf('&lt;img src=x onerror=alert(1)&gt;') > 0 && hX.indexOf('<img src=x') < 0, '質問の短い名前もエスケープ');
+  // paperSheetCss（@media・閉じタグなし。用紙の内寸いっぱい・計測中は内容の高さ。段階 pp-a3 → pp-a2〔次の行の線 1 本〕→ pp-a1〔なし〕）
   const pcss = S.paperSheetCss();
-  ['.pp-sheet{', 'min-height:100%;max-height:100%', '.pp-sheet.pp-measure{min-height:0 !important;max-height:none !important}', '.pp-sheet.pp-q2 .pp-q .pp-lines i:nth-child(n+3){display:none}',
-    '.pp-sheet.pp-q0 .pp-q .pp-lines{display:none}', '.pp-sheet.pp-measure .pp-notes .pp-lines{min-height:30mm}', '.pp-sheet .cl-title-logo{flex:none;display:block;height:7mm;'].forEach(function (t) { assert.ok(pcss.indexOf(t) >= 0, 'paperSheetCss に ' + t); });
-  ['@media', '</' + 'script', 'print-checklist'].forEach(function (t) { assert.ok(pcss.indexOf(t) < 0, 'paperSheetCss に無い: ' + t); });
-  // fitPaperSheet（疑似 DOM）: pp-q3 → pp-q2 → pp-q1 → pp-q1 pp-compact → pp-q0 pp-compact → 縮小。高さ 0 は何もしない
+  ['.pp-sheet{', 'min-height:100%;max-height:100%', '.pp-sheet.pp-measure{min-height:0 !important;max-height:none !important}', '.pp-sheet.pp-a2 .pp-qx i:nth-child(n+2){display:none}',
+    '.pp-sheet.pp-a1 .pp-qx{display:none}', '.pp-sheet.pp-measure .pp-notes .pp-lines{min-height:', '.pp-sheet .cl-title-logo{flex:none;display:block;height:7mm;', '.pp-part{', '.pp-ev-cols{', '.pp-qa .pp-ql{'].forEach(function (t) { assert.ok(pcss.indexOf(t) >= 0, 'paperSheetCss に ' + t); });
+  ['@media', '</' + 'script', 'print-checklist', 'pp-q0', 'pp-q1', 'pp-q2', 'pp-q3', '.pp-qn', '.pp-qsep'].forEach(function (t) { assert.ok(pcss.indexOf(t) < 0, 'paperSheetCss に無い: ' + t); });
+  // fitPaperSheet（疑似 DOM）: pp-a3 → pp-a2 → pp-a1 → pp-a1 pp-compact → 縮小。高さ 0 は何もしない
   function sheetMock(h0, o) {
     o = o || {};
     const c = {};
@@ -2378,7 +2419,7 @@ test('97 A4 の人物像（5 タイル・確認点｜人物像の 2 カラム）
       getBoundingClientRect: function () {
         if (o.hidden) return { height: 0 };
         let h = h0.v;
-        if (c['pp-q2']) h -= 80; if (c['pp-q1']) h -= 140; if (c['pp-q0']) h -= 200; if (c['pp-compact']) h -= 40;
+        if (c['pp-a2']) h -= 80; if (c['pp-a1']) h -= 140; if (c['pp-compact']) h -= 40;
         if (!c['pp-measure']) h = Math.max(h, 1062);   // 計測中でなければ用紙の内寸いっぱい
         const z = parseFloat(sheet.style.zoom || '1');
         return { height: z === 1 ? h : 200 + (h - 200) * z };
@@ -2386,24 +2427,172 @@ test('97 A4 の人物像（5 タイル・確認点｜人物像の 2 カラム）
     };
     return { sheet: sheet, c: c };
   }
-  const lvOf = function (m) { return ['pp-q3', 'pp-q2', 'pp-q1', 'pp-q0', 'pp-compact'].filter(function (k) { return m.c[k]; }).join(' '); };
+  const lvOf = function (m) { return ['pp-a3', 'pp-a2', 'pp-a1', 'pp-compact'].filter(function (k) { return m.c[k]; }).join(' '); };
   const L = 1052;
   const hh = { v: 930 };
   let m = sheetMock(hh);
-  assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-q3' && lvOf(m) === 'pp-q3' && !m.c['pp-measure'] && m.sheet.style.zoom === '');
-  hh.v = 1100; assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-q2' && lvOf(m) === 'pp-q2');
-  hh.v = 1150; assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-q1' && lvOf(m) === 'pp-q1');
-  hh.v = 1220; assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-q1 pp-compact' && lvOf(m) === 'pp-q1 pp-compact');
-  hh.v = 1280; assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-q0 pp-compact' && lvOf(m) === 'pp-q0 pp-compact');
+  assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-a3' && lvOf(m) === 'pp-a3' && !m.c['pp-measure'] && m.sheet.style.zoom === '');
+  hh.v = 1100; assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-a2' && lvOf(m) === 'pp-a2');
+  hh.v = 1150; assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-a1' && lvOf(m) === 'pp-a1');
+  hh.v = 1220; assert.ok(S.fitPaperSheet(m.sheet, L) === 'pp-a1 pp-compact' && lvOf(m) === 'pp-a1 pp-compact');
   hh.v = 1600;
   assert.strictEqual(S.fitPaperSheet(m.sheet, L), 'zoom');
   const z = parseFloat(m.sheet.style.zoom);
-  assert.ok(z > 0.3 && z < 1 && m.sheet.getBoundingClientRect().height <= 1062 && lvOf(m) === 'pp-q0 pp-compact', JSON.stringify([z, lvOf(m)]));
+  assert.ok(z > 0.3 && z < 1 && m.sheet.getBoundingClientRect().height <= 1062 && lvOf(m) === 'pp-a1 pp-compact', JSON.stringify([z, lvOf(m)]));
   hh.v = 900;   // 内容が減れば縮小と段階を外す
-  assert.ok(S.fitPaperSheet(m.sheet) === 'pp-q3' && m.sheet.style.zoom === '' && lvOf(m) === 'pp-q3', '上限を省略すると 1052px');
+  assert.ok(S.fitPaperSheet(m.sheet) === 'pp-a3' && m.sheet.style.zoom === '' && lvOf(m) === 'pp-a3', '上限を省略すると 1052px');
   m = sheetMock({ v: 900 }, { hidden: true });
   assert.ok(S.fitPaperSheet(m.sheet, L) === '' && lvOf(m) === '' && m.sheet.style.zoom === '', '描かれていない（高さ 0）なら何もしない');
   assert.strictEqual(S.fitPaperSheet(null), '');
+});
+
+// ======================================================================
+// 面接の流れ（docs/SPEC-flow.md 9-1。#98〜#100）
+// ======================================================================
+test('98 面接の時間 timing の正規化と往復（normalizeTiming・normalizeRecord・buildRecord・保存 HTML。docs/SPEC-flow.md 6-2・6-3）', function () {
+  // object でなければ null
+  [null, undefined, 'x', 3, [], true].forEach(function (x) { assert.strictEqual(S.normalizeTiming(x), null, JSON.stringify(x)); });
+  // 空の object は空の形（キーは startedAt・endedAt・stage・perStage。min は無い）
+  assert.deepStrictEqual(plain(S.normalizeTiming({})), { startedAt: '', endedAt: '', stage: '', perStage: {} });
+  // 壊れた値・範囲外・未知のキー
+  const raw = {
+    startedAt: 'not a date', endedAt: 123, stage: '1bad', foo: 'x', running: true,
+    perStage: { conditions: 900.7, continuity: -5, job: 'x', '1bad': 3, teamwork: Infinity, reverse: 999999, x_y: NaN, ok_2: 0 }, min: 0
+  };
+  assert.deepStrictEqual(plain(S.normalizeTiming(raw)), { startedAt: '', endedAt: '', stage: '', perStage: { conditions: 900, reverse: 86400, ok_2: 0 } });
+  const good = { startedAt: '2026-10-10T00:00:00.000Z', endedAt: '2026-10-10T00:32:10.000Z', stage: 'continuity', perStage: { conditions: 900, continuity: 185 }, min: 35 };
+  assert.deepStrictEqual(plain(S.normalizeTiming(good)), plain(good));
+  // min は 1〜600 の整数だけ（数字の文字列も数に）
+  [[35, 35], ['35', 35], [1, 1], [600, 600], [0, undefined], [601, undefined], [2.5, undefined], [true, undefined], ['', undefined], [null, undefined], [[5], undefined]].forEach(function (x) {
+    assert.strictEqual(plain(S.normalizeTiming({ min: x[0] })).min, x[1], 'min ' + JSON.stringify(x[0]));
+  });
+  // 冪等
+  [raw, good, {}, { perStage: 'x', stage: 'job' }].forEach(function (x) { assert.deepStrictEqual(plain(S.normalizeTiming(S.normalizeTiming(x))), plain(S.normalizeTiming(x))); });
+  // 空の回答に timing は無い（タイマーの記録なし。単体 #96 の形のまま）
+  assert.ok(!('timing' in R.emptyChecklist()));
+  // normalizeRecord: 形を正したものだけ残す・無い／壊れた値はキーごと消す
+  const st = scriptState();
+  st.checklist.timing = U2(good);
+  const rec = plain(S.buildRecord(st));
+  assert.deepStrictEqual(rec.checklist.timing, plain(good), 'buildRecord は timing をそのまま書く');
+  const n1 = S.normalizeRecord(rec);
+  assert.deepStrictEqual(plain(n1.checklist.timing), plain(good));
+  assert.ok(!('timing' in S.normalizeRecord(plain(S.buildRecord(scriptState()))).checklist), 'timing の無い記録は無いまま');
+  ['x', 3, null, []].forEach(function (t) {
+    const r = plain(S.buildRecord(scriptState())); r.checklist.timing = t;
+    assert.ok(!('timing' in S.normalizeRecord(r).checklist), '壊れた timing は消す: ' + JSON.stringify(t));
+  });
+  const rb = plain(S.buildRecord(scriptState())); rb.checklist.timing = U2(raw);
+  assert.deepStrictEqual(plain(S.normalizeRecord(rb).checklist.timing), plain(S.normalizeTiming(raw)));
+  // 往復: 保存 → 読み込み → 保存で timing が同じ（保存 HTML の埋め込みの記録を通しても）
+  const st2 = Object.assign({}, st, { checklist: plain(n1.checklist) });
+  assert.deepStrictEqual(plain(S.buildRecord(st2).checklist.timing), plain(good));
+  const html = S.generateReportHTML(rec, P());
+  const back = S.normalizeRecord(recordOf(html));   // 保存 HTML の埋め込みの記録（parseRecordFromHTML は DOMParser を使うので文字列から取り出す）
+  assert.deepStrictEqual(plain(back.checklist.timing), plain(good));
+  // 面接の時間は回答の有無（checklistHasInput）に数えない（タイマーだけでは「回答あり」にしない）
+  const cl0 = R.emptyChecklist(); cl0.timing = U2(good);
+  assert.strictEqual(R.checklistHasInput(cl0), false);
+});
+function U2(o) { return JSON.parse(JSON.stringify(o)); }
+
+test('99 timingSummary（合計・目安・目安を過ぎた／1.5 倍の境界・1分未満・手入力が優先・記録なし。docs/SPEC-flow.md 6-4）', function () {
+  const def = P().checklist;
+  const ts = function (t) { const cl = R.emptyChecklist(); if (t !== undefined) cl.timing = t; return R.timingSummary(def, cl); };
+  const T0 = '2026-10-10T00:00:00.000Z';
+  // 記録が無い（startedAt も min も無い）ときは null
+  [undefined, null, 'x', {}, { perStage: { conditions: 900 } }, { startedAt: '', min: 0 }].forEach(function (t) { assert.strictEqual(ts(t), null, JSON.stringify(t)); });
+  assert.strictEqual(R.timingSummary(def, null), null);
+  // 始めたばかり（0 秒）: 合計 0・報告書には出さない（text ''）・目安 41 分・段階は 5 つ（表示したことは無い）
+  const s0 = plain(ts({ startedAt: T0, perStage: {} }));
+  assert.ok(s0.totalSec === 0 && s0.text === '' && s0.timerMin === null && s0.manualMin === null && s0.goalMin === 41 && s0.startedAt === T0 && s0.endedAt === '', JSON.stringify(s0));
+  assert.deepStrictEqual(s0.stages.map(function (x) { return [x.id, x.noMark, x.minutes, x.minutesMax, x.visited, x.sec]; }),
+    [['conditions', '①', 10, false, false, 0], ['continuity', '②', 3, false, false, 0], ['job', '③', 10, false, false, 0], ['teamwork', '④', 8, false, false, 0], ['reverse', '⑤', 10, true, false, 0]]);
+  //   表示したばかりの段階（キーはあるが 0 秒）は visited
+  assert.strictEqual(plain(ts({ startedAt: T0, perStage: { conditions: 0 } })).stages[0].visited, true);
+  // 目安を過ぎた（over: 目安より長い）・1.5 倍（late: 目安の 1.5 倍以上）の境界（① 目安 10 分）
+  const st = function (sec) { return plain(ts({ startedAt: T0, perStage: { conditions: sec } })).stages[0]; };
+  [[600, false, false], [601, true, false], [899, true, false], [900, true, true], [0, false, false]].forEach(function (x) {
+    const r = st(x[0]);
+    assert.ok(r.over === x[1] && r.late === x[2] && r.sec === x[0], JSON.stringify([x, r]));
+  });
+  //   ⑤ 最大 10 分も同じ（色を変えるだけ）。目安 0 分の段階は色を変えない
+  const s5 = plain(ts({ startedAt: T0, perStage: { reverse: 900 } })).stages[4];
+  assert.ok(s5.over && s5.late && s5.minutesMax);
+  const d0 = P().checklist; d0.sections[1].minutes = 0;
+  const z = plain(R.timingSummary(d0, Object.assign(R.emptyChecklist(), { timing: { startedAt: T0, perStage: { continuity: 5000 } } })));
+  assert.ok(!z.stages[1].over && !z.stages[1].late && z.goalMin === 38, JSON.stringify(z.stages[1]));
+  // 報告書の値: 60 秒未満は「1分未満」・分は四捨五入・合計は全キーの和（台本から消えた段階の秒も数える）
+  [[59, '1分未満', null], [1, '1分未満', null], [60, '1分', 1], [89, '1分', 1], [90, '2分', 2], [1085, '18分', 18]].forEach(function (x) {
+    const r = plain(ts({ startedAt: T0, perStage: { conditions: x[0] } }));
+    assert.ok(r.text === x[1] && r.timerMin === x[2] && r.totalSec === x[0], JSON.stringify([x, r.text, r.timerMin]));
+  });
+  const g = plain(ts({ startedAt: T0, endedAt: T0, stage: 'continuity', perStage: { conditions: 900, continuity: 185, removed_sec: 60 } }));
+  assert.ok(g.totalSec === 1145 && g.text === '19分' && g.stage === 'continuity' && g.endedAt === T0 && g.stages.length === 5, JSON.stringify(g));
+  // 手入力（評価の画面の面接時間）が優先。手入力だけでも記録あり（startedAt なし）
+  const m1 = plain(ts({ startedAt: T0, perStage: { conditions: 1085 }, min: 35 }));
+  assert.ok(m1.text === '35分' && m1.manualMin === 35 && m1.timerMin === 18, JSON.stringify(m1));
+  const m2 = plain(ts({ min: 20 }));
+  assert.ok(m2 && m2.text === '20分' && m2.startedAt === '' && m2.totalSec === 0);
+  [0, 601, 2.5, '', true].forEach(function (v) { assert.strictEqual(plain(ts({ startedAt: T0, perStage: {}, min: v })).manualMin, null, 'min ' + JSON.stringify(v)); });
+  // 壊れた秒は 0（負・文字列・無限）
+  assert.strictEqual(plain(ts({ startedAt: T0, perStage: { conditions: -50, continuity: 'x', job: Infinity, teamwork: 30.9 } })).totalSec, 30);
+});
+
+test('100 A4 の面接メモは質問ごとの行・面接時間・保存 HTML の窓（docs/SPEC-flow.md 5-2・F18・F19）', function () {
+  const T0 = '2026-10-10T00:00:00.000Z';
+  const mk = function (notes, timing) {
+    const st = scriptState();
+    st.checklist.notes = notes || {};
+    if (timing !== undefined) st.checklist.timing = timing;
+    return S.buildRecord(st);
+  };
+  const rows = function (h) {
+    return (h.match(/<div class="cl-nm-row [^"]+"[^>]*><div class="cl-nm-k">[\s\S]*?<\/div><div class="cl-nm-v">[\s\S]*?<\/div><\/div>/g) || []).map(function (r) {
+      return { cls: (r.match(/class="cl-nm-row ([^"]+)"/) || [])[1], note: (r.match(/data-cl-note="([^"]+)"/) || [])[1] || '', block: (r.match(/data-cl-block="([^"]+)"/) || [])[1] || '',
+        k: r.match(/<div class="cl-nm-k">([\s\S]*?)<\/div>/)[1].replace(/<[^>]+>/g, ''), v: r.match(/<div class="cl-nm-v">([\s\S]*?)<\/div><\/div>$/)[1] };
+    });
+  };
+  // 質問ごとの行（段階の順・質問の順。キー「①＋短い名前」）。旧い記録のブロックのメモは今のまま 1 行（1 問目の短い名前＋「ほか n 問」）
+  const rec = mk({ q_term: '長期で働きたい', q_family: '反対なし', q_prev_job: '1 年・学業', continuity_q: '以前のメモ', q_concerns: '研修は？', rt_concrete: '具体的' });
+  const h = S.checklistSheetHtml(rec, P(), {});
+  const rs = rows(h);
+  assert.deepStrictEqual(rs.map(function (r) { return [r.cls, r.note, r.block, r.k]; }), [
+    ['cl-nm-q', 'q_term', '', '①短期／長期の希望'], ['cl-nm-q', 'q_family', '', '①家族の反対'], ['cl-nm-q', 'q_prev_job', '', '②前のバイトの期間・退職理由'],
+    ['cl-nm-q', '', 'continuity_q', '②前のバイトの期間・退職理由 ほか2問'], ['cl-nm-q', 'q_concerns', '', '⑤気になる点（逆質問）'],
+    ['cl-nm-b cl-nm-rt', '', '', '確認点のメモ'], ['cl-nm-iv', '', '', '面接所見'], ['cl-nm-memo', '', '', 'メモ']], JSON.stringify(rs));
+  assert.ok(rs[0].v === '長期で働きたい' && rs[3].v === '以前のメモ', JSON.stringify(rs));
+  assert.ok(h.indexOf('<p class="cl-nm-ref has-q">') > 0, '質問の行があれば「質問の回答は省略」の案内（.cl-compact-2 のとき）を持つ');
+  //   メモの無い質問は行を出さない・空白だけのメモも出さない
+  assert.deepStrictEqual(rows(S.checklistSheetHtml(mk({ q_term: '   ' }), P(), {})).map(function (r) { return r.k; }), ['面接所見', 'メモ']);
+  //   エスケープ（質問のメモ・短い名前）
+  const pX = P(); pX.checklist.sections[0].blocks.find(function (b) { return b.type === 'question'; }).items[0].short = '<b>短</b>';
+  const recX = mk({ q_term: '<img src=x onerror=alert(1)>' }); recX.checklistDef = pX.checklist;
+  const hX = S.checklistSheetHtml(recX, pX, {});
+  assert.ok(hX.indexOf('&lt;img src=x onerror=alert(1)&gt;') > 0 && hX.indexOf('<img src=x') < 0 && hX.indexOf('&lt;b&gt;短&lt;/b&gt;') > 0 && hX.indexOf('<b>短</b>') < 0);
+  // 面接時間（応募者の 2 行目の末尾。タイマーの合計・手入力・目安）
+  const kvOf = function (r) { const x = S.checklistSheetHtml(r, P(), {}); return (x.match(/<dl class="cl-sh-kv">([\s\S]*?)<\/dl>/) || ['', ''])[1].replace(/<\/dd><\/div>/g, '|').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); };
+  const kv1 = kvOf(mk({}, { startedAt: T0, endedAt: T0, stage: 'reverse', perStage: { conditions: 900, continuity: 185 } }));
+  assert.ok(/タクシー可否・料金 可・2,500円\| 面接時間 18分（目安 41分）\|$/.test(kv1), kv1);
+  assert.ok(kvOf(mk({}, { startedAt: T0, perStage: { conditions: 900 }, min: 35 })).indexOf('面接時間 35分（目安 41分）') >= 0, '手入力が優先');
+  assert.ok(kvOf(mk({}, { startedAt: T0, perStage: { conditions: 30 } })).indexOf('面接時間 1分未満（目安 41分）') >= 0, '60 秒未満');
+  assert.ok(kvOf(mk({}, { startedAt: T0, perStage: { conditions: 0 } })).indexOf('面接時間') < 0, '0 秒（e2e の固定時計）は出さない');
+  assert.ok(kvOf(mk({})).indexOf('面接時間') < 0, '記録が無ければ出さない');
+  assert.ok(kvOf(mk({}, { min: 20 })).indexOf('面接時間 20分（目安 41分）') >= 0, '手入力だけでも出す');
+  //   記録の台本の目安（保存時の台本 checklistDef の分の合計）
+  const rec7 = mk({}, { startedAt: T0, perStage: { conditions: 600 } }); const d7 = P().checklist; d7.sections[1].minutes = 6; rec7.checklistDef = d7;
+  assert.ok(S.checklistSheetHtml(rec7, P(), {}).indexOf('<dt>面接時間</dt><dd>10分（目安 44分）</dd>') > 0);
+  // 保存 HTML: 切れたメモの窓（memoOf）は data-cl-note（質問の id）→ data-cl-block（ブロックの id）の順に記録のメモを探す（全文を出す）
+  const html = S.generateReportHTML(rec, P());
+  assert.ok(html.indexOf('b = row.getAttribute("data-cl-note") || row.getAttribute("data-cl-block");') > 0, 'memoOf');
+  assert.ok(html.indexOf('data-cl-note="q_term"') > 0 && html.indexOf('data-cl-block="continuity_q"') > 0);
+  //   保存 HTML の窓の処理を疑似 DOM で動かす: 質問の行は記録の notes[質問 id] の全文
+  const src = html.match(/function memoOf\(el\) \{[\s\S]*?\n    \}/)[0];
+  const memoOf = new Function('rec', 'each', src + '\nreturn memoOf;')(recordOf(html), function (l, fn) { Array.prototype.forEach.call(l || [], fn); });
+  const fakeRow = function (attrs, cls, k) { return { getAttribute: function (n) { return attrs[n] || null; }, classList: { contains: function (c) { return cls.indexOf(c) >= 0; } }, querySelector: function () { return { textContent: k }; }, querySelectorAll: function () { return []; } }; };
+  const el = function (row, text) { return { closest: function () { return row; }, textContent: text }; };
+  assert.deepStrictEqual(plain(memoOf(el(fakeRow({ 'data-cl-note': 'q_term' }, ['cl-nm-row', 'cl-nm-q'], '①短期／長期の希望'), '長期で…'))), { k: '①短期／長期の希望', v: '長期で働きたい' });
+  assert.deepStrictEqual(plain(memoOf(el(fakeRow({ 'data-cl-block': 'continuity_q' }, ['cl-nm-row', 'cl-nm-q'], '②…'), '以前…'))), { k: '②…', v: '以前のメモ' });
 });
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

@@ -6,34 +6,40 @@
  * 失敗した確認（FAIL）が 1 つでもあれば exit 1。
  *
  * シナリオ（docs/SPEC-script-mode.md 7-3・docs/SPEC-slim.md 5-2・docs/SPEC-a4.md 7 章。2026-10-14 の面接特化で E1〜E39 → E1〜E11 に振り直し、E12〜E14 を追加）
- *   E1  3 ステップ・① 応募者（詳細モードの保存済み設定は 3 ステップで開く・詳細項目なし・390px）
- *   E2  ② 面接チェックリスト（①〜⑤ のみ・読み取り専用ヘッダー）→ ③ 報告書（A4 の紙・見出し・押印行・判定サマリー・必須条件・総合判断・押印 2 欄）
+ *   E1  4 ステップ・準備（詳細モードの保存済み設定は 4 ステップで開く・詳細項目なし・はじめての方へ・390px）
+ *   E2  面接（①〜⑤ を 1 段階ずつ・応募者の 1 行・説明した）→ 評価（段階のカード・総評）→ 報告書（A4 の紙・見出し・押印行・判定サマリー・必須条件・総合判断・押印 2 欄）
  *   E3  押印 → 保存 → 保存 HTML（A4 縦の用紙 1 枚・用紙の「最終合否」をクリックして窓で採用・右下の保存バーで再出力・そのまま印刷で 1 枚）→ アプリで読込 → 再保存 → 開く
  *   E4  旧レコードの読み込み（詳細モードの記録・初期対応者の押印入り・v1）
  *   E5  ダークモードの紙（白地・ハンコの明るさ補正なし）・390px
- *   E6  ③ を開かずに ② から保存・印刷しても判定が入る・② で保存した記録は ② から再開・印刷の経路（🖨・② の印刷ボタン・beforeprint）・総合判断未入力の保存
+ *   E6  報告書を開かずに評価から保存・印刷しても判定が入る・評価で保存した記録は評価から・面接で保存した記録は面接の同じ段階から再開・印刷の経路（🖨・beforeprint）・総合判断未入力の保存
  *   E7  旧レコード（消極属性入り）の読み込み
- *   E8  A4 報告（1 ページの要約）: 紙に質問文なし・結果が上部・1280/1440px で横スクロールなし・重いサンプルでも 1 ページ（.cl-compact。押印行込みで 1052px 以内）・PDF の本文
+ *   E8  A4 報告（1 ページの要約）: 紙に質問文なし・結果が上部・1280/1440px で横スクロールなし・重いサンプル（質問ごとのメモ 13 個）でも 1 ページ（.cl-compact。押印行込みで 1052px 以内）・
+ *       面接メモは質問ごとの行・面接時間の行・PDF の本文
  *   E9  押印欄 2 つ（初期対応者なし）: アプリ・紙・印刷用・保存 HTML の用紙（390px でも 2 列のまま用紙ごと縮小）・右サマリー・設定・旧い 3 欄の設定
  *   E10 設定画面（5 節・data-bind の許可リスト・保存／破棄／初期化・書き出し・v1／詳細モードの JSON の読み込み）・使い方
  *   E11 保存 HTML の印刷（印刷のための切替なし・ボタンなし・そのまま A4 1 枚・台本の全文なし）・アプリの A4 印刷（押印 2 欄・1 ページ）
  *   E12 設定の反映（必須条件の不一致を上長最終判断要に・台本の文言と確認点の増減・満点・空の文言・既定に戻す・壊れた台本）・読み込みの toast（確認点の差・他劇場）・
  *       手入力の押印と最終合否・保存 HTML の用紙の窓での取消・手入力・未選択のエラー・最終合否の ON/OFF（旧 E22・E26・E28・E31 のうち残した機能）
- *   E13 ロゴ（brand.js）と、ロゴ・名簿入りの版（node build.js --local）: サイドバー・③ の紙・保存 HTML の用紙の見出し
+ *   E13 ロゴ（brand.js）と、ロゴ・名簿入りの版（node build.js --local）: サイドバー・報告書の紙・保存 HTML の用紙の見出し
  *   E14 A4 用紙（docs/SPEC-a4.md 7-3）: 寸法 210×297mm・画面と印刷が同じ様式（スクリーンショットと PDF の画像）・欄クリックの窓（Esc・外のクリック・印刷に出ない・書き出しに残らない）・
  *       長いメモの全文・390px の縮小表示・アプリの印刷と保存 HTML の印刷が同じ見出しの 1 ページ
- *   E15 最終承認のパスワード（docs/SPEC-a4.md 11 章）: 公開版はロックなし・ローカル版（tests/fixtures/local-sample の架空のパスワード）で ③ の最終確認・最終合否・保存 HTML の窓・
+ *   E15 最終承認のパスワード（docs/SPEC-a4.md 11 章）: 公開版はロックなし・ローカル版（tests/fixtures/local-sample の架空のパスワード）で 報告書の最終確認・最終合否・保存 HTML の窓・
  *       設定の変更／外す（現在のパスワード）・変えた後の保存 HTML・JSON の読み込み・初期化。dist にパスワード・ハッシュが無いこと。
  *       ロックの迂回を塞ぐ（「押印欄と連動」・最終合否の ON/OFF・押印欄の構成を変える保存／JSON は現在のパスワード。「連動しない」でも最終確認欄はロックのまま）
  *   E16 用紙を埋めるレイアウト（docs/SPEC-a4.md 12 章）: 押印行は用紙の内寸の下端（上限近くのゆったりを狭い画面で開いても）・面接メモ・所見の枠（記入なしでも）・ゆったり（.cl-roomy）の付け外し・重いサンプルも 1 ページ・
  *       切れたメモを罫線の空きまで広げる（重いサンプル・面接所見 4,000 字。狭い画面・書き出して開き直しても同じ行数）・
  *       スクリーンショット a4-form.png・a4-form-heavy.png・a4-form-print.png・a4-form-heavy-print.png
- *   E17 人物像（1〜5 点）・面接記入シート（手書き用）・面接中はメモ中心の案内・質問の 1 行表示（docs/SPEC-persona.md 7-2）: 総評の人物像（クリック・数字キー・合計・1 点の警告）・
+ *   E17 人物像（1〜5 点）・面接記入シート（手書き用）（docs/SPEC-persona.md 7-2）: 評価の総評の人物像（クリック・数字キー・合計・1 点の警告・前書きの 1 行）・
  *       判定（1 点・40% 未満・全部 3・全部 4・未入力）・A4（5 タイル・確認点｜人物像・1 ページ）・右サマリー・記入シートの印刷（PDF 1 ページ・面接日を空にすると線・本物の window.print の経路・
- *       afterprint が来ないときの 3 秒の片付け）・設定・旧い記録（① だけ保存した導入前の記録は人物像を使う）・使い方。
- *       スクリーンショット p12-step2-persona.png・p12-step2-questions.png・p12-report.png・p12-report-print.png・p12-paper-sheet.png・p12-paper-sheet-filled.png
+ *       afterprint が来ないときの 3 秒の片付け）・設定・旧い記録（準備だけ保存した導入前の記録は人物像を使う）・使い方。
+ *       スクリーンショット p12-step2-persona.png（評価の総評）・p12-report.png・p12-report-print.png・p12-paper-sheet.png・p12-paper-sheet-filled.png
  *   2026-10-16 から既定の確認点は 6 項目（面接評価 14 点満点。rt_manner を人物像と重なるため外した）。rateAll・mk39 は人物像を 4 点で埋める（未入力だと上長最終判断要になるため）
- *   必須条件の不一致の案内（⑤ 逆質問へ・省略可。旧 E26）は E2 で確かめる
+ *   必須条件の不一致の案内（⑤ 逆質問へ・省略可。旧 E26）は E2・E18 で確かめる
+ *   E18 面接の流れ（docs/SPEC-flow.md 9-4。2026-10-16「実際の面接を想定したかたちに」）: 準備 → 面接（1 段階ずつ・タイマー）→ 評価 → 報告書の通し（画面の操作だけ）・段階のチップとタイマー（page.clock）・
+ *       必須条件の不一致の案内・説明した（段階に 1 つ）・質問ごとのメモ・評価の画面・はじめての方へ・旧レコード・記入シートの新しい並び・画面の大きさ・ダーク・Ctrl+Enter。
+ *       スクリーンショット p13-prep.png・p13-interview-1.png・p13-interview-2.png・p13-interview-must-ng.png・p13-evaluate.png・p13-report.png・p13-paper.png・p13-interview-390.png
+ *   2026-10-16 の面接の流れで画面は 準備（step 1）→ 面接（2）→ 評価（3）→ 報告書（4）の 4 ステップになった。ヘルパ（setCl・setPs・rateAll・judge）は押すボタンが今の画面に無ければ
+ *   その画面へ移ってから押す（docs/SPEC-flow.md 9-2）。E1・E2・E4〜E8・E10・E12・E17 は新しい画面に合わせて書き直した（落とした性質は無い。9-3 の対応表）
  */
 const { chromium } = (function(){ try { return require('playwright'); } catch (e) { return require('/opt/node-tools/node_modules/playwright'); } })();
 const path = require('path');
@@ -86,22 +92,66 @@ const pdfTextOf = (f) => {
   const fresh = async () => { await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} }); await page.reload(); await wait(300); };
   const toView = async (v) => { await page.click('.nav-item[data-view="' + v + '"]'); await wait(300); };
   const navStep = async (n) => { await page.click('#stepNav [data-step="' + n + '"]'); await wait(300); };
-  // 面接チェックリスト（docs/SPEC-checklist.md 7-2）。既に同じ値なら押さない（再押下で解除されるため）
+  // ステップの移動（サイドバーの無効〔まだ進んでいないステップ〕を通らない。docs/SPEC-flow.md 9-2）・面接の段階のチップ
+  const goTo = async (n) => { await st(n => window.RecruitApp.goStep(n), n); await wait(250); };
+  const ivGo = async (sec) => { await page.click('#ivChips [data-action="iv-go"][data-sec="' + sec + '"]'); await wait(150); };
+  const clWhere = (id) => st(id => { const x = window.RecruitRules.checklistItems(window.RecruitApp.state.profile.checklist).find(x => x.item.id === id); return x ? { type: x.block.type, sec: x.section.id } : null; }, id);
+  // 面接チェックリスト（docs/SPEC-checklist.md 7-2）。既に同じ値なら押さない（再押下で解除されるため）。
+  //   押すボタンが今の画面に無ければ出す（header.* → 準備・必須条件／確認点／総合判断 → 評価・記入欄 → 面接のその段階。docs/SPEC-flow.md 9-2）
   const setCl = async (path, v) => {
     const cur = await st(p => window.RecruitUtil.getPath(window.RecruitApp.state.checklist, p) || '', path);
-    if (cur !== v) await page.click(`[data-action="cl-set"][data-cl="${path}"][data-value="${v}"]`);
+    if (cur === v) return;
+    const sel = `[data-action="cl-set"][data-cl="${path}"][data-value="${v}"]`;
+    if (!(await page.$(sel))) {
+      if (path.indexOf('header.') === 0) await goTo(1);
+      else {
+        const w = path === 'overall' ? { type: 'rating' } : await clWhere(path.replace(/^values\./, ''));
+        if (!w || w.type === 'rating' || w.type === 'must') await goTo(3); else { await goTo(2); await ivGo(w.sec); }
+      }
+    }
+    await page.click(sel);
   };
-  // 人物像の点（docs/SPEC-persona.md 3-2）。今の値と違うときだけ押す（同じ点を押すと未入力に戻るため）。n=0 で未入力に戻す
+  // 人物像の点（docs/SPEC-persona.md 3-2）。今の値と違うときだけ押す（同じ点を押すと未入力に戻るため）。n=0 で未入力に戻す。ボタンが無ければ評価へ
   const setPs = async (id, n) => {
     const cur = await st(id => { const p = window.RecruitApp.state.checklist.persona; return p && p[id] ? Number(p[id]) : 0; }, id);
     if (cur === n) return;
-    await page.click(`[data-action="ps-set"][data-persona="${id}"][data-score="${n || cur}"]`);
+    const sel = `[data-action="ps-set"][data-persona="${id}"][data-score="${n || cur}"]`;
+    if (!(await page.$(sel))) await goTo(3);
+    await page.click(sel);
+  };
+  // 面接の「説明した」（段階に 1 つ。kind: explain／notify）。ボタンが無ければ面接のその段階へ
+  const said = async (sec, kind = 'explain') => {
+    const sel = `[data-action="iv-said"][data-sec="${sec}"][data-kind="${kind}"]`;
+    if (!(await page.$(sel))) { if (await step() !== 2) await goTo(2); await ivGo(sec); }
+    await page.click(sel);
+    await wait(120);
+  };
+  // 面接の全段階の質問のメモ（と台本の編集で付けたメモ）を text に・評価の確認点のメモを rtText に（重いサンプル）
+  const fillMemos = async (text, rtText) => {
+    await goTo(2);
+    for (const sec of await st(() => window.RecruitApp.state.profile.checklist.sections.map(s => s.id))) {
+      await ivGo(sec);
+      for (const c of await page.$$eval('#ivStage textarea[data-cl^="notes."]', els => els.map(e => e.getAttribute('data-cl')))) await page.fill('#ivStage textarea[data-cl="' + c + '"]', text);
+    }
+    await goTo(3);
+    for (const c of await page.$$eval('#stepContent input.cl-note[data-cl]', els => els.map(e => e.getAttribute('data-cl')))) await page.fill('#stepContent input.cl-note[data-cl="' + c + '"]', rtText == null ? text : rtText);
+  };
+  // 別のページ（ローカル版・公開版のタブ）で面接 → 評価 → 報告書へ（画面の操作で: 最後の段階のチップ →「面接を終えて評価へ」→「報告書へ」）
+  const ivToReport = async (pg) => {
+    const last = await pg.$$eval('#ivChips [data-action="iv-go"]', els => els.length ? els[els.length - 1].dataset.sec : '');
+    if (last) { await pg.click('#ivChips [data-action="iv-go"][data-sec="' + last + '"]'); await pg.waitForTimeout(150); }
+    await pg.click('#ivNext');
+    await pg.waitForTimeout(250);
+    await pg.click('#toReportBtn');
+    await pg.waitForTimeout(400);
   };
   const psIds = () => st(() => { const p = window.RecruitApp.state.profile.checklist.persona; return p && p.enabled !== false ? (p.items || []).map(it => it.id) : []; });
   // 人物像を台本順に scores（配列）で入れる
   const setPsAll = async (scores) => { const ids = await psIds(); for (let i = 0; i < ids.length; i++) await setPs(ids[i], scores[i] || 0); await wait(80); };
   // 必須条件すべて一致（o.must=false で触らない）・確認点すべて level・総合判断 o.overall（既定 hire）・人物像すべて o.ps（既定 4。false で触らない）
+  //   必須条件・確認点・総合判断・人物像は全部評価の画面にあるので、先に評価へ（docs/SPEC-flow.md 9-2）
   const rateAll = async (level = 'good', o = {}) => {
+    if (await step() !== 3) await goTo(3);
     const ids = await st(() => { const d = window.RecruitApp.state.profile.checklist, R = window.RecruitRules;
       return { must: R.checklistItems(d, 'must').map(x => x.item.id), rate: R.checklistItems(d, 'rating').map(x => x.item.id) }; });
     if (o.must !== false) for (const id of ids.must) await setCl('values.' + id, 'match');
@@ -112,7 +162,8 @@ const pdfTextOf = (f) => {
     }
     await wait(100);
   };
-  const judge = async () => { await page.click('[data-action="judge"]'); await wait(400); };
+  // 報告書へ（評価の「報告書へ →」。ほかの画面からは goTo(4)）
+  const judge = async () => { if (await page.$('#toReportBtn')) await page.click('#toReportBtn'); else await goTo(4); await wait(400); };
   const saveSettings = async () => { await page.click('#view-settings [data-action="save"]'); await wait(300); };
   const storedProfile = () => st(() => JSON.parse(localStorage.getItem('recruit.profile.v1') || 'null'));
   const saveRecord = async (name) => {
@@ -168,9 +219,9 @@ const pdfTextOf = (f) => {
   await wait(300);
 
   // =====================================================================
-  // E1 3 ステップ・① 応募者（docs/SPEC-script-mode.md 7-3・docs/SPEC-slim.md 3-4）
+  // E1 4 ステップ・準備（docs/SPEC-flow.md 1 章・2 章・docs/SPEC-script-mode.md 7-3・docs/SPEC-slim.md 3-4）
   // =====================================================================
-  console.log('\n== E1 3 ステップ・① 応募者 ==');
+  console.log('\n== E1 4 ステップ・準備 ==');
   // 1. 詳細モード（mode:'full'＋handoffRules）の保存済みの設定（full-mode-last の利用者）
   const legacyProfile = fs.readFileSync(path.join(FIX, 'legacy-profile-full.json'), 'utf8');
   await page.evaluate((t) => { localStorage.clear(); localStorage.setItem('recruit.profile.v1', t); }, legacyProfile);
@@ -179,10 +230,10 @@ const pdfTextOf = (f) => {
   const t1a = await toastText();
   const sp1 = await storedProfile();
   const nav1a = await stepLabels();
-  expect(JSON.stringify(nav1a) === JSON.stringify(['応募者', '面接チェックリスト', '報告書']) && !!(await page.$('#scriptApplicantCard')) && t1a.includes('詳細モードは終了しました') &&
+  expect(JSON.stringify(nav1a) === JSON.stringify(['準備', '面接', '評価', '報告書']) && !!(await page.$('#scriptApplicantCard')) && t1a.includes('詳細モードは終了しました') && t1a.includes('準備 → 面接 → 評価 → 報告書の 4 ステップで開きます') &&
     !('mode' in sp1) && !('handoffRules' in sp1) && !('contribution' in sp1) && !('inputStages' in sp1) && JSON.stringify(sp1.management.fields.map(f => f.id)) === JSON.stringify(['interviewer', 'final']) &&
     sp1.meta.theaterName === 'TOHOシネマズ テスト',
-    'E1 詳細モードの保存済みの設定は 3 ステップで開き（toast「詳細モードは終了しました」）、保存済みの設定から mode・handoffRules・初期対応者の欄を消す: ' + JSON.stringify({ t1a, keys: Object.keys(sp1) }));
+    'E1 詳細モードの保存済みの設定は 4 ステップで開き（toast「詳細モードは終了しました。準備 → 面接 → 評価 → 報告書の 4 ステップで開きます。」）、保存済みの設定から mode・handoffRules・初期対応者の欄を消す: ' + JSON.stringify({ t1a, keys: Object.keys(sp1) }));
   // 確認点 rt_manner の移行（docs/SPEC-persona.md 1-6）: 直前の既定と同じ台本の保存済みの設定は、rt_manner を外した新しい既定の台本に（人物像も入る。toast 1 回）
   expect(!JSON.stringify(sp1.checklist).includes('rt_manner') && !!sp1.checklist.persona && sp1.checklist.persona.enabled === true && sp1.checklist.persona.items.length === 7 &&
     t1a.includes('確認点「最低限の話し方、敬語が可能か」は人物像の「言葉遣い・説明のわかりやすさ」と重なるため、既定の台本から外しました'),
@@ -197,12 +248,24 @@ const pdfTextOf = (f) => {
     'E1 既定（設定なし）: 設定に mode は無く、押印欄は 2 つ・toast なし');
   // 3. サイドバー
   const nav32 = await stepNav();
-  expect(JSON.stringify(nav32) === JSON.stringify([['1', '1', '応募者'], ['3', '2', '面接チェックリスト'], ['4', '3', '報告書']]) && (await page.textContent('#stepSectionTitle')) === '手順',
-    'E1 サイドバーは 3 ステップ（応募者／面接チェックリスト／報告書）・見出し「手順」: ' + JSON.stringify(nav32));
+  const hint32 = await page.$$eval('#stepNav .step-hint', els => els.map(e => e.textContent));
+  expect(JSON.stringify(nav32) === JSON.stringify([['1', '1', '準備'], ['2', '2', '面接'], ['3', '3', '評価'], ['4', '4', '報告書']]) && (await page.textContent('#stepSectionTitle')) === '手順' &&
+    JSON.stringify(hint32) === JSON.stringify(['応募者の名前と面接の情報', '台本どおりに話す・聞く・メモ', '面接のあとに ○△×・人物像・総合判断', '押印・合否・保存']),
+    'E1 サイドバーは 4 ステップ（準備／面接／評価／報告書・内部キーと表示番号は同じ）＋各ステップの 1 行の説明・見出し「手順」: ' + JSON.stringify({ nav32, hint32 }));
+  // まだ進んでいないステップは押せない（面接・評価・報告書は無効）・最上部に「この画面ですること」
+  const dis32 = await page.$$eval('#stepNav li', els => els.map(e => e.classList.contains('disabled')));
+  const lead32 = await page.evaluate(() => { const l = document.getElementById('stepLead'); return l ? { b: l.querySelector('b').textContent, t: l.querySelector('span').textContent, first: l === document.getElementById('stepContent').firstElementChild } : null; });
+  expect(JSON.stringify(dis32) === JSON.stringify([false, true, true, true]) && !!lead32 && lead32.first && lead32.b === 'この画面ですること' && lead32.t === '応募者の名前と面接の情報を入れて、「面接を始める」を押します。',
+    'E1 まだ進んでいないステップ（面接・評価・報告書）は無効・準備の最上部に「この画面ですること」の 1 行: ' + JSON.stringify({ dis32, lead32 }));
+  // はじめての方へ（docs/SPEC-flow.md 2-1・F16）: 初回は準備の上にカード（4 つの手順・「使い方を見る」「わかった」）
+  const intro32 = await page.evaluate(() => { const c = document.getElementById('introCard'); return c ? { h: c.querySelector('h2').textContent, li: Array.from(c.querySelectorAll('.intro-steps li b')).map(e => e.textContent),
+    btns: Array.from(c.querySelectorAll('button')).map(b => b.textContent), before: !!(c.compareDocumentPosition(document.getElementById('scriptApplicantCard')) & Node.DOCUMENT_POSITION_FOLLOWING) } : null; });
+  expect(!!intro32 && intro32.h === 'はじめての方へ' && JSON.stringify(intro32.li) === JSON.stringify(['準備', '面接', '評価', '報告書']) && JSON.stringify(intro32.btns) === JSON.stringify(['使い方を見る', 'わかった']) && intro32.before,
+    'E1 初回は応募者のカードの上に「はじめての方へ」（準備・面接・評価・報告書の 4 つ・使い方を見る・わかった）: ' + JSON.stringify(intro32));
   const names32 = await page.evaluate(() => ({ nav: document.querySelector('.nav-item[data-view="judge"]').textContent.trim(), top: document.getElementById('topTitle').textContent }));
   expect(names32.nav.endsWith('報告書の作成') && !names32.nav.includes('応募者判定') && names32.top === '面接チェックリスト報告',
     'E1 画面名: ナビ「報告書の作成」・トップバー「面接チェックリスト報告」: ' + JSON.stringify(names32));
-  // 4. Step① の項目
+  // 4. 準備の項目
   const f32 = await page.evaluate(() => {
     const q = (s) => document.querySelector(s);
     const iv = q('#saInterviewer');
@@ -217,7 +280,7 @@ const pdfTextOf = (f) => {
     };
   });
   expect(f32.card && f32.name && f32.age && f32.gender && f32.category && f32.posting === 2 && f32.noNeg && f32.taxi && f32.date === '2026-10-10' && f32.ivOpts.includes('笹川 晴央') && f32.notes,
-    'E1 Step① に氏名（必須）・年齢・性別・区分・応募した求人・タクシー可否・料金・面接日（今日）・面接担当者（名簿）・メモ（任意・2 行）。消極属性は無い: ' + JSON.stringify(f32));
+    'E1 準備に氏名（必須）・年齢・性別・区分・応募した求人・タクシー可否・料金・面接日（今日）・面接担当者（名簿）・メモ（任意・2 行）。消極属性は無い: ' + JSON.stringify(f32));
   // 1 枚のカード・3 行（docs/SPEC-script-mode.md 12 章）。説明文は冒頭の 1 行だけ・各入力の下の補足文なし
   const lay32 = await page.evaluate(() => {
     const card = document.getElementById('scriptApplicantCard');
@@ -234,13 +297,13 @@ const pdfTextOf = (f) => {
   expect(lay32.cards === 1 && lay32.rows === 3 && JSON.stringify(lay32.r) === JSON.stringify([['name', 'age', 'gender', 'category', 'grp-graduation'], ['saDate', 'saInterviewer', 'saPosting'], ['saTaxi', 'reviewerNotes']]) &&
     JSON.stringify(lay32.lead) === JSON.stringify(['氏名だけ必須です。あとは分かる範囲で入力してください。']) && lay32.hints === 0 && lay32.subs === 0 && lay32.ivTitle && lay32.taxiPh === '例: 可・2,500円' &&
     JSON.stringify(lay32.btns) === JSON.stringify(['通常', '短期']) && lay32.postLabel === '応募した求人',
-    'E1 Step① は 1 枚・3 行（氏名・年齢・性別・区分〔卒業予定〕／面接日・面接担当者・求人〔通常・短期〕／タクシー・メモ）・説明は冒頭 1 行・補足文なし（名簿の案内は title）: ' + JSON.stringify(lay32));
+    'E1 準備は 1 枚・3 行（氏名・年齢・性別・区分〔卒業予定〕／面接日・面接担当者・求人〔通常・短期〕／タクシー・メモ）・説明は冒頭 1 行・補足文なし（名簿の案内は title）: ' + JSON.stringify(lay32));
   // 5. 詳細項目なし
   const absent32 = [];
   for (const sel of ['[data-field="workDays"]', '[data-field="anyDay"]', '[data-field="shifts.mon.start"]', '[data-field="daysMin"]', '[data-field="daysMax"]', '[data-field="workPeriod"]', '[data-field="commuteMethod"]',
     '[data-field="nearestStation"]', '[data-field="sideJob"]', '[data-field="foreign.isForeign"]', '[data-field="vacation.gw"]', '[data-field="lateNight.availability"]', '[data-field="allNight.availability"]',
     '#preFill', '#notesCard', '[data-action="generate-handoff"]']) if (await page.$(sel)) absent32.push(sel);
-  expect(absent32.length === 0, 'E1 Step① に詳細項目（曜日・時間帯・週日数・勤務期間・通勤・かけもち・外国籍・繁忙期・深夜帯・オールナイト・申し送り）が無い: ' + absent32.join(' '));
+  expect(absent32.length === 0, 'E1 準備に詳細項目（曜日・時間帯・週日数・勤務期間・通勤・かけもち・外国籍・繁忙期・深夜帯・オールナイト・申し送り）が無い: ' + absent32.join(' '));
   // 6. 卒業予定年月
   await page.selectOption('[data-field="category"]', '大学2年生');
   await wait(100);
@@ -264,7 +327,7 @@ const pdfTextOf = (f) => {
   const s32 = await st(() => { const s = window.RecruitApp.state; return { a: s.applicant, h: s.checklist.header }; });
   expect(s32.a.name === '台本 花子' && s32.a.age === '20' && s32.a.gender === '女性' && s32.a.category === '大学2年生' && s32.a.graduationDate === '2029-03' && s32.a.reviewerNotes === '電話の受け答えが丁寧。' &&
     s32.h.posting === 'short' && s32.h.negatives === undefined && s32.h.taxi === '可・2,500円' && s32.h.interviewer === '笹川 晴央' && s32.h.date === '2026-10-10',
-    'E1 Step① の入力は applicant と checklist.header に入る: ' + JSON.stringify(s32.h));
+    'E1 準備の入力は applicant と checklist.header に入る: ' + JSON.stringify(s32.h));
   // 9. 右サマリー
   const sum32 = await page.textContent('#summaryPanel');
   expect(['台本 花子', '大学2年生', '20歳', '短期求人', '笹川 晴央'].every(t => sum32.includes(t)) && !['シフト貢献度', '留意点', '通勤', '消極属性', '短期希望', '朝～12時のみ'].some(t => sum32.includes(t)),
@@ -278,7 +341,7 @@ const pdfTextOf = (f) => {
   expect(sa32b.length === 0 && !(await page.textContent('#sumApplicant')).includes('通常求人'), 'E1 求人が通常なら右サマリーに求人のチップを出さない: ' + JSON.stringify(sa32b));
   await setCl('header.posting', 'short');
   await wait(100);
-  // 1440px・1280px で 1 画面に収まる（スクロールなしで「面接チェックリストへ進む →」まで見える）
+  // 1440px・1280px で 1 画面に収まる（「はじめての方へ」を出したままでも、スクロールなしで右下の「面接を始める →」まで見える。docs/SPEC-flow.md 2-1）
   const fit32 = [];
   for (const [w, h] of [[1440, 900], [1280, 800]]) {
     await page.setViewportSize({ width: w, height: h });
@@ -286,9 +349,12 @@ const pdfTextOf = (f) => {
     fit32.push(await page.evaluate(([w, h]) => { window.scrollTo(0, 0); const r = document.getElementById('saNext').getBoundingClientRect();
       const cardR = document.getElementById('scriptApplicantCard').getBoundingClientRect();
       const inCard = Array.from(document.querySelectorAll('#scriptApplicantCard input, #scriptApplicantCard select, #scriptApplicantCard textarea, #scriptApplicantCard .seg-btn')).every(el => { const b = el.getBoundingClientRect(); return b.left >= cardR.left - 1 && b.right <= cardR.right + 1; });
-      return { w, bottom: Math.round(r.bottom), h: innerHeight, sy: window.scrollY, inCard }; }, [w, h]));
+      const foot = document.getElementById('saActions').getBoundingClientRect(), btn = document.getElementById('saNext');
+      return { w, bottom: Math.round(r.bottom), h: innerHeight, sy: window.scrollY, inCard, intro: !!document.getElementById('introCard'), label: btn.textContent, primary: btn.classList.contains('primary'),
+        right: Math.abs(foot.right - r.right) <= 2, paperLeft: document.getElementById('saPaperBtn').getBoundingClientRect().left < r.left }; }, [w, h]));
   }
-  expect(fit32.every(x => x.bottom <= x.h && x.sy === 0 && x.inCard), 'E1 1440×900・1280×800 でスクロールなしに「面接チェックリストへ進む →」まで見え、入力欄はカードからはみ出さない: ' + JSON.stringify(fit32));
+  expect(fit32.every(x => x.bottom <= x.h && x.sy === 0 && x.inCard && x.intro && x.label === '面接を始める →' && x.primary && x.right && x.paperLeft),
+    'E1 1440×900・1280×800 で「はじめての方へ」を出したままスクロールなしに右下の「面接を始める →」（主ボタン。記入シートは左）まで見え、入力欄はカードからはみ出さない: ' + JSON.stringify(fit32));
   // 性別のセレクトは PC 幅（卒業予定年月も出る学生の区分＝1 行目が最も詰まる状態）でも文言が切れない。未選択の文言は「選択」（「選択してください」は狭くて切れる）
   const gen32 = [];
   for (const [w, h] of [[1440, 900], [1366, 768], [1280, 800]]) {
@@ -314,89 +380,127 @@ const pdfTextOf = (f) => {
   await wait(300);
   const ov32 = await overflowX();
   const col32 = await page.evaluate(() => ['name', 'age', 'gender', 'category'].map(k => Math.round(document.querySelector('[data-field="' + k + '"]').closest('.field').getBoundingClientRect().left)));
-  expect(ov32 <= 1 && col32.every(x => x === col32[0]), 'E1 390px 幅の Step① は 1 列・横スクロールなし: ' + ov32 + ' ' + col32.join(','));
+  expect(ov32 <= 1 && col32.every(x => x === col32[0]), 'E1 390px 幅の準備は 1 列・横スクロールなし: ' + ov32 + ' ' + col32.join(','));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await wait(200);
   await sshot('40-script-step1.png');
-  // 11. 面接チェックリストへ
+  // 11. 面接へ（「はじめての方へ」は閉じずに進んでもよい）
   await page.click('[data-action="script-next"]');
   await wait(400);
-  expect(await step() === 3, 'E1 「面接チェックリストへ進む」で面接チェックリスト（内部キー 3）へ');
+  expect(await step() === 2 && !!(await page.$('#ivStage[data-sec="conditions"]')) && await st(() => !!window.RecruitApp.state.checklist.timing.startedAt),
+    'E1 「面接を始める →」で面接（内部キー 2）の ① へ・面接の開始時刻が入る');
 
   // =====================================================================
-  // E2 ② 面接チェックリスト → ③ 報告書（判定）
+  // E2 面接（1 段階ずつ）→ 評価 → 報告書（判定）（docs/SPEC-flow.md 3 章・4 章）
   // =====================================================================
-  console.log('\n== E2 ② 面接チェックリスト → ③ 報告書 ==');
-  const has33 = {};
-  for (const sel of ['#cl-conditions', '#cl-continuity', '#cl-job', '#cl-teamwork', '#cl-reverse', '#clOverall', '#shiftConfirm', '#unresolvedAlert', '.cl-group-label']) has33[sel] = !!(await page.$(sel));
-  expect(has33['#cl-conditions'] && has33['#cl-continuity'] && has33['#cl-job'] && has33['#cl-teamwork'] && has33['#cl-reverse'] && has33['#clOverall'] && !has33['#shiftConfirm'] && !has33['#unresolvedAlert'] && !has33['.cl-group-label'],
-    'E2 Step② は ①〜⑤ と総合判断だけ（「面接で確認する項目」・未確認の留意点は出さない）: ' + JSON.stringify(has33));
-  const hd33 = await page.textContent('#clHeader');
-  expect(['台本 花子', '大学2年生', '20歳', '短期求人', '可・2,500円', '笹川 晴央', '2026/10/10', '応募者を編集'].every(t => hd33.includes(t)) && !hd33.includes('自動') && !(await page.$('#clHeader input, #clHeader select')),
-    'E2 #clHeader の属性は Step① の入力から（読み取り専用・自動の表示なし）');
-  // 1 行に圧縮（氏名・区分・年齢・求人・タクシー・面接日・担当 のチップと「応募者を編集」だけ。題名・説明文・目安時間・消極属性は出さない。docs/SPEC-script-mode.md 12 章）
-  const hl33 = await page.evaluate(() => {
-    const hd = document.getElementById('clHeader');
-    const kids = Array.from(document.querySelectorAll('#clHeaderAttrs > *'));
-    const mids = kids.map(e => { const r = e.getBoundingClientRect(); return Math.round(r.top + r.height / 2); });
-    return { attrs: Array.from(document.querySelectorAll('#clHeaderAttrs .cl-attr')).map(e => e.dataset.attr), mids, h: Math.round(hd.getBoundingClientRect().height),
-      h2: !!hd.querySelector('h2'), min: !!document.getElementById('clMinutesTotal'), edit: !!hd.querySelector('[data-action="to-step"][data-step="1"]') };
+  console.log('\n== E2 面接 → 評価 → 報告書 ==');
+  // 面接の画面: 上の帯（段階のチップ 5 つ・タイマー）→ 1 段階（① 勤務条件）→ 下の操作行。○△×・人物像・総合判断・旧ヘッダー（#clHeader）は出さない
+  const ivNow = () => page.evaluate(() => {
+    const q = (s) => document.querySelector(s);
+    return {
+      chips: Array.from(document.querySelectorAll('#ivChips .iv-chip')).map(c => c.dataset.sec + ':' + c.querySelector('.iv-chip-no').textContent + c.querySelector('.iv-chip-t').textContent),
+      cur: Array.from(document.querySelectorAll('#ivChips .iv-chip.is-current')).map(c => c.dataset.sec + ':' + c.getAttribute('aria-current')),
+      stage: q('#ivStage') ? q('#ivStage').dataset.sec : '', h: (q('#ivStageH') || {}).textContent, who: (q('#ivWho') || {}).textContent,
+      groups: Array.from(document.querySelectorAll('#ivStage .iv-grp')).map(g => g.dataset.kind + ':' + g.querySelector('.iv-k > span').textContent),
+      cols: document.querySelectorAll('#ivStage .iv-cols.is-two > .iv-col').length,
+      qs: Array.from(document.querySelectorAll('#ivStage .iv-q')).map(e => e.dataset.item),
+      must: Array.from(document.querySelectorAll('#ivStage .cl-must-row')).map(e => e.dataset.item),
+      timer: [q('#ivTStageVal'), q('#ivTStageGoal'), q('#ivTTotal')].map(e => e ? e.textContent : '?').join(' '),
+      flow: (q('#ivStage .iv-flow') || {}).textContent || '',
+      prev: (q('#ivPrev') || {}).textContent, next: (q('#ivNext') || {}).textContent, nextAct: q('#ivNext') ? q('#ivNext').dataset.action : '', toEval: !!q('#ivToEval'),
+      no: ['.cl-rate-row', '#clPersona', '#clOverall', '[data-action="ps-set"]', '[data-cl="overall"]', '#clHeader', '[data-action="explain-all"]', '.cl-auto', '.cl-auto-hint'].filter(s => !!document.querySelector('#stepContent ' + s)),
+      noSummary: document.querySelector('#view-judge .judge-layout').classList.contains('no-summary'), lead: (q('#stepLead span') || {}).textContent
+    };
   });
-  expect(JSON.stringify(hl33.attrs) === JSON.stringify(['name', 'category', 'age', 'posting', 'taxi', 'date', 'interviewer']) && Math.max(...hl33.mids) - Math.min(...hl33.mids) <= 4 && hl33.h <= 60 &&
-    !hl33.h2 && !hl33.min && hl33.edit && !['消極属性', '短期希望', '朝～12時のみ', '目安', '台本の順に確認し'].some(t => hd33.includes(t)),
-    'E2 #clHeader は 1 行（氏名・区分・年齢・求人・タクシー・面接日・担当＋応募者を編集。題名・説明文・目安・消極属性なし）: ' + JSON.stringify(hl33));
-  // 本文が狭い 1366px・1280px でもチップは 1 行（チップを一段詰め、「応募者を編集」はカード上端の枠線上・右に出してチップの行から外す）
-  const hn33 = [];
+  const iv33 = await ivNow();
+  expect(JSON.stringify(iv33.chips) === JSON.stringify(['conditions:①勤務条件', 'continuity:②継続性・報連相', 'job:③仕事内容の説明', 'teamwork:④集団行動特性', 'reverse:⑤逆質問']) &&
+    JSON.stringify(iv33.cur) === JSON.stringify(['conditions:step']) && iv33.stage === 'conditions' && iv33.h === '①勤務条件' && iv33.no.length === 0 && iv33.noSummary &&
+    iv33.lead === '台本どおりに話す・聞く・メモ。○△× などの評価は面接のあとで付けます。',
+    'E2 面接は上の帯（段階のチップ ①〜⑤・今の段階 ①）と 1 段階だけ。○△×・人物像・総合判断・旧ヘッダー・自動表示・右サマリーは出さない: ' + JSON.stringify(iv33));
+  expect(iv33.who === '台本 花子さん・大学2年生・20歳・短期求人' && !iv33.who.includes('消極属性') && !iv33.who.includes('短期希望'),
+    'E2 段階の見出しの右に応募者の 1 行（氏名・区分・年齢・求人。消極属性なし）: ' + iv33.who);
+  // ① は 2 列（最初の質問より前を左）。種類の見出しは 確かめること → 話すこと → 確かめること｜聞くこと・流れの 1 行
+  expect(JSON.stringify(iv33.groups) === JSON.stringify(['check:確かめること', 'say:話すこと', 'check:確かめること', 'ask:聞くこと']) && iv33.cols === 2 &&
+    JSON.stringify(iv33.qs) === JSON.stringify(['q_term', 'q_two_months', 'q_family']) && JSON.stringify(iv33.must) === JSON.stringify(['must_weekly', 'must_busy']) &&
+    iv33.flow === '→ 条件一致：2へ　／　必須条件不一致：追加質問してみて、解消しなければ「５」へ' && iv33.timer === '00:00 / 目安 10分 00:00',
+    'E2 ① は 2 列（左: 確かめること・話すこと・確かめること／右: 聞くこと〔質問 3 つ〕・流れの 1 行）・タイマー「00:00 / 目安 10分」（固定時計）: ' + JSON.stringify({ g: iv33.groups, cols: iv33.cols, timer: iv33.timer }));
+  expect(iv33.prev === '← 準備に戻る' && iv33.next === '次へ：② 継続性・報連相 →' && iv33.nextAct === 'iv-next' && !iv33.toEval,
+    'E2 ① の操作行は「← 準備に戻る」と右端の「次へ：② 継続性・報連相 →」: ' + JSON.stringify({ prev: iv33.prev, next: iv33.next }));
+  // 本文が狭い 1366px・1280px でもチップは 1 行・タイマーと重ならない
+  const ch33 = [];
   for (const [w, h] of [[1366, 768], [1280, 800]]) {
     await page.setViewportSize({ width: w, height: h });
     await wait(150);
-    hn33.push(await page.evaluate((w) => {
-      const hd = document.getElementById('clHeader'); hd.scrollIntoView({ block: 'center' }); const cr = hd.getBoundingClientRect();
-      const chips = Array.from(hd.querySelectorAll('.cl-attr')).map(e => e.getBoundingClientRect());
-      const mids = chips.map(r => r.top + r.height / 2);
-      const ed = hd.querySelector('.cl-head-edit'); const er = ed.getBoundingClientRect();
-      const hit = document.elementFromPoint(er.left + er.width / 2, er.top + er.height / 2);
-      return { w, h: Math.round(cr.height), spread: Math.round(Math.max(...mids) - Math.min(...mids)), label: hd.querySelector('[data-attr="date"]').textContent,
-        edit: ed.textContent, editIn: er.width > 0 && er.left >= cr.left && er.right <= cr.right && er.top >= cr.top - 12 && er.bottom <= cr.bottom,
-        noOverlap: chips.every(r => r.right <= er.left || r.left >= er.right || r.bottom <= er.top || r.top >= er.bottom), clickable: !!hit && (hit === ed || ed.contains(hit)) };
+    ch33.push(await page.evaluate((w) => {
+      const rs = Array.from(document.querySelectorAll('#ivChips .iv-chip')).map(c => c.getBoundingClientRect()), tr = document.getElementById('ivTimer').getBoundingClientRect();
+      const mids = rs.map(r => r.top + r.height / 2);
+      return { w, spread: Math.round(Math.max(...mids) - Math.min(...mids)), noOverlap: rs.every(r => r.right <= tr.left || r.bottom <= tr.top || r.top >= tr.bottom), h: Math.round(rs[0].height) };
     }, w));
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await wait(150);
-  expect(hn33.every(x => x.h <= 60 && x.spread <= 4 && x.edit === '応募者を編集' && x.editIn && x.noOverlap && x.clickable && x.label === '2026/10/10'),
-    'E2 1366px・1280px でも #clHeader のチップは 1 行（面接日はラベルなしの日付）・「応募者を編集」はカードの右上でチップと重ならず押せる: ' + JSON.stringify(hn33));
-  // 「すべて説明した」（docs/SPEC-script-mode.md 12 章）。求人が短期なので「※短期求人のみ」も付く
-  const ea33 = await page.$$eval('#stepContent [data-action="explain-all"]', els => els.map(e => e.dataset.block + ':' + e.textContent));
-  expect(JSON.stringify(ea33) === JSON.stringify(['conditions_explain:すべて説明した', 'continuity_explain:すべて説明した', 'job_explain:すべて説明した', 'teamwork_explain:すべて説明した', 'reverse_notify:すべて説明した']),
-    'E2 【説明】4 ブロックと⑤【合否連絡】の見出しの右に「すべて説明した」: ' + JSON.stringify(ea33));
+  expect(ch33.every(x => x.spread <= 2 && x.noOverlap && x.h >= 34), 'E2 1366px・1280px でも段階のチップは 1 行（高さ 34px 以上）・タイマーと重ならない: ' + JSON.stringify(ch33));
+  // 「説明した」（段階に 1 つ。docs/SPEC-flow.md 3-4）。求人が短期なので ① の 4 項目（短期のみ 2 つも）が対象
   const exVals = (ids) => st(ids => { const v = window.RecruitApp.state.checklist.values; return ids.map(id => v[id] === true); }, ids);
-  const exUi = (ids) => st(ids => ids.map(id => { const l = document.querySelector('label.cl-check[data-item="' + id + '"]'); return !!l && l.classList.contains('on') && l.querySelector('input').checked; }), ids);
+  const saidBtn = (sec, kind = 'explain') => page.$eval(`[data-action="iv-said"][data-sec="${sec}"][data-kind="${kind}"]`, b => ({ t: b.textContent, p: b.getAttribute('aria-pressed') }));
   const EX1 = ['ex_fare', 'ex_hours', 'ex_contract', 'ex_switch'];
-  const exAll = (blk) => page.click('[data-action="explain-all"][data-block="' + blk + '"]').then(() => wait(120));
-  const exTxt = (blk) => page.textContent('[data-action="explain-all"][data-block="' + blk + '"]');
-  await exAll('conditions_explain');
-  const ea33a = { v: await exVals(EX1), ui: await exUi(EX1), t: await exTxt('conditions_explain'), other: await exVals(['ex_submit']) };
-  expect(ea33a.v.every(Boolean) && ea33a.ui.every(Boolean) && ea33a.t === 'すべて外す' && !ea33a.other[0], 'E2 1 クリックで ① の【説明】を全部チェック（短期求人なので ※ の 2 項目も）・ボタンは「すべて外す」・他のブロックは触らない: ' + JSON.stringify(ea33a));
-  await exAll('conditions_explain');
-  const ea33b = { v: await exVals(EX1), ui: await exUi(EX1), t: await exTxt('conditions_explain') };
-  expect(ea33b.v.every(x => !x) && ea33b.ui.every(x => !x) && ea33b.t === 'すべて説明した' && await st(() => !Object.keys(window.RecruitApp.state.checklist.values).some(k => k.indexOf('ex_') === 0)),
-    'E2 もう一度押すと全部外す（values から消える）・ボタンは「すべて説明した」: ' + JSON.stringify(ea33b));
-  for (const id of ['ex_submit', 'ex_phone', 'ex_absence']) await page.click('label.cl-check[data-item="' + id + '"]');
+  const sb33 = await page.$$eval('#stepContent [data-action="iv-said"]', els => els.map(e => e.dataset.sec + ':' + e.dataset.kind + ':' + e.textContent));
+  const li33 = await page.$$eval('#ivStage .iv-say-list li', els => els.map(e => e.dataset.item + (e.querySelector('.tag') ? '*' : '')));
+  expect(JSON.stringify(sb33) === JSON.stringify(['conditions:explain:説明した']) && JSON.stringify(li33) === JSON.stringify(EX1) && !(await page.$('#ivStage .iv-say-list input')) && !(await page.$('#ivStage .iv-note')),
+    'E2 ① の「話すこと」は 4 項目を読むだけのリスト（チェックボックスなし・短期求人なので「短期のみ」の印と注記なし）と「説明した」1 つ: ' + JSON.stringify({ sb33, li33 }));
+  await said('conditions');
+  const ea33a = { v: await exVals(EX1), b: await saidBtn('conditions'), other: await exVals(['ex_submit']) };
+  expect(ea33a.v.every(Boolean) && ea33a.b.t === '✓ 説明した' && ea33a.b.p === 'true' && !ea33a.other[0], 'E2 「説明した」で ① の説明 4 項目（短期求人なので短期のみも）が済み・ボタンは「✓ 説明した」・他の段階は触らない: ' + JSON.stringify(ea33a));
+  await said('conditions');
+  const ea33b = { v: await exVals(EX1), b: await saidBtn('conditions') };
+  expect(ea33b.v.every(x => !x) && ea33b.b.t === '説明した' && ea33b.b.p === 'false' && await st(() => !Object.keys(window.RecruitApp.state.checklist.values).some(k => k.indexOf('ex_') === 0)),
+    'E2 もう一度押すと全部外す（values から消える）・ボタンは「説明した」: ' + JSON.stringify(ea33b));
+  // ② へ（［次へ］）: ① のチップは ✓・「← 前の段階」。「一部説明しなかった ▾」で項目ごとのチェック → 全部付けると「✓ 説明した」
+  await page.click('#ivNext');
+  await wait(200);
+  const iv33b = await ivNow();
+  const done33 = await page.$eval('#ivChips [data-sec="conditions"]', c => c.classList.contains('is-done') && c.querySelector('.iv-chip-s').textContent === '✓');
+  expect(iv33b.stage === 'continuity' && iv33b.prev === '← 前の段階' && iv33b.next === '次へ：③ 仕事内容の説明 →' && done33 && iv33b.cols === 2 &&
+    JSON.stringify(iv33b.groups) === JSON.stringify(['say:話すこと', 'ask:聞くこと']) &&
+    await page.evaluate(() => document.activeElement === document.getElementById('ivStageH') && window.scrollY === 0),
+    'E2 ［次へ］で ②（話すこと｜聞くこと の 2 列）・① のチップに ✓・見出しにフォーカスして先頭へ: ' + JSON.stringify({ stage: iv33b.stage, prev: iv33b.prev, next: iv33b.next, done33 }));
+  await page.click('[data-action="iv-said-items"][data-sec="continuity"][data-kind="explain"]');
   await wait(120);
-  expect(await exTxt('continuity_explain') === 'すべて外す', 'E2 個別に全部チェックしてもボタンは「すべて外す」に変わる');
-  await exAll('continuity_explain');
-  expect((await exVals(['ex_submit', 'ex_phone', 'ex_absence'])).every(x => !x), 'E2 「すべて外す」で ② の【説明】を全部外す');
-  await exAll('reverse_notify');
-  const nt33 = await st(() => { const d = window.RecruitApp.state.profile.checklist; const b = d.sections.find(s => s.id === 'reverse').blocks.find(b => b.type === 'notify'); const v = window.RecruitApp.state.checklist.values; return b.items.map(it => v[it.id] === true); });
-  expect(nt33.length >= 2 && nt33.every(Boolean) && await exTxt('reverse_notify') === 'すべて外す', 'E2 ⑤【合否連絡】も「すべて説明した」で全部チェック: ' + JSON.stringify(nt33));
-  await exAll('reverse_notify');
-  await exAll('conditions_explain');   // 撮影用に ① の【説明】だけチェックしておく
-  const auto33 = await page.$$eval('#stepContent .cl-auto, #stepContent .cl-auto-hint', els => els.map(e => e.textContent.trim()).filter(Boolean));
-  expect(auto33.length === 0, 'E2 必須条件・記入欄に応募情報からの自動表示（見込み・自動: …）を出さない: ' + auto33.join(' / '));
-  expect((await page.textContent('#backToApplicant')).trim() === '← 応募者に戻る' && (await page.textContent('#toReportBtn')).trim() === '報告書へ進む →' && !(await page.$('#stepContent [data-action="to-step"][data-step="2"]')),
-    'E2 戻る＝「← 応募者に戻る」・進む＝「報告書へ進む →」（申し送りへの導線なし）');
+  const items33 = await page.$$eval('#ivStage .iv-say-list.is-items input[type="checkbox"]', els => els.map(e => e.dataset.cl));
+  const part33 = await page.$eval('[data-action="iv-said-items"][data-sec="continuity"]', b => b.textContent + ':' + b.getAttribute('aria-expanded'));
+  for (const c of items33) await page.click('#ivStage .iv-say-list input[data-cl="' + c + '"]');
+  await wait(120);
+  const ea33c = { b: await saidBtn('continuity'), v: await exVals(['ex_submit', 'ex_phone', 'ex_absence']) };
+  expect(JSON.stringify(items33) === JSON.stringify(['values.ex_submit', 'values.ex_phone', 'values.ex_absence']) && part33 === '一部説明しなかった ▴:true' && ea33c.v.every(Boolean) && ea33c.b.t === '✓ 説明した',
+    'E2 「一部説明しなかった ▾」で項目ごとのチェック（3 つ）・全部付けるとボタンは「✓ 説明した」: ' + JSON.stringify({ items33, part33, ea33c }));
+  await said('continuity');
+  expect((await exVals(['ex_submit', 'ex_phone', 'ex_absence'])).every(x => !x) && (await saidBtn('continuity')).t === '説明した', 'E2 済みの「✓ 説明した」を押すと ② の説明を全部外す');
+  // ⑤（チップ）: 1 列・質問 → 話すこと（合否連絡の［伝えた］）・「面接を終えて評価へ →」
+  await ivGo('reverse');
+  const iv33c = await ivNow();
+  expect(iv33c.stage === 'reverse' && iv33c.cols === 0 && JSON.stringify(iv33c.groups) === JSON.stringify(['ask:聞くこと', 'say:話すこと']) && iv33c.next === '面接を終えて評価へ →' && iv33c.nextAct === 'iv-end' &&
+    iv33c.timer === '00:00 / 最大 10分 00:00' && (await page.textContent('#ivStage .k-say .iv-k small')) === '合否連絡',
+    'E2 ⑤ は 1 列（聞くこと → 話すこと〔合否連絡〕）・目安「/ 最大 10分」・主ボタン「面接を終えて評価へ →」: ' + JSON.stringify({ g: iv33c.groups, next: iv33c.next, timer: iv33c.timer }));
+  await said('reverse', 'notify');
+  const nt33 = { v: await exVals(['nt_hire', 'nt_reject']), b: await saidBtn('reverse', 'notify') };
+  expect(nt33.v.every(Boolean) && nt33.b.t === '✓ 伝えた' && nt33.b.p === 'true', 'E2 ⑤ の［伝えた］で合否連絡 2 項目が済み・「✓ 伝えた」: ' + JSON.stringify(nt33));
+  await said('reverse', 'notify');
+  await said('conditions');   // ① の説明だけ済みにしておく
+  // 評価へ（⑤ の「面接を終えて評価へ →」）: 段階のカード 5 枚＋総評。「← 面接に戻る」「報告書へ →」
+  await ivGo('reverse');
+  await page.click('#ivNext');
+  await wait(300);
+  const ev33 = await page.evaluate(() => ({
+    secs: Array.from(document.querySelectorAll('#stepContent section.ev-sec')).map(e => e.id), overall: !!document.getElementById('clOverall'),
+    old: ['#shiftConfirm', '#unresolvedAlert', '.cl-group-label', '.cl-auto', '.cl-auto-hint', '#clHeader', '#ivStage'].filter(s => !!document.querySelector('#stepContent ' + s)),
+    back: (document.getElementById('evBack') || {}).textContent, next: (document.getElementById('toReportBtn') || {}).textContent,
+    ended: !!(window.RecruitApp.state.checklist.timing || {}).endedAt, lead: (document.querySelector('#stepLead span') || {}).textContent
+  }));
+  expect(await step() === 3 && JSON.stringify(ev33.secs) === JSON.stringify(['cl-conditions', 'cl-continuity', 'cl-job', 'cl-teamwork', 'cl-reverse']) && ev33.overall && ev33.old.length === 0 &&
+    ev33.back === '← 面接に戻る' && ev33.next === '報告書へ →' && ev33.ended && ev33.lead === '面接のメモを見ながら、○△×・人物像・総合判断を付けます。',
+    'E2 「面接を終えて評価へ →」で評価（段階のカード ①〜⑤＋総評・面接の終了時刻）。「← 面接に戻る」「報告書へ →」: ' + JSON.stringify(ev33));
   await rateAll('good');
-  await sshot('41-script-step2.png');
+  await sshot('41-flow-evaluate.png');
   await judge();
   const j33 = await judgment();
   expect(await step() === 4 && j33.mode === 'script' && j33.result === 'recommend' && j33.adjustments.length === 0, 'E2 必須条件すべて一致・確認点すべて○・総合判断「採用」→ 採用推奨（mode=script）: ' + JSON.stringify(j33));
@@ -405,13 +509,13 @@ const pdfTextOf = (f) => {
     judge: (document.querySelector('#appPaper .cl-judge') || {}).textContent || '', dec: !!document.querySelector('#appPaper .cl-decision.is-none#appPaperDecision') }));
   expect(paper33.sheet && JSON.stringify(paper33.tiles) === JSON.stringify(['結果', '総合判断', '必須条件', '確認点', '人物像']) && paper33.judge.includes('採用推奨') && !paper33.judge.includes('シフト貢献度') && paper33.dec,
     'E2 報告書の紙プレビュー: 結果ストリップは 結果・総合判断・必須条件・確認点・人物像（貢献度タイルなし）＋最終合否（未押印）: ' + JSON.stringify(paper33.tiles));
-  // ③ の紙は保存 HTML と同じ A4 縦の用紙（210×297mm・白地＋下線の見出し・押印行は用紙の中。docs/SPEC-a4.md 5 章）。公開版はロゴなし
+  // 報告書の紙は保存 HTML と同じ A4 縦の用紙（210×297mm・白地＋下線の見出し・押印行は用紙の中。docs/SPEC-a4.md 5 章）。公開版はロゴなし
   const a4p33 = await page.evaluate(() => { const p = document.getElementById('appPaper'), r = p.getBoundingClientRect(), z = parseFloat(p.style.zoom || '1');
     return { a4: p.classList.contains('a4'), w: +(r.width / z).toFixed(1), h: +(r.height / z).toFixed(1), title: (document.querySelector('#appPaper .cl-title .cl-title-t') || {}).textContent, logo: !!document.querySelector('#appPaper .cl-title-logo'),
       band: !!document.querySelector('#appPaper .cl-band'), stamps: Array.from(document.querySelectorAll('#appPaper .cl-stamps .stamp-box')).map(b => b.dataset.fieldId), cap: (document.querySelector('.report-paper-cap') || {}).textContent }; });
   expect(a4p33.a4 && Math.abs(a4p33.w - 793.7) <= 1 && Math.abs(a4p33.h - 1122.5) <= 1 && a4p33.title === '面接チェックリスト報告' && !a4p33.logo && !a4p33.band && JSON.stringify(a4p33.stamps) === JSON.stringify(['interviewer', 'final']) &&
     a4p33.cap.includes('保存した HTML はこの用紙 1 枚で開きます'),
-    'E2 ③ の紙は A4 縦の用紙（210×297mm・見出しは白地＋下線・公開版はロゴなし・押印行 2 欄は用紙の中）: ' + JSON.stringify(a4p33));
+    'E2 報告書の紙は A4 縦の用紙（210×297mm・見出しは白地＋下線・公開版はロゴなし・押印行 2 欄は用紙の中）: ' + JSON.stringify(a4p33));
   const lay33 = await page.evaluate(() => { const t = (s) => { const el = document.querySelector(s); return el ? el.getBoundingClientRect().top : null; };
     return { paper: t('#appPaperWrap'), mgmt: t('#mgmtCard'), dec: t('#decisionCard'), boxes: Array.from(document.querySelectorAll('#mgmtCard .stamp-box')).map(b => b.dataset.fieldId),
       cols: document.querySelector('#mgmtCard .stamp-row').classList.contains('cols-2'), grid: getComputedStyle(document.querySelector('#mgmtCard .stamp-row')).gridTemplateColumns.split(' ').length,
@@ -422,34 +526,37 @@ const pdfTextOf = (f) => {
   const no33 = [];
   for (const sel of ['.result-card', '#clBreakdown', '.axis-grid', '#busyAllNightResult', '#applicantSummary', '#judgeWarnings']) if (await page.$('#stepContent ' + sel)) no33.push(sel);
   expect(no33.length === 0 && !(await page.textContent('#stepContent')).includes('シフト貢献度'), 'E2 報告書ステップに 2軸判定・貢献度・応募情報サマリーを出さない: ' + no33.join(' '));
-  expect(await page.$eval('#mgmtCard .stamp-box[data-field-id="interviewer"] select', el => el.value) === '0', 'E2 Step① の面接担当者が押印欄「面接対応者」の初期選択');
-  // 必須条件を不一致
-  await navStep(3);
+  expect(await page.$eval('#mgmtCard .stamp-box[data-field-id="interviewer"] select', el => el.value) === '0', 'E2 準備の面接担当者が押印欄「面接対応者」の初期選択');
+  // 必須条件を不一致に（面接の ①。docs/SPEC-flow.md 3-8）: 赤い案内・②〜④ のチップに「省略可」・「⑤ 逆質問へ」で ⑤ へ
+  await navStep(2);
+  await ivGo('conditions');
   await setCl('values.must_weekly', 'mismatch');
   await wait(150);
-  // 打ち切りの案内（旧 E26。app.js の clMustAlertHtml・updateChecklistUI）: 「⑤ 逆質問へ進み…終了」・不一致あり・②〜④ は省略可（⑤ は対象外）・⑤ へ移動
-  const ma33 = await st(() => ({ text: document.getElementById('clMustAlertText').textContent, state: document.getElementById('clState-conditions').textContent,
-    skip: ['conditions', 'continuity', 'job', 'teamwork', 'reverse'].filter(id => document.getElementById('cl-' + id).classList.contains('cl-skippable')),
-    jump: (document.querySelector('#clMustAlert [data-action="cl-jump"]') || {}).textContent }));
-  expect(await visible('#clMustAlert') && ma33.text === '必須条件が一致しません（土日を含む週3日以上、5時間以上）。追加質問して解消しなければ ⑤ 逆質問へ進み、最大10分で終了してください（判定は不採用推奨になります）。' &&
-    ma33.state.includes('不一致あり') && JSON.stringify(ma33.skip) === JSON.stringify(['continuity', 'job', 'teamwork']) && await visible('#clMustAlert [data-action="cl-jump"]') && ma33.jump === '⑤ 逆質問へ',
-    'E2 必須条件の不一致: 赤い案内「⑤ 逆質問へ進み、最大10分で終了」・① に「不一致あり」・②〜④ に省略可（⑤ は対象外）・「⑤ 逆質問へ」ボタン: ' + JSON.stringify(ma33));
-  const inView33 = () => st(() => { const r = document.getElementById('cl-reverse').getBoundingClientRect(); return r.top < window.innerHeight && r.bottom > 0; });
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await wait(100);
-  const before33 = await inView33();
-  await page.click('#clMustAlert [data-action="cl-jump"]');
-  await wait(900);
-  expect(!before33 && await inView33(), 'E2 「⑤ 逆質問へ」で ⑤ 逆質問へ移動（押す前は画面外）');
+  const ma33 = await st(() => ({ text: document.getElementById('ivMustAlertText').textContent, title: document.getElementById('ivMustAlert').title,
+    skip: Array.from(document.querySelectorAll('#ivChips .iv-chip.is-skip')).map(c => c.dataset.sec + ':' + c.querySelector('.iv-chip-s').textContent),
+    jump: (document.getElementById('ivMustJump') || {}).textContent }));
+  expect(await visible('#ivMustAlert') && ma33.text === '必須条件が合いません。追加で確認し、解消しなければ ⑤ 逆質問へ進んで最大 10 分で終了します' && ma33.title === '不一致: 土日を含む週3日以上、5時間以上' &&
+    JSON.stringify(ma33.skip) === JSON.stringify(['continuity:省略可', 'job:省略可', 'teamwork:省略可']) && await visible('#ivMustJump') && ma33.jump === '⑤ 逆質問へ',
+    'E2 必須条件の不一致: 赤い案内「…⑤ 逆質問へ進んで最大 10 分で終了します」（title に不一致の項目）・②〜④ のチップに省略可（⑤ は対象外）・「⑤ 逆質問へ」ボタン: ' + JSON.stringify(ma33));
+  await page.click('#ivMustJump');
+  await wait(250);
+  expect(await st(() => document.getElementById('ivStage').dataset.sec) === 'reverse' && await visible('#ivMustAlert') && !(await visible('#ivMustJump')),
+    'E2 「⑤ 逆質問へ」で ⑤ が今の段階に（⑤ では案内だけ残り、ボタンは出さない）');
+  await navStep(3);
+  const ev33b = await st(() => ({ skip: ['conditions', 'continuity', 'job', 'teamwork', 'reverse'].filter(id => document.getElementById('cl-' + id).classList.contains('cl-skippable')),
+    state: document.getElementById('clState-conditions').textContent, miss: document.getElementById('evMissing').textContent, res: document.getElementById('evResultTitle').textContent }));
+  expect(JSON.stringify(ev33b.skip) === JSON.stringify(['continuity', 'job', 'teamwork']) && ev33b.state.includes('不一致あり') && ev33b.miss === '必須条件の不一致のため、ほかの入力は任意です' && ev33b.res === '不採用推奨',
+    'E2 評価: ① に「不一致あり」・②〜④ のカードは省略可・結果は不採用推奨（ほかの入力は任意）: ' + JSON.stringify(ev33b));
   await judge();
   const j33b = await judgment();
   expect(j33b.result === 'reject' && j33b.adjustments[0] === 'must_conditions' && (await page.textContent('#appPaper .cl-tile-res')).includes('不採用推奨'), 'E2 必須条件を「不一致」にすると不採用推奨（紙の結果タイルも）: ' + JSON.stringify(j33b));
-  // 保留
+  // 保留（評価の必須条件の行でも直せる）
   await navStep(3);
   await setCl('values.must_weekly', 'match');
   await wait(100);
-  expect(!(await visible('#clMustAlert')) && await st(() => !document.querySelector('.cl-skippable') && !document.getElementById('clState-conditions').textContent.includes('不一致')),
-    'E2 必須条件を一致に戻すと案内・省略可・「不一致あり」が消える');
+  expect(await st(() => !document.querySelector('.cl-skippable') && !document.getElementById('clState-conditions').textContent.includes('不一致')), 'E2 評価で必須条件を一致に戻すと省略可・「不一致あり」が消える');
+  await navStep(2);
+  expect(!(await visible('#ivMustAlert')) && !(await page.$('#ivChips .iv-chip.is-skip')), 'E2 面接の案内・チップの「省略可」も消える');
   await setCl('overall', 'hold');
   await judge();
   const j33c = await judgment();
@@ -460,9 +567,12 @@ const pdfTextOf = (f) => {
   await wait(100);
   await judge();
   const j33d = await judgment();
-  expect(await step() === 4 && j33d.result === 'review' && await st(() => window.RecruitApp.state.checklist.overall) === '' && (await txtIn(page, '#scriptWarnings')).includes('総合判断が未入力'),
-    'E2 総合判断が未入力でも報告書へ進め、上長最終判断要＋警告（#scriptWarnings）: ' + JSON.stringify(j33d));
-  await navStep(3);
+  expect(await step() === 4 && j33d.result === 'review' && await st(() => window.RecruitApp.state.checklist.overall) === '' && (await txtIn(page, '#scriptWarnings')).includes('総合判断が未入力') &&
+    (await page.textContent('#scriptWarnings [data-action="to-step"][data-step="3"]')) === '評価で入力する',
+    'E2 総合判断が未入力でも報告書へ進め、上長最終判断要＋警告（#scriptWarnings・「評価で入力する」）: ' + JSON.stringify(j33d));
+  await page.click('#scriptWarnings [data-action="to-step"][data-step="3"]');
+  await wait(250);
+  expect(await step() === 3, 'E2 「評価で入力する」で評価へ');
   await setCl('overall', 'hire');
   await judge();
   expect((await judgment()).result === 'recommend' && !(await page.$('#scriptWarnings')), 'E2 総合判断「採用」に戻すと採用推奨・警告なし');
@@ -479,7 +589,7 @@ const pdfTextOf = (f) => {
   await wait(150);
   expect(!!(await page.$('#mgmtCard .stamp-box[data-field-id="interviewer"] svg.hanko')) && await st(() => (window.RecruitApp.state.management.interviewer || {}).name) === '笹川 晴央' &&
     !!(await page.$('#appPaper .cl-stamps .stamp-box[data-field-id="interviewer"] svg.hanko')),
-    'E3 「面接対応者」に押印（初期選択のまま押せる）・③ の紙の押印行にもハンコ');
+    'E3 「面接対応者」に押印（初期選択のまま押せる）・報告書の紙の押印行にもハンコ');
   await page.selectOption('#decisionManager', { label: SASA });
   await page.click('#decisionCard [data-action="decide"][data-value="hire"]');
   await wait(200);
@@ -519,13 +629,13 @@ const pdfTextOf = (f) => {
     'E3 用紙の見出しは 題名・氏名・区分・年齢・性別・卒業予定・求人・タクシー・面接日・担当（消極属性・短期希望・目安なし。公開版はロゴなし）: ' + hd34);
   const pj34 = await txtIn(rp34, '#a4 .cl-judge');
   expect(['必須条件', '総合判断', '確認点', '採用推奨'].every(t => pj34.includes(t)) && !pj34.includes('シフト貢献度') && !pj34.includes('2軸'), 'E3 用紙の結果ストリップ（必須条件・総合判断・確認点・結果。貢献度・2軸なし）');
-  // 「詳細」表示は無い（2026-10-14）。① の項目は用紙の見出し、Step① の「メモ（任意）」は面接メモの「メモ」
+  // 「詳細」表示は無い（2026-10-14）。準備の項目は用紙の見出し、準備の「メモ（任意）」は面接メモの「メモ」
   const who34 = await txtIn(rp34, '#a4 .cl-who');
   const memo34 = await rp34.evaluate(() => ({ keys: Array.from(document.querySelectorAll('#a4 .cl-nm-row .cl-nm-k')).map(e => e.textContent.trim()), memo: (document.querySelector('#a4 .cl-nm-memo .cl-nm-v') || {}).textContent }));
   expect(!(await rp34.$('#rtViewFull')) && !(await rp34.$('section.sec')) && !(await rp34.$('.rh')) && !(await rp34.$('.rtool')) &&
     ['台本 花子', '20歳', '女性', '大学2年生', '2029年3月', '短期求人', '可・2,500円', '2026/10/10', '笹川 晴央'].every(t => who34.includes(t)) && !who34.includes('通勤') && !who34.includes('勤務期間') &&
     memo34.memo === '電話の受け答えが丁寧。' && memo34.keys.includes('メモ') && !memo34.keys.some(t => t.includes('備考')),
-    'E3 「詳細」表示なし。応募者の項目は用紙の見出し・① のメモは面接メモの「メモ」（「備考」は出さない）: ' + JSON.stringify({ who34, memo34 }));
+    'E3 「詳細」表示なし。応募者の項目は用紙の見出し・準備のメモは面接メモの「メモ」（「備考」は出さない）: ' + JSON.stringify({ who34, memo34 }));
   await rp34.mouse.move(0, 0);
   await rp34.screenshot({ path: path.join(OUT, '44-script-report.png'), fullPage: true });
   // 最終合否: 用紙の欄をクリック → 窓で担当者を選んで「採用」（docs/SPEC-a4.md 3-6）
@@ -566,9 +676,9 @@ const pdfTextOf = (f) => {
   await page.setInputFiles('#fileInput', file34b);
   await wait(500);
   const s34 = await st(() => { const s = window.RecruitApp.state; return { step: s.step, d: s.decision && s.decision.result, final: (s.management.final || {}).name }; });
-  expect(s34.step === 4 && (await page.$$('#stepNav li')).length === 3 && s34.d === 'hire' && s34.final === '笹川 晴央' && !!(await page.$('#decisionCard svg.verdict-stamp')) &&
+  expect(s34.step === 4 && (await page.$$('#stepNav li')).length === 4 && s34.d === 'hire' && s34.final === '笹川 晴央' && !!(await page.$('#decisionCard svg.verdict-stamp')) &&
     !!(await page.$('#appPaper .cl-decision svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('採用・笹川') && (await page.$$('#appPaper .cl-stamps svg.hanko')).length === 2,
-    'E3 アプリで読み込むと報告書（③）に合否・押印を引き継ぐ（紙の押印行にハンコ 2 つ）: ' + JSON.stringify(s34));
+    'E3 アプリで読み込むと報告書（step 4）に合否・押印を引き継ぐ（紙の押印行にハンコ 2 つ）: ' + JSON.stringify(s34));
   // 往復（docs/SPEC-a4.md A11）: 書き出したファイルをアプリで読み込み → 保存し直し → 開く
   const saved34c = await saveRecord('script-report-hire-resaved.html');
   await rp34.goto('file://' + saved34c.file);
@@ -599,9 +709,9 @@ const pdfTextOf = (f) => {
   await wait(500);
   const t4a = await toastText();
   const s4a = await st(() => { const s = window.RecruitApp.state; return { step: s.step, keys: Object.keys(s.applicant), name: s.applicant.name, n: Object.keys(s.checklist.values).length, j: s.judgment && s.judgment.mode, mg: Object.keys(s.management) }; });
-  expect(s4a.step === 4 && (await page.$$('#stepNav li')).length === 3 && s4a.name === '面接 花子' && s4a.n === Object.keys(rFull.checklist.values).length && s4a.j === 'script' &&
+  expect(s4a.step === 4 && (await page.$$('#stepNav li')).length === 4 && s4a.name === '面接 花子' && s4a.n === Object.keys(rFull.checklist.values).length && s4a.j === 'script' &&
     t4a.includes('詳細モードで保存された記録です') && !(await page.textContent('#stepContent')).includes('シフト貢献度'),
-    'E4 詳細モードの記録（回答・判定あり）はエラーなく ③ 報告書で開き、回答は保持・toast で案内: ' + JSON.stringify(s4a) + ' ' + t4a);
+    'E4 詳細モードの記録（回答・判定あり）はエラーなく報告書で開き、回答は保持・toast で案内: ' + JSON.stringify(s4a) + ' ' + t4a);
   expect(JSON.stringify(s4a.keys) === JSON.stringify(['name', 'gender', 'age', 'category', 'graduationDate', 'reviewerNotes']), 'E4 応募者データは 6 キー（勤務条件・通勤などの詳細は読み込まない）: ' + s4a.keys.join(','));
   const saved4 = await saveRecord('legacy-full-resaved.html');
   const r4 = saved4.rec;
@@ -616,8 +726,8 @@ const pdfTextOf = (f) => {
   await wait(500);
   const t4b = await toastText();
   const s4b = await st(() => { const s = window.RecruitApp.state; return { step: s.step, name: s.applicant.name, mg: Object.keys(s.management) }; });
-  expect(s4b.step === 3 && s4b.name === '押印 太郎' && JSON.stringify(s4b.mg) === JSON.stringify(['interviewer', 'final']) && t4b.includes('初期対応者の押印欄は廃止したため表示しません') && t4b.includes('詳細モードで保存された記録です'),
-    'E4 初期対応者の印がある記録: state.management に initial が無い・② から再開・toast で案内: ' + JSON.stringify(s4b) + ' ' + t4b);
+  expect(s4b.step === 2 && !!(await page.$('#ivStage')) && s4b.name === '押印 太郎' && JSON.stringify(s4b.mg) === JSON.stringify(['interviewer', 'final']) && t4b.includes('初期対応者の押印欄は廃止したため表示しません') && t4b.includes('詳細モードで保存された記録です'),
+    'E4 初期対応者の印がある記録（回答なし）: state.management に initial が無い・面接から再開・toast で案内: ' + JSON.stringify(s4b) + ' ' + t4b);
   await judge();
   const st4 = await page.evaluate(() => Array.from(document.querySelectorAll('#mgmtCard .stamp-box')).map(b => b.dataset.fieldId + ':' + !!b.querySelector('svg.hanko')));
   expect(JSON.stringify(st4) === JSON.stringify(['interviewer:true', 'final:true']) && !(await page.textContent('#mgmtCard')).includes('初期対応者'), 'E4 押印欄は 2 つ（面接対応者・最終確認に印。初期対応者の欄なし）: ' + st4.join(','));
@@ -637,9 +747,10 @@ const pdfTextOf = (f) => {
   await wait(500);
   const t4c = await toastText();
   const s4c = await st(() => { const s = window.RecruitApp.state; return { step: s.step, name: s.applicant.name, keys: Object.keys(s.applicant).length, j: s.judgment }; });
-  expect(s4c.step === 3 && s4c.name === parseRecord(fs.readFileSync(fxV1, 'utf8')).applicant.name && s4c.keys === 6 && s4c.j === null && t4c.includes('旧形式の面接評価（10 項目×5 点）は読み込みません') &&
+  expect(s4c.step === 2 && !!(await page.$('#ivStage')) && s4c.name === parseRecord(fs.readFileSync(fxV1, 'utf8')).applicant.name && s4c.keys === 6 && s4c.j === null &&
+    t4c.includes('旧形式の面接評価（10 項目×5 点）は読み込みません。評価の画面で評価し直してください') &&
     !(await page.$('#legacyScores')) && !(await page.textContent('#stepContent')).includes('旧形式'),
-    'E4 v1 の記録はエラーなく ② で開く（旧評価は読み込まず、面接チェックリストで評価し直す）: ' + JSON.stringify(s4c) + ' ' + t4c);
+    'E4 v1 の記録（回答なし）はエラーなく面接で開く（旧評価は読み込まず、評価の画面で評価し直す）: ' + JSON.stringify(s4c) + ' ' + t4c);
 
   // =====================================================================
   // E5 ダークモードの紙・390px
@@ -662,21 +773,25 @@ const pdfTextOf = (f) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await wait(300);
   const nw36 = await page.evaluate(() => { const w = document.getElementById('appPaperWrap'); return { sw: w.scrollWidth, cw: w.clientWidth, ov: document.documentElement.scrollWidth - window.innerWidth }; });
-  await st(() => window.RecruitApp.goStep(3));
-  await wait(300);
+  await goTo(2);
+  await ivGo('conditions');
+  const ov36i = await overflowX();
+  await ivGo('reverse');
+  const ov36r = await overflowX();
+  await goTo(3);
   const ov36b = await overflowX();
-  await st(() => window.RecruitApp.goStep(1));
-  await wait(300);
+  await goTo(1);
   const ov36c = await overflowX();
-  expect(nw36.sw > nw36.cw && nw36.ov <= 1 && ov36b <= 1 && ov36c <= 1, 'E5 390px 幅で横スクロールなし（報告書は紙だけ横スクロール・面接チェックリスト・応募者も）: ' + JSON.stringify({ nw36, ov36b, ov36c }));
+  expect(nw36.sw > nw36.cw && nw36.ov <= 1 && ov36i <= 1 && ov36r <= 1 && ov36b <= 1 && ov36c <= 1,
+    'E5 390px 幅で横スクロールなし（報告書は紙だけ横スクロール・面接の ① と ⑤・評価・準備も）: ' + JSON.stringify({ nw36, ov36i, ov36r, ov36b, ov36c }));
   await sshot('47-script-narrow.png');
   await page.setViewportSize({ width: 1440, height: 1000 });
   await wait(200);
 
   // =====================================================================
-  // E6 ③ を開かずに ② から保存・印刷しても判定が入る・印刷の経路・総合判断未入力の保存
+  // E6 報告書を開かずに評価から保存・印刷しても判定が入る・再開先・印刷の経路・総合判断未入力の保存（docs/SPEC-flow.md 6-5・9-3）
   // =====================================================================
-  console.log('\n== E6 ② から保存・印刷 ==');
+  console.log('\n== E6 評価・面接から保存・印刷 ==');
   const names37 = await page.evaluate(() => ({ nav: document.querySelector('.nav-item[data-view="judge"]').textContent.trim(), top: document.getElementById('topTitle').textContent, side: document.getElementById('stepSectionTitle').textContent }));
   expect(names37.nav.endsWith('報告書の作成') && names37.top === '面接チェックリスト報告' && names37.side === '手順', 'E6 画面名は 報告書の作成／面接チェックリスト報告／手順: ' + JSON.stringify(names37));
   await page.click('#btnNew');
@@ -685,24 +800,35 @@ const pdfTextOf = (f) => {
   await setCl('header.posting', 'regular');
   await page.click('[data-action="script-next"]');
   await wait(400);
-  // 「すべて説明した」: 求人が通常なら「※短期求人のみ」の項目は付けない（docs/SPEC-script-mode.md 12 章）
-  await page.click('[data-action="explain-all"][data-block="conditions_explain"]');
-  await wait(120);
+  // 「説明した」: 求人が通常なら短期のみの項目は出さず、対象にもしない（docs/SPEC-flow.md 3-4）
+  const li37 = await page.$$eval('#ivStage .iv-say-list li', els => els.map(e => e.dataset.item));
+  await said('conditions');
   const ex37 = await st(() => { const v = window.RecruitApp.state.checklist.values; return { fare: v.ex_fare === true, hours: v.ex_hours === true, contract: v.ex_contract === true, sw: v.ex_switch === true,
-    t: document.querySelector('[data-action="explain-all"][data-block="conditions_explain"]').textContent }; });
-  expect(ex37.fare && ex37.hours && !ex37.contract && !ex37.sw && ex37.t === 'すべて外す', 'E6 求人が通常なら「すべて説明した」で ※短期求人のみ の項目は付かない（それ以外で全部 → 「すべて外す」）: ' + JSON.stringify(ex37));
-  await page.click('label.cl-check[data-item="ex_contract"]');   // 通常求人でも手で付けた ※ の項目は「すべて外す」で外れる
-  await wait(100);
-  await page.click('[data-action="explain-all"][data-block="conditions_explain"]');
-  await wait(120);
-  expect(await st(() => !['ex_fare', 'ex_hours', 'ex_contract', 'ex_switch'].some(id => window.RecruitApp.state.checklist.values[id] === true)), 'E6 「すべて外す」はブロックの全項目（手で付けた ※ の項目も）を外す');
+    t: document.querySelector('[data-action="iv-said"][data-sec="conditions"]').textContent }; });
+  expect(JSON.stringify(li37) === JSON.stringify(['ex_fare', 'ex_hours']) && ex37.fare && ex37.hours && !ex37.contract && !ex37.sw && ex37.t === '✓ 説明した',
+    'E6 求人が通常なら ① の話すことは 2 項目（短期のみは出さない）・「説明した」で 2 つとも済み（短期のみは付かない）・「✓ 説明した」: ' + JSON.stringify({ li37, ex37 }));
+  await said('conditions');
+  // 短期で 4 つとも説明 → 求人を通常に直す → ① は「✓ 説明した」のまま・押すと短期のみも含めて全部外す
+  await goTo(1);
+  const back37 = await page.textContent('#saNext');
+  await setCl('header.posting', 'short');
+  await goTo(2);
+  await said('conditions');
+  const sh37 = await st(() => ['ex_fare', 'ex_hours', 'ex_contract', 'ex_switch'].map(id => window.RecruitApp.state.checklist.values[id] === true));
+  await goTo(1);
+  await setCl('header.posting', 'regular');
+  await goTo(2);
+  const re37 = await page.textContent('[data-action="iv-said"][data-sec="conditions"]');
+  await said('conditions');
+  expect(back37 === '面接に戻る →' && sh37.every(Boolean) && re37 === '✓ 説明した' && await st(() => !['ex_fare', 'ex_hours', 'ex_contract', 'ex_switch'].some(id => window.RecruitApp.state.checklist.values[id] === true)),
+    'E6 面接を始めた後の準備は「面接に戻る →」・短期で付けた短期のみの説明も、通常求人の「✓ 説明した」を押すと全部外れる: ' + JSON.stringify({ back37, sh37, re37 }));
   await rateAll('good');
-  expect(await step() === 3 && await st(() => window.RecruitApp.state.judgment) === null, 'E6 ② では未判定（state.judgment なし）');
-  // 1. ② から保存（③ は開かない）
+  expect(await step() === 3 && await st(() => window.RecruitApp.state.judgment) === null, 'E6 評価では未判定（state.judgment なし。結果カードは表示のためだけに計算）');
+  // 1. 評価から保存（報告書は開かない）
   const saved37 = await saveRecord('script-step2-save.html');
   const r37 = saved37.rec;
   expect(await step() === 3 && r37.step === 3 && !!r37.judgment && r37.judgment.mode === 'script' && r37.judgment.result === 'recommend',
-    'E6 ② から保存しても判定（mode=script・採用推奨）を記録する（③ は開かない）: ' + JSON.stringify(r37.judgment && [r37.judgment.mode, r37.judgment.result, r37.step]));
+    'E6 評価から保存しても判定（mode=script・採用推奨）を記録する（報告書は開かない）: ' + JSON.stringify(r37.judgment && [r37.judgment.mode, r37.judgment.result, r37.step]));
   expect((await txtIn(page, '#sumResult')).includes('採用推奨'), 'E6 右サマリーの結果も記録した判定');
   const rp37Err = [];
   const rp37 = await newReportPage(rp37Err);
@@ -714,18 +840,30 @@ const pdfTextOf = (f) => {
     'E6 保存 HTML の用紙の結果タイルに採用推奨（「未実施」なし。ダッシュ .dash は無い）: ' + JSON.stringify({ tile37, dash37 }));
   expect(rp37Err.length === 0, 'E6 保存 HTML のページエラー・console error なし: ' + (rp37Err.join(' / ') || 'none'));
   await rp37.close();
-  // 2. 保存後に ③ を開いても同じ判定
+  // 2. 保存後に報告書を開いても同じ判定
   await judge();
   const j37 = await judgment();
   expect(await step() === 4 && j37.result === r37.judgment.result && j37.title === r37.judgment.title && (await txtIn(page, '#appPaper .cl-tile-res')).includes(r37.judgment.title),
-    'E6 保存後に ③ を開いても同じ判定: ' + JSON.stringify([j37.result, r37.judgment.result]));
-  // 3. ② で保存した記録は読み込むと ② から再開する（判定が入っていても ③ に飛ばない）
+    'E6 保存後に報告書を開いても同じ判定: ' + JSON.stringify([j37.result, r37.judgment.result]));
+  // 3. 評価で保存した記録は読み込むと評価から再開する（判定が入っていても報告書に飛ばない）
   await page.click('#btnNew');
   await wait(200);
   await page.setInputFiles('#fileInput', saved37.file);
   await wait(500);
-  expect(await step() === 3 && await st(() => window.RecruitApp.state.applicant.name) === '台本 次郎' && await st(() => window.RecruitApp.state.judgment) === null,
-    'E6 ② で保存した記録は読み込むと ② 面接チェックリストから再開');
+  expect(await step() === 3 && !!(await page.$('#clOverall')) && await st(() => window.RecruitApp.state.applicant.name) === '台本 次郎' && await st(() => window.RecruitApp.state.judgment) === null,
+    'E6 評価で保存した記録は読み込むと評価から再開');
+  // 3-2. 面接の ② で保存した記録は読み込むと面接の ② から再開する
+  await navStep(2);
+  await ivGo('continuity');
+  const saved37i = await saveRecord('script-interview-save.html');
+  await page.click('#btnNew');
+  await wait(200);
+  await page.setInputFiles('#fileInput', saved37i.file);
+  await wait(500);
+  expect(saved37i.rec.step === 2 && saved37i.rec.checklist.timing.stage === 'continuity' && await step() === 2 && await st(() => document.getElementById('ivStage').dataset.sec) === 'continuity' &&
+    await st(() => document.querySelector('#ivChips .iv-chip.is-current').dataset.sec) === 'continuity',
+    'E6 面接の ② で保存した記録（step 2・timing.stage）は読み込むと面接の ② から再開: ' + JSON.stringify({ step: saved37i.rec.step, stage: saved37i.rec.checklist.timing.stage }));
+  await navStep(3);
   // 4. 印刷の経路（window.print はスタブ。印刷の瞬間の body.print-checklist と A4 報告の結果タイルを記録する）
   await page.evaluate(() => {
     window.__pr = [];
@@ -757,24 +895,26 @@ const pdfTextOf = (f) => {
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   await wait(100);
   expect(!(await prState()).cls, 'E6 印刷後（afterprint）に body.print-checklist を外す');
-  // 4-3. ② の「🖨 面接チェックリスト報告（A4）」
+  // 4-3. 面接の画面からトップバー 🖨（今の段階の秒を記録に入れてから印刷。タイマーは止めない）
   await setCl('overall', 'hire');
   await wait(100);
-  await page.click('#clPrintBtn');
+  await goTo(2);
+  await page.click('#btnPrint');
   await wait(150);
-  const cp37 = await prState();
-  expect(cp37.calls.length === 2 && cp37.calls[1].cls && cp37.calls[1].res.includes('採用推奨') && cp37.j === 'recommend',
-    'E6 ② の「面接チェックリスト報告（A4）」も判定を入れて印刷: ' + JSON.stringify(cp37.calls));
+  const ip37 = await prState();
+  expect(ip37.calls.length === 2 && ip37.calls[1].cls && ip37.calls[1].res.includes('採用推奨') && await step() === 2 && !!(await page.$('#ivStage')),
+    'E6 面接の画面からもトップバー 🖨 で A4 報告（判定を入れて）を印刷・面接の画面のまま: ' + JSON.stringify(ip37.calls));
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   await wait(100);
   // 5. 総合判断が未入力のまま保存すると警告（保存は止めない）
+  await goTo(3);
   await page.click('[data-action="cl-set"][data-cl="overall"][data-value="hire"]');
   await wait(100);
   const saved37b = await saveRecord('script-overall-missing.html');
   const t37 = await toastText();
   expect(t37.includes('総合判断が未入力です') && saved37b.rec.checklist.overall === '' && saved37b.rec.judgment && saved37b.rec.judgment.result === 'review',
     'E6 総合判断が未入力のまま保存すると toast に「総合判断が未入力です」（保存はする）: ' + t37);
-  // 回答が無くても（① だけで保存）総合判断の警告を出す
+  // 回答が無くても（準備だけで保存）総合判断の警告を出す
   await page.click('#btnNew');
   await wait(200);
   await fillScript({ name: '台本 三郎' });
@@ -803,11 +943,15 @@ const pdfTextOf = (f) => {
     'E7 消極属性入りの旧レコードもエラーなく読め、右サマリーに消極属性を出さない: ' + JSON.stringify(s38));
   const paper38 = (await txtIn(page, '#appPaper .cl-sheet-head'));
   expect(paper38.includes('短期求人') && !['短期希望', '消極属性', '朝～12時のみ'].some(t => paper38.includes(t)), 'E7 報告書の紙（A4 ヘッダー）に消極属性を出さない: ' + paper38);
+  await navStep(2);
+  const hd38 = await page.textContent('#ivWho');
+  const iv38 = await page.textContent('#stepContent');
+  expect(await step() === 2 && hd38.includes('短期求人') && !['短期希望', '消極属性', '朝～12時のみ'].some(t => hd38.includes(t) || iv38.includes(t)), 'E7 面接の応募者の 1 行（#ivWho）・画面に消極属性を出さない: ' + hd38);
   await navStep(3);
-  const hd38 = await page.textContent('#clHeader');
-  expect(await step() === 3 && hd38.includes('短期求人') && !['短期希望', '消極属性', '朝～12時のみ'].some(t => hd38.includes(t)), 'E7 ② のヘッダーに消極属性を出さない: ' + hd38);
+  const ev38 = await page.textContent('#stepContent');
+  expect(await step() === 3 && !['短期希望', '消極属性', '朝～12時のみ'].some(t => ev38.includes(t)), 'E7 評価の画面にも消極属性を出さない');
   await navStep(1);
-  expect(!(await page.$('#saNegatives, [data-cl^="header.negatives"]')) && !(await page.textContent('#scriptApplicantCard')).includes('短期希望'), 'E7 ① にも消極属性の入力・表示なし');
+  expect(!(await page.$('#saNegatives, [data-cl^="header.negatives"]')) && !(await page.textContent('#scriptApplicantCard')).includes('短期希望'), 'E7 準備にも消極属性の入力・表示なし');
   const saved38 = await saveRecord('script-old-negatives-resaved.html');
   const shown38 = saved38.html.replace(/<script type="application\/json" id="recruit-record">[\s\S]*?<\/script>/, '');
   expect(!shown38.includes('消極属性') && !shown38.includes('朝～12時のみ') && saved38.rec.checklist.header.posting === 'short' && !('negatives' in saved38.rec.checklistDef.header),
@@ -825,7 +969,7 @@ const pdfTextOf = (f) => {
   //   副支配人「出力される報告書が煩雑すぎて頭に入ってこない。わかりやすく、かつ1ページで」
   // =====================================================================
   console.log('\n== E8 A4 報告（1 ページの要約） ==');
-  // 1. 標準の記録（E3 の再出力ファイル: 採用・押印あり）をアプリで開く → ③ の紙プレビュー
+  // 1. 標準の記録（E3 の再出力ファイル: 採用・押印あり）をアプリで開く → 報告書の紙プレビュー
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.click('#btnNew');
   await wait(200);
@@ -843,11 +987,11 @@ const pdfTextOf = (f) => {
   };
   const pv39 = await page.evaluate(paperOf, ['#appPaper', QS39]);
   expect(await step() === 4 && pv39.qs.length === 0 && pv39.res >= 0 && pv39.res <= 160 && pv39.rows === 6 && pv39.must === 2 && pv39.res2 === '採用推奨' && !pv39.cls.includes('cl-compact') && pv39.h <= 1052,
-    'E8 ③ の紙プレビュー: 質問文・説明文・補足・注記なし・結果バッジは紙の上端から 160px 以内・確認点 6 行・必須条件 2 行（標準のサンプルは .cl-compact なし）: ' + JSON.stringify(Object.assign({}, pv39, { order: undefined })));
+    'E8 報告書の紙プレビュー: 質問文・説明文・補足・注記なし・結果バッジは紙の上端から 160px 以内・確認点 6 行・必須条件 2 行（標準のサンプルは .cl-compact なし）: ' + JSON.stringify(Object.assign({}, pv39, { order: undefined })));
   expect(JSON.stringify(pv39.order) === JSON.stringify(['cl-sheet-head', 'cl-judge', 'cl-cols', 'cl-cols.cl-cols-eval', 'cl-blk.cl-blk-notes', 'cl-exline', 'cl-stamps']),
     'E8 紙の並び: 見出し → 結果ストリップ → 必須条件｜勤務条件の確認 → 確認点｜人物像 → 面接メモ → 説明・連絡 → 押印行: ' + JSON.stringify(pv39.order));
-  // 2. 1280px・1366px・1440px で横スクロールなし（アプリ ③ の紙・保存 HTML の用紙。保存 HTML は 1280px 以上なら縮小しない）。
-  //   アプリ ③ は紙を縮小しない（本文 9.5px のまま）: 右サマリーの横に紙が等倍で入らない幅は右サマリーを紙の下に回す（.judge-layout.paper-stack）
+  // 2. 1280px・1366px・1440px で横スクロールなし（アプリの報告書の紙・保存 HTML の用紙。保存 HTML は 1280px 以上なら縮小しない）。
+  //   アプリの報告書は紙を縮小しない（本文 9.5px のまま）: 右サマリーの横に紙が等倍で入らない幅は右サマリーを紙の下に回す（.judge-layout.paper-stack）
   const rp39Err = [];
   const rp39 = await newReportPage(rp39Err);
   await rp39.goto('file://' + file34b);
@@ -868,9 +1012,9 @@ const pdfTextOf = (f) => {
     wide39.push({ w, app: await ov(page, '#appPaperWrap'), rep, res: (await page.evaluate(paperOf, ['#appPaper', QS39])).res, fz });
     if (w === 1280) await sshot('49-script-step3-1280.png');
   }
-  expect(wide39.every(x => x.app.doc <= 1 && x.app.wrap <= 1 && x.rep.doc <= 1 && x.rep.zoom === '' && x.res <= 160), 'E8 1280px・1366px・1440px で横スクロールなし（アプリ ③ の紙・保存 HTML の用紙は縮小しない）: ' + JSON.stringify(wide39.map(x => ({ w: x.w, app: x.app, rep: x.rep, res: x.res }))));
+  expect(wide39.every(x => x.app.doc <= 1 && x.app.wrap <= 1 && x.rep.doc <= 1 && x.rep.zoom === '' && x.res <= 160), 'E8 1280px・1366px・1440px で横スクロールなし（アプリの報告書の紙・保存 HTML の用紙は縮小しない）: ' + JSON.stringify(wide39.map(x => ({ w: x.w, app: x.app, rep: x.rep, res: x.res }))));
   expect(wide39.every(x => x.fz.zoom === 1 && x.fz.body >= 9.5 && x.fz.label >= 8.5 && x.fz.res >= 14 && x.fz.stack === (x.w < 1440) && x.fz.below === x.fz.stack),
-    'E8 アプリ ③ の紙は 1280px・1366px でも等倍（本文 9.5px・ラベル 8.5px・結果 14px）。右サマリーの横に入らない幅は右サマリーを紙の下へ: ' + JSON.stringify(wide39.map(x => Object.assign({ w: x.w }, x.fz))));
+    'E8 アプリの報告書の紙は 1280px・1366px でも等倍（本文 9.5px・ラベル 8.5px・結果 14px）。右サマリーの横に入らない幅は右サマリーを紙の下へ: ' + JSON.stringify(wide39.map(x => Object.assign({ w: x.w }, x.fz))));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await rp39.setViewportSize({ width: 1440, height: 1000 });
   await wait(200);
@@ -878,49 +1022,52 @@ const pdfTextOf = (f) => {
   expect(rv39.qs.length === 0 && rv39.res <= 160 && rv39.rows === 6 && rv39.res2 === '採用推奨' && !!(await rp39.$('#a4 .cl-decision svg.verdict-stamp')) && JSON.stringify(rv39.order) === JSON.stringify(pv39.order),
     'E8 保存 HTML の用紙も同じ 1 ページの要約（質問文なし・結果が上部・最終合否の採用スタンプ・同じ並び）: ' + JSON.stringify(Object.assign({}, rv39, { order: undefined })));
   await rp39.close();
-  // 3. 重いサンプル: 全メモ（質問の回答・確認点のメモ・Step① のメモ）に 300 字・面接所見 1,500 字 → .cl-compact で 1 ページ
-  //   （質問の回答は 2 行・確認点のメモは 1 行で打ち切るので、本文が A4 を超えるのは際限なく長くなる面接所見が長いとき）
+  // 3. 重いサンプル（docs/SPEC-flow.md 9-3）: 面接の質問ごとのメモ 13 個・確認点のメモ・準備のメモに 300 字・面接所見 1,500 字 → .cl-compact で 1 ページ
+  //   質問ごとの行が 13 行になるので、質問の回答は 1 行（.cl-compact-q1）に詰め、残りの空きまで面接所見を広げる（実測。2026-10-16）
   await page.click('#btnNew');
   await wait(200);
   await fillScript({ name: '台本 四郎', age: 21, gender: '男性', category: '大学3年生', posting: 'short', taxi: '可・2,500円', interviewer: '笹川 晴央', notes: L(300) });
   await page.click('[data-action="script-next"]');
   await wait(400);
-  for (const sel of await page.$$eval('#stepContent textarea[data-cl]', els => els.map(e => e.getAttribute('data-cl')))) await page.fill('textarea[data-cl="' + sel + '"]', L(300));
-  for (const sel of await page.$$eval('#stepContent input.cl-note[data-cl]', els => els.map(e => e.getAttribute('data-cl')))) await page.fill('input[data-cl="' + sel + '"]', L(300));
+  await fillMemos(L(300));
   await page.fill('textarea[data-note="interview"]', L(1500));
-  for (const b of ['conditions_explain', 'continuity_explain', 'job_explain', 'teamwork_explain', 'reverse_notify']) await page.click('[data-action="explain-all"][data-block="' + b + '"]');
+  for (const sec of ['conditions', 'continuity', 'job', 'teamwork']) await said(sec);
+  await said('reverse', 'notify');
   await rateAll('good');
   await judge();
   const hv39 = await page.evaluate(paperOf, ['#appPaper', QS39]);
-  expect(await step() === 4 && hv39.cls.includes('cl-compact') && hv39.h <= 1052 && hv39.res <= 160 && hv39.rows === 6 && hv39.qs.length === 0,
-    'E8 重いサンプル（全メモ 300 字・面接所見 1,500 字）: 紙プレビューに .cl-compact・押印行込みで上限（1052px）以内・結果は上部: ' + JSON.stringify(Object.assign({}, hv39, { order: undefined })));
+  const qn39 = await st(() => Object.keys(window.RecruitApp.state.checklist.notes).filter(k => k.indexOf('q_') === 0).length);
+  expect(await step() === 4 && qn39 === 13 && hv39.cls.includes('cl-compact') && hv39.h <= 1052 && hv39.res <= 160 && hv39.rows === 6 && hv39.qs.length === 0,
+    'E8 重いサンプル（質問ごとのメモ 13 個・全メモ 300 字・面接所見 1,500 字）: 紙プレビューに .cl-compact・押印行込みで上限（1052px）以内・結果は上部: ' + JSON.stringify(Object.assign({ qn39 }, hv39, { order: undefined })));
   const nm39 = await page.evaluate(() => {
     const sh = document.querySelector('#appPaper .cl-sheet'), q = sh.querySelector('.cl-nm-q .cl-nm-v'), iv = sh.querySelector('.cl-nm-iv .cl-nm-v'), ref = sh.querySelector('.cl-nm-ref');
     const cq = getComputedStyle(q), ci = getComputedStyle(iv);
-    // 名前の行数（Range の行の上端を数える）
-    const linesOf = (el) => { const r = document.createRange(); r.selectNodeContents(el); const tops = []; Array.from(r.getClientRects()).forEach(x => { if (!tops.some(t => Math.abs(t - x.top) < 4)) tops.push(x.top); }); return tops.length; };
     const lw = sh.querySelector('.cl-nm-lines');
     return { qClamp: cq.webkitLineClamp, qh: Math.round(q.getBoundingClientRect().height), qlh: parseFloat(cq.lineHeight),
       ivClamp: ci.webkitLineClamp, ivh: Math.round(iv.getBoundingClientRect().height), ivlh: parseFloat(ci.lineHeight), sheetH: Math.round(sh.getBoundingClientRect().height),
-      ivCut: iv.classList.contains('cl-cut'), linesMm: +(lw.getBoundingClientRect().height / (96 / 25.4)).toFixed(2),
+      ivCut: iv.classList.contains('cl-cut'), linesMm: +(lw.getBoundingClientRect().height / (96 / 25.4)).toFixed(2), q1: sh.classList.contains('cl-compact-q1'),
       ref: ref && ref.getClientRects().length ? ref.innerText.trim() : '', cut: sh.classList.contains('cl-nm-cut'),
-      keys: Array.from(sh.querySelectorAll('.cl-nm-q .cl-nm-k')).map(k => ({ t: k.textContent, lines: linesOf(k) })) };
+      rows: Array.from(sh.querySelectorAll('.cl-nm-row')).map(r => r.dataset.clNote || r.className.replace('cl-nm-row ', '')),
+      //   名前は 1 行（見えている高さ。長い名前は 1 行で「…」）
+      keys: Array.from(sh.querySelectorAll('.cl-nm-q .cl-nm-k')).map(k => ({ t: k.textContent, h: Math.round(k.getBoundingClientRect().height), lh: parseFloat(getComputedStyle(k).lineHeight) })) };
   });
-  expect(String(nm39.qClamp) === '2' && nm39.qh > nm39.qlh * 1.5 && nm39.qh <= nm39.qlh * 2.5,
-    'E8 .cl-compact でも質問の回答は 2 行のまま（超えた分は面接所見から先に削る）: ' + JSON.stringify({ qClamp: nm39.qClamp, qh: nm39.qh, qlh: nm39.qlh }));
+  expect(String(nm39.qClamp) === '1' && nm39.q1 && nm39.qh <= nm39.qlh * 1.5,
+    'E8 質問ごとの行が 13 行なので .cl-compact-q1 で質問の回答は 1 行: ' + JSON.stringify({ qClamp: nm39.qClamp, qh: nm39.qh, qlh: nm39.qlh, q1: nm39.q1 }));
   // 面接所見は .cl-compact の 10 行で「…」になるが、面接メモ・所見の枠に罫線の空きが残るので、その分まで行数を広げる（docs/SPEC-a4.md 12 章 F5。
-  //   まだ切れているので罫線の空きは 1 行分〔7.5mm〕未満。質問の回答は 2 行のまま＝所見のために他を削らない）
+  //   まだ切れているので罫線の空きは 1 行分〔7.5mm〕未満）
   expect(Number(nm39.ivClamp) > 10 && nm39.ivh >= nm39.ivlh * 10.5 && nm39.ivCut && nm39.linesMm < 7 && hv39.h <= 1052,
     'E8 面接所見は罫線の空きまで広げる（10 行より多い・まだ切れているので罫線の空きは 7mm 未満・上限 1052px 以内）: ' + JSON.stringify({ ivClamp: nm39.ivClamp, ivh: nm39.ivh, ivlh: nm39.ivlh, ivCut: nm39.ivCut, linesMm: nm39.linesMm, sheetH: nm39.sheetH }));
-  expect(nm39.keys.length === 5 && nm39.keys.every(k => k.lines === 1 && k.t.length <= 22) && nm39.keys[1].t === '②前のバイトの期間・退職理由 ほか2問' && nm39.keys[4].t === '⑤気になる点（逆質問）',
-    'E8 質問の回答の名前は 1 行（1 問目の短い名前＋「ほか n 問」）: ' + JSON.stringify(nm39.keys));
-  // ③ の紙はクリックしても窓を出さないので「保存した HTML の画面で」（アプリの印刷・保存 HTML は「画面で」。下の PDF で確かめる）
+  const QIDS39 = ['q_term', 'q_two_months', 'q_family', 'q_prev_job', 'q_cant_3days', 'q_sudden_absence', 'q_value', 'q_failure', 'q_unsure', 'q_feedback', 'q_unknown', 'q_busy_mind', 'q_concerns'];
+  expect(JSON.stringify(nm39.rows) === JSON.stringify(QIDS39.concat(['cl-nm-b cl-nm-rt', 'cl-nm-iv', 'cl-nm-memo'])) && nm39.keys.length === 13 && nm39.keys.every(k => k.h <= k.lh * 1.5) &&
+    nm39.keys[0].t === '①短期／長期の希望' && nm39.keys[3].t === '②前のバイトの期間・退職理由' && nm39.keys[12].t === '⑤気になる点（逆質問）',
+    'E8 面接メモは質問ごとの行（段階の順・キー「①短い名前」・1 行）→ 確認点のメモ → 面接所見 → メモ: ' + JSON.stringify({ rows: nm39.rows.length, keys: nm39.keys.map(k => k.t) }));
+  // 報告書の紙はクリックしても窓を出さないので「保存した HTML の画面で」（アプリの印刷・保存 HTML は「画面で」。下の PDF で確かめる）
   const cut39 = await page.evaluate(() => document.querySelectorAll('#appPaper .cl-cut').length);
   await page.click('#appPaper .cl-nm-iv .cl-nm-v');
   await wait(100);
   const pop39 = !!(await page.$('.pop,#a4Pop,[role="dialog"]:not([hidden])'));
   expect(nm39.cut && nm39.ref === '「…」で切れたメモは、保存した HTML の画面でクリックすると全文を表示します' && cut39 >= 1 && !pop39,
-    'E8 「…」で切れたメモがあれば案内 1 行（③ の紙は「保存した HTML の画面でクリックすると全文」。③ の紙のクリックでは窓は出ない）: ' + JSON.stringify({ cut: nm39.cut, ref: nm39.ref, cut39, pop39 }));
+    'E8 「…」で切れたメモがあれば案内 1 行（報告書の紙は「保存した HTML の画面でクリックすると全文」。報告書の紙のクリックでは窓は出ない）: ' + JSON.stringify({ cut: nm39.cut, ref: nm39.ref, cut39, pop39 }));
   await page.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
   await wait(150);
   await sshot('48-script-report-heavy.png');
@@ -987,6 +1134,9 @@ const pdfTextOf = (f) => {
     // o.qRaw・o.ivTail: そのままの文字列（折り返せない幅広の書記素など。E16）
     if (o.q || o.qRaw) R.checklistItems(prof.checklist, 'question').forEach(x => { cl.notes[x.block.id] = o.qRaw != null ? o.qRaw : Lx(o.q); });
     if (o.rn) R.checklistItems(prof.checklist, 'rating').forEach(x => { cl.notes[x.item.id] = Lx(o.rn); });   // 確認点のメモ
+    //   o.qi: 質問ごとのメモ（2026-10-16 の形 cl.notes[質問 id]）・o.tm: 面接の時間（cl.timing。docs/SPEC-flow.md 6-2）
+    if (o.qi) R.checklistItems(prof.checklist, 'question').forEach(x => { cl.notes[x.item.id] = Lx(o.qi); });
+    if (o.tm) cl.timing = o.tm;
     const applicant = { name: '台本 五郎', age: '21', gender: '男性', category: '大学3年生', reviewerNotes: o.memo ? Lx(o.memo) : '' };
     // o.stamp: 全欄に押印済み／o.dec: 最終合否（'hire'・'reject'）
     const who = { name: '笹川 晴央', short: '笹川', title: '副支配人', date: '2026/10/10', at: '2026-10-10T00:00:00.000Z' };
@@ -1001,7 +1151,10 @@ const pdfTextOf = (f) => {
   //   zoomNotes: 確認点 +46 件＋長いメモ（縮小の段階でも、切れたメモを縮小後の空きまで広げる。12 章 F5）
   //     縮小後の空きは zoom の刻みしだいで 1 行に満たないことがある。確認点のメモが面接メモ・所見の枠に移った（docs/SPEC-persona.md D11）ので、
   //     空きが 1 行を超える件数（+46）と、.cl-compact-2（4 行）で確実に切れる面接所見（600 字）に選び直した（以前は +40 件・400 字）
-  for (const c of [{ key: 'iv4000', iv: 4000 }, { key: 'stamps4', fields: 4, q: 300, memo: 500, iv: 1600 }, { key: 'zoom', extra: 65 }, { key: 'zoomNotes', extra: 46, q: 100, memo: 100, iv: 600, rn: 50 }]) {
+  //   qi: 質問ごとのメモ 13 個（300 字）・面接時間（40 分）の新しい形の重い記録
+  const TM39 = { startedAt: '2026-10-10T00:00:00.000Z', endedAt: '2026-10-10T00:41:00.000Z', stage: 'reverse', perStage: { conditions: 720, continuity: 200, job: 600, teamwork: 480, reverse: 400 } };
+  for (const c of [{ key: 'iv4000', iv: 4000 }, { key: 'stamps4', fields: 4, q: 300, memo: 500, iv: 1600 }, { key: 'zoom', extra: 65 }, { key: 'zoomNotes', extra: 46, q: 100, memo: 100, iv: 600, rn: 50 },
+    { key: 'qi', qi: 300, rn: 300, memo: 300, iv: 1500, tm: TM39 }]) {
     const f39 = path.join(OUT, 'script-report-fit-' + c.key + '.html');
     fs.writeFileSync(f39, await page.evaluate(mk39, c));
     const rp = await newReportPage(rp39Err);
@@ -1034,7 +1187,8 @@ const pdfTextOf = (f) => {
     const pdf = path.join(OUT, 'script-report-fit-' + c.key + '.pdf');
     await rp.pdf({ path: pdf, format: 'A4', preferCSSPageSize: true, printBackground: true });
     const t = pdfTextOf(pdf);
-    fit39.push(Object.assign({ key: c.key, pages: pdfPagesOf(pdf), ref: t === null ? null : t.includes('「…」で切れたメモは、画面でクリックすると全文を表示します'), name: t === null ? null : t.includes('台本五郎') }, m));
+    fit39.push(Object.assign({ key: c.key, pages: pdfPagesOf(pdf), ref: t === null ? null : t.includes('「…」で切れたメモは、画面でクリックすると全文を表示します'), name: t === null ? null : t.includes('台本五郎'),
+      tm: t === null ? null : t.includes('面接時間40分（目安41分）'), qRows: await rp.evaluate(() => document.querySelectorAll('#a4 .cl-nm-q[data-cl-note]').length) }, m));
     await rp.close();
   }
   const fit39k = (k) => fit39.find(x => x.key === k);
@@ -1048,14 +1202,17 @@ const pdfTextOf = (f) => {
   const zn39 = fit39k('zoomNotes');
   expect(zn39.cls.includes('cl-compact-2') && parseFloat(zn39.zoom) < 1 && zn39.ivInline !== '' && zn39.h <= 1052 && (zn39.cutLineH === 0 || zn39.room < zn39.cutLineH),
     'E8 縮小の段階（確認点 +46 件＋長いメモ）でも、切れたメモを縮小後の空きまで広げる（面接所見の行数を広げる・切れたメモが残るなら空きは 1 行未満・上限 1052px 以内）: ' + JSON.stringify(zn39));
+  const qi39 = fit39k('qi');
+  expect(qi39.qRows === 13 && qi39.tm !== false && qi39.h <= 1052 && (qi39.pages === -1 || qi39.pages === 1) && fit39.filter(x => x.key !== 'qi').every(x => x.qRows === 0 && x.tm !== true),
+    'E8 質問ごとのメモ 13 個・面接時間ありの重い記録も保存 HTML の用紙 1 ページ（質問ごとの行 13・「面接時間 40分（目安 41分）」）。旧い形の記録は質問ごとの行・面接時間なし: ' + JSON.stringify(qi39));
   expect(fit39.every(x => x.fitN === 1),
     'E8 保存 HTML を開いたときの計測は 1 回（load・フォントの読み込み後に同じ計測を繰り返さない）: ' + JSON.stringify(fit39.map(x => [x.key, x.fitN])));
-  //   アプリで読み込んだときも ③ の紙の計測は 1 回（読み込みで ③ を 2 回描かない）
+  //   アプリで読み込んだときも 報告書の紙の計測は 1 回（読み込みで 報告書を 2 回描かない）
   await page.evaluate(() => { const S = window.RecruitStorage; window.__fitOrig = S.fitChecklistSheet; window.__fitApp = 0; S.fitChecklistSheet = function () { window.__fitApp++; return window.__fitOrig.apply(this, arguments); }; });
   await page.setInputFiles('#fileInput', path.join(OUT, 'script-report-fit-zoom.html'));
   await wait(600);
   const app39n = await page.evaluate(() => { const n = window.__fitApp; window.RecruitStorage.fitChecklistSheet = window.__fitOrig; return { n: n, step: window.RecruitApp.state.step, paper: !!document.querySelector('#appPaper .cl-sheet') }; });
-  expect(app39n.step === 4 && app39n.paper && app39n.n === 1, 'E8 アプリで保存 HTML を読み込むと ③ の紙の計測は 1 回: ' + JSON.stringify(app39n));
+  expect(app39n.step === 4 && app39n.paper && app39n.n === 1, 'E8 アプリで保存 HTML を読み込むと 報告書の紙の計測は 1 回: ' + JSON.stringify(app39n));
   //   最終合否の担当者名が改行できない長い文字列でも、最終合否欄は結果ストリップの 36% まで（左の 5 枚のタイルを「…」で潰さない・用紙からはみ出さない。docs/SPEC-persona.md D10）。
   //   結果が「上長最終判断要」（7 文字）・人物像のタイルが「未入力 3・1点あり」・確認点のタイルが「○3 △1 ×0 未入力2」でも同じ（タイルは中身の幅より狭くならず、足りなければ最終合否欄が縮む）。
   //   名簿の氏名＋役職 18 文字（「試験 長名美子（エリアマネージャー）」）は、どちらの状態でも最終合否欄で切れない（c0d20ce と同じく収まる）。
@@ -1132,7 +1289,7 @@ const pdfTextOf = (f) => {
   const app9 = { ids: await ids9(page, '#mgmtCard .stamp-box'), cols: await page.$eval('#mgmtCard .stamp-row', e => e.classList.contains('cols-2') && getComputedStyle(e).gridTemplateColumns.split(' ').length),
     labels: await page.$$eval('#mgmtCard .stamp-label', els => els.map(e => e.textContent)), txt: await page.textContent('#stepContent') };
   expect(JSON.stringify(app9.ids) === JSON.stringify(['interviewer', 'final']) && app9.cols === 2 && JSON.stringify(app9.labels) === JSON.stringify(['面接対応者', '最終確認']) && !app9.txt.includes('初期対応者'),
-    'E9 アプリ ③ の押印欄は 面接対応者・最終確認 の 2 つ（2 列・初期対応者なし）: ' + JSON.stringify(Object.assign({}, app9, { txt: undefined })));
+    'E9 アプリの報告書の押印欄は 面接対応者・最終確認 の 2 つ（2 列・初期対応者なし）: ' + JSON.stringify(Object.assign({}, app9, { txt: undefined })));
   const sum9 = await txtIn(page, '#sumStamps');
   expect(sum9.includes('面接対応者') && sum9.includes('最終確認') && !sum9.includes('初期対応者'), 'E9 右サマリーの押印状況も 2 欄: ' + sum9);
   expect(!(await page.textContent('#appPaper')).includes('初期対応者'), 'E9 紙プレビューに初期対応者が無い');
@@ -1200,7 +1357,7 @@ const pdfTextOf = (f) => {
     !okRj9.pop && okRj9.reject && rp9Err.length === 0,
     'E9 採用×不採用推奨も窓を開いたまま注記・判定と同じ「不採用」なら注記なしで窓が閉じる: ' + JSON.stringify({ noteRj9, hireRj9, okRj9 }));
   await rp9.close();
-  // アプリ ③ の 390px
+  // アプリの報告書の 390px
   await page.setViewportSize({ width: 390, height: 900 });
   await wait(300);
   const n9 = await page.evaluate(() => ({ cols: getComputedStyle(document.querySelector('#mgmtCard .stamp-row')).gridTemplateColumns.split(' ').length, ov: document.documentElement.scrollWidth - window.innerWidth }));
@@ -1268,9 +1425,10 @@ const pdfTextOf = (f) => {
     'E10 data-action は台本の編集・保存／破棄／書き出し／読み込み／初期化・最終承認のパスワードの設定だけ: ' + set10.actions.join(','));
   const txt10 = await page.evaluate(() => ({ cl: document.getElementById('s-checklist').textContent, mgmt: document.getElementById('s-mgmt').textContent, io: document.getElementById('s-io').textContent,
     band: !!document.querySelector('#clBandInputs [data-bind="evaluation.thresholds.recommendPct"]') && !!document.getElementById('clCapsScriptHint') }));
-  expect(txt10.cl.includes('説明（Step② に表示）') && txt10.band && txt10.mgmt.includes('Step③ に「採用」「不採用」のボタン') &&
+  expect(txt10.cl.includes('説明（「評価」に表示）') && txt10.cl.includes('「面接」では「不一致のとき案内するセクション」へ進んで面接を終えるよう案内します') && txt10.band &&
+    txt10.mgmt.includes('保存ファイル（HTML）と「報告書」に「採用」「不採用」のボタン') && txt10.mgmt.includes('（「報告書」の画面と保存した HTML の両方') && !/Step[①②③]/.test(txt10.cl + txt10.mgmt) &&
     txt10.io.includes('v1 形式の JSON は読み込むと既定の設定になります') && !txt10.io.includes('新しい設定項目が既定値で補われます'),
-    'E10 文言: 面接チェックリストは Step②・最終合否は Step③・帯の境界は面接チェックリストの節・書き出しの注記');
+    'E10 文言: 画面は「準備」「面接」「評価」「報告書」で呼ぶ（総合判断の説明は「評価」・必須条件の案内は「面接」・最終合否は「報告書」。Step① などは使わない）・帯の境界は面接チェックリストの節・書き出しの注記');
   // どこにも表示しない台本の題名・説明文（checklist.title / intro）の欄は無い。必須条件の不一致の補足は削除した入力チェック（「入力が必要」）を案内しない
   //   区分のグループは学生かどうかだけを説明する（freeter・homemaker などを選ばせない）
   const ap10 = await page.evaluate(() => (document.querySelector('#s-applicant [data-bind="options.categories"]').closest('.field').querySelector('.hint') || {}).textContent || '');
@@ -1325,18 +1483,26 @@ const pdfTextOf = (f) => {
   // 使い方
   await toView('help');
   const help10 = await page.textContent('#view-help');
-  expect((await page.$$('#view-help .help-step')).length === 3 && ['応募者', '面接チェックリスト', '報告書', '最終合否', '面接対応者／最終確認'].every(t => help10.includes(t)) &&
-    !['詳細モード', '初期対応者', '2軸', '貢献度', '留意点', '申し送り'].some(t => help10.includes(t)) && !(await page.$('#helpFullMode')),
-    'E10 使い方は 3 ステップ（押印欄は 面接対応者／最終確認。詳細モード・初期対応者・2軸の記述なし）');
+  const hs10 = await page.$$eval('#view-help .help-step h3', els => els.map(e => e.textContent));
+  expect(JSON.stringify(hs10) === JSON.stringify(['準備', '面接', '評価', '報告書']) && ['準備 → 面接 → 評価 → 報告書 の 4 つの手順', '最終合否', '「面接対応者」に押印', '最終確認と最終合否'].every(t => help10.includes(t)) &&
+    !['詳細モード', '初期対応者', '2軸', '貢献度', '留意点', '申し送り', '面接チェックリストへ進む', 'Step②'].some(t => help10.includes(t)) && !(await page.$('#helpFullMode')),
+    'E10 使い方は 4 ステップ（準備・面接・評価・報告書。押印は面接対応者 → 最終確認・最終合否。詳細モード・初期対応者・2軸の記述なし）: ' + JSON.stringify(hs10));
+  // 面接の進め方（1 分で読める 8 行。段階の名前・必須条件の案内先・最後の段階は台本から）
+  const hiv10 = await page.$$eval('#helpInterview li', els => els.map(e => e.textContent));
+  expect(hiv10.length === 8 && hiv10[0] === '「面接を始める」でタイマーが動き、① 勤務条件から 1 段階ずつ表示します。' &&
+    hiv10[5] === '必須条件が 1 つでも［不一致］になると赤い案内が出ます。追加で確認して解消しなければ ⑤ 逆質問へ進み、最大 10 分で終えます。' &&
+    hiv10[6] === '⑤ の最後に合否連絡を伝えて［伝えた］を押し、「面接を終えて評価へ」。Ctrl＋Enter でも次へ進めます。' && hiv10[2].includes('［説明した］を 1 回') && hiv10[3].includes('○△× などの評価は面接のあとでまとめて付けます'),
+    'E10 使い方の「面接の進め方」は 8 行（タイマー・段階の順・説明した・メモ・目安・必須条件の案内・合否連絡と Ctrl＋Enter・記入シート）: ' + JSON.stringify(hiv10));
   const helpLock10 = await page.textContent('#helpFinalLock').catch(() => '');
   expect(['最終承認のパスワード', '誤操作を防ぐための鍵', 'HTML をテキストで開いて書き換える人までは防げません', 'パスワードそのものは保存しません', '初期パスワードは管理者に確認してください', '押印欄の表示名'].every(t => helpLock10.includes(t)) &&
     !helpLock10.includes('local/') && !helpLock10.includes('final-password'),
     'E10 使い方に最終承認のパスワード（誤操作を防ぐ鍵・書き換えは防げない・平文は保存しない・ローカル版の初期パスワードは管理者に確認〔リポジトリ内のパスは出さない〕・押印欄の表示名の変更にも要る）');
   //   報告書（HTML）の流れ・ステップ 3 にパスワードの手順（最終合否の欄はパスワードの入力から・最終確認と最終合否は副支配人が保存した HTML で）
   const helpFlow10 = await page.textContent('#helpScriptFlow').catch(() => '');
-  const helpStep3 = await page.evaluate(() => { const s = document.querySelectorAll('#view-help .help-step'); return s[2] ? s[2].textContent : ''; });
-  expect(helpFlow10.includes('パスワードがあるときは、最初にパスワードを入力します') && helpStep3.includes('最終確認と最終合否は、副支配人が保存した HTML で押します'),
-    'E10 使い方の「報告書（HTML）の流れ」とステップ 3 にパスワードの手順: ' + JSON.stringify({ flow: helpFlow10.length, step3: helpStep3.length }));
+  const helpStep4 = await page.evaluate(() => { const s = document.querySelectorAll('#view-help .help-step'); return s[3] ? s[3].textContent : ''; });
+  expect(helpFlow10.includes('パスワードがあるときは、最初にパスワードを入力します') && helpStep4.includes('最終確認と最終合否は副支配人が保存した HTML で押します（最終承認のパスワードがあるときはその入力が必要です）') &&
+    helpLock10.includes('報告書の画面と保存した HTML の両方'),
+    'E10 使い方の「報告書（HTML）の流れ」とステップ 4（報告書）にパスワードの手順: ' + JSON.stringify({ flow: helpFlow10.length, step4: helpStep4.length }));
   await toView('judge');
   await fresh();
 
@@ -1370,10 +1536,10 @@ const pdfTextOf = (f) => {
   expect((await snap11()) === s11a, 'E11 印刷（PDF）の前後で用紙の状態は変わらない');
   expect(rp11Err.length === 0, 'E11 保存 HTML のページエラーなし: ' + (rp11Err.join(' / ') || 'none'));
   await rp11.close();
-  // アプリ ③ の「A4 で印刷」も 1 ページ（押印 2 欄）
+  // アプリの報告書の「A4 で印刷」も 1 ページ（押印 2 欄）
   await page.setInputFiles('#fileInput', saved9.file);
   await wait(500);
-  expect(await step() === 4, 'E11 保存した記録を ③ で開く');
+  expect(await step() === 4, 'E11 保存した記録を報告書で開く');
   await st(() => window.RecruitApp.prepareChecklistSheet(true));
   const a11 = await st(() => document.querySelectorAll('#clSheet .a4 .cl-stamps .stamp-box').length);
   await page.emulateMedia({ media: 'print' });
@@ -1390,7 +1556,7 @@ const pdfTextOf = (f) => {
   // =====================================================================
   console.log('\n== E12 設定の反映・読み込みの案内・手入力の押印・最終合否の ON/OFF ==');
   await fresh();
-  // 1. 必須条件に不一致があるとき「上長最終判断要」: 打ち切りの案内・省略可・⑤ へのボタンを出さず、未入力でも報告書へ進める
+  // 1. 必須条件に不一致があるとき「上長最終判断要」: 打ち切りの案内・省略可・⑤ へのボタンを出さず、未入力でも報告書へ進める（面接の案内は docs/SPEC-flow.md 3-8）
   await toView('settings');
   await page.selectOption('[data-bind="checklist.mustFailResult"]', 'review');
   await saveSettings();
@@ -1399,12 +1565,16 @@ const pdfTextOf = (f) => {
   await page.click('[data-action="script-next"]');
   await wait(400);
   await setCl('values.must_weekly', 'mismatch');
+  await wait(150);
+  const rv12 = await st(() => ({ text: document.getElementById('ivMustAlertText').textContent, skip: document.querySelectorAll('#ivChips .iv-chip.is-skip').length,
+    jump: !!document.getElementById('ivMustJump') && !document.getElementById('ivMustJump').classList.contains('hidden') }));
+  expect(await visible('#ivMustAlert') && rv12.text === '必須条件が合いません。追加で確認してください（このまま続けると、結果は上長最終判断要以下になります）' && rv12.skip === 0 && !rv12.jump,
+    'E12 mustFailResult=review の面接の案内（追加で確認・続けると上長最終判断要以下。省略可のチップ・「⑤ 逆質問へ」は出さない）: ' + JSON.stringify(rv12));
   await setCl('overall', 'hire');
   await wait(150);
-  const rv12 = await st(() => ({ text: document.getElementById('clMustAlertText').textContent, skip: document.querySelectorAll('.cl-skippable').length,
-    jump: !document.querySelector('#clMustAlert [data-action="cl-jump"]').classList.contains('hidden') }));
-  expect(await visible('#clMustAlert') && rv12.text.includes('ほかのセクションの確認点も評価してから判定してください') && rv12.text.includes('上長最終判断要以下') && !rv12.text.includes('終了してください') && rv12.skip === 0 && !rv12.jump,
-    'E12 mustFailResult=review の案内（確認点も評価・上長最終判断要以下。省略可・「⑤ 逆質問へ」は出さない）: ' + JSON.stringify(rv12));
+  const ev12 = await st(() => ({ skip: document.querySelectorAll('.cl-skippable').length, miss: document.getElementById('evMissing').textContent, res: document.getElementById('evResultTitle').textContent, why: document.getElementById('evResultWhy').textContent }));
+  expect(await step() === 3 && ev12.skip === 0 && ev12.miss.startsWith('未入力：') && ev12.res === '上長最終判断要' && ev12.why.startsWith('必須条件が不一致') && ev12.why.endsWith('のため'),
+    'E12 mustFailResult=review の評価: 省略可なし・未入力の数を出す（打ち切りではない）・いまの結果は上長最終判断要（必須条件が不一致のため）: ' + JSON.stringify(ev12));
   await judge();
   const j12a = await judgment();
   expect(await step() === 4 && j12a.result === 'review' && j12a.adjustments.includes('must_conditions'), 'E12 mustFailResult=review: 確認点が未入力でも報告書へ進み、採用 → 上長最終判断要（must_conditions）: ' + JSON.stringify(j12a));
@@ -1439,12 +1609,14 @@ const pdfTextOf = (f) => {
   await fillScript({ name: '設定 二郎' });
   await page.click('[data-action="script-next"]');
   await wait(400);
-  const cl12 = await st(() => ({ busy: (document.querySelector('.cl-must-row[data-item="must_busy"] .cl-label') || {}).textContent, rows: document.querySelectorAll('.cl-rate-row').length,
+  const busy12 = await page.textContent('#ivStage .cl-must-row[data-item="must_busy"] .cl-label');
+  await goTo(3);
+  const cl12 = await st(() => ({ busy: (document.querySelector('#cl-conditions .cl-must-row[data-item="must_busy"] .cl-label') || {}).textContent, rows: document.querySelectorAll('.cl-rate-row').length,
     c1: document.querySelectorAll('#cl-conditions .cl-rate-row').length, c2: document.querySelectorAll('#cl-continuity .cl-rate-row').length, c4: document.querySelectorAll('#cl-teamwork .cl-rate-row').length,
     turnover: !!document.querySelector('.cl-rate-row[data-item="rt_turnover"]') }));
   //   （c0d20ce では削除したのが rt_manner だったので「rt_manner が無い」を見ていた。いまは削除したのが rt_turnover で、rt_manner は既定に無い〔単体 #54〕ので見ない）
-  expect(cl12.busy === NEW_BUSY && cl12.rows === 6 && cl12.c1 === 1 && cl12.c2 === 1 && cl12.c4 === 2 && !cl12.turnover && (await txtIn(page, '#sumMarks')).includes('/14点'),
-    'E12 ② に新しい文言・確認点は ① 1 件／② 1 件／④ 2 件（計 6 件・rt_turnover なし・満点 14 点）: ' + JSON.stringify(cl12));
+  expect(busy12 === NEW_BUSY && cl12.busy === NEW_BUSY && cl12.rows === 6 && cl12.c1 === 1 && cl12.c2 === 1 && cl12.c4 === 2 && !cl12.turnover && (await txtIn(page, '#sumMarks')).includes('/14点'),
+    'E12 面接 ①・評価の必須条件に新しい文言・評価の確認点は ① 1 件／② 1 件／④ 2 件（計 6 件・rt_turnover なし・満点 14 点）: ' + JSON.stringify(Object.assign({ busy12 }, cl12)));
   await setCl('values.must_busy', 'mismatch');
   await judge();
   const why12 = await st(() => (window.RecruitApp.state.judgment.adjustments[0] || {}).reason || '');
@@ -1493,7 +1665,7 @@ const pdfTextOf = (f) => {
   const t12c = await toastText();
   expect(await step() === 4 && t12c.includes('このファイルは「TOHOシネマズ 他劇場」の設定で保存されています。現在の設定で判定し直します') && !t12c.includes('確認点が異なります'),
     'E12 他劇場の設定で保存された記録は toast で知らせる: ' + t12c);
-  // 7. 名簿にない担当者（手入力）の押印・取消（アプリ ③）
+  // 7. 名簿にない担当者（手入力）の押印・取消（アプリの報告書）
   const box12 = (id) => '#mgmtCard .stamp-box[data-field-id="' + id + '"]';
   await page.click(box12('interviewer') + ' [data-action="unstamp"]');
   await wait(150);
@@ -1602,7 +1774,7 @@ const pdfTextOf = (f) => {
   await saveSettings();
   await toView('judge');
   expect(await step() === 4 && !(await page.$('#decisionCard')) && !(await page.$('#sumDecision')) && !(await page.$('#appPaper .cl-decision')) && await st(() => (window.RecruitApp.state.decision || {}).result) === 'reject',
-    'E12 最終合否を OFF にすると ③ のカード・紙の合否欄・右サマリーを出さない（記録は保持）');
+    'E12 最終合否を OFF にすると 報告書のカード・紙の合否欄・右サマリーを出さない（記録は保持）');
   const saved12c = await saveRecord('decision-off.html');
   const rp12c = await newReportPage(rp12Err);
   await rp12c.goto('file://' + saved12c.file);
@@ -1620,7 +1792,7 @@ const pdfTextOf = (f) => {
   await wait(100);
   await saveSettings();
   await toView('judge');
-  expect(!!(await page.$('#decisionCard svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('不採用・鈴木'), 'E12 ON に戻すと ③ のカード（記録した合否）が戻る');
+  expect(!!(await page.$('#decisionCard svg.verdict-stamp')) && (await txtIn(page, '#sumDecision')).includes('不採用・鈴木'), 'E12 ON に戻すと 報告書のカード（記録した合否）が戻る');
   await fresh();
 
   // =====================================================================
@@ -1664,7 +1836,7 @@ const pdfTextOf = (f) => {
     const opts13 = await lp.$$eval('#saInterviewer option', els => els.map(e => e.textContent));
     expect(opts13.some(t => t.includes('見本 一郎')) && opts13.some(t => t.includes('試験 花子')) && !opts13.some(t => t.includes('笹川')),
       'E13 名簿は local の managers.txt に置き換わる: ' + JSON.stringify(opts13));
-    // 用紙の見出しにもロゴ（③ の紙・保存 HTML。高さ 7mm ≒ 26.5px。docs/SPEC-a4.md A3）
+    // 用紙の見出しにもロゴ（報告書の紙・保存 HTML。高さ 7mm ≒ 26.5px。docs/SPEC-a4.md A3）
     await lp.fill('[data-field="name"]', 'ロゴ 確認');
     const [dl13] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
     const rf13 = path.join(OUT, 'local-build-report.html');
@@ -1679,10 +1851,9 @@ const pdfTextOf = (f) => {
       'E13 保存 HTML の用紙の見出しにロゴ（題名の左・高さ 7mm）: ' + JSON.stringify(head13));
     await lp.click('[data-action="script-next"]');
     await lp.waitForTimeout(300);
-    await lp.click('[data-action="judge"]');
-    await lp.waitForTimeout(400);
+    await ivToReport(lp);
     const app13 = await lp.evaluate(logoOf, '#appPaper .cl-title-logo');
-    expect(!!app13 && app13.alt === 'SAMPLE LOGO' && Math.abs(app13.h - 26.5) <= 1 && app13.first, 'E13 アプリ ③ の紙の見出しにも同じロゴ: ' + JSON.stringify(app13));
+    expect(!!app13 && app13.alt === 'SAMPLE LOGO' && Math.abs(app13.h - 26.5) <= 1 && app13.first, 'E13 アプリの報告書の紙の見出しにも同じロゴ: ' + JSON.stringify(app13));
     //   面接記入シート（手書き用）の見出しも同じ部品（docs/SPEC-persona.md D13）
     await lp.evaluate(() => window.RecruitApp.preparePaperSheet(true));
     await lp.waitForTimeout(200);
@@ -1935,7 +2106,7 @@ const pdfTextOf = (f) => {
   expect(in14(bn14) && in14(bn14s) && bn14s.x && (await p14s.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 1,
     'E14 (5) 390×844: 保存バー（変更中・保存後）は縮小した用紙の下に出て、見出し・氏名・最終合否・用紙に重ならない（保存後は［×］あり・横スクロールなし）: ' + JSON.stringify({ bn14: bn14.bar, bn14s: bn14s.bar }));
   await p14s.close();
-  // アプリ ③ の紙の欄はクリックしても何もしない（操作は下のカード。docs/SPEC-a4.md A10）
+  // アプリの報告書の紙の欄はクリックしても何もしない（操作は下のカード。docs/SPEC-a4.md A10）
   await page.click('#btnNew');
   await wait(200);
   await page.setInputFiles('#fileInput', saved9.file);
@@ -1946,7 +2117,7 @@ const pdfTextOf = (f) => {
   await page.click('#appPaperDecision');
   await wait(150);
   expect(await step() === 4 && !(await page.$('.pop')) && !(await page.$('#a4Pop')) && (await mg14()) === mg14a && !(await page.$('#appPaper [data-a4-t]')),
-    'E14 (3) アプリ ③ の紙の押印欄・最終合否をクリックしても窓は出ず、押印・合否は変わらない');
+    'E14 (3) アプリの報告書の紙の押印欄・最終合否をクリックしても窓は出ず、押印・合否は変わらない');
   await sshot('a4-app.png');
   // (7) アプリの A4 印刷と保存 HTML の印刷: どちらも 1 ページ・同じ見出し・同じ様式（同じ記録）
   await st(() => window.RecruitApp.prepareChecklistSheet(true));
@@ -2140,7 +2311,7 @@ const pdfTextOf = (f) => {
     const realPw = fs.existsSync(realPwFile) ? (fs.readFileSync(realPwFile, 'utf8').replace(/^﻿/, '').split(/\r?\n/)[0] || '').trim() : '';
     expect(/finalLock: \{ salt: '', hash: '' \}/.test(distHtml) && !/finalLock: \{"salt"/.test(distHtml) && !distHtml.includes(PW) && (!realPw || !distHtml.includes(realPw)),
       'E15 公開版（dist）の最終承認のロックは空（テスト用・local のパスワードもハッシュも入っていない）' + (realPw ? '' : '（local/final-password.txt なし）'));
-    // (2) 公開版: ロックなしで従来どおり押せる（③ にパスワード欄なし・保存 HTML の窓にもなし）
+    // (2) 公開版: ロックなしで従来どおり押せる（報告書にパスワード欄なし・保存 HTML の窓にもなし）
     await fresh();
     await fillScript({ name: '鍵 公開' });
     await page.click('[data-action="script-next"]');
@@ -2167,7 +2338,7 @@ const pdfTextOf = (f) => {
     await pp.close();
     expect(pub.lock === 0 && pub.dec && pub.fin && pubDec.dec === 'hire' && pubDec.fin && pubCfg.finalLock === null && pubCfg.lockField === 'final' &&
       !!pubPop && !pubPop.pw && pubPop.sel && !!pubPop2 && !pubPop2.pw && pubPop2.act,
-      'E15 公開版はロックなし: ③ の最終確認・最終合否はパスワードなしで押せる・保存 HTML の窓にもパスワード欄なし: ' + JSON.stringify({ pub, pubDec, pubPop, pubPop2 }));
+      'E15 公開版はロックなし: 報告書の最終確認・最終合否はパスワードなしで押せる・保存 HTML の窓にもパスワード欄なし: ' + JSON.stringify({ pub, pubDec, pubPop, pubPop2 }));
     // (3) ローカル版（テスト用の架空のパスワード）: build が salt と hash を差し込む（平文は出さない）
     const OUTL = path.join(OUT, 'local-lock.html');
     const logL = cp.execSync('node build.js --local tests/fixtures/local-sample --out ' + JSON.stringify(OUTL), { cwd: ROOT }).toString();
@@ -2183,8 +2354,7 @@ const pdfTextOf = (f) => {
     await lp.fill('[data-field="name"]', '鍵 確認');
     await lp.click('[data-action="script-next"]');
     await lp.waitForTimeout(300);
-    await lp.click('[data-action="judge"]');
-    await lp.waitForTimeout(400);
+    await ivToReport(lp);
     const cards = () => lp.evaluate(() => ({
       ivSel: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="interviewer"] select'),
       finLock: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="final"] .final-lock'), finBtn: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="final"] [data-action="stamp"]'),
@@ -2195,7 +2365,7 @@ const pdfTextOf = (f) => {
       linkHint: Array.from(document.querySelectorAll('#decisionCard .hint')).some(h => h.textContent.includes('同じ担当者の印も押します')) }));
     const c0 = await cards();
     expect(c0.ivSel && c0.finLock && !c0.finBtn && c0.decLock && !c0.decBtn && c0.pwType === 'password/off,password/off',
-      'E15 ローカル版の ③: 最終確認の押印欄と最終合否はパスワード欄（type=password・autocomplete=off）と［確認］だけ・面接対応者は従来どおり: ' + JSON.stringify(c0));
+      'E15 ローカル版の報告書: 最終確認の押印欄と最終合否はパスワード欄（type=password・autocomplete=off）と［確認］だけ・面接対応者は従来どおり: ' + JSON.stringify(c0));
     await lp.selectOption('#mgmtCard .stamp-box[data-field-id="interviewer"] select', { index: 1 });
     await lp.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
     await lp.waitForTimeout(200);
@@ -2225,7 +2395,7 @@ const pdfTextOf = (f) => {
     expect(!c2.finLock && !c2.decLock && c2.decBtn && c2.finBtn && foc2 === 'decisionManager' && c3.dec === 'hire' && c3.mg === 'final,interviewer' && c4.finName === '試験 花子' && !ls4.includes(PW),
       'E15 正しいパスワード（Enter）で解錠: パスワード欄が消え、最終合否・最終確認の押印・取消を続けて押せる（localStorage に平文なし）: ' + JSON.stringify({ c2, foc2, c3, c4 }));
     expect(!c0.linkHint && !c1.linkHint && c2.linkHint,
-      'E15 ③ の最終合否カード: パスワード欄のあいだは「採用」「不採用」の連動の案内を出さない（ボタンが無い）・解錠すると出す: ' + JSON.stringify({ c0: c0.linkHint, c1: c1.linkHint, c2: c2.linkHint }));
+      'E15 報告書の最終合否カード: パスワード欄のあいだは「採用」「不採用」の連動の案内を出さない（ボタンが無い）・解錠すると出す: ' + JSON.stringify({ c0: c0.linkHint, c1: c1.linkHint, c2: c2.linkHint }));
     // (4) 保存 HTML: 保存時のロックで照合。最終確認・最終合否の窓はパスワード欄だけ（面接対応者は不要）→ 正しいと解錠され、続けて押せる
     const [dlA] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
     const fA = path.join(OUT, 'lock-local-a.html');
@@ -2272,7 +2442,7 @@ const pdfTextOf = (f) => {
     await rB.close();
     expect(!!pB && pB.pw && !pB.act && decB && !hB.includes(PW) && !shownHtml(hB).includes('pop-pw') && cfgOf(hB).finalLock.hash === lockL.hash,
       'E15 書き出したファイルを開き直すとまたパスワードが要る（書き出しに解錠状態・パスワード欄・平文なし。ロックはそのまま）: ' + JSON.stringify(pB));
-    // (5) 設定: パスワードの変更には現在のパスワードが要る → 保存 → ③ はまた求める（前のパスワードは違う）→ 変えた後の保存 HTML は新しいパスワード
+    // (5) 設定: パスワードの変更には現在のパスワードが要る → 保存 → 報告書はまた求める（前のパスワードは違う）→ 変えた後の保存 HTML は新しいパスワード
     await lp.click('.nav-item[data-view="settings"]');
     await lp.waitForTimeout(300);
     const lst = () => lp.evaluate(() => { const f = document.getElementById('finalLockForm');
@@ -2318,7 +2488,7 @@ const pdfTextOf = (f) => {
     await lp.waitForTimeout(150);
     const c7 = await cards();
     expect(c5.finLock && c5.decLock && c6.decLock && c6.err.includes('パスワードが違います') && !c7.decLock && !c7.finLock && c7.decBtn,
-      'E15 パスワードを変えると ③ はまた求める（前のパスワードは違う・新しいパスワードで解錠）: ' + JSON.stringify({ c5, c6: c6.err, c7 }));
+      'E15 パスワードを変えると報告書はまた求める（前のパスワードは違う・新しいパスワードで解錠）: ' + JSON.stringify({ c5, c6: c6.err, c7 }));
     const [dlC] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
     const fC = path.join(OUT, 'lock-local-c.html');
     await dlC.saveAs(fC);
@@ -2370,7 +2540,7 @@ const pdfTextOf = (f) => {
     expect(!j0.dlg && j0.toast.includes('プロファイルを読み込みました') && !!j1 && j1.text.includes('外れます') && j1.type === 'password' && j1.ac === 'off' && j1.focus === 'pwDialogInput' &&
       j2.open && j2.err === 'パスワードが違います' && !j3.open && j3.hash === s5.stored.hash && j3.toast.includes('読み込みませんでした') && !!j4.stored && j4.stored.hash === '' && j4.status.includes('未設定'),
       'E15 JSON の読み込み: 同じロックはそのまま・ロックを外す JSON は現在のパスワードが要る（違えば「パスワードが違います」、キャンセルなら読み込まない、正しければ読み込む）: ' + JSON.stringify({ j0, j1: j1 && j1.focus, j2, j3: { open: j3.open, toast: j3.toast }, j4: j4.status }));
-    // (7) 未設定からの設定（現在のパスワードは不要）→ 外すには現在のパスワードが要る → ③ にパスワード欄なし
+    // (7) 未設定からの設定（現在のパスワードは不要）→ 外すには現在のパスワードが要る → 報告書にパスワード欄なし
     await lp.click('#finalLockChange');
     await lp.waitForTimeout(100);
     const s6 = await lst();
@@ -2400,7 +2570,7 @@ const pdfTextOf = (f) => {
     expect(s6.form === 'change' && s6.pw === 'lockNew:password:off,lockNew2:password:off' && s7.status.includes('設定済み') && s7.stored.hash.length === 64 &&
       s8.form === 'remove' && s8.err === '現在のパスワードが違います' && s9.form === '' && s9.status.includes('未設定') && s9.status.includes('未保存') && s10.stored.hash === '' && s10.stored.off === true &&
       !c8.finLock && !c8.decLock && c8.finBtn && c8.decBtn,
-      'E15 設定: 未設定からは現在のパスワードなしで設定・外すには現在のパスワードが要る・外して保存すると ③ にパスワード欄なし: ' + JSON.stringify({ s6: s6.pw, s7: s7.status, s8: s8.err, s9: s9.status, c8 }));
+      'E15 設定: 未設定からは現在のパスワードなしで設定・外すには現在のパスワードが要る・外して保存すると報告書にパスワード欄なし: ' + JSON.stringify({ s6: s6.pw, s7: s7.status, s8: s8.err, s9: s9.status, c8 }));
     // (8) 初期化でロックが変わるときも現在のパスワードが要る（ローカル版の初期は local のロック）
     await lp.click('.nav-item[data-view="settings"]');
     await lp.waitForTimeout(300);
@@ -2432,7 +2602,7 @@ const pdfTextOf = (f) => {
       r3.stored.hash === lockL.hash && r3.status.includes('設定済み'),
       'E15 初期化: ロックが無ければそのまま初期のロック（local）に戻す・別のパスワードのときは現在のパスワードが要る（キャンセルなら戻さない）: ' + JSON.stringify({ r1, r2: r2.status, r3: r3.status }));
     // (9) ロックの迂回を塞ぐ（docs/SPEC-a4.md 11 章 L1b・L5c）: 「押印欄と連動」を「連動しない」に変えて保存するには現在のパスワードが要る（違えば・キャンセルなら保存しない）。
-    //     正しければ保存でき、その後も最終確認欄の押印・取消にはパスワードが要る（③・保存 HTML。解錠前）。表示名だけの変更は不要。最終合否の ON/OFF・押印欄の構成（JSON）も求める
+    //     正しければ保存でき、その後も最終確認欄の押印・取消にはパスワードが要る（報告書・保存 HTML。解錠前）。表示名だけの変更は不要。最終合否の ON/OFF・押印欄の構成（JSON）も求める
     await lp.reload();
     await lp.waitForTimeout(300);
     await lp.click('.nav-item[data-view="settings"]');
@@ -2494,14 +2664,13 @@ const pdfTextOf = (f) => {
     const g9 = await lp.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.fields.map(f => f.id).join(','));
     expect(g8.includes('押印欄の構成') && g9 === 'interviewer,final',
       'E15 ロックの迂回: 同じパスワードでも押印欄の構成が変わる JSON の読み込みは現在のパスワードが要る（キャンセルなら読み込まない）: ' + JSON.stringify({ g8: !!g8, g9 }));
-    // ③: 「連動しない」でも最終確認欄はパスワード欄。最終合否もパスワード（読み込み直したので解錠していない）
+    // 報告書: 「連動しない」でも最終確認欄はパスワード欄。最終合否もパスワード（読み込み直したので解錠していない）
     await lp.click('.nav-item[data-view="judge"]');
     await lp.waitForTimeout(300);
     await lp.fill('[data-field="name"]', '鍵 迂回');
     await lp.click('[data-action="script-next"]');
     await lp.waitForTimeout(300);
-    await lp.click('[data-action="judge"]');
-    await lp.waitForTimeout(400);
+    await ivToReport(lp);
     const c9 = await cards();
     const [dlD] = await Promise.all([lp.waitForEvent('download'), lp.click('#btnSave')]);
     const fD = path.join(OUT, 'lock-local-d.html');
@@ -2517,7 +2686,7 @@ const pdfTextOf = (f) => {
     await rD.close();
     expect(c9.ivSel && c9.finLock && !c9.finBtn && c9.decLock && !c9.decBtn && cfgD.lockField === '' && JSON.stringify(cfgD.lockFields) === '["final"]' &&
       !!pD1 && pD1.pw && !pD1.act && !!pD2 && !pD2.pw && pD2.act,
-      'E15 ロックの迂回: 「連動しない」を保存したあとも最終確認欄の押印・取消はパスワードが要る（③ と保存 HTML。保存 HTML の lockFields は ["final"]・正しいと解錠）: ' + JSON.stringify({ c9, lockFields: cfgD.lockFields, pD1, pD2 }));
+      'E15 ロックの迂回: 「連動しない」を保存したあとも最終確認欄の押印・取消はパスワードが要る（報告書と保存 HTML。保存 HTML の lockFields は ["final"]・正しいと解錠）: ' + JSON.stringify({ c9, lockFields: cfgD.lockFields, pD1, pD2 }));
     // (10) 同じ file:// の localStorage を公開版と共有する（docs/SPEC-a4.md 11 章 L6c）: 公開版で設定を保存しても（空のロックを書いても）・公開版で「外した」印の
     //      JSON を読み込んでも、ローカル版のロックは外れない。ローカル版の［パスワードを外す］で外したとき（「外した」印）だけ外れたまま（公開版で保存しても）
     const toJ15 = async (pg, name) => {
@@ -2527,8 +2696,7 @@ const pdfTextOf = (f) => {
         await pg.fill('[data-field="name"]', name);
         await pg.click('[data-action="script-next"]');
         await pg.waitForTimeout(300);
-        await pg.click('[data-action="judge"]');
-        await pg.waitForTimeout(400);
+        await ivToReport(pg);
       }
     };
     const cardsOf = (pg) => pg.evaluate(() => ({ finLock: !!document.querySelector('#mgmtCard .stamp-box[data-field-id="final"] .final-lock'), decLock: !!document.querySelector('#decisionCard .final-lock'),
@@ -2631,7 +2799,7 @@ const pdfTextOf = (f) => {
     expect(!!k4 && k4.off === true && k4.hash === '' && !!k5 && k5.off === true && !k6.finLock && !k6.decLock && k6.finBtn && k6.decBtn,
       'E15 ローカル版の［パスワードを外す］で外した設定（「外した」印 off: true）は、公開版で保存しても外れたまま: ' + JSON.stringify({ k4, k5, k6 }));
     // (11) 古いタブ（docs/SPEC-a4.md 11 章 L5d）: ロックが無いときに開いたタブ B は、タブ A（lp）でパスワードを付けると読み込み直し（storage イベント）、
-    //      ③ の最終確認・最終合否はパスワード欄になる。B で表示名だけ変えて保存しても A のロックを上書きしない。B の下書きで変えていたパスワードは取り消す。
+    //      報告書の最終確認・最終合否はパスワード欄になる。B で表示名だけ変えて保存しても A のロックを上書きしない。B の下書きで変えていたパスワードは取り消す。
     //      storage イベントが届かなくても、保存・押印の直前に localStorage と比べる
     const tabB = await newReportPage(e15);
     await tabB.goto('file://' + OUTL);
@@ -2655,7 +2823,7 @@ const pdfTextOf = (f) => {
     const t2 = { dlg: !!(await tabB.$('#pwDialog')), stored: await storedLock(tabB), label: await tabB.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.fields[0].hint) };
     expect(!t0.finLock && t0.finBtn && !!lkA && /^[0-9a-f]{64}$/.test(lkA.hash) && t1.cards.finLock && t1.cards.decLock && !t1.cards.finBtn && !t1.cards.decBtn && t1.toast.includes('別のタブ') &&
       !t2.dlg && t2.stored.hash === lkA.hash && t2.label === '面接対応者（B）',
-      'E15 古いタブ: A でパスワードを付けると B は読み込み直して ③ はパスワード欄・B で押印欄の説明だけ変えて保存しても A のパスワードは外れない: ' + JSON.stringify({ t0, t1, t2: { dlg: t2.dlg, same: t2.stored.hash === lkA.hash, label: t2.label } }));
+      'E15 古いタブ: A でパスワードを付けると B は読み込み直して報告書はパスワード欄・B で押印欄の説明だけ変えて保存しても A のパスワードは外れない: ' + JSON.stringify({ t0, t1, t2: { dlg: t2.dlg, same: t2.stored.hash === lkA.hash, label: t2.label } }));
     //   B の下書きでパスワードを変えている間に、A で別のパスワード（NEWPW）に変えて保存 → B の下書きのパスワードの変更は取り消す（ほかの下書きは残る）→ B で保存しても A のパスワードのまま
     await tabB.click('#finalLockChange');
     await tabB.waitForTimeout(100);
@@ -2732,7 +2900,7 @@ const pdfTextOf = (f) => {
     const d1 = { open: !!(await tabB.$('#pwDialog')), same: (await storedLock(tabB)).hash === lkA3.hash, sf: await tabB.evaluate(() => JSON.parse(localStorage.getItem('recruit.profile.v1')).management.decision.stampField), toast: await tabB.textContent('#toast') };
     expect(d0 && !!lkA3 && lkA3.hash !== lkB.hash && !d1.open && d1.same && d1.sf === 'final' && d1.toast.includes('やめました'),
       'E15 古いタブ: B でパスワードのダイアログを出しているあいだに A でパスワードが変わると、B で前のパスワードを入れても保存しない（A のロックのまま）: ' + JSON.stringify({ d0, d1 }));
-    //   ③ の押印の直前にも比べる: B を「外した」状態で開き直して ③ を出したあと、B のページで localStorage にロックを書く → 最終確認の［押印］は押さずに描き直す（パスワード欄）
+    //   報告書の押印の直前にも比べる: B を「外した」状態で開き直して 報告書を出したあと、B のページで localStorage にロックを書く → 最終確認の［押印］は押さずに描き直す（パスワード欄）
     await putLock(tabB, { salt: '', hash: '', off: true, chain: true });
     await tabB.reload();
     await tabB.waitForTimeout(300);
@@ -2743,7 +2911,7 @@ const pdfTextOf = (f) => {
     await tabB.click('#mgmtCard .stamp-box[data-field-id="final"] [data-action="stamp"]');
     await tabB.waitForTimeout(300);
     const t7 = await cardsOf(tabB);
-    //   ③ の［報告書を保存（HTML）］の直前にも比べる: 「外した」状態で開いた B のページで localStorage にロックを書いてから（storage イベントなし）保存すると、
+    //   報告書の［報告書を保存（HTML）］の直前にも比べる: 「外した」状態で開いた B のページで localStorage にロックを書いてから（storage イベントなし）保存すると、
     //   書き出したファイルは最新のロック（ロックなし〔null〕で書き出さない）
     await putLock(tabB, { salt: '', hash: '', off: true, chain: true });
     await tabB.reload();
@@ -2757,7 +2925,7 @@ const pdfTextOf = (f) => {
     t8.cfg = cfgOf(fs.readFileSync(f8, 'utf8')).finalLock;
     t8.after = await cardsOf(tabB);
     expect(!t8.cards.finLock && t8.cards.finBtn && !!t8.cfg && t8.cfg.hash === lockL.hash && t8.cfg.salt === lockL.salt && t8.after.finLock && t8.after.decLock,
-      'E15 古いタブ: storage イベントが届かなくても、③ の保存（HTML）の直前に比べて最新のロックで書き出す（③ もパスワード欄に描き直す）: ' + JSON.stringify({ cards: t8.cards, cfg: !!t8.cfg, after: t8.after }));
+      'E15 古いタブ: storage イベントが届かなくても、報告書の保存（HTML）の直前に比べて最新のロックで書き出す（報告書もパスワード欄に描き直す）: ' + JSON.stringify({ cards: t8.cards, cfg: !!t8.cfg, after: t8.after }));
     //   設定画面で入力中のパスワードの欄（［変更］。下書きには入らない）は、別のタブでロック以外だけが保存されても閉じず、入力も残る（下書きは最新の設定）。
     //   別のタブでパスワードが変わったときは閉じる
     await toSet15(tabB);
@@ -2799,7 +2967,7 @@ const pdfTextOf = (f) => {
       'E15 古いタブ: 入力中のパスワードの欄は、別のタブでロック以外だけが保存されても閉じない（入力が残り、下書きは最新・続けて変更して保存できる）・パスワードが変わったときは閉じる: ' +
       JSON.stringify({ t9: { form: t9.form, footer: t9.footer, saved: t9.saved.footer, isB: t9.isB }, t10 }));
     expect(!t5.dlg && t5.stored.hash === lockL.hash && t5.footer === 'B の変更 2' && !t6.finLock && t6.finBtn && !t7.fin && t7.finLock && t7.decLock && !t7.finBtn,
-      'E15 古いタブ: storage イベントが届かなくても、保存の直前に比べて最新のロックを上書きしない・③ の押印の直前にも比べる（押さずにパスワード欄で描き直す）: ' + JSON.stringify({ t5: { dlg: t5.dlg, same: t5.stored.hash === lockL.hash, footer: t5.footer }, t6, t7 }));
+      'E15 古いタブ: storage イベントが届かなくても、保存の直前に比べて最新のロックを上書きしない・報告書の押印の直前にも比べる（押さずにパスワード欄で描き直す）: ' + JSON.stringify({ t5: { dlg: t5.dlg, same: t5.stored.hash === lockL.hash, footer: t5.footer }, t6, t7 }));
     // (12) ロックの無いアプリ（公開版）で、ロック付きで保存した記録を読み込むと、その記録の最終確認・最終合否はファイルのロックで守り、保存し直すファイルにも入れる（11 章 L7b）。
     //      fA（ローカル版で保存。面接対応者・最終確認の押印と最終合否「採用」入り）を、ロックの無い公開版で読み込む
     const pubR = await newReportPage(e15);
@@ -2933,7 +3101,8 @@ const pdfTextOf = (f) => {
     const st16x = await p16.evaluate(() => Array.from(document.querySelectorAll('#a4 .cl-nm-v')).map(v => v.style.getPropertyValue('-webkit-line-clamp')).join(','));
     const lv16x = await p16.evaluate(() => window.__a4Fit());
     const st16y = await p16.evaluate(() => Array.from(document.querySelectorAll('#a4 .cl-nm-v')).map(v => v.style.getPropertyValue('-webkit-line-clamp')).join(','));
-    expect(/\d/.test(st16a) && st16x === st16a && st16y === st16a && lv16x === 'cl-compact' && h16x.cls === h16.cls && okGap(h16x),
+    //   （2026-10-16 から重いサンプルは質問ごとのメモ 13 個。質問の回答を 1 行に詰める .cl-compact-q1 の段階になる）
+    expect(/\d/.test(st16a) && st16x === st16a && st16y === st16a && lv16x === 'cl-compact-q1' && h16x.cls === h16.cls && okGap(h16x),
       'E16 重いサンプル: 書き出したファイルを開き直しても・測り直しても同じ行数（インラインの行数を外してから測る）: ' + JSON.stringify({ st16h, st16a, st16x, st16y, lv16x }));
     //   極端な例（面接所見 4,000 字・全メモ 300 字）でも 1 ページ・押印行は下端・罫線の空きは 1 行分未満
     const f16k = path.join(OUT, 'a4-form-iv4000.html');
@@ -2982,7 +3151,7 @@ const pdfTextOf = (f) => {
       'E16 狭い画面（540・430・390・360・320px）でも面接メモ・所見の枠の記入が切れない（.cl-nm の scrollHeight ≦ clientHeight + 1）・行数と各行の高さは 1440px と同じ（縮小は transform）・押印行は下端・横スクロールなし（重いサンプル・質問の回答 600 字×5・面接所見 4,000 字・押印欄 4 件）: ' +
       JSON.stringify(nwBad16.length ? nwBad16 : nwAll16));
     //   折り返せない幅広の書記素（ZWJ でつながった絵文字 1 つ。overflow-wrap:anywhere でも折り返せない）で横にはみ出すメモ: 「…」の印（.cl-cut）は付くが、
-    //   広げる処理は縦のはみ出しだけを見るので固まらない（保存 HTML・アプリ ③ の読み込みの両方。10 秒で打ち切る）
+    //   広げる処理は縦のはみ出しだけを見るので固まらない（保存 HTML・アプリの報告書の読み込みの両方。10 秒で打ち切る）
     const zwj16 = '\u{1F468}' + '‍\u{1F468}'.repeat(60);
     const zr16 = {};
     const within16 = (pr, ms) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('10 秒以上応答なし')), ms))]);
@@ -3022,8 +3191,8 @@ const pdfTextOf = (f) => {
     const zq16 = (r) => !r.err && r.ms < 10000 && r.cutW >= 1 && !!r.q && r.q.cut && r.q.clamp === '' && r.nat <= 1052;
     const ziv16 = (r) => !r.err && r.ms < 10000 && r.cls.includes('cl-compact') && !!r.iv && r.iv.cut && r.iv.clamp > 10 && r.iv.hid <= 1 && r.nat <= 1052;
     expect(zq16(zr16['q-report']) && zq16(zr16['q-app']) && ziv16(zr16['iv-report']) && ziv16(zr16['iv-app']),
-      'E16 横にはみ出す（折り返せない幅広の書記素の）メモがあっても保存 HTML・アプリ ③ が固まらない（「…」の印は付く・縦に全部見えた面接所見はそこで広げるのをやめる）: ' + JSON.stringify(zr16));
-    // (3) 記入なし（面接メモ・所見・質問の回答・① のメモが空）: 空の枠（点線の罫線＝手書きのメモ欄）
+      'E16 横にはみ出す（折り返せない幅広の書記素の）メモがあっても保存 HTML・アプリの報告書が固まらない（「…」の印は付く・縦に全部見えた面接所見はそこで広げるのをやめる）: ' + JSON.stringify(zr16));
+    // (3) 記入なし（面接メモ・所見・質問の回答・準備のメモが空）: 空の枠（点線の罫線＝手書きのメモ欄）
     const f16e = path.join(OUT, 'a4-form-empty.html');
     fs.writeFileSync(f16e, await page.evaluate(mk39, {}));
     await p16.goto('file://' + f16e);
@@ -3076,7 +3245,7 @@ const pdfTextOf = (f) => {
     expect(tog16[0].roomy && tog16[0].body === 10.5 && tog16.some(x => !x.roomy && !x.compact && x.body === 9.5) && tog16[tog16.length - 1].compact && !tog16[tog16.length - 1].roomy &&
       tog16.every((x, i) => i === 0 || !(x.roomy && !tog16[i - 1].roomy)),
       'E16 ゆったりの付け外し: 内容が少なければ .cl-roomy（10.5px）、増えると外して通常（9.5px）、さらに .cl-compact: ' + JSON.stringify(tog16));
-    // (5) アプリ ③ の紙・アプリの印刷も同じ（押印行は下端・枠は 30mm 以上・同じ段階）
+    // (5) アプリの報告書の紙・アプリの印刷も同じ（押印行は下端・枠は 30mm 以上・同じ段階）
     await page.click('#btnNew');
     await wait(200);
     await page.setInputFiles('#fileInput', file34b);
@@ -3086,8 +3255,8 @@ const pdfTextOf = (f) => {
     const pr16 = await formOf(page, '#clSheet .a4');
     await page.evaluate(() => window.RecruitApp.prepareChecklistSheet(false));
     expect(await step() === 4 && okGap(a16) && a16.boxMm >= 30 && a16.cls === n16.cls && okGap(pr16) && pr16.boxMm >= 30 && pr16.cls === n16.cls,
-      'E16 アプリ ③ の紙・アプリの印刷も同じ用紙（ゆったり・押印行は下端・面接メモ・所見の枠 30mm 以上）: ' + JSON.stringify({ a16, pr16 }));
-    //   アプリ ③ の紙は少しだけ縮める（zoom 0.95〜1。それより狭い画面は横スクロール）: 重いサンプルでも面接メモ・所見の枠の記入は切れない
+      'E16 アプリの報告書の紙・アプリの印刷も同じ用紙（ゆったり・押印行は下端・面接メモ・所見の枠 30mm 以上）: ' + JSON.stringify({ a16, pr16 }));
+    //   アプリの報告書の紙は少しだけ縮める（zoom 0.95〜1。それより狭い画面は横スクロール）: 重いサンプルでも面接メモ・所見の枠の記入は切れない
     await page.click('#btnNew');
     await wait(200);
     await page.setInputFiles('#fileInput', saved39.file);
@@ -3102,26 +3271,27 @@ const pdfTextOf = (f) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await wait(300);
     expect(Object.keys(az16).every(w => +az16[w].zoom >= 0.95 && +az16[w].zoom < 1 && az16[w].clip <= 1 && az16[w].cut > 0),
-      'E16 アプリ ③ の紙を少し縮めた幅（zoom 0.95〜1）でも重いサンプルの面接メモ・所見の枠の記入は切れない: ' + JSON.stringify(az16));
+      'E16 アプリの報告書の紙を少し縮めた幅（zoom 0.95〜1）でも重いサンプルの面接メモ・所見の枠の記入は切れない: ' + JSON.stringify(az16));
     expect(e16.length === 0, 'E16 ページエラー・console error なし: ' + (e16.join(' / ') || 'none'));
   }
   await fresh();
 
   // =====================================================================
-  // E17 人物像（1〜5 点）・面接記入シート（手書き用）・面接中はメモ中心・質問の 1 行表示（docs/SPEC-persona.md 7-2）
+  // E17 人物像（1〜5 点）・面接記入シート（手書き用）（docs/SPEC-persona.md 7-2・docs/SPEC-flow.md 9-3）
   //   フィードバック: ① 1 対 1 なら面接中はメモを中心に（1 対 1 でなければ面接しながらの入力は苦しい）② 紙で書いて面接後に転記 ③ 接客の人物像（1〜5 点）を総評に・内容をコンパクトに
+  //   2026-10-16 の面接の流れで ② の案内・目次・質問の 1 行表示は無くなった（面接は 1 段階ずつ・評価は面接のあと。E18）。人物像・総評は評価の画面で確かめる
   // =====================================================================
-  console.log('\n== E17 人物像・記入シート・質問の 1 行表示 ==');
+  console.log('\n== E17 人物像・記入シート ==');
   {
     const e17 = [];
     const PS17 = ['ps_greeting', 'ps_impression', 'ps_smile', 'ps_voice', 'ps_eye', 'ps_speech', 'ps_motivation'];
     const PSL17 = ['挨拶ができていたか', '第一印象・身だしなみ', '笑顔・表情', '声のトーン・ハキハキさ', '目を見て話していたか', '言葉遣い・説明のわかりやすさ', '志望動機・接客で大切にしたいこと'];
     const psState17 = () => st(() => { const p = window.RecruitApp.state.checklist.persona; return p ? JSON.parse(JSON.stringify(p)) : p; });
-    //   ② の要素のスクリーンショット: 撮るあいだだけトップバー・目次の sticky を外す（要素の上端〔見出し〕に重ならない。sticky は流れの中にあるので配置は変わらない）。
+    //   評価の要素のスクリーンショット: 撮るあいだだけトップバー・上の帯・下の操作行の sticky を外す（要素の上端〔見出し〕に重ならない。sticky は流れの中にあるので配置は変わらない）。
     //   マウスは要素の外へ（ホバーの色を写さない）・要素の中のフォーカスは外す（入力欄のフォーカス枠を写さない）・toast は消す
     const shotEl17 = async (sel, file) => {
       await page.mouse.move(1, 1);
-      await page.evaluate((q) => { const s = document.createElement('style'); s.id = 'e2eNoSticky'; s.textContent = '.topbar,.cl-nav{position:static !important}'; document.head.appendChild(s);
+      await page.evaluate((q) => { const s = document.createElement('style'); s.id = 'e2eNoSticky'; s.textContent = '.topbar,.iv-top,.ev-top,.flow-foot.is-sticky{position:static !important}'; document.head.appendChild(s);
         const a = document.activeElement, el = document.querySelector(q); if (a && el && el.contains(a) && a.blur) a.blur();
         const t = document.getElementById('toast'); if (t) t.classList.remove('show'); }, sel);
       await wait(80);
@@ -3146,44 +3316,42 @@ const pdfTextOf = (f) => {
         report: !!document.querySelector('#clSheet .cl-sheet'), who: sh ? sh.querySelector('.pp-who').textContent : '', nameLine: !!(sh && sh.querySelector('.pp-f-name .pp-line')), date: window.__ppDate(sh) }); };
     });
     await fresh();
-    // (1) ① に記入シートのボタン・② の上部の案内・総評の構成
+    // (1) 準備に記入シートのボタン・評価の総評の構成
     const sa17 = await page.evaluate(() => { const b = document.getElementById('saPaperBtn'), n = document.getElementById('saNext'), c = document.getElementById('scriptApplicantCard');
       return b && { act: b.dataset.action, text: b.textContent.trim(), row: b.parentNode.id, next: !!b.parentNode.querySelector('#saNext'),
         left: !!n && b.getBoundingClientRect().right <= n.getBoundingClientRect().left, below: !!c && b.getBoundingClientRect().top >= c.getBoundingClientRect().bottom }; });
     expect(!!sa17 && sa17.act === 'print-paper' && sa17.text === '🖨 記入シート（手書き用）' && sa17.row === 'saActions' && sa17.next && sa17.left && sa17.below,
-      'E17 (1) ① の操作行（カードの下）に「🖨 記入シート（手書き用）」（#saPaperBtn）と、その右に「進む」（使い方の説明どおりの場所）: ' + JSON.stringify(sa17));
+      'E17 (1) 準備の操作行（カードの下）に「🖨 記入シート（手書き用）」（#saPaperBtn）と、その右に「面接を始める →」（使い方の説明どおりの場所）: ' + JSON.stringify(sa17));
     await fillScript({ name: '人物 一郎', interviewer: '笹川 晴央' });
     await page.click('[data-action="script-next"]');
     await wait(400);
+    expect(!(await page.$('#clPersona')) && !(await page.$('[data-action="ps-set"]')) && !(await page.$('#stepContent [data-action="print-paper"]')),
+      'E17 (1) 面接の画面に人物像・記入シートのボタンは無い（人物像は評価の画面・記入シートは準備）');
+    await goTo(3);
     const s17 = await page.evaluate(() => {
       const ov = document.getElementById('clOverall');
       const rows = Array.from(document.querySelectorAll('#clPersona .cl-ps-row'));
       return {
-        guide: (document.querySelector('#clGuide .cl-guide-t') || {}).textContent, role: (document.getElementById('clGuide') || { getAttribute: () => '' }).getAttribute('role'),
-        guideBtn: (document.querySelector('#clGuide #clPaperBtn[data-action="print-paper"]') || {}).textContent,
-        guidePos: !!document.getElementById('clGuide') && !!(document.getElementById('clHeader').compareDocumentPosition(document.getElementById('clGuide')) & Node.DOCUMENT_POSITION_FOLLOWING) &&
-          !!(document.getElementById('clGuide').compareDocumentPosition(document.getElementById('clNav')) & Node.DOCUMENT_POSITION_FOLLOWING),
-        chip: (document.querySelector('.cl-chip[data-sec="__overall"]') || {}).textContent, h2: (ov.querySelector('.card-head h2') || {}).textContent,
+        old: ['#clGuide', '.cl-chip', '.cl-page-head', '#clNav', '#clPaperBtn'].filter(q => !!document.querySelector(q)), h2: (ov.querySelector('.card-head h2') || {}).textContent,
         order: Array.from(ov.querySelectorAll('#clPersona, .cl-overall-row, .cl-notes-field')).map(e => e.id || (e.classList.contains('cl-overall-row') ? 'overall' : 'notes')),
         rows: rows.map(r => r.dataset.psRow), btns: rows.map(r => Array.from(r.querySelectorAll('button.cl-ps-btn[data-action="ps-set"]')).map(b => b.dataset.persona === r.dataset.psRow ? b.dataset.score : 'x').join('')),
         legend: (document.getElementById('clPsLegend') || {}).textContent, h3: (document.getElementById('clPersonaH') || {}).textContent, hint: (document.querySelector('[data-ps-row="ps_impression"] .hint') || {}).textContent,
         tabs: rows.map(r => Array.from(r.querySelectorAll('.cl-ps-btn')).filter(b => b.tabIndex === 0).map(b => b.dataset.score).join('')),
         off: !!document.getElementById('clPersonaOff'), ovHint: Array.from(ov.querySelectorAll(':scope > .hint')).map(h => h.textContent).join(' '),
-        lead: Array.from(document.querySelectorAll('.cl-page-head')).map(h => { const n = h.querySelector('.cl-lead-ps'); return h.dataset.page + ':' + (n ? n.dataset.psRef + ':' + n.textContent : ''); }),
-        leadAfter: (() => { const n = document.querySelector('.cl-page-head[data-page="1"] .cl-lead-ps'); return !!n && !!n.previousElementSibling && n.previousElementSibling.textContent.includes('最低限の話し方、敬語が可能か'); })()
+        lead: Array.from(document.querySelectorAll('.cl-lead-ps')).map(n => n.dataset.psRef + ':' + n.textContent),
+        leadAfter: (() => { const n = document.querySelector('#clPersona .cl-lead-ps'); return !!n && !!n.previousElementSibling && n.previousElementSibling.classList.contains('cl-ps-head'); })()
       };
     });
-    expect(s17.guide === '面接中はメモを中心に。○△×・人物像・総合判断は面接後にまとめて入力できます' && s17.role === 'note' && s17.guideBtn === '🖨 記入シート（手書き用）' && s17.guidePos &&
-      s17.chip === '総評' && s17.h2 === '総評' && JSON.stringify(s17.order) === JSON.stringify(['clPersona', 'overall', 'notes']) && JSON.stringify(s17.rows) === JSON.stringify(PS17) &&
+    expect(s17.old.length === 0 && s17.h2 === '総評' && JSON.stringify(s17.order) === JSON.stringify(['clPersona', 'overall', 'notes']) && JSON.stringify(s17.rows) === JSON.stringify(PS17) &&
       s17.btns.every(b => b === '12345') && s17.legend === '1 不採用レベル　2 やや不安　3 普通　4 良い　5 とても良い' && s17.h3 === '人物像（接客）' && s17.hint === '服装・清潔感' &&
       s17.tabs.every(t => t === '1') && !s17.off && s17.ovHint.includes('人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます。'),
-      'E17 (1) ② の上部に 1 行の案内と記入シートのボタン・目次の最後は「総評」・総評は 人物像 → 総合判断 → 面接所見（7 行×1〜5・凡例・行ごとに 1 つのタブ位置）・総合判断の説明に人物像で下がる条件（合計・1 点・未入力）: ' + JSON.stringify(s17));
-    //   台本 1 枚目の前書き「…最低限の話し方、敬語が可能か。…」（台本の文言は変えない）の下に、付ける場所（人物像の「言葉遣い・説明のわかりやすさ」）を 1 行（docs/SPEC-persona.md 11-9 補完 6）
-    expect(JSON.stringify(s17.lead) === JSON.stringify(['1:ps_speech:→ 話し方・敬語は確認点ではなく、最後の総評の人物像（接客）「言葉遣い・説明のわかりやすさ」で 1〜5 点を付けます。', '2:']) && s17.leadAfter,
-      'E17 (1) 1 枚目の前書きの「最低限の話し方、敬語」の下に、人物像「言葉遣い・説明のわかりやすさ」で付ける旨の 1 行（2 枚目には出さない）: ' + JSON.stringify(s17.lead));
+      'E17 (1) 評価の総評は 人物像 → 総合判断 → 面接所見（7 行×1〜5・凡例・行ごとに 1 つのタブ位置）・総合判断の説明に人物像で下がる条件（合計・1 点・未入力）。旧 ② の案内・目次・ページの見出しは無い: ' + JSON.stringify(s17));
+    //   台本 1 枚目の前書き「…最低限の話し方、敬語が可能か。…」（台本の文言は変えない）の付ける場所（人物像の「言葉遣い・説明のわかりやすさ」）を人物像の見出しの下に 1 行（docs/SPEC-flow.md 4-6）
+    expect(JSON.stringify(s17.lead) === JSON.stringify(['ps_speech:→ 台本 1 枚目の「最低限の話し方、敬語が可能か」は、この人物像（接客）「言葉遣い・説明のわかりやすさ」で 1〜5 点を付けます。']) && s17.leadAfter,
+      'E17 (1) 台本 1 枚目の前書きの「最低限の話し方、敬語が可能か」は、人物像の見出しの下に「言葉遣い・説明のわかりやすさ」で付ける旨の 1 行（1 つだけ）: ' + JSON.stringify(s17.lead));
     const u17a = await psUi17();
     expect(u17a.sum === '—' && u17a.max === '35' && u17a.pct === '' && u17a.state === '未入力 7・上長最終判断要まで' && u17a.stateCls.includes('warn') && u17a.warn === '' && u17a.nav.includes('人物像 —/35') && u17a.sum2.includes('未入力 7'),
-      'E17 (1) 入力前: 合計 —/35・琥珀「未入力 7・上長最終判断要まで」（このまま ③ に進むと上長最終判断要）・目次の右に「人物像 —/35」・右サマリーの人物像「未入力 7」: ' + JSON.stringify(u17a));
+      'E17 (1) 入力前: 合計 —/35・琥珀「未入力 7・上長最終判断要まで」（このまま報告書に進むと上長最終判断要）・結果カードに「人物像 —/35」・右サマリーの人物像「未入力 7」: ' + JSON.stringify(u17a));
     // (2) クリック: 4 → 同じ 4 をもう一度で未入力に戻す
     await page.click('[data-action="ps-set"][data-persona="ps_greeting"][data-score="4"]');
     await wait(100);
@@ -3231,7 +3399,7 @@ const pdfTextOf = (f) => {
     const tx17 = { v: await page.inputValue('textarea[data-note="interview"]'), same: keyed17(await psState17()) === keyed17(k17b.ps) };
     expect(tab17 === 'ps_impression:5' && left17 === 'ps_impression:4' && down17 === 'ps_smile:4' && right17 === 'ps_smile:5' && same17 && en17 === undefined && sp17 === 3 && tx17.v === '笑顔123' && tx17.same,
       'E17 (3) Tab で次の行（押下中の点）・←→ は行内・↑↓ は上下の行の同じ点へフォーカスだけ（点は変わらない）・Enter で未入力・Space で入力・テキスト欄の数字は奪わない: ' + JSON.stringify({ tab17, left17, down17, right17, same17, en17, sp17, tx17 }));
-    // (4) 1 点の項目: 全部 4＋笑顔・表情 1 → 警告・行の .is-one → ③ で上長最終判断要（persona_one）・理由は ③ の確認事項と A4 の調整の行・タイルは赤（1点あり）
+    // (4) 1 点の項目: 全部 4＋笑顔・表情 1 → 警告・行の .is-one → 報告書で上長最終判断要（persona_one）・理由は報告書の確認事項と A4 の調整の行・タイルは赤（1点あり）
     await setPsAll([4, 4, 1, 4, 4, 4, 4]);
     await page.fill('textarea[data-note="interview"]', '受け答えは丁寧。笑顔が少なく表情が硬い。');
     const one17 = { ui: await psUi17(), row: await st(() => document.querySelector('[data-ps-row="ps_smile"]').className), btn: await st(() => getComputedStyle(document.querySelector('[data-persona="ps_smile"][data-score="1"]')).backgroundColor) };
@@ -3249,7 +3417,7 @@ const pdfTextOf = (f) => {
         btn: !!document.querySelector('#scriptWarnings [data-action="to-step"][data-step="3"]') }; });
     expect(j17a.result === 'review' && JSON.stringify(j17a.adjustments) === '["persona_one"]' && why17 === '人物像に 1 点の項目（笑顔・表情）があるため、採用推奨ではなく上長最終判断要として扱います。' &&
       a17a.warn.includes(why17) && a17a.adj.includes('採用推奨 → 上長最終判断要') && a17a.adj.includes(why17) && a17a.ng && a17a.v === '25/35点' && a17a.s === '71%・1点あり' && a17a.s1 && !a17a.btn,
-      'E17 (4) ③: 上長最終判断要（persona_one）・理由は ③ の確認事項と A4 の調整の行・人物像のタイルは赤（25/35点・71%・1点あり）・tr.s-1: ' + JSON.stringify({ j17a, why17, a17a }));
+      'E17 (4) 報告書: 上長最終判断要（persona_one）・理由は報告書の確認事項と A4 の調整の行・人物像のタイルは赤（25/35点・71%・1点あり）・tr.s-1: ' + JSON.stringify({ j17a, why17, a17a }));
     // (5) 合計 40% 未満 → 不採用推奨・全部 3 → 上長最終判断要・全部 4 以上 → 採用推奨（調整・警告なし）
     const totals17 = {};
     for (const [k, sc] of [['lt40', [1, 1, 2, 2, 2, 2, 2]], ['all3', [3, 3, 3, 3, 3, 3, 3]], ['all4', [4, 4, 4, 4, 4, 4, 4]]]) {
@@ -3315,7 +3483,7 @@ const pdfTextOf = (f) => {
     const n17h = pdfPagesOf(pdf17h);
     expect(h17.nat.h <= 1052 && h17.nat.cls.includes('cl-compact') && h17.gap >= 0 && h17.gap <= 2 && (n17h === -1 || n17h === 1) && !!h17.rt && h17.rt.k === '確認点のメモ' && h17.rt.cut && h17.tile.includes('24/35点') && h17.tile.includes('1点あり'),
       'E17 (7) 重いサンプル（確認点のメモ 300 字×6・人物像 4,5,1,3,4,2,5）も 1 ページ（.cl-compact・押印行は下端・確認点のメモは面接メモ・所見の枠で「…」）: ' + JSON.stringify({ h17, pages: n17h }));
-    // (6) 未入力: 人物像を入れずに総合判断「採用」→ 上長最終判断要・警告・「面接チェックリストで入力する」
+    // (6) 未入力: 人物像を入れずに総合判断「採用」→ 上長最終判断要・警告・「評価で入力する」
     await page.click('#btnNew');
     await wait(200);
     await fillScript({ name: '人物 二郎' });
@@ -3328,57 +3496,13 @@ const pdfTextOf = (f) => {
       tile: (document.querySelector('#appPaper .cl-tile-ps') || {}).textContent || '' }));
     expect(j17u.result === 'review' && JSON.stringify(j17u.adjustments) === '["persona_unscored"]' && u17.w.includes('人物像に未入力が 7 項目あります（挨拶、身だしなみ、笑顔・表情、声のトーン、目線、言葉遣い、志望動機）。') &&
       u17.btn && u17.side.includes('未入力 7') && u17.tile === '人物像未入力',
-      'E17 (6) 人物像が未入力で総合判断「採用」→ 上長最終判断要（persona_unscored）・警告（7 項目の名前）・「面接チェックリストで入力する」・タイル「未入力」: ' + JSON.stringify({ j17u, u17 }));
+      'E17 (6) 人物像が未入力で総合判断「採用」→ 上長最終判断要（persona_unscored）・警告（7 項目の名前）・「評価で入力する」・タイル「未入力」: ' + JSON.stringify({ j17u, u17 }));
     await page.click('#scriptWarnings [data-action="to-step"][data-step="3"]');
     await wait(300);
-    expect(await step() === 3, 'E17 (6) 「面接チェックリストで入力する」で ② に戻る');
-    // (10) 質問の 1 行表示（短い名前＋全文を薄く・はみ出しは「…」）・行のクリック／Enter で全文・見出しの「全文」⇔「たたむ」・メモ欄は残る
-    const q17 = await page.evaluate(() => {
-      const qs = Array.from(document.querySelectorAll('.cl-q'));
-      const inner = (q) => { const cs = getComputedStyle(q); return q.getBoundingClientRect().height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth); };
-      const full = document.querySelector('[data-item="q_term"] .cl-q-full');
-      return { n: qs.length, all: Array.from(document.querySelectorAll('.cl-q-all')).map(b => b.dataset.block + ':' + b.textContent), one: qs.every(q => inner(q) <= parseFloat(getComputedStyle(q).lineHeight) * 1.6),
-        short: (document.querySelector('[data-item="q_term"] .cl-q-short') || {}).textContent, full: full.textContent, ell: full.scrollWidth > full.clientWidth + 1, to: getComputedStyle(full).textOverflow,
-        exp: qs.every(q => q.getAttribute('aria-expanded') === 'false' && q.dataset.action === 'q-toggle'), memo: document.querySelectorAll('.cl-memo textarea[data-cl^="notes."]').length,
-        hTerm: Math.round(document.querySelector('[data-item="q_term"] .cl-q').getBoundingClientRect().height) };
-    });
-    expect(q17.n === 13 && q17.all.length === 5 && q17.all.every(x => x.endsWith(':全文')) && q17.one && q17.short === '短期／長期の希望' && q17.full.startsWith('「いまのところ、短期希望ですか？') && q17.ell && q17.to === 'ellipsis' && q17.exp && q17.memo === 5,
-      'E17 (10) 質問は 13 個とも 1 行（短い名前を太字＋全文を薄く・長い質問は「…」）・ブロックに「全文」・メモ欄 5 つ: ' + JSON.stringify(q17));
-    await page.click('[data-item="q_term"] .cl-q');
-    await wait(80);
-    const qo17 = await page.evaluate(() => { const q = document.querySelector('[data-item="q_term"] .cl-q'); return { open: q.classList.contains('open'), exp: q.getAttribute('aria-expanded'), h: Math.round(q.getBoundingClientRect().height), title: q.title,
-      all: document.querySelector('.cl-q-all[data-block="conditions_q"]').textContent }; });
-    await page.click('[data-item="q_term"] .cl-q');
-    await wait(80);
-    const qc17 = await page.evaluate(() => { const q = document.querySelector('[data-item="q_term"] .cl-q'); return { open: q.classList.contains('open'), exp: q.getAttribute('aria-expanded'), h: Math.round(q.getBoundingClientRect().height) }; });
-    await page.focus('[data-item="q_family"] .cl-q');
-    await page.keyboard.press('Enter');
-    await wait(60);
-    const qe17 = await st(() => document.querySelector('[data-item="q_family"] .cl-q').classList.contains('open'));
-    await page.keyboard.press('Enter');
-    await wait(60);
-    const qe17b = await st(() => document.querySelector('[data-item="q_family"] .cl-q').classList.contains('open'));
-    await page.click('.cl-q-all[data-block="conditions_q"]');
-    await wait(80);
-    const qa17 = await page.evaluate(() => ({ open: Array.from(document.querySelectorAll('#cl-conditions .cl-q')).map(q => q.classList.contains('open')), t: document.querySelector('.cl-q-all[data-block="conditions_q"]').textContent,
-      pressed: document.querySelector('.cl-q-all[data-block="conditions_q"]').getAttribute('aria-pressed'), other: Array.from(document.querySelectorAll('#cl-continuity .cl-q')).some(q => q.classList.contains('open')),
-      memo: !!document.querySelector('#cl-conditions textarea[data-cl="notes.conditions_q"]') }));
-    await page.click('.cl-q-all[data-block="conditions_q"]');
-    await wait(80);
-    const qa17b = await page.evaluate(() => ({ open: Array.from(document.querySelectorAll('#cl-conditions .cl-q')).some(q => q.classList.contains('open')), t: document.querySelector('.cl-q-all[data-block="conditions_q"]').textContent }));
-    expect(qo17.open && qo17.exp === 'true' && qo17.h > q17.hTerm * 1.5 && qo17.title === 'クリックでたたむ' && qo17.all === '全文' && !qc17.open && qc17.exp === 'false' && qc17.h === q17.hTerm && qe17 && !qe17b &&
-      qa17.open.every(Boolean) && qa17.open.length === 3 && qa17.t === 'たたむ' && qa17.pressed === 'true' && !qa17.other && qa17.memo && !qa17b.open && qa17b.t === '全文',
-      'E17 (10) 行のクリック／Enter で全文（.open・aria-expanded・高さが増える）・もう一度で閉じる・「全文」で全部開いて「たたむ」・もう一度で全部閉じる（メモ欄は残る）: ' + JSON.stringify({ qo17, qc17, qe17, qe17b, qa17, qa17b }));
-    await page.click('[data-item="q_prev_job"] .cl-q');
-    await wait(80);
-    await shotEl17('#cl-continuity', 'p12-step2-questions.png');
-    //   ② の上部の案内の段組み（💡・文言・ボタン）と人物像の凡例（「点 意味」ごとの span）の折り返し
-    const lay17 = () => page.evaluate(() => {
-      const g = document.getElementById('clGuide'), r = (e) => e.getBoundingClientRect(), mid = (e) => (r(e).top + r(e).bottom) / 2, within = (y, e) => y >= r(e).top - 1 && y <= r(e).bottom + 1;
-      const ico = g.querySelector('.ico'), t = g.querySelector('.cl-guide-t'), b = document.getElementById('clPaperBtn');
-      return { h: Math.round(r(g).height), icoWithText: within(mid(ico), t), btnWithText: within(mid(b), t), btnBelow: r(b).top >= r(t).bottom - 1, textLines: Math.round(r(t).height / parseFloat(getComputedStyle(t).lineHeight)),
-        legendItems: document.querySelectorAll('#clPsLegend > span').length, legendSplit: Array.from(document.querySelectorAll('#clPsLegend > span')).filter(sp => sp.getClientRects().length > 1).map(sp => sp.textContent) };
-    });
+    expect(await step() === 3 && !!(await page.$('#clPersona')), 'E17 (6) 「評価で入力する」で評価（人物像のある画面）に戻る');
+    // (10) 評価の画面の幅: 390px でも横スクロールなし（人物像の行は 1 列）・人物像の凡例（「点 意味」ごとの span）は語の途中で折り返さない
+    const lay17 = () => page.evaluate(() => ({ legendItems: document.querySelectorAll('#clPsLegend > span').length,
+      legendSplit: Array.from(document.querySelectorAll('#clPsLegend > span')).filter(sp => sp.getClientRects().length > 1).map(sp => sp.textContent) }));
     await page.setViewportSize({ width: 390, height: 900 });
     await wait(250);
     const nw17 = await page.evaluate(() => ({ ov: document.documentElement.scrollWidth - window.innerWidth, row: getComputedStyle(document.querySelector('.cl-ps-row')).gridTemplateColumns.split(' ').length,
@@ -3391,9 +3515,8 @@ const pdfTextOf = (f) => {
     await wait(200);
     ly17.w1440 = await lay17();
     expect(nw17.ov <= 1 && nw17.row === 1 && nw17.btnIn, 'E17 (10) 390px でも横スクロールなし（人物像の行は 1 列・ボタンは画面の中）: ' + JSON.stringify(nw17));
-    expect(ly17.w1440.textLines === 1 && ly17.w1440.btnWithText && ly17.w1280.icoWithText && ly17.w1280.btnWithText && ly17.w1280.h <= 64 && ly17.w390.icoWithText && ly17.w390.btnBelow &&
-      [ly17.w390, ly17.w1280, ly17.w1440].every(x => x.legendItems === 5 && x.legendSplit.length === 0),
-      'E17 (10) ② の上部の案内: 1440px は 1 行・1280px は文言を折り返してボタンと同じ行（ボタンだけの行を作らない）・390px は 💡 と文言が同じ行でボタンは次の行（💡 だけの行を作らない）。凡例は「5 とても良い」などの途中で折り返さない: ' + JSON.stringify(ly17));
+    expect([ly17.w390, ly17.w1280, ly17.w1440].every(x => x.legendItems === 5 && x.legendSplit.length === 0),
+      'E17 (10) 人物像の凡例は「5 とても良い」などの途中で折り返さない（390・1280・1440px）: ' + JSON.stringify(ly17));
     //   ダークモード: 押下中の ○△×・一致・総合判断・人物像の点の文字と地のコントラストは 4.5:1 以上（白字では 2.0〜3.1:1 だった。--on-status）。アプリの「ダークモード」（data-theme）と OS の設定（prefers-color-scheme）の両方。ライトは白字のまま
     await setPsAll([1, 2, 3, 4, 5, 4, 3]);
     await setCl('values.rt_hourensou', 'fair');
@@ -3418,7 +3541,7 @@ const pdfTextOf = (f) => {
     const KINDS17 = ['ps1', 'ps2', 'ps3', 'ps4', 'ps5', 'good', 'fair', 'poor', 'match', 'hold'];
     expect([dk17a, dk17b].every(d => KINDS17.every(k => d[k] && d[k].r >= 4.5)) && ['ps1', 'ps2', 'ps4', 'good', 'fair', 'poor', 'match', 'hold'].every(k => lt17[k] && lt17[k].color === 'rgb(255, 255, 255)'),
       'E17 (10) ダークモードでも押下中のボタン（人物像 1〜5・○△×・一致・総合判断）の文字は 4.5:1 以上（data-theme・prefers-color-scheme の両方。ライトは白字のまま）: ' + JSON.stringify({ dk17a, dk17b, lt17 }));
-    // (9) 記入シート（手書き用）: ① で氏名が空でも印刷できる（印刷の瞬間だけ body.print-checklist と #clSheet .pp-sheet）・判定は走らない・保存しない
+    // (9) 記入シート（手書き用）: 準備で氏名が空でも印刷できる（印刷の瞬間だけ body.print-checklist と #clSheet .pp-sheet）・判定は走らない・保存しない
     await page.click('#btnNew');
     await wait(200);
     await stubPrint17();
@@ -3430,8 +3553,8 @@ const pdfTextOf = (f) => {
     const af17 = await page.evaluate(() => ({ cls: document.body.classList.contains('print-checklist'), host: document.getElementById('clSheet').innerHTML.length }));
     expect(pr17.calls.length === 1 && pr17.calls[0].cls && pr17.calls[0].sheet && pr17.calls[0].a4 && !pr17.calls[0].report && pr17.calls[0].nameLine && pr17.j === null && pr17.step === 1 && !af17.cls && af17.host === 0 &&
       pr17.calls[0].date === '2026/10/10',
-      'E17 (9) ① の「記入シート」（氏名が空でも）: 印刷の瞬間に body.print-checklist と #clSheet .a4.pp-a4 .pp-sheet（氏名は線・面接日は ① の欄のとおり）・判定は走らない・afterprint で外す: ' + JSON.stringify({ pr17, af17 }));
-    //   ① で面接日を空にすると記入シートの面接日は記入用の線（前もって刷っておく白紙）。印刷で今日の日付を入れない（記録・① の欄・右サマリーは空のまま。docs/SPEC-persona.md 11-9 補完 3）
+      'E17 (9) 準備の「記入シート」（氏名が空でも）: 印刷の瞬間に body.print-checklist と #clSheet .a4.pp-a4 .pp-sheet（氏名は線・面接日は準備の欄のとおり）・判定は走らない・afterprint で外す: ' + JSON.stringify({ pr17, af17 }));
+    //   準備で面接日を空にすると記入シートの面接日は記入用の線（前もって刷っておく白紙）。印刷で今日の日付を入れない（記録・準備の欄・右サマリーは空のまま。docs/SPEC-persona.md 11-9 補完 3）
     await page.fill('#saDate', '');
     await wait(150);
     const pdt17a = await st(() => ({ date: window.RecruitApp.state.checklist.header.date, dirty: window.RecruitApp.state.dirty }));
@@ -3445,7 +3568,7 @@ const pdfTextOf = (f) => {
     const pdt17b = await st(() => ({ date: window.RecruitApp.state.checklist.header.date, input: document.getElementById('saDate').value, side: (document.querySelector('#sumDate .sum-val') || {}).textContent }));
     expect(pdt17a.date === '' && pdt17.calls.length === 1 && pdt17.calls[0].sheet && pdt17.calls[0].date === 'LINE' && !pdt17.calls[0].who.includes('2026/10/10') && pdt17.date === '' && pdt17.input === '' && pdt17.side === '—' &&
       pdt17.dirty === pdt17a.dirty && pdt17.j === null && pdt17b.date === '' && pdt17b.input === '' && pdt17b.side === '—',
-      'E17 (9) ① で面接日を空にした記入シートは面接日が記入用の線（今日の日付を印字しない）・印刷の前後で記録・① の欄・右サマリーの面接日は空のまま: ' + JSON.stringify({ pdt17a, pdt17, pdt17b }));
+      'E17 (9) 準備で面接日を空にした記入シートは面接日が記入用の線（今日の日付を印字しない）・印刷の前後で記録・準備の欄・右サマリーの面接日は空のまま: ' + JSON.stringify({ pdt17a, pdt17, pdt17b }));
     //   記入欄（.pp-fields の 1 欄）の中身の右端が欄の右端を越える量（Range で文字・□ の右端を測る。越えた欄だけ [id, px]）
     const defFieldsOver17 = () => page.evaluate(() => { window.__ppFieldsOver = (sh) => Array.from(sh.querySelectorAll('.pp-fields > div')).map(d => {
       const rg = document.createRange(); rg.selectNodeContents(d.querySelector('dd'));
@@ -3467,22 +3590,23 @@ const pdfTextOf = (f) => {
     await st(() => window.RecruitApp.preparePaperSheet(false));
     const n17p = pdfPagesOf(pdf17p), t17p = pdfTextOf(pdf17p);
     if (hasPpm14) png14(pdf17p, path.join(OUT, 'p12-paper-sheet'));
-    const want17p = ['面接記入シート', '人物像（接客）', '12345', '○', '△', '×', '一致', '不一致', '面接者の総合判断', '採用', '保留', '不採用', '面接所見', '指定繁忙期間すべて可', '総評'].concat(PSL17);
+    const want17p = ['面接記入シート', '人物像（接客）', '12345', '○', '△', '×', '一致', '不一致', '面接者の総合判断', '採用', '保留', '不採用', '面接所見', '指定繁忙期間すべて可', '面接', '評価', '面接のあとに付ける', '面接時間'].concat(PSL17);
     //   記入欄（2 列）の中身は欄の中（右端を越えない）。見出しと □選択肢 が 1 行に入らない「短期／長期の希望」は □短期希望 □長期希望 を次の行へ（隣の「契約開始日の希望」とつながって見えない）
     expect(pd17.fieldsOver.length === 0 && pd17.termWrap === true, 'E17 (9) 記入シートの記入欄は欄からはみ出さない（「短期／長期の希望」の □選択肢 は次の行）: ' + JSON.stringify({ over: pd17.fieldsOver, termWrap: pd17.termWrap }));
-    expect(pd17.h <= 1052 && Math.abs(pd17.a4w - 210) <= 0.5 && Math.abs(pd17.a4h - 297) <= 0.5 && pd17.nameLine && pd17.date === 'LINE' && pd17.ps === 7 && pd17.psCells && pd17.rate === 6 && pd17.rateMk && pd17.must === 2 && pd17.notes >= 4 &&
+    expect(pd17.h <= 1052 && Math.abs(pd17.a4w - 210) <= 0.5 && Math.abs(pd17.a4h - 297) <= 0.5 && pd17.nameLine && pd17.date === 'LINE' && pd17.ps === 7 && pd17.psCells && pd17.rate === 6 && pd17.rateMk && pd17.must === 2 && pd17.notes >= 3 &&
       JSON.stringify(pd17.ov) === '["採用","保留","不採用"]' && JSON.stringify(pd17.cols) === JSON.stringify(['conditions,continuity', 'job,teamwork,reverse']) && pd17.title === '面接記入シート' &&
       (n17p === -1 || n17p === 1) && (t17p === null || want17p.filter(t => !t17p.includes(t)).length === 0),
-      'E17 (9) 記入シート（白紙）: A4 縦 1 枚（210×297mm・内容 1052px 以内）・氏名と面接日は線・人物像 7 行×1〜5・確認点 6 行（○△×）・必須条件 2 行・総合判断 3 つ・面接所見の罫線 4 本以上・2 段（①② ｜ ③④⑤）・PDF 1 ページ: ' +
+      'E17 (9) 記入シート（白紙）: A4 縦 1 枚（210×297mm・内容 1052px 以内）・氏名と面接日は線・人物像 7 行×1〜5・確認点 6 行（○△×）・必須条件 2 行・総合判断 3 つ・面接所見の罫線 3 本以上・2 段（①② ｜ ③④⑤）・PDF 1 ページ: ' +
       JSON.stringify({ pd17, pages: n17p, missing: t17p === null ? null : want17p.filter(t => !t17p.includes(t)) }));
-    //   ① に入力 → ② の上部の「記入シート」でも印刷できる・氏名・区分/年齢/性別・担当・短期求人・タクシーを印字（② の回答は印字しない）
+    //   準備に入力 → 面接でメモ・評価で人物像を付けたあと、準備に戻って「記入シート」: 氏名・区分/年齢/性別・担当・短期求人・タクシーを印字（面接・評価の回答は印字しない）
     await fillScript({ name: '記入 太郎', age: 21, gender: '男性', category: '大学3年生', posting: 'short', taxi: '可・2,500円', interviewer: '笹川 晴央' });
     await page.click('[data-action="script-next"]');
     await wait(400);
+    await page.fill('#ivStage textarea[data-cl="notes.q_term"]', '回答メモは記入シートに印字しない');
     await setPs('ps_smile', 2);
-    await page.fill('textarea[data-cl="notes.conditions_q"]', '回答メモは記入シートに印字しない');
+    await goTo(1);
     await stubPrint17();
-    await page.click('#clPaperBtn');
+    await page.click('#saPaperBtn');
     await wait(150);
     const pr17b = await page.evaluate(() => window.__pp.slice());
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
@@ -3499,7 +3623,7 @@ const pdfTextOf = (f) => {
     if (hasPpm14) png14(pdf17f, path.join(OUT, 'p12-paper-sheet-filled'));
     expect(pr17b.length === 1 && pr17b[0].cls && pr17b[0].sheet && pr17b[0].who.includes('記入 太郎') && pf17.h <= 1052 && pf17.fieldsOver.length === 0 && ['記入 太郎', '大学3年生・21歳・男性', '2026/10/10', '笹川 晴央', '短期求人', '可・2,500円'].every(t => pf17.who.includes(t)) &&
       !pf17.txt && (n17f === -1 || n17f === 1) && (t17f === null || ['記入太郎', '大学3年生・21歳・男性', '笹川晴央', '短期求人', '可・2,500円'].every(t => t17f.includes(t))),
-      'E17 (9) ① に入力した記入シート（② の「記入シート」）: 氏名・区分/年齢/性別・面接日・担当・短期求人・タクシーを印字・② の回答は印字しない・PDF 1 ページ: ' + JSON.stringify({ pr17b: pr17b.length, pf17, pages: n17f }));
+      'E17 (9) 準備に入力した記入シート（面接・評価のあとに準備から）: 氏名・区分/年齢/性別・面接日・担当・短期求人・タクシーを印字・面接のメモ・評価の点は印字しない・PDF 1 ページ: ' + JSON.stringify({ pr17b: pr17b.length, pf17, pages: n17f }));
     //   本物の印刷の経路（window.print をスタブにしない。docs/SPEC-persona.md 11-9 補完 9）: ヘッドレスの Chromium の window.print はダイアログを出さずに beforeprint → afterprint を送る。
     //   beforeprint の時点の印刷ホストは記入シート（beforeprint の自動切替で報告書に替えない）・afterprint で片付ける・判定は走らない・面接日は変えない。
     //   afterprint が来ないとき（スタブ）は 3 秒で片付け、片付けは印刷ごとに 1 回だけ（前の印刷の 3 秒のタイマーが次の印刷の用紙を消さない）。時計は page.clock で進める
@@ -3538,7 +3662,7 @@ const pdfTextOf = (f) => {
       'E17 (9) 本物の window.print（スタブなし）: beforeprint の時点の印刷ホストは記入シート（報告書に替えない・氏名は線）・afterprint で片付け・判定は走らない・面接日はそのまま: ' + JSON.stringify(real17));
     expect(g17.on.cls && g17.on.pp && g17.t3.cls && g17.t3.pp && g17.t39.cls && g17.t39.pp && !g17.t41.cls && g17.t41.host === 0 && e17p.length === 0,
       'E17 (9) afterprint が来ない印刷は 3 秒で片付ける・前の印刷の 3 秒のタイマーは次の印刷の用紙を消さない（片付けは印刷ごとに 1 回）・ページエラーなし: ' + JSON.stringify({ g17, e17p }));
-    // (11) 設定: 人物像の節（data-bind 7 種）・項目を 3 行にして保存 → ② の行 3・満点 15・A4・記入シート。並べ替えても点が残る・検証エラー・OFF
+    // (11) 設定: 人物像の節（data-bind 7 種）・項目を 3 行にして保存 → 評価の行 3・満点 15・A4・記入シート。並べ替えても点が残る・検証エラー・OFF
     await setPs('ps_greeting', 4);
     await setPs('ps_smile', 5);
     await toView('settings');
@@ -3571,8 +3695,8 @@ const pdfTextOf = (f) => {
       spr17.items[2].hint === '髪型・爪' && !('short' in spr17.items[2]) && JSON.stringify(r17s.rows) === JSON.stringify(spr17.items.map(it => it.id)) && r17s.max === '15' &&
       r17s.ps.ps_smile === 5 && r17s.ps.ps_greeting === 4 && JSON.stringify(r17s.pressed) === JSON.stringify(['ps_smile:5', 'ps_greeting:4']) && r17s.hint === '髪型・爪' &&
       a17s.ps === 3 && a17s.tile.includes('未入力 1') && a17s.tile.includes('9/15点') && pp17s.ps === 3 && pp17s.sum.includes('/ 15 点'),
-      'E17 (11) 項目を 3 行（並べ替え＋新しい項目）にして保存: ② の行 3・満点 15・入力済みの点は項目名が同じなら残る・A4 の人物像 3 行・記入シート 3 行: ' + JSON.stringify({ note17, items: spr17.items, r17s, a17s, pp17s }));
-    //   検証エラー（境界・項目なし）は保存しない・OFF にすると ② に人物像なし・判定にも使わない
+      'E17 (11) 項目を 3 行（並べ替え＋新しい項目）にして保存: 評価の行 3・満点 15・入力済みの点は項目名が同じなら残る・A4 の人物像 3 行・記入シート 3 行: ' + JSON.stringify({ note17, items: spr17.items, r17s, a17s, pp17s }));
+    //   検証エラー（境界・項目なし）は保存しない・OFF にすると評価に人物像なし・判定にも使わない
     await toView('settings');
     await page.fill('[data-bind="checklist.persona.keepPct"]', '30');
     await page.fill('[data-bind="checklist.persona.rejectBelowPct"]', '50');
@@ -3595,16 +3719,16 @@ const pdfTextOf = (f) => {
     await saveSettings();
     await toView('judge');
     await navStep(3);
-    const off17 = await page.evaluate(() => ({ ps: !!document.getElementById('clPersona'), off: !!document.getElementById('clPersonaOff'), guide: (document.querySelector('#clGuide .cl-guide-t') || {}).textContent, side: !!document.getElementById('sumPersona'),
-      nav: document.getElementById('clNavScore').textContent }));
+    const off17 = await page.evaluate(() => ({ ps: !!document.getElementById('clPersona'), off: !!document.getElementById('clPersonaOff'), lead: !!document.querySelector('.cl-lead-ps'), side: !!document.getElementById('sumPersona'),
+      nav: document.getElementById('clNavScore').textContent, miss: document.getElementById('evMissing').textContent, stepLead: document.querySelector('#stepLead span').textContent }));
     await rateAll('good');
     await judge();
     const j17off = await judgment();
     const w17off = await st(() => window.RecruitApp.state.judgment.warnings.filter(w => w.indexOf('人物像') >= 0).length);
     const t17off = await page.$$eval('#appPaper .cl-tile-k', els => els.map(e => e.textContent));
-    expect(!off17.ps && !off17.off && !off17.side && !off17.nav.includes('人物像') && off17.guide === '面接中はメモを中心に。○△×・総合判断は面接後にまとめて入力できます' && j17off.result === 'recommend' && w17off === 0 &&
+    expect(!off17.ps && !off17.off && !off17.lead && !off17.side && !off17.nav.includes('人物像') && !off17.miss.includes('人物像') && j17off.result === 'recommend' && w17off === 0 &&
       JSON.stringify(t17off) === JSON.stringify(['結果', '総合判断', '必須条件', '確認点']),
-      'E17 (11) 人物像を OFF にして保存すると ② に人物像（注記も）なし・右サマリーなし・総合判断「採用」で採用推奨（人物像の警告なし・A4 は 4 タイル）: ' + JSON.stringify({ off17, j17off, w17off, t17off }));
+      'E17 (11) 人物像を OFF にして保存すると評価に人物像（注記・前書きの 1 行・未入力の数も）なし・右サマリーなし・総合判断「採用」で採用推奨（人物像の警告なし・A4 は 4 タイル）: ' + JSON.stringify({ off17, j17off, w17off, t17off }));
     //   使い方も設定に合わせる（OFF なら人物像のカードの先頭と「結果（推奨）の決まり方」の 1 行に「いまの設定では人物像を使いません」）
     await toView('help');
     const help17off = await page.evaluate(() => ({ off: (document.getElementById('helpPersonaOff') || {}).textContent || '',
@@ -3618,7 +3742,7 @@ const pdfTextOf = (f) => {
     const def17 = (await storedProfile()).checklist.persona;
     expect(def17.enabled === true && def17.items.length === 7 && def17.items[0].id === 'ps_greeting', 'E17 (11) 「既定の台本に戻す」で人物像も既定（ON・7 項目）: ' + JSON.stringify({ enabled: def17.enabled, n: def17.items.length }));
     await toView('judge');
-    // (12) 旧い記録（人物像の導入前）: 人物像を使わない（null）・保存時と同じ判定・人物像の警告なし・toast・② は 1 行の注記・③ は 4 タイル。保存し直しても null のまま
+    // (12) 旧い記録（人物像の導入前）: 人物像を使わない（null）・保存時と同じ判定・人物像の警告なし・toast・評価は 1 行の注記・報告書は 4 タイル。保存し直しても null のまま
     const old17 = {};
     for (const f of ['legacy-full-checklist.html', 'legacy-report-view.html', 'legacy-pre-persona.html']) {
       const saved = parseRecord(fs.readFileSync(path.join(FIX, f), 'utf8')).judgment.result;
@@ -3640,8 +3764,8 @@ const pdfTextOf = (f) => {
     }
     expect(Object.keys(old17).every(f => { const o = old17[f]; return o.ps === null && o.step === 4 && o.res === o.saved && o.res === 'recommend' && o.w === 0 && o.adj === 0 && o.toast &&
       JSON.stringify(o.tiles) === JSON.stringify(['結果', '総合判断', '必須条件', '確認点']) && !o.psBlk && !o.side && o.off && !o.psUi; }),
-      'E17 (12) 旧い記録（詳細モード・報告書／詳細の切替つき・人物像の導入前）: persona は null・保存時と同じ採用推奨・人物像の警告なし・toast・③ は 4 タイル・② は 1 行の注記: ' + JSON.stringify(old17));
-    await page.click('#toReportBtn');   // ③ で保存する（② で保存した記録は読み込んでも ② のまま＝判定前）
+      'E17 (12) 旧い記録（詳細モード・報告書／詳細の切替つき・人物像の導入前）: persona は null・保存時と同じ採用推奨・人物像の警告なし・toast・報告書は 4 タイル・評価は 1 行の注記: ' + JSON.stringify(old17));
+    await page.click('#toReportBtn');   // 報告書で保存する（評価で保存した記録は読み込んでも評価のまま＝判定前）
     await wait(400);
     const sv17 = await saveRecord('p12-legacy-pre-persona-resaved.html');
     await page.click('#btnNew');
@@ -3651,8 +3775,8 @@ const pdfTextOf = (f) => {
     const re17 = await st(() => { const s = window.RecruitApp.state; return { ps: s.checklist.persona, res: s.judgment && s.judgment.result, w: ((s.judgment || {}).warnings || []).length }; });
     expect(sv17.rec.checklist.persona === null && !!sv17.rec.checklistDef.persona && sv17.rec.step === 4 && re17.ps === null && re17.res === 'recommend' && re17.w === 0,
       'E17 (12) 人物像の導入前の記録を保存し直しても persona は null のまま（もう一度読み込んでも採用推奨・警告なし）: ' + JSON.stringify({ rec: sv17.rec.checklist.persona, re17 }));
-    //   人物像の導入前に ① だけ保存した記録（② の回答なし。fixture を ① の段階に戻したもの）は、これから面接するので人物像を使う（{}。docs/SPEC-persona.md 11-9 補完 1）:
-    //   導入前の toast・注記は出さず、② に人物像 7 行（記入シートと同じ並び）→ 点を入れれば採用推奨（5 タイル）→ 保存し直しても点が残る
+    //   人物像の導入前に準備だけ保存した記録（回答なし。fixture を準備の段階に戻したもの）は、これから面接するので人物像を使う（{}。docs/SPEC-persona.md 11-9 補完 1）:
+    //   導入前の toast・注記は出さず、評価に人物像 7 行（記入シートと同じ並び）→ 点を入れれば採用推奨（5 タイル）→ 保存し直しても点が残る
     const fx17 = fs.readFileSync(path.join(FIX, 'legacy-pre-persona.html'), 'utf8');
     const lp17 = parseRecord(fx17);
     Object.assign(lp17, { step: 1, judgment: null, management: {}, decision: null, interviewNotes: '' });
@@ -3668,8 +3792,10 @@ const pdfTextOf = (f) => {
       await st(() => { const s = window.RecruitApp.state; return { ps: s.checklist.persona, step: s.step, name: s.applicant.name }; }));
     await page.click('[data-action="script-next"]');
     await wait(400);
+    s1x17.iv = await step();
+    await goTo(3);
     Object.assign(s1x17, await st(() => ({ rows: document.querySelectorAll('#clPersona .cl-ps-row').length, off: !!document.getElementById('clPersonaOff'),
-      guide: (document.querySelector('#clGuide .cl-guide-t') || {}).textContent })));
+      lead: !!document.querySelector('#clPersona .cl-lead-ps') })));
     await st(() => window.RecruitApp.preparePaperSheet(true));
     s1x17.paper = await st(() => document.querySelectorAll('#clSheet tr[data-pp-ps]').length);
     await st(() => window.RecruitApp.preparePaperSheet(false));
@@ -3684,9 +3810,9 @@ const pdfTextOf = (f) => {
     await wait(500);
     s1x17.re = await st(() => { const s = window.RecruitApp.state; return { ps: s.checklist.persona, res: s.judgment && s.judgment.result }; });
     expect(!s1x17.defPs && !s1x17.keyPs && s1x17.step === 1 && s1x17.name === '保存 花子' && JSON.stringify(s1x17.ps) === '{}' && !s1x17.toast.includes('人物像（1〜5 点）の導入前') &&
-      s1x17.rows === 7 && !s1x17.off && s1x17.paper === 7 && s1x17.guide.includes('人物像') && s1x17.res === 'recommend' && JSON.stringify(s1x17.tiles) === JSON.stringify(['結果', '総合判断', '必須条件', '確認点', '人物像']) &&
+      s1x17.iv === 2 && s1x17.rows === 7 && !s1x17.off && s1x17.lead && s1x17.paper === 7 && s1x17.res === 'recommend' && JSON.stringify(s1x17.tiles) === JSON.stringify(['結果', '総合判断', '必須条件', '確認点', '人物像']) &&
       PS17.every(id => sv17s1.rec.checklist.persona[id] === 4) && keyed17(s1x17.re.ps) === keyed17(sv17s1.rec.checklist.persona) && s1x17.re.res === 'recommend',
-      'E17 (12) 人物像の導入前に ① だけ保存した記録（② の回答なし）は人物像を使う（{}・導入前の toast と注記なし）・② に人物像 7 行（記入シートと同じ）・点を入れれば採用推奨（5 タイル）・保存し直しても点が残る: ' + JSON.stringify(s1x17));
+      'E17 (12) 人物像の導入前に準備だけ保存した記録（回答なし）は人物像を使う（{}・導入前の toast と注記なし）・面接を経て評価に人物像 7 行（記入シートと同じ）・点を入れれば採用推奨（5 タイル）・保存し直しても点が残る: ' + JSON.stringify(s1x17));
     //   人物像の項目が保存時と違う記録（両方に人物像あり。docs/SPEC-persona.md 1-7・D19）: 志望動機を外して「電話応対の丁寧さ」を足した設定で、既定の 7 項目すべて 4 点の保存 HTML（(7) の p12-persona-report.html）を読み込む
     //   → toast「保存時と人物像の項目が異なります（追加 1・削除 1）。現在の項目で再判定します」・現在の項目で再判定（足した項目は未入力 → 上長最終判断要）。既定の項目に戻すと同じ記録でも出ない
     await toView('settings');
@@ -3721,23 +3847,24 @@ const pdfTextOf = (f) => {
     // (13) 使い方
     await toView('help');
     const help17 = await page.evaluate(() => ({ card: (document.getElementById('helpPersona') || {}).textContent || '', steps: document.querySelectorAll('#view-help .help-step').length,
-      step2: (document.querySelectorAll('#view-help .help-step')[1] || {}).textContent || '', step3: (document.querySelectorAll('#view-help .help-step')[2] || {}).textContent || '',
+      step3: (document.querySelectorAll('#view-help .help-step')[2] || {}).textContent || '', iv: Array.from(document.querySelectorAll('#helpInterview li')).map(li => li.textContent),
       rule: Array.from(document.querySelectorAll('#view-help .card')).map(c => c.textContent).find(t => t.includes('結果（推奨）の決まり方')) || '',
       settings: Array.from(document.querySelectorAll('#view-help .card')).map(c => c.textContent).find(t => t.includes('設定（劇場プロファイル）')) || '',
       off: !!document.getElementById('helpPersonaOff') }));
-    expect(help17.steps === 3 && ['人物像（1〜5 点）と記入シート', '面接中はメモを中心に', '記入シート（手書き用）', '70% 以上はそのまま', '40% 未満は不採用推奨', '最低限の話し方、敬語が可能か'].every(t => help17.card.includes(t)) &&
-      help17.step2.includes('総評（人物像 1〜5 点') && help17.step2.includes('面接中はメモを中心に') && help17.rule.includes('人物像（1〜5 点）の合計が低い') &&
-      help17.rule.includes('40% 未満なら不採用推奨') && !help17.off && !help17.rule.includes('いまの設定では人物像を使いません'),
-      'E17 (13) 使い方に「人物像（1〜5 点）と記入シート」（面接中はメモ中心・判定への反映・記入シート・rt_manner を外した理由）・ステップ 2 と結果の決まり方にも 1 行（.help-step は 3 つのまま）: ' + JSON.stringify({ steps: help17.steps, len: help17.card.length }));
-    //   面接中はメモ中心は 1 対 1 の面接のとき。1 対 1 でない面接は記入シートに書いて面接後に転記（フィードバック ①②。「1 対 1 でなくても回せます」と逆に案内しない。docs/SPEC-persona.md 11-9 補完 2）
-    expect(help17.card.includes('面接中はメモを中心に：1 対 1 の面接なら、質問の回答などはメモ欄に書き、確認点の ○△×・人物像・総合判断は面接のあとでまとめて入力できます。') &&
-      help17.card.includes('1 対 1 でない面接は、面接しながらアプリに入力するのが難しいので、記入シート（手書き用。下）に書いて、面接のあとでアプリに転記してください。') && !help17.card.includes('1 対 1 でなくても'),
-      'E17 (13) 使い方の「面接中はメモを中心に」は 1 対 1 の面接のときの案内・1 対 1 でない面接は記入シートに書いて転記: ' + JSON.stringify(help17.card.slice(0, 260)));
-    //   使い方のほかの箇所も人物像・記入シートに合わせる（ステップ 3 の印刷の中身・① の記入シートのボタンの場所・設定のカード。docs/SPEC-persona.md 11-9 補完 5）
-    expect(help17.step3.includes('「A4 で印刷」で 1 枚（結果・必須条件・確認点・人物像・面接メモ・押印）に印刷できます') &&
-      help17.card.includes('Step① の「🖨 記入シート（手書き用）」（カードの下、「面接チェックリストへ進む →」の左）か、Step② の上部の同じボタンで A4 1 枚を印刷できます') && !help17.card.includes('Step① と Step② の上部') &&
-      help17.settings.includes('面接チェックリスト（台本の文言・項目・確認点・人物像）') && help17.card.includes('台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます'),
-      'E17 (13) 使い方のステップ 3（印刷の中身に人物像）・記入シートのボタンの場所（① はカードの下の操作行・② は上部）・設定のカード（人物像）・前書きの話し方・敬語の付け先: ' + JSON.stringify({ step3: help17.step3, settings: help17.settings }));
+    expect(help17.steps === 4 && ['人物像（1〜5 点）と記入シート', '評価の画面の総評で', '記入シート（手書き用）', '70% 以上はそのまま', '40% 未満は不採用推奨', '最低限の話し方、敬語が可能か'].every(t => help17.card.includes(t)) &&
+      help17.step3.includes('人物像（1〜5 点）') && help17.step3.includes('面接のあとに') && help17.rule.includes('人物像（1〜5 点）の合計が低い') &&
+      help17.rule.includes('40% 未満なら不採用推奨') && !help17.off && !help17.rule.includes('いまの設定では人物像を使いません') && !help17.card.includes('面接中はメモを中心に'),
+      'E17 (13) 使い方に「人物像（1〜5 点）と記入シート」（評価の画面の総評・判定への反映・記入シート・rt_manner を外した理由）・ステップ 3（評価）と結果の決まり方にも 1 行（.help-step は 4 つ。面接中のメモの案内は「面接の進め方」へ）: ' + JSON.stringify({ steps: help17.steps, len: help17.card.length }));
+    //   面接中はメモを中心に（評価は面接のあと）・1 対 1 でない面接は記入シートに書いて面接後に転記（フィードバック ①②。「1 対 1 でなくても回せます」と逆に案内しない。docs/SPEC-persona.md 11-9 補完 2・docs/SPEC-flow.md 7-1）
+    expect(help17.iv.includes('聞くことは質問の下に答えを短くメモします（Tab で次の質問のメモへ）。○△× などの評価は面接のあとでまとめて付けます。') &&
+      help17.iv.includes('1 対 1 でない面接は記入シートに書き、終わったら面接の画面に転記してください（報告書の面接時間は評価の画面で直せます）。') && !help17.card.includes('1 対 1 でなくても') && !help17.iv.some(t => t.includes('1 対 1 でなくても')),
+      'E17 (13) 使い方の「面接の進め方」: 面接中はメモ・評価は面接のあとでまとめて・1 対 1 でない面接は記入シートに書いて転記: ' + JSON.stringify(help17.iv));
+    //   使い方のほかの箇所も人物像・記入シートに合わせる（記入シートのボタンの場所は準備・設定のカード・前書きの話し方・敬語の付け先。docs/SPEC-persona.md 11-9 補完 5）
+    expect(help17.card.includes('準備の画面の「🖨 記入シート（手書き用）」（「面接を始める →」の左）で A4 1 枚を印刷できます（面接 → 評価の画面と同じ並び・質問ごとに答えの線。') &&
+      !help17.card.includes('Step①') && !help17.card.includes('Step②') &&
+      help17.settings.includes('面接チェックリスト（台本の文言・項目・確認点・人物像）') && help17.settings.includes('台本を変えると面接・評価の画面と記入シートにそのまま反映されます') &&
+      help17.card.includes('台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます'),
+      'E17 (13) 使い方の記入シートのボタンの場所（準備の「面接を始める →」の左）・並び（面接 → 評価）・設定のカード（人物像・台本の反映）・前書きの話し方・敬語の付け先: ' + JSON.stringify({ settings: help17.settings }));
     //   項目名は「、」でつなぐ（「笑顔・表情」の「・」と区別。D6）・「結果（推奨）の決まり方」の人物像の 1 行は既定ではこの文言
     const lis17 = () => page.evaluate(() => Array.from(document.querySelectorAll('#view-help li')).map(li => li.textContent));
     const RULE17 = '人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます（下げる方向だけ。設定で変更可）。';
@@ -3762,7 +3889,7 @@ const pdfTextOf = (f) => {
       hl17b.some(t => t.includes('得点率 60% 以上はそのまま・30% 以上 60% 未満は上長最終判断要まで・30% 未満は不採用推奨。1 点の項目が 1 つでもあれば不採用推奨、未入力があれば下げない')) &&
       hl17b.includes('人物像（1〜5 点）の合計が低いと、結果を上長最終判断要（合計が 30% 未満・1 点の項目があるなら不採用推奨）まで下げます（下げる方向だけ。設定で変更可）。') && !hl17b.includes(RULE17),
       'E17 (13) 1 点＝不採用推奨・未入力＝調整しない・境界 60/30 にすると、結果の決まり方の人物像の 1 行も「判定への反映」と同じ内容: ' + JSON.stringify(hl17b.filter(t => t.includes('人物像'))));
-    //   ② の総評の説明・人物像の状態も同じ設定から（docs/SPEC-persona.md 11-9 補完 4）: 読み込んだ記録（7 項目すべて 4 点＝80%）→ 緑「60% 以上」・
+    //   評価の総評の説明・人物像の状態も同じ設定から（docs/SPEC-persona.md 11-9 補完 4）: 読み込んだ記録（7 項目すべて 4 点＝80%）→ 緑「60% 以上」・
     //   1 項目を未入力に戻す（未入力＝調整しない）→ 灰「未入力 1」（下がらない）・笑顔・表情を 1 点（1 点＝不採用推奨）→ 赤「未入力 1・不採用推奨」と警告
     await toView('judge');
     await navStep(3);
@@ -3777,7 +3904,7 @@ const pdfTextOf = (f) => {
     expect(ov17a.hint.includes('人物像（1〜5 点）の合計が低いと、結果を上長最終判断要（合計が 30% 未満・1 点の項目があるなら不採用推奨）まで下げます。') && !ov17a.hint.includes('未入力がある') &&
       ov17a.state === '60% 以上' && ov17a.stateCls.includes('ok') && ov17b.state === '未入力 1' && ov17b.stateCls.includes('muted') &&
       ov17c.state === '未入力 1・不採用推奨' && ov17c.stateCls.includes('danger') && ov17c.warn === '1 点の項目があります（笑顔・表情）。結果は不採用推奨になります。',
-      'E17 (13) 1 点＝不採用推奨・未入力＝調整しない・境界 60/30 の設定では、② の総評の説明と人物像の状態もその設定どおり（未入力だけなら灰・1 点ありは赤「不採用推奨」）: ' + JSON.stringify({ ov17a, ov17b, ov17c }));
+      'E17 (13) 1 点＝不採用推奨・未入力＝調整しない・境界 60/30 の設定では、評価の総評の説明と人物像の状態もその設定どおり（未入力だけなら灰・1 点ありは赤「不採用推奨」）: ' + JSON.stringify({ ov17a, ov17b, ov17c }));
     //   人物像の項目名・目盛りの文言・結果の表示名は設定（画面・JSON の読み込み）から入る → 使い方・設定・② では文字として出す（img を作らない・onerror は走らない）
     await toView('settings');
     await page.click('#view-settings [data-action="cl-default"]');
@@ -3817,6 +3944,561 @@ const pdfTextOf = (f) => {
     await toView('judge');
     expect(e17.length === 0, 'E17 保存 HTML のページエラー・console error なし: ' + (e17.join(' / ') || 'none'));
   }
+  // =====================================================================
+  // E18 面接の流れ（docs/SPEC-flow.md 9-4。2026-10-16 副支配人「実際の面接を想定したかたちにしてほしい」）
+  //   準備 → 面接（1 段階ずつ・タイマー）→ 評価 → 報告書。画面の操作だけで通す・タイマーは別の BrowserContext の page.clock で進める
+  // =====================================================================
+  console.log('\n== E18 面接の流れ ==');
+  {
+    const e18 = [];
+    const PS18 = ['ps_greeting', 'ps_impression', 'ps_smile', 'ps_voice', 'ps_eye', 'ps_speech', 'ps_motivation'];
+    const SECS18 = ['conditions', 'continuity', 'job', 'teamwork', 'reverse'];
+    const NOSTICKY18 = '.topbar,.iv-top,.ev-top,.flow-foot.is-sticky{position:static !important}';
+    // 全体のスクリーンショット（撮るあいだだけ sticky を外す・先頭へ・toast とフォーカスを外す）／見えている範囲のスクリーンショット
+    const full18 = async (pg, name) => {
+      await pg.mouse.move(1, 1);
+      await pg.evaluate((css) => { const s = document.createElement('style'); s.id = 'e2eNoSticky18'; s.textContent = css + '#toast{transition:none !important}'; document.head.appendChild(s); window.scrollTo(0, 0);
+        const t = document.getElementById('toast'); if (t) t.classList.remove('show'); const a = document.activeElement; if (a && a.blur) a.blur(); }, NOSTICKY18);
+      await pg.waitForTimeout(150);
+      await pg.screenshot({ path: path.join(OUT, name), fullPage: true });
+      await pg.evaluate(() => { const s = document.getElementById('e2eNoSticky18'); if (s) s.remove(); });
+    };
+    const view18 = async (pg, name) => {
+      await pg.mouse.move(1, 1);
+      await pg.evaluate(() => { window.scrollTo(0, 0); const s = document.createElement('style'); s.id = 'e2eNoToast18'; s.textContent = '#toast{transition:none !important}'; document.head.appendChild(s);
+        const t = document.getElementById('toast'); if (t) t.classList.remove('show'); const a = document.activeElement; if (a && a.blur && a.tagName !== 'BODY') a.blur(); });
+      await pg.waitForTimeout(150);
+      await pg.screenshot({ path: path.join(OUT, name) });
+      await pg.evaluate(() => { const s = document.getElementById('e2eNoToast18'); if (s) s.remove(); });
+    };
+    // 面接の段階が画面に収まるか（段階の下端と操作行の上端・縦スクロールの量）
+    const fit18 = (pg) => pg.evaluate(() => { const s = document.getElementById('ivStage').getBoundingClientRect(), f = document.getElementById('ivFoot').getBoundingClientRect();
+      return { sec: document.getElementById('ivStage').dataset.sec, over: Math.round(s.bottom - f.top), scroll: document.documentElement.scrollHeight - window.innerHeight, footBottom: Math.round(innerHeight - f.bottom) }; });
+    // 今の段階のメモ（質問ごと）を埋める（スクリーンショット用に答えらしい文。無い質問は「（段階）の答え」）
+    const ANS18 = { q_term: '長期希望。卒業まで続けたい', q_two_months: '問題なし。試験期間も週3日は出せる', q_family: '反対なし。終電の時間も家族と確認済み',
+      q_prev_job: '飲食で1年。学業との両立のため退職', q_cant_3days: '分かった時点で早めに相談する', q_sudden_absence: 'すぐ電話で連絡する',
+      q_value: '笑顔と提供のスピード', q_failure: 'オーダーを間違えた。復唱するようにした', q_unsure: '清掃。やり方を教われば大丈夫',
+      q_feedback: '声が小さいと言われ、意識して改善した', q_unknown: '近くのスタッフに確認する', q_busy_mind: '周りを見て声をかけ合う', q_concerns: '研修の期間と制服の貸し出し' };
+    const memo18 = async (pg, tag) => {
+      for (const c of await pg.$$eval('#ivStage textarea.iv-q-memo', els => els.map(e => e.getAttribute('data-cl')))) await pg.fill('#ivStage textarea[data-cl="' + c + '"]', ANS18[c.replace('notes.', '')] || tag + 'の答え');
+    };
+    const saidOf18 = (pg, sec, kind) => pg.$eval(`[data-action="iv-said"][data-sec="${sec}"][data-kind="${kind || 'explain'}"]`, b => b.textContent + '|' + b.getAttribute('aria-pressed'));
+    const vals18 = (pg, ids) => pg.evaluate(ids => { const v = window.RecruitApp.state.checklist.values; return ids.map(id => v[id] === true); }, ids);
+
+    // (1) 初見の通し（画面のボタンだけ。st で状態を書き換えない）: はじめての方へ → 氏名 → 面接を始める → ①〜⑤ → 評価 → 報告書 → 押印 → 保存
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await fresh();
+    const in18 = await page.evaluate(() => ({ intro: !!document.getElementById('introCard'), stored: (() => { try { return localStorage.getItem('recruit.intro.v1'); } catch (e) { return 'x'; } })() }));
+    await view18(page, 'p13-prep.png');
+    await page.click('#introOk');
+    await wait(150);
+    const in18b = await page.evaluate(() => ({ intro: !!document.getElementById('introCard'), stored: localStorage.getItem('recruit.intro.v1'), focus: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.field : '' }));
+    expect(in18.intro && in18.stored === null && !in18b.intro && in18b.stored === '1' && in18b.focus === 'name',
+      'E18 (1)(7) 初回は「はじめての方へ」・［わかった］で閉じて localStorage に覚える（recruit.intro.v1 = 1）・氏名の欄にフォーカス: ' + JSON.stringify({ in18, in18b }));
+    await page.fill('[data-field="name"]', '流れ 太郎');
+    await page.fill('[data-field="age"]', '20');
+    await page.selectOption('[data-field="category"]', '大学2年生');
+    await page.click('[data-action="cl-set"][data-cl="header.posting"][data-value="short"]');
+    await page.selectOption('#saInterviewer', '笹川 晴央');
+    await page.click('#saNext');
+    await wait(300);
+    // ① 勤務条件: 必須条件 一致×2・記入欄・［説明した］・メモ 3
+    await page.click('[data-action="cl-set"][data-cl="values.must_weekly"][data-value="match"]');
+    await page.click('[data-action="cl-set"][data-cl="values.must_busy"][data-value="match"]');
+    await page.click('[data-action="cl-set"][data-cl="values.weekend"][data-value="both"]');
+    await page.fill('#ivStage input[data-cl="values.busy_ng"]', 'なし');
+    await page.click('[data-action="cl-set"][data-cl="values.term"][data-value="short"]');
+    await page.fill('#ivStage input[data-cl="values.start_date"]', '2026-11-01');
+    await page.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    await memo18(page, '①');
+    await wait(150);
+    const f18 = { conditions: await fit18(page) };
+    await view18(page, 'p13-interview-1.png');
+    const s18a = { said: await saidOf18(page, 'conditions'), v: await vals18(page, ['ex_fare', 'ex_hours', 'ex_contract', 'ex_switch']) };
+    // ② 以降: ［次へ］・［説明した］・メモ（③ から ④ へは Ctrl+Enter）
+    await page.click('#ivNext');
+    await wait(250);
+    await page.click('[data-action="iv-said"][data-sec="continuity"][data-kind="explain"]');
+    await memo18(page, '②');
+    await wait(150);
+    f18.continuity = await fit18(page);
+    await view18(page, 'p13-interview-2.png');
+    await page.click('#ivNext');
+    await wait(250);
+    await page.click('[data-action="iv-said"][data-sec="job"][data-kind="explain"]');
+    await memo18(page, '③');
+    f18.job = await fit18(page);
+    await page.focus('#ivStage textarea[data-cl="notes.q_unsure"]');
+    await page.keyboard.press('Control+Enter');
+    await wait(250);
+    const ce18 = await page.evaluate(() => ({ sec: document.getElementById('ivStage').dataset.sec, focus: document.activeElement && document.activeElement.id }));
+    await page.click('[data-action="iv-said"][data-sec="teamwork"][data-kind="explain"]');
+    await memo18(page, '④');
+    f18.teamwork = await fit18(page);
+    await page.click('#ivNext');
+    await wait(250);
+    await page.click('[data-action="iv-said"][data-sec="reverse"][data-kind="notify"]');
+    await memo18(page, '⑤');
+    await wait(150);
+    f18.reverse = await fit18(page);
+    const end18 = await page.textContent('#ivNext');
+    await page.click('#ivNext');
+    await wait(300);
+    expect(s18a.said === '✓ 説明した|true' && s18a.v.every(Boolean) && ce18.sec === 'teamwork' && ce18.focus === 'ivStageH' && end18 === '面接を終えて評価へ →' && await step() === 3,
+      'E18 (1) 面接: ① で［説明した］（短期求人なので 4 項目）・Ctrl+Enter で次の段階（④・見出しにフォーカス）・⑤ の「面接を終えて評価へ →」で評価へ: ' + JSON.stringify({ s18a, ce18, end18 }));
+    // 1440×900: ②〜⑤ は段階の下端が操作行より上（スクロールなし）・① ははみ出し 80px 以内。操作行は画面の下端
+    expect(['continuity', 'job', 'teamwork', 'reverse'].every(k => f18[k].over <= 0 && f18[k].scroll <= 1) && f18.conditions.over <= 80 && Object.keys(f18).every(k => Math.abs(f18[k].footBottom) <= 1),
+      'E18 1440×900: ②〜⑤ は段階が操作行より上でスクロールなし・① ははみ出し 80px 以内・操作行は画面の下端: ' + JSON.stringify(f18));
+    // 評価: 確認点 6 つに ○・人物像 7 つに 4・総合判断「採用」・面接所見 → 報告書へ
+    for (const b of await page.$$('#stepContent .cl-rate-row [data-action="cl-set"][data-value="good"]')) await b.click();
+    for (const id of PS18) await page.click('[data-action="ps-set"][data-persona="' + id + '"][data-score="4"]');
+    await page.click('[data-action="cl-set"][data-cl="overall"][data-value="hire"]');
+    await page.fill('#clIvNotes', '受け答えが丁寧で、具体的に話せていた。');
+    await wait(150);
+    const ev18 = await page.evaluate(() => ({ res: document.getElementById('evResultTitle').textContent, why: document.getElementById('evResultWhy').textContent, miss: document.getElementById('evMissing').textContent,
+      qa: Array.from(document.querySelectorAll('#cl-conditions .ev-qa > div')).map(d => d.querySelector('dt').textContent + '=' + d.querySelector('dd').textContent),
+      said: Array.from(document.querySelectorAll('.ev-said')).map(e => e.textContent), kv: Array.from(document.querySelectorAll('#cl-conditions .ev-kv > div')).map(d => d.querySelector('dt').textContent + '=' + d.querySelector('dd').textContent) }));
+    await full18(page, 'p13-evaluate.png');
+    expect(ev18.res === '採用推奨' && ev18.why === '総合判断「採用」のとおり' && ev18.miss === '未入力はありません' &&
+      JSON.stringify(ev18.qa) === JSON.stringify(['短期／長期の希望=' + ANS18.q_term, '最初の2か月で条件を満たせない可能性=' + ANS18.q_two_months, '家族の反対=' + ANS18.q_family]) &&
+      JSON.stringify(ev18.said) === JSON.stringify(['説明：✓ 説明した（4/4）', '説明：✓ 説明した（3/3）', '説明：✓ 説明した（4/4）', '説明：✓ 説明した（3/3）', '合否連絡：✓ 伝えた']) &&
+      ev18.kv.includes('土日勤務可否=両日') && ev18.kv.includes('契約開始日の希望=2026/11/01') && ev18.kv.includes('初回契約終了=—'),
+      'E18 (1) 評価: 段階のカードに面接のメモ（質問ごと・記入欄・説明）・いまの結果「採用推奨」（総合判断「採用」のとおり・未入力はありません）: ' + JSON.stringify(ev18));
+    await page.click('#toReportBtn');
+    await wait(400);
+    const rp18 = await page.evaluate(() => ({ step: window.RecruitApp.state.step, res: (document.querySelector('#appPaper .cl-tile-res') || {}).textContent || '',
+      rows: Array.from(document.querySelectorAll('#appPaper .cl-nm-q[data-cl-note]')).map(r => r.dataset.clNote), back: (document.getElementById('backToChecklist') || {}).textContent,
+      save: (document.getElementById('reportSaveBtn') || {}).textContent, lead: (document.querySelector('#stepLead span') || {}).textContent }));
+    await page.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
+    await wait(150);
+    const sv18 = await saveRecord('p13-flow.html');
+    const r18 = sv18.rec, tmg18 = r18.checklist.timing || {};
+    expect(rp18.step === 4 && rp18.res.includes('採用推奨') && rp18.rows.length === 13 && rp18.back === '← 評価に戻る' && rp18.save === '💾 報告書を保存（HTML）' &&
+      rp18.lead === '用紙を確かめて押印し、報告書を保存（HTML）します。' && r18.step === 4 && Object.keys(r18.checklist.notes).filter(k => /^q_/.test(k)).length === 13 &&
+      !!tmg18.startedAt && !!tmg18.endedAt && JSON.stringify(Object.keys(tmg18.perStage || {}).sort()) === JSON.stringify(SECS18.slice().sort()) && tmg18.stage === 'reverse' &&
+      r18.management.interviewer.name === '笹川 晴央' && r18.judgment.result === 'recommend',
+      'E18 (1) 報告書: 採用推奨・A4 に質問ごとのメモ 13 行・押印して保存（step 4・notes の質問 13・timing の開始／終了・5 段階・最後は ⑤）: ' + JSON.stringify({ rp18, timing: tmg18 }));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await wait(150);
+
+    // (2) 段階のチップとタイマー（別の BrowserContext・page.clock で時計を進める。docs/SPEC-flow.md 3-7・F10〜F12）
+    const ctx18 = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'ja-JP', acceptDownloads: true });
+    const tp = await ctx18.newPage();
+    tp.on('pageerror', e => e18.push('timer: ' + e.message));
+    tp.on('console', m => { if (m.type() === 'error') e18.push('timer console: ' + m.text()); });
+    tp.on('dialog', d => d.accept());
+    await tp.clock.install({ time: NOW });
+    await tp.goto(FILE);
+    await tp.waitForTimeout(300);
+    const T0 = +NOW + 60000;
+    await tp.clock.pauseAt(new Date(T0));
+    const tm18 = () => tp.evaluate(() => { const g = (id) => (document.getElementById(id) || {}).textContent || ''; const s = document.getElementById('ivTStage');
+      return { stage: document.getElementById('ivStage') ? document.getElementById('ivStage').dataset.sec : '', val: g('ivTStageVal'), goal: g('ivTStageGoal'), total: g('ivTTotal'),
+        over: !!s && s.classList.contains('is-over'), late: !!s && s.classList.contains('is-late'),
+        chips: Array.from(document.querySelectorAll('#ivChips .iv-chip')).map(c => (c.classList.contains('is-current') ? '*' : '') + c.querySelector('.iv-chip-no').textContent + c.querySelector('.iv-chip-s').textContent) }; });
+    const tming18 = () => tp.evaluate(() => JSON.parse(JSON.stringify(window.RecruitApp.state.checklist.timing || null)));
+    await tp.fill('[data-field="name"]', '時計 花子');
+    await tp.click('[data-action="cl-set"][data-cl="header.posting"][data-value="short"]');
+    await tp.click('#saNext');
+    await tp.waitForTimeout(200);
+    const t18a = await tm18(), st18a = await tming18();
+    const dirty18 = await tp.evaluate(() => { window.RecruitApp.state.dirty = false; return true; });
+    await tp.fill('#ivStage textarea[data-cl="notes.q_term"]', '短期希望。2か月のあとは長期も相談したい');
+    await tp.fill('#ivStage textarea[data-cl="notes.q_two_months"]', '試験期間の1月は週2日になる可能性あり');
+    await tp.click('[data-action="cl-set"][data-cl="values.must_weekly"][data-value="match"]');
+    await tp.click('[data-action="cl-set"][data-cl="values.must_busy"][data-value="match"]');
+    await tp.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    await tp.evaluate(() => { window.RecruitApp.state.dirty = false; });
+    await tp.clock.runFor(372000);
+    const t18b = await tm18();
+    const clean18 = await tp.evaluate(() => window.RecruitApp.state.dirty === false && window.RecruitApp.state.judgment === null);
+    await tp.clock.runFor(229000);
+    const t18c = await tm18();
+    await tp.clock.runFor(299000);
+    const t18d = await tm18();
+    expect(dirty18 && t18a.stage === 'conditions' && t18a.val === '00:00' && t18a.goal === '/ 目安 10分' && t18a.total === '00:00' && !!st18a && st18a.startedAt === new Date(T0).toISOString() &&
+      st18a.stage === 'conditions' && st18a.perStage.conditions === 0 && t18b.val === '06:12' && !t18b.over && !t18b.late && t18b.total === '06:12' && clean18 &&
+      t18c.val === '10:01' && t18c.over && !t18c.late && t18d.val === '15:00' && t18d.over && t18d.late && t18d.total === '15:00',
+      'E18 (2) タイマー: 開始は 00:00「/ 目安 10分」（startedAt・stage・perStage）→ 6 分 12 秒で「06:12」（色なし。毎秒の表示で記録の変更・判定を起こさない）→ 601 秒で琥珀（.is-over）→ 900 秒で赤（.is-late）・合計 15:00: ' +
+      JSON.stringify({ t18a, st18a, t18b, t18c, t18d, clean18 }));
+    // ダークでもタイマーの超過・「✓ 説明した」・今のチップの文字は 4.5:1 以上（data-theme・prefers-color-scheme の両方）
+    const con18 = () => tp.evaluate(() => {
+      const lum = (c) => { const v = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(x => { x /= 255; return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+      const bg = (el) => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor, m = c.match(/[\d.]+/g); if (m && (m.length < 4 || Number(m[3]) > 0.5)) return c; } return getComputedStyle(document.body).backgroundColor; };
+      const ratio = (el) => { if (!el) return 0; const a = lum(getComputedStyle(el).color), b = lum(bg(el)); return +((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(2); };
+      const st = document.getElementById('ivTStage');
+      const late = ratio(document.getElementById('ivTStageVal'));
+      st.classList.remove('is-late');
+      const over = ratio(document.getElementById('ivTStageVal'));
+      st.classList.add('is-late');
+      return { late, over, said: ratio(document.querySelector('.iv-said[aria-pressed="true"]')), chip: ratio(document.querySelector('.iv-chip.is-current .iv-chip-t')), chipNo: ratio(document.querySelector('.iv-chip.is-current .iv-chip-no')) };
+    });
+    //   ボタンの地の色は transition（.15s）で変わるので、測るあいだは transition を止める（切り替えた直後の途中の色を測らない）
+    await tp.evaluate(() => { const s = document.createElement('style'); s.id = 'e2eNoTr18'; s.textContent = '*{transition:none !important}'; document.head.appendChild(s); });
+    const lt18 = await con18();
+    await tp.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const dk18a = await con18();
+    await tp.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+    await tp.emulateMedia({ colorScheme: 'dark' });
+    const dk18b = await con18();
+    await tp.emulateMedia({ colorScheme: 'light' });
+    await tp.evaluate(() => { const s = document.getElementById('e2eNoTr18'); if (s) s.remove(); });
+    expect([lt18, dk18a, dk18b].every(d => d.late >= 4.5 && d.over >= 4.5 && d.said >= 4.5 && d.chip >= 4.5 && d.chipNo >= 4.5),
+      'E18 タイマーの超過（琥珀・赤）・「✓ 説明した」・今のチップの文字のコントラストはライト・ダーク（data-theme・prefers-color-scheme）とも 4.5:1 以上: ' + JSON.stringify({ lt18, dk18a, dk18b }));
+    // ［次へ］で ② は 00:00 から・① のチップに ✓・使い方・設定を開いているあいだは数えない
+    await tp.click('#ivNext');
+    await tp.waitForTimeout(150);
+    const t18e = await tm18();
+    await tp.fill('#ivStage textarea[data-cl="notes.q_prev_job"]', '前職は飲食で1年。学業のため退職');
+    await tp.click('.nav-item[data-view="help"]');
+    await tp.clock.runFor(30000);
+    await tp.click('.nav-item[data-view="settings"]');
+    await tp.clock.runFor(30000);
+    await tp.click('.nav-item[data-view="judge"]');
+    await tp.waitForTimeout(150);
+    const t18f = await tm18();
+    await tp.clock.runFor(185000);
+    const t18g = await tm18();
+    await tp.click('#ivChips [data-sec="conditions"]');
+    await tp.waitForTimeout(150);
+    const t18h = await tm18();
+    await tp.click('#ivChips [data-sec="reverse"]');
+    await tp.waitForTimeout(150);
+    const t18i = await tm18();
+    await tp.fill('#ivStage textarea[data-cl="notes.q_concerns"]', '終電に間に合うか');
+    await tp.click('[data-action="iv-said"][data-sec="reverse"][data-kind="notify"]');
+    expect(t18e.stage === 'continuity' && t18e.val === '00:00' && t18e.goal === '/ 目安 3分' && t18e.total === '15:00' && JSON.stringify(t18e.chips) === JSON.stringify(['①✓', '*②', '③', '④', '⑤']) &&
+      t18f.stage === 'continuity' && t18f.val === '00:00' && t18f.total === '15:00' && t18g.val === '03:05' && t18g.over && !t18g.late && t18g.total === '18:05' &&
+      t18h.stage === 'conditions' && t18h.val === '15:00' && t18h.total === '18:05' && t18i.stage === 'reverse' && t18i.goal === '/ 最大 10分' && t18i.val === '00:00' &&
+      JSON.stringify(t18i.chips) === JSON.stringify(['①✓', '②✓', '③', '④', '*⑤']),
+      'E18 (2) ［次へ］で ② は 00:00（目安 3分）・① のチップに ✓・使い方／設定の 60 秒は数えない・185 秒で 03:05（超過）・合計 18:05・① のチップで戻ると 15:00 から・⑤ は「/ 最大 10分」: ' +
+      JSON.stringify({ t18e, t18f, t18g, t18h, t18i }));
+    await tp.click('#ivNext');
+    await tp.waitForTimeout(300);
+    const st18b = await tming18();
+    const ev18t = await tp.evaluate(() => ({ step: window.RecruitApp.state.step, sub: document.getElementById('evTimeSub').textContent, ph: document.getElementById('evTimeMin').placeholder, val: document.getElementById('evTimeMin').value,
+      st: Array.from(document.querySelectorAll('#evTime .ev-t-i')).map(e => e.textContent), sec: Array.from(document.querySelectorAll('.ev-sec .ev-sec-time')).map(e => e.textContent) }));
+    expect(ev18t.step === 3 && st18b.endedAt === new Date(T0 + 372000 + 229000 + 299000 + 60000 + 185000).toISOString() && st18b.startedAt === new Date(T0).toISOString() &&
+      JSON.stringify(st18b.perStage) === JSON.stringify({ conditions: 900, continuity: 185, reverse: 0 }) && st18b.stage === 'reverse' &&
+      ev18t.sub === '（タイマー 18分05秒・目安 41分）' && ev18t.ph === '18' && ev18t.val === '' && JSON.stringify(ev18t.st) === JSON.stringify(['① 15:00', '② 3:05', '③ —', '④ —', '⑤ 0:00']) &&
+      JSON.stringify(ev18t.sec) === JSON.stringify(['15:00（目安 10分）', '3:05（目安 3分）', '—（目安 10分）', '—（目安 8分）', '0:00（最大 10分）']),
+      'E18 (2) 面接を終えると endedAt・perStage（① 900・② 185・⑤ 0）。評価の面接時間は「タイマー 18分05秒・目安 41分」・入力欄の placeholder 18・段階ごとの時間（表示しなかった段階は —）: ' + JSON.stringify({ st18b, ev18t }));
+    // 評価を付けて報告書へ: A4 の面接時間「18分（目安 41分）」→ 評価で 35 分と入れると「35分（目安 41分）」
+    for (const b of await tp.$$('#stepContent .cl-rate-row [data-action="cl-set"][data-value="good"]')) await b.click();
+    for (const id of PS18) await tp.click('[data-action="ps-set"][data-persona="' + id + '"][data-score="4"]');
+    await tp.click('[data-action="cl-set"][data-cl="overall"][data-value="hire"]');
+    await tp.fill('#clIvNotes', '笑顔があり、質問にも具体的に答えていた。');
+    await tp.click('#toReportBtn');
+    await tp.waitForTimeout(400);
+    const kv18 = (pg) => pg.evaluate(() => { const d = Array.from(document.querySelectorAll('#appPaper dl.cl-sh-kv > div')).find(x => (x.querySelector('dt') || {}).textContent === '面接時間'); return d ? d.querySelector('dd').textContent : null; });
+    const a18 = { time: await kv18(tp), q: await tp.$$eval('#appPaper .cl-nm-q[data-cl-note] .cl-nm-k', els => els.map(e => e.textContent)) };
+    await tp.mouse.move(1, 1);
+    await tp.evaluate((css) => { const s = document.createElement('style'); s.id = 'e2eNoSticky18'; s.textContent = css; document.head.appendChild(s); }, NOSTICKY18);
+    await tp.locator('#appPaper').screenshot({ path: path.join(OUT, 'p13-report.png') });
+    await tp.evaluate(() => { const s = document.getElementById('e2eNoSticky18'); if (s) s.remove(); });
+    await tp.click('#backToChecklist');
+    await tp.waitForTimeout(250);
+    await tp.fill('#evTimeMin', '35');
+    await tp.waitForTimeout(100);
+    await tp.click('#toReportBtn');
+    await tp.waitForTimeout(400);
+    a18.manual = await kv18(tp);
+    const [dl18] = await Promise.all([tp.waitForEvent('download'), tp.click('#btnSave')]);
+    const f18s = path.join(OUT, 'p13-timer.html');
+    await dl18.saveAs(f18s);
+    const rt18 = parseRecord(fs.readFileSync(f18s, 'utf8')).checklist.timing;
+    await tp.click('#btnNew');
+    await tp.waitForTimeout(200);
+    await tp.setInputFiles('#fileInput', f18s);
+    await tp.waitForTimeout(500);
+    const lt18b = { step: await tp.evaluate(() => window.RecruitApp.state.step), timing: await tming18(), time: await kv18(tp) };
+    const canon18 = (o) => JSON.stringify(o && Object.keys(o).sort().map(k => [k, o[k]]));   // キーの順は問わない（読み込みの正規化で並びが変わる）
+    expect(a18.time === '18分（目安 41分）' && JSON.stringify(a18.q) === JSON.stringify(['①短期／長期の希望', '①最初の2か月で条件を満たせない可能性', '②前のバイトの期間・退職理由', '⑤気になる点（逆質問）']) &&
+      a18.manual === '35分（目安 41分）' && rt18.min === 35 && JSON.stringify(rt18.perStage) === JSON.stringify(st18b.perStage) && rt18.endedAt === st18b.endedAt &&
+      lt18b.step === 4 && canon18(lt18b.timing) === canon18(rt18) && lt18b.time === '35分（目安 41分）',
+      'E18 (2) 報告書の A4 に「面接時間 18分（目安 41分）」と質問ごとのメモ・評価で 35 分と入れると「35分（目安 41分）」・保存 → 読み込みで timing が同じ: ' + JSON.stringify({ a18, rt18, lt18b }));
+    await ctx18.close();
+
+    // (3) 必須条件の不一致（docs/SPEC-flow.md 3-8）: 赤い案内・②〜④ は省略可・「⑤ 逆質問へ」・評価は不採用推奨で未入力の強調なし・一致に戻すと消える
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.click('#btnNew');
+    await wait(200);
+    await fillScript({ name: '不一致 次郎', posting: 'short' });
+    await page.click('#saNext');
+    await wait(300);
+    await page.click('[data-action="cl-set"][data-cl="values.must_busy"][data-value="match"]');
+    await page.click('[data-action="cl-set"][data-cl="values.must_weekly"][data-value="mismatch"]');
+    await wait(150);
+    const mm18 = await page.evaluate(() => ({ shown: !document.getElementById('ivMustAlert').classList.contains('hidden'), text: document.getElementById('ivMustAlertText').textContent,
+      chips: Array.from(document.querySelectorAll('#ivChips .iv-chip')).map(c => c.querySelector('.iv-chip-no').textContent + c.querySelector('.iv-chip-s').textContent),
+      jump: !document.getElementById('ivMustJump').classList.contains('hidden') }));
+    await view18(page, 'p13-interview-must-ng.png');
+    await page.click('#ivMustJump');
+    await wait(250);
+    const mm18b = await page.evaluate(() => ({ sec: document.getElementById('ivStage').dataset.sec, shown: !document.getElementById('ivMustAlert').classList.contains('hidden'), jump: !document.getElementById('ivMustJump').classList.contains('hidden') }));
+    await page.click('#ivNext');
+    await wait(300);
+    const mm18c = await page.evaluate(() => ({ step: window.RecruitApp.state.step, skip: Array.from(document.querySelectorAll('.ev-sec.cl-skippable')).map(e => e.dataset.sec), missing: document.querySelectorAll('.is-missing').length,
+      res: document.getElementById('evResultTitle').textContent, why: document.getElementById('evResultWhy').textContent, miss: document.getElementById('evMissing').textContent,
+      note: Array.from(document.querySelectorAll('.ev-sec.cl-skippable .cl-skip-note')).map(e => getComputedStyle(e).display !== 'none') }));
+    expect(mm18.shown && mm18.text === '必須条件が合いません。追加で確認し、解消しなければ ⑤ 逆質問へ進んで最大 10 分で終了します' && JSON.stringify(mm18.chips) === JSON.stringify(['①', '②省略可', '③省略可', '④省略可', '⑤']) && mm18.jump &&
+      mm18b.sec === 'reverse' && mm18b.shown && !mm18b.jump && mm18c.step === 3 && JSON.stringify(mm18c.skip) === JSON.stringify(['continuity', 'job', 'teamwork']) && mm18c.missing === 0 &&
+      mm18c.res === '不採用推奨' && mm18c.why === '必須条件が不一致のため' && mm18c.miss === '必須条件の不一致のため、ほかの入力は任意です' && mm18c.note.length === 3 && mm18c.note.every(Boolean),
+      'E18 (3) 必須条件の不一致: 案内（⑤ 逆質問へ・最大 10 分）・②〜④ のチップに省略可・「⑤ 逆質問へ」で ⑤（案内は残りボタンは消える）・評価は ②〜④ が省略可・未入力の強調なし・不採用推奨: ' + JSON.stringify({ mm18, mm18b, mm18c }));
+    await page.click('#cl-conditions .ev-fix[data-action="iv-go"]');
+    await wait(250);
+    const fix18 = await page.evaluate(() => ({ step: window.RecruitApp.state.step, sec: document.getElementById('ivStage').dataset.sec }));
+    await page.click('[data-action="cl-set"][data-cl="values.must_weekly"][data-value="match"]');
+    await wait(150);
+    const mm18d = await page.evaluate(() => ({ shown: !document.getElementById('ivMustAlert').classList.contains('hidden'), skip: document.querySelectorAll('#ivChips .iv-chip.is-skip').length, toEval: (document.getElementById('ivToEval') || {}).textContent || '' }));
+    expect(fix18.step === 2 && fix18.sec === 'conditions' && !mm18d.shown && mm18d.skip === 0 && mm18d.toEval === '評価に戻る',
+      'E18 (3) 評価の「✎ 面接の画面で直す」で ① へ・一致に戻すと案内と省略可が消える・面接を終えた後は「評価に戻る」も出る: ' + JSON.stringify({ fix18, mm18d }));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await wait(150);
+
+    // (4) 説明した（docs/SPEC-flow.md 3-4）: 通常求人 2 項目・一部説明しなかった・mixed／短期求人 4 項目／未選択は 4 項目（短期のみ 2 つに印）で対象は 2 つ／⑤［伝えた］
+    await page.click('#btnNew');
+    await wait(200);
+    await fillScript({ name: '説明 三郎', posting: 'regular' });
+    await page.click('#saNext');
+    await wait(300);
+    const EX18 = ['ex_fare', 'ex_hours', 'ex_contract', 'ex_switch'];
+    const li18 = () => page.$$eval('#ivStage .iv-say-list[data-kind="explain"] li', els => els.map(e => e.dataset.item + (e.querySelector('.tag') ? '*' : '')));
+    const x18 = { regular: await li18() };
+    await page.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    x18.on = { b: await saidOf18(page, 'conditions'), v: await vals18(page, EX18) };
+    await page.click('[data-action="iv-said-items"][data-sec="conditions"][data-kind="explain"]');
+    await wait(100);
+    x18.items = await page.$$eval('#ivStage .iv-say-list.is-items input[type="checkbox"]', els => els.map(e => e.dataset.cl + ':' + e.checked));
+    await page.click('#ivStage .iv-say-list input[data-cl="values.ex_hours"]');
+    await wait(100);
+    x18.mixed = { b: await saidOf18(page, 'conditions'), v: await vals18(page, EX18), li: await page.$$eval('#ivStage .iv-say-list li.is-on', els => els.map(e => e.dataset.item)) };
+    await page.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    x18.all = { b: await saidOf18(page, 'conditions'), v: await vals18(page, EX18) };
+    await page.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    x18.off = { b: await saidOf18(page, 'conditions'), keys: await st(() => Object.keys(window.RecruitApp.state.checklist.values).filter(k => k.indexOf('ex_') === 0)) };
+    expect(JSON.stringify(x18.regular) === JSON.stringify(['ex_fare', 'ex_hours']) && x18.on.b === '✓ 説明した|true' && JSON.stringify(x18.on.v) === JSON.stringify([true, true, false, false]) &&
+      JSON.stringify(x18.items) === JSON.stringify(['values.ex_fare:true', 'values.ex_hours:true']) && x18.mixed.b === '✓ 一部説明した（1/2）|mixed' && JSON.stringify(x18.mixed.v) === JSON.stringify([true, false, false, false]) &&
+      JSON.stringify(x18.mixed.li) === JSON.stringify(['ex_fare']) && x18.all.b === '✓ 説明した|true' && JSON.stringify(x18.all.v) === JSON.stringify([true, true, false, false]) && x18.off.b === '説明した|false' && x18.off.keys.length === 0,
+      'E18 (4) 通常求人: ① の説明は 2 項目（短期のみなし）・［説明した］で 2 つ・「一部説明しなかった ▾」で 2 つのチェック・1 つ外すと「✓ 一部説明した（1/2）」（mixed）・押すと全部・もう一度で全部外れる（キーが消える）: ' + JSON.stringify(x18));
+    await goTo(1);
+    await setCl('header.posting', 'short');
+    await goTo(2);
+    x18.short = await li18();
+    await page.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    x18.shortV = await vals18(page, EX18);
+    await page.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    await goTo(1);
+    await page.click('[data-action="cl-set"][data-cl="header.posting"][data-value="short"]');   // 押し直して未選択に
+    await wait(100);
+    await goTo(2);
+    x18.none = { li: await li18(), note: await page.$$eval('#ivStage .k-say .iv-note', els => els.map(e => e.textContent)) };
+    await page.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    x18.noneV = { v: await vals18(page, EX18), b: await saidOf18(page, 'conditions') };
+    await ivGo('reverse');
+    await page.click('[data-action="iv-said"][data-sec="reverse"][data-kind="notify"]');
+    x18.nt = { v: await vals18(page, ['nt_hire', 'nt_reject']), b: await saidOf18(page, 'reverse', 'notify'), part: await page.textContent('[data-action="iv-said-items"][data-sec="reverse"][data-kind="notify"]'),
+      note: await page.$$eval('#ivStage .k-say .iv-note', els => els.map(e => e.textContent)) };
+    expect(JSON.stringify(x18.short) === JSON.stringify(EX18) && x18.shortV.every(Boolean) && JSON.stringify(x18.none.li) === JSON.stringify(['ex_fare', 'ex_hours', 'ex_contract*', 'ex_switch*']) &&
+      JSON.stringify(x18.none.note) === JSON.stringify(['※は短期求人に応募の場合のみご説明ください']) && JSON.stringify(x18.noneV.v) === JSON.stringify([true, true, false, false]) && x18.noneV.b === '✓ 説明した|true' &&
+      x18.nt.v.every(Boolean) && x18.nt.b === '✓ 伝えた|true' && x18.nt.part === '一部伝えなかった ▾' && JSON.stringify(x18.nt.note) === JSON.stringify(['面接の最後に伝えたらチェック']),
+      'E18 (4) 短期求人は 4 項目とも対象・求人が未選択なら 4 項目（短期のみ 2 つに印と注記）で［説明した］は 2 つだけ・⑤［伝えた］で合否連絡 2 項目（「一部伝えなかった」・注記）: ' + JSON.stringify(x18));
+
+    // (5) 質問ごとのメモ（docs/SPEC-flow.md 3-5・5-2）: notes に入る・Tab で次の質問のメモ・メモが伸びる・評価のカード・A4 の行・保存 HTML の窓（全文）・XSS は文字のまま
+    await ivGo('conditions');
+    const XSS18 = '<img src=x onerror="window.__x18=1">短期希望';
+    await page.fill('#ivStage textarea[data-cl="notes.q_term"]', XSS18);
+    await page.focus('#ivStage textarea[data-cl="notes.q_term"]');
+    await page.keyboard.press('Tab');
+    const tab18 = await page.evaluate(() => (document.activeElement || {}).dataset ? document.activeElement.dataset.cl : '');
+    const h18a = await page.evaluate(() => Math.round(document.querySelector('#ivStage textarea[data-cl="notes.q_family"]').getBoundingClientRect().height));
+    await page.fill('#ivStage textarea[data-cl="notes.q_family"]', '反対はない\n親には伝えてある\n終電の時間も話した');
+    const h18b = await page.evaluate(() => Math.round(document.querySelector('#ivStage textarea[data-cl="notes.q_family"]').getBoundingClientRect().height));
+    await page.fill('#ivStage textarea[data-cl="notes.q_two_months"]', L(2500));
+    const n18 = await st(() => { const n = window.RecruitApp.state.checklist.notes; return { term: n.q_term, family: n.q_family, two: (n.q_two_months || '').length }; });   // 2,500 字は用紙の空きまで広げても切れる
+    await goTo(3);
+    const qa18 = await page.evaluate(() => { const d = document.querySelector('#cl-conditions .ev-qa > div[data-item="q_term"]'); return d ? { k: d.querySelector('dt').textContent, v: d.querySelector('dd').textContent, img: document.querySelectorAll('#stepContent img').length } : null; });
+    await rateAll('good');
+    await judge();
+    const nm18 = await page.evaluate(() => { const r = document.querySelector('#appPaper .cl-nm-q[data-cl-note="q_term"]'); return r ? { k: r.querySelector('.cl-nm-k').textContent, v: r.querySelector('.cl-nm-v').textContent, img: document.querySelectorAll('#appPaper img').length, x: window.__x18 === 1 } : null; });
+    expect(tab18 === 'notes.q_two_months' && h18b > h18a + 15 && n18.term === XSS18 && n18.family.split('\n').length === 3 && n18.two === 2500 && !!qa18 && qa18.k === '短期／長期の希望' && qa18.v === XSS18 && qa18.img === 0 &&
+      !!nm18 && nm18.k === '①短期／長期の希望' && nm18.v === XSS18 && nm18.img === 0 && !nm18.x,
+      'E18 (5) 質問ごとのメモ: notes.q_term に入る・Tab で次の質問のメモ・3 行で高さが増える・評価の ① のカードに「短期／長期の希望」と答え・A4 に「①短期／長期の希望」の行・<img onerror> は文字のまま: ' +
+      JSON.stringify({ tab18, h18a, h18b, n18, qa18, nm18 }));
+    const sv18b = await saveRecord('p13-memo.html');
+    const rp18b = await newReportPage(e18);
+    await rp18b.goto('file://' + sv18b.file);
+    await rp18b.waitForTimeout(300);
+    const cut18 = await rp18b.evaluate(() => { const v = document.querySelector('#a4 .cl-nm-q[data-cl-note="q_two_months"] .cl-nm-v'); return v ? v.classList.contains('cl-cut') : null; });
+    await rp18b.click('#a4 .cl-nm-q[data-cl-note="q_two_months"] .cl-nm-v');
+    await rp18b.waitForTimeout(150);
+    const pop18 = await rp18b.evaluate(() => { const p = document.getElementById('a4Pop'); return p ? { kind: p.dataset.kind, h: p.querySelector('.pop-h').textContent, len: p.querySelector('.pop-text').textContent.length } : null; });
+    const x18b = await rp18b.evaluate(() => ({ img: document.querySelectorAll('#a4 img').length, x: window.__x18 === 1, v: (document.querySelector('#a4 .cl-nm-q[data-cl-note="q_term"] .cl-nm-v') || {}).textContent }));
+    await rp18b.close();
+    expect(cut18 === true && !!pop18 && pop18.kind === 'memo' && pop18.h === '①最初の2か月で条件を満たせない可能性' && pop18.len === 2500 && x18b.img === 0 && !x18b.x && x18b.v === XSS18,
+      'E18 (5) 保存 HTML: 切れた質問のメモ（「…」）をクリックすると窓に全文（見出しは「①最初の2か月…」）・<img onerror> は文字のまま: ' + JSON.stringify({ cut18, pop18, x18b }));
+
+    // (6) 評価の画面（docs/SPEC-flow.md 4-3〜4-6）: 未入力の数と強調 → 入れると減る → 全部で採用推奨 → 保留・必須条件の未確認のバッジ
+    await page.click('#btnNew');
+    await wait(200);
+    await fillScript({ name: '評価 四郎' });
+    await page.click('#saNext');
+    await wait(300);
+    await page.click('[data-action="cl-set"][data-cl="values.must_weekly"][data-value="match"]');
+    await page.click('[data-action="cl-set"][data-cl="values.must_busy"][data-value="match"]');
+    await ivGo('reverse');
+    await page.click('#ivNext');
+    await wait(300);
+    const evs18 = () => page.evaluate(() => ({ res: document.getElementById('evResultTitle').textContent, why: document.getElementById('evResultWhy').textContent, miss: document.getElementById('evMissing').textContent,
+      none: document.getElementById('evMissing').classList.contains('is-none'), rt: document.querySelectorAll('.cl-rate-row.is-missing').length, ps: document.querySelectorAll('#clPersona .cl-ps-row.is-missing').length,
+      ov: document.querySelectorAll('.cl-overall-row.is-missing').length, must: document.querySelectorAll('.ev-must .cl-must-row.is-missing').length, score: document.getElementById('clNavScore').textContent,
+      badge: Array.from(document.querySelectorAll('.is-missing .ev-miss')).filter(b => getComputedStyle(b).display !== 'none').map(b => b.textContent),
+      state: Array.from(document.querySelectorAll('.cl-sec-state')).map(e => e.textContent) }));
+    const ev18a = await evs18();
+    await page.click('[data-action="cl-set"][data-cl="values.rt_concrete"][data-value="good"]');
+    const ev18b = await evs18();
+    for (const b of await page.$$('#stepContent .cl-rate-row [data-action="cl-set"][data-value="good"]:not(.active)')) await b.click();
+    for (const id of PS18) await page.click('[data-action="ps-set"][data-persona="' + id + '"][data-score="4"]');
+    await page.click('[data-action="cl-set"][data-cl="overall"][data-value="hire"]');
+    const ev18c = await evs18();
+    await page.click('[data-action="cl-set"][data-cl="overall"][data-value="hold"]');
+    const ev18d = await evs18();
+    await page.click('.ev-must [data-action="cl-set"][data-cl="values.must_busy"][data-value="match"]');   // 押し直して未確認に
+    const ev18e = await evs18();
+    expect(ev18a.res === '上長最終判断要' && ev18a.miss === '未入力：確認点 6・人物像 7・総合判断' && ev18a.rt === 6 && ev18a.ps === 7 && ev18a.ov === 1 && ev18a.must === 0 && ev18a.why === '総合判断が未入力のため' &&
+      ev18b.miss === '未入力：確認点 5・人物像 7・総合判断' && ev18b.rt === 5 &&
+      ev18c.res === '採用推奨' && ev18c.miss === '未入力はありません' && ev18c.none && ev18c.why === '総合判断「採用」のとおり' && ev18c.rt + ev18c.ps + ev18c.ov === 0 &&
+      ev18c.score.includes('面接評価 14/14') && ev18c.score.includes('人物像 28/35') && JSON.stringify(ev18c.state) === JSON.stringify(['済', '済', '済', '済', '済']) &&
+      ev18d.res === '上長最終判断要' && ev18d.why === '総合判断「保留」のため' &&
+      ev18e.must === 1 && ev18e.miss === '未入力：必須条件 1' && ev18e.badge.includes('未確認'),
+      'E18 (6) 評価: 入力前は上長最終判断要・「未入力：確認点 6・人物像 7・総合判断」と行の強調（6・7・1）→ 確認点 1 つで 5 → 全部で採用推奨（総合判断「採用」のとおり・未入力はありません・面接評価 14/14・人物像 28/35）→ 保留は「総合判断「保留」のため」・必須条件の未確認は「未確認」: ' +
+      JSON.stringify({ ev18a, ev18b, ev18c, ev18d, ev18e }));
+
+    // (7) はじめての方へ（docs/SPEC-flow.md F16）: 閉じたら再読込で出ない・fresh() で出る・localStorage が使えなくても閉じられる・「使い方を見る」
+    await page.reload();
+    await wait(300);
+    const in18c = !!(await page.$('#introCard'));
+    await fresh();
+    const in18d = !!(await page.$('#introCard'));
+    await page.click('#introCard [data-action="show-help"]');
+    await wait(200);
+    const help18 = await page.evaluate(() => !document.getElementById('view-help').classList.contains('hidden') && !!document.getElementById('helpInterview'));
+    await toView('judge');
+    const ctx18b = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'ja-JP' });
+    const np = await ctx18b.newPage();
+    const ne18 = [];
+    np.on('pageerror', e => ne18.push(e.message));
+    await np.addInitScript(() => { Storage.prototype.getItem = function () { throw new Error('denied'); }; Storage.prototype.setItem = function () { throw new Error('denied'); }; });
+    await np.clock.setFixedTime(NOW);
+    await np.goto(FILE);
+    await np.waitForTimeout(300);
+    const ns18 = { intro: !!(await np.$('#introCard')) };
+    await np.click('#introOk');
+    await np.waitForTimeout(150);
+    ns18.after = !!(await np.$('#introCard'));
+    await np.fill('[data-field="name"]', '鍵なし');
+    await np.click('#saNext');
+    await np.waitForTimeout(250);
+    await np.click('#ivChips [data-sec="conditions"]');
+    await np.click('#ivPrev');
+    await np.waitForTimeout(250);
+    ns18.back = !!(await np.$('#introCard'));
+    ns18.saNext = await np.textContent('#saNext');
+    await ctx18b.close();
+    expect(!in18c && in18d && help18 && ns18.intro && !ns18.after && !ns18.back && ns18.saNext === '面接に戻る →' && ne18.length === 0,
+      'E18 (7) 「はじめての方へ」: 閉じたら再読込で出ない・localStorage を消すと出る・「使い方を見る」で使い方・localStorage が例外でも閉じられる（このページでは閉じたまま・エラーなし）: ' + JSON.stringify({ in18c, in18d, help18, ns18, ne18 }));
+
+    // (8) 旧レコード（2026-10-16 より前の質問ブロックのメモ・timing なし）: 評価で開く・② に「（以前のメモ）」・面接で直せる・A4 は「ほか 2 問」の行・面接時間なし／回答なしの step 3 は面接で開く
+    const fx18 = fs.readFileSync(path.join(FIX, 'legacy-pre-persona.html'), 'utf8');
+    const old18 = parseRecord(fx18);
+    const mini18 = (rec) => '<!doctype html><meta charset="utf-8"><title>old</title><script type="application/json" id="recruit-record">' + JSON.stringify(rec).replace(/</g, '\\u003c') + '</script>';
+    const fo18 = path.join(OUT, 'p13-legacy-step3.html');
+    fs.writeFileSync(fo18, mini18(Object.assign({}, old18, { step: 3 })));
+    const fo18b = path.join(OUT, 'p13-legacy-step3-empty.html');
+    fs.writeFileSync(fo18b, mini18(Object.assign({}, old18, { step: 3, judgment: null, interviewNotes: '', checklist: Object.assign({}, old18.checklist, { values: {}, notes: {}, overall: '' }) })));
+    await page.click('#btnNew');
+    await wait(200);
+    await page.setInputFiles('#fileInput', fo18);
+    await wait(500);
+    const ol18 = await page.evaluate(() => { const m = document.querySelector('#cl-continuity .ev-oldmemo[data-block="continuity_q"]');
+      return { step: window.RecruitApp.state.step, k: m ? m.querySelector('.ev-memo-k').textContent : '', v: m ? m.querySelector('.ev-memo-v').textContent : '', sub: document.getElementById('evTimeSub').textContent,
+        timing: window.RecruitApp.state.checklist.timing === undefined }; });
+    await goTo(4);
+    const ol18a4 = await page.evaluate(() => ({ k: Array.from(document.querySelectorAll('#appPaper .cl-nm-q[data-cl-block] .cl-nm-k')).map(e => e.textContent), q: document.querySelectorAll('#appPaper .cl-nm-q[data-cl-note]').length,
+      time: Array.from(document.querySelectorAll('#appPaper dl.cl-kv dt')).some(e => e.textContent === '面接時間') }));
+    await goTo(2);
+    await ivGo('continuity');
+    const ol18iv = await page.evaluate(() => { const t = document.querySelector('#ivStage .iv-oldmemo textarea[data-cl="notes.continuity_q"]'); return t ? { v: t.value, label: t.closest('.iv-oldmemo').querySelector('label').textContent } : null; });
+    await page.click('#btnNew');
+    await wait(200);
+    await page.setInputFiles('#fileInput', fo18b);
+    await wait(500);
+    const ol18e = await page.evaluate(() => ({ step: window.RecruitApp.state.step, stage: document.getElementById('ivStage') ? document.getElementById('ivStage').dataset.sec : '' }));
+    expect(ol18.step === 3 && ol18.k === '（以前のメモ）' && ol18.v === '前職は飲食で2年。学業との両立のため退職。' && ol18.sub === '（タイマーの記録なし・目安 41分）' && ol18.timing &&
+      JSON.stringify(ol18a4.k) === JSON.stringify(['②前のバイトの期間・退職理由 ほか2問']) && ol18a4.q === 0 && !ol18a4.time &&
+      !!ol18iv && ol18iv.v === '前職は飲食で2年。学業との両立のため退職。' && ol18iv.label === '（以前のメモ）' && ol18e.step === 2 && ol18e.stage === 'conditions',
+      'E18 (8) 旧レコード（質問ブロックのメモ・timing なし）: 評価で開き ② に「（以前のメモ）」・タイマーの記録なし・A4 は「②前のバイトの期間・退職理由 ほか2問」の行・面接時間なし・面接 ② で直せる・回答なしの step 3 は面接で開く: ' +
+      JSON.stringify({ ol18, ol18a4, ol18iv, ol18e }));
+
+    // (9) 記入シート（docs/SPEC-flow.md 5-3）: 準備の「🖨 記入シート」→ 面接 → 評価の並び・質問ごとに答えの線 13・既定の白紙は pp-a2・確認点 6 行は評価の部分・人物像 7 行・PDF 1 ページ（入力ありも）
+    await page.click('#btnNew');
+    await wait(200);
+    await page.evaluate(() => { window.__pp18 = 0; window.print = function () { window.__pp18++; }; });
+    await page.click('#saPaperBtn');
+    await wait(150);
+    const pc18 = await page.evaluate(() => window.__pp18);
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await wait(100);
+    const pp18 = async (name) => {
+      await st(() => window.RecruitApp.preparePaperSheet(true));
+      const m = await page.evaluate(() => { const sh = document.querySelector('#clSheet .pp-sheet');
+        return { cls: sh.className, parts: Array.from(sh.querySelectorAll('.pp-part')).map(e => e.dataset.part), qa: sh.querySelectorAll('.pp-qa[data-pp-q]').length, ql: sh.querySelectorAll('.pp-qa[data-pp-q] .pp-ql').length,
+          ask: sh.querySelectorAll('.pp-qa .pp-qk').length, rateSum: sh.querySelectorAll('.pp-sum .pp-rate tr[data-pp-item]').length, rateSec: sh.querySelectorAll('.pp-sec .pp-rate, .pp-sec tr[data-pp-item^="rt_"]').length,
+          ps: sh.querySelectorAll('.pp-sum tr[data-pp-ps]').length, time: !!sh.querySelector('.pp-ov .pp-ov-time'), ex: Array.from(sh.querySelectorAll('.pp-ex .pp-k')).map(e => e.textContent) }; });
+      await page.emulateMedia({ media: 'print' });
+      const pdf = path.join(OUT, name + '.pdf');
+      await page.pdf({ path: pdf, format: 'A4', preferCSSPageSize: true, printBackground: true });
+      await page.emulateMedia({ media: null });
+      await st(() => window.RecruitApp.preparePaperSheet(false));
+      m.pages = pdfPagesOf(pdf);
+      m.pdf = pdf;
+      return m;
+    };
+    const pb18 = await pp18('p13-paper');
+    if (hasPpm14) png14(pb18.pdf, path.join(OUT, 'p13-paper'));
+    await fillScript({ name: '記入 五郎', age: 19, gender: '女性', category: '大学1年生', posting: 'short', taxi: '可・2,000円', interviewer: '笹川 晴央' });
+    const pf18 = await pp18('p13-paper-filled');
+    expect(pc18 === 1 && pb18.cls === 'pp-sheet pp-a2' && JSON.stringify(pb18.parts) === JSON.stringify(['iv', 'ev']) && pb18.qa === 13 && pb18.ql === 13 && pb18.ask === 13 && pb18.rateSum === 6 && pb18.rateSec === 0 &&
+      pb18.ps === 7 && pb18.time && (pb18.pages === -1 || pb18.pages === 1) && pf18.qa === 13 && (pf18.pages === -1 || pf18.pages === 1) && pf18.cls.includes('pp-a2'),
+      'E18 (9) 記入シート: 「面接」→「評価」の順・質問ごとの答えの線 13・既定の白紙は pp-a2・確認点 6 行は評価の部分（段階の中に無い）・人物像 7 行・面接時間の欄・PDF 1 ページ（準備に入力しても）: ' +
+      JSON.stringify({ pc18, pb18: Object.assign({}, pb18, { pdf: undefined }), pf18: { cls: pf18.cls, pages: pf18.pages } }));
+
+    // 画面の大きさ: 1280×800 で ②〜⑤ はスクロールなし・390px で面接・評価の横スクロールなし（p13-interview-390.png）
+    await page.click('[data-action="script-next"]');
+    await wait(300);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await wait(200);
+    const f18b = {};
+    for (const sec of SECS18) { await ivGo(sec); f18b[sec] = await fit18(page); }
+    expect(['continuity', 'job', 'teamwork', 'reverse'].every(k => f18b[k].over <= 0 && f18b[k].scroll <= 1),
+      'E18 1280×800: ②〜⑤ は段階が操作行より上でスクロールなし: ' + JSON.stringify(f18b));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await wait(250);
+    await ivGo('conditions');
+    const w18 = { iv: await overflowX(), cols: await page.evaluate(() => document.querySelectorAll('#ivStage .iv-col').length && getComputedStyle(document.querySelector('#ivStage .iv-cols')).gridTemplateColumns.split(' ').length),
+      foot: await page.evaluate(() => { const f = document.getElementById('ivFoot').getBoundingClientRect(); return Math.round(innerHeight - f.bottom); }) };
+    await full18(page, 'p13-interview-390.png');
+    await goTo(3);
+    w18.ev = await overflowX();
+    await goTo(1);
+    w18.prep = await overflowX();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await wait(200);
+    expect(w18.iv <= 1 && w18.cols === 1 && Math.abs(w18.foot) <= 1 && w18.ev <= 1 && w18.prep <= 1,
+      'E18 390px: 面接（1 列・操作行は画面の下）・評価・準備に横スクロールなし: ' + JSON.stringify(w18));
+    expect(e18.length === 0, 'E18 ページエラー・console error なし（タイマーのページ・保存 HTML）: ' + (e18.join(' / ') || 'none'));
+  }
+
   await fresh();
 
   expect(errors.length === 0, 'ERRORS: ' + (errors.length ? JSON.stringify(errors) : 'none'));

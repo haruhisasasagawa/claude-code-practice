@@ -233,7 +233,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
   .judge-layout { grid-template-columns: 1fr; }
   .summary { position: static; }
 }
-/* 報告書（③）: 右サマリーの横で A4 の紙が等倍で入らない幅（1280px・1366px など）は、右サマリーを紙の下に回して紙を等倍（本文 9.5px）で見せる（app.js fitReportPaper が付ける） */
+/* 報告書: 右サマリーの横で A4 の紙が等倍で入らない幅（1280px・1366px など）は、右サマリーを紙の下に回して紙を等倍（本文 9.5px）で見せる（app.js fitReportPaper が付ける） */
 .judge-layout.paper-stack { grid-template-columns: minmax(0, 1fr); }
 .judge-layout.paper-stack .summary { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; }
 @media (max-width: 840px) {
@@ -432,7 +432,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hanko { filter: brightness(1.25); } }
 @media (max-width: 760px) { .stamp-row, .stamp-row.cols-2 { grid-template-columns: 1fr; } }
 
-/* ---------- 最終合否（報告書 ③。docs/SPEC-report.md 5-3） ---------- */
+/* ---------- 最終合否（報告書。docs/SPEC-report.md 5-3） ---------- */
 .decision-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 20px; align-items: center; }
 .decision-stamp { width: 128px; height: 82px; display: grid; place-items: center; }
 .verdict-empty { width: 118px; height: 72px; border: 2px dashed var(--border-strong); border-radius: 9px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--surface); }
@@ -459,7 +459,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 @media (max-width: 760px) { .decision-body { grid-template-columns: 1fr; } }
 @media print { #decisionCard.is-none { display: none !important; } #decisionCard .verdict-stamp { width: 96px; height: 61px; filter: none; } }
 
-/* ---------- 最終承認のパスワード（docs/SPEC-a4.md 11 章）: ③ のカードのパスワード欄・JSON の読み込み／初期化のダイアログ・設定 ---------- */
+/* ---------- 最終承認のパスワード（docs/SPEC-a4.md 11 章）: 報告書のカードのパスワード欄・JSON の読み込み／初期化のダイアログ・設定 ---------- */
 .final-lock { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 8px 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); text-align: left; }
 .final-lock-msg { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .final-lock-ctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -476,31 +476,8 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .lock-form .field { margin-bottom: 4px; }
 @media print { .pw-dialog-back { display: none !important; } }
 
-/* ---------- ① 応募者・② のヘッダー・③ 報告書（docs/SPEC-script-mode.md） ---------- */
-.cl-head-attrs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.cl-attr { display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-size: 13px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
-.cl-attr small { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
-.cl-attr-name { font-size: 14px; font-weight: 700; background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
-/* Step② の読み取り専用ヘッダー（1 行。docs/SPEC-script-mode.md 12 章） */
-.card.cl-head-line { padding: 8px 12px; }
-.cl-head-line .cl-head-attrs { gap: 4px; }
-.cl-head-line .cl-attr { padding: 2px 7px; gap: 4px; font-size: 12.5px; }
-.cl-head-line .cl-attr small { font-size: 10.5px; }
-.cl-head-line .cl-attr-name { font-size: 13.5px; }
-/* 「応募者を編集」はリンクの見た目（枠なし）で右端へ */
-.cl-head-line .cl-head-edit { margin-left: auto; padding: 2px 4px; border: 0; background: none; color: var(--accent); font-size: 12.5px; text-decoration: underline; text-underline-offset: 2px; }
-.cl-head-line .cl-head-edit:hover { background: var(--accent-soft); }
-/* 本文が狭い幅（1400px 以下。1280px で本文 約 640px）: チップを一段詰め、「応募者を編集」はカード上端の枠線上・右へ出してチップの行から外す（チップは 1 行のまま） */
-@media screen and (max-width: 1400px) {
-  .card.cl-head-line { position: relative; padding: 8px 10px; }
-  .cl-head-line .cl-head-attrs { gap: 3px; }
-  .cl-head-line .cl-attr { padding: 2px 6px; gap: 3px; font-size: 12px; }
-  .cl-head-line .cl-attr small { font-size: 10px; }
-  .cl-head-line .cl-attr-name { font-size: 13px; }
-  .cl-head-line .cl-head-edit { position: absolute; top: -9px; right: 12px; margin: 0; padding: 0 6px; line-height: 16px; font-size: 11.5px; border-radius: 4px; background: var(--surface); }
-  .cl-head-line .cl-head-edit:hover { background: var(--accent-soft); }
-}
-/* Step① 応募者（1 枚・3 行。docs/SPEC-script-mode.md 12 章） */
+/* ---------- 準備・報告書（docs/SPEC-script-mode.md・docs/SPEC-flow.md 2 章・5 章） ---------- */
+/* 準備の応募者（1 枚・3 行。docs/SPEC-script-mode.md 12 章） */
 #scriptApplicantCard { padding: 16px 20px 4px; }
 #scriptApplicantCard .card-head { margin-bottom: 10px; align-items: baseline; }
 #scriptApplicantCard .card-head p { width: auto; flex: 1; min-width: 14em; }
@@ -524,18 +501,17 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .sa-row3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
 @media (max-width: 840px) { .sa-row1 { flex-direction: column; } .sa-row1 > .field { flex: none; min-width: 0; } }
 .sum-attrs .badge { margin-left: 2px; vertical-align: 1px; }
-.cl-all-btn { margin-left: auto; font-weight: 600; }
 .report-paper-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px 2px 14px; }
 .report-paper-cap { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; width: 210mm; max-width: 100%; margin: 0 auto 6px; font-size: 12px; color: var(--muted); }
 .report-paper-cap b { color: var(--text); }
-/* ③ の紙は保存 HTML と同じ A4 縦の用紙（210×297mm・余白・白地・影は共有の .a4。storage.checklistSheetCss）。docs/SPEC-a4.md 5 章 */
+/* 報告書の紙は保存 HTML と同じ A4 縦の用紙（210×297mm・余白・白地・影は共有の .a4。storage.checklistSheetCss）。docs/SPEC-a4.md 5 章 */
 #appPaper.a4 { margin: 0 auto; }
 .sum-stamps { font-size: 12px; font-weight: 600; text-align: right; }
 #sumStamps .sum-label { white-space: nowrap; }
 
 @media print { .report-paper-wrap { display: none !important; } }
 
-/* ---------- 面接チェックリスト（②。docs/SPEC-checklist.md 2 章） ---------- */
+/* ---------- 面接チェックリストの部品（面接・評価で共用。docs/SPEC-checklist.md 2 章） ---------- */
 .toast.warn { background: var(--warn); color: #fff; }
 .badge.muted { background: var(--surface-3); color: var(--muted); border-color: var(--border); }
 .seg-btn.wide { width: auto; min-width: 46px; padding: 0 12px; font-size: 13.5px; white-space: nowrap; }
@@ -547,29 +523,7 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .cl-seg { flex: none; max-width: 100%; }
 .field > .cl-seg { align-self: flex-start; }
 .cl-must-row { grid-template-columns: minmax(0, 1fr) auto 4.6em; }
-.cl-unknown.is-off { visibility: hidden; }
 
-.cl-nav {
-  position: sticky; top: 57px; z-index: 15;
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(6px); box-shadow: var(--shadow);
-}
-.cl-nav .spacer { flex: 1; }
-.cl-chip {
-  display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px;
-  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
-}
-.cl-chip:hover { background: var(--surface-3); }
-.cl-chip small { color: var(--muted); font-weight: 600; }
-.cl-chip.done { border-color: color-mix(in srgb, var(--ok) 55%, var(--border)); background: var(--ok-soft); color: var(--ok); }
-.cl-chip.ng { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); background: var(--danger-soft); color: var(--danger); }
-.cl-chip-mark:empty { display: none; }
-.cl-nav-score { font-size: 13px; font-weight: 700; color: var(--text); }
-
-.cl-page-head { padding: 6px 4px 0; border-bottom: 2px solid var(--accent); font-size: 14px; color: var(--accent); }
-.cl-page-head .hint { margin: 2px 0 6px; }
-.cl-page-head .hint.cl-lead-ps { margin-top: -4px; font-weight: 600; }   /* 前書きの話し方・敬語を付ける場所（人物像の言葉遣い。docs/SPEC-persona.md 11-9 補完 6） */
 .cl-sec { scroll-margin-top: 120px; }
 #clOverall { scroll-margin-top: 120px; }
 .cl-no { display: inline-block; margin-right: 6px; color: var(--accent); font-weight: 800; }
@@ -577,12 +531,6 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .cl-skip-note { display: none; font-size: 12px; font-weight: 700; color: var(--danger); align-self: center; }
 .cl-sec.cl-skippable { border-style: dashed; }
 .cl-sec.cl-skippable .cl-skip-note { display: inline; }
-
-.cl-block { margin-top: 14px; }
-.cl-block:first-of-type { margin-top: 0; }
-.cl-block-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13.5px; font-weight: 700; margin-bottom: 8px; }
-.cl-block-note { font-size: 12px; font-weight: 600; color: var(--muted); }
-.cl-block-note.strong { color: var(--warn); }
 .cl-legend { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
 .cl-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px 14px; align-items: center;
@@ -593,38 +541,9 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .cl-label.b { font-weight: 700; }
 .cl-rate-row { grid-template-columns: minmax(0, 1fr) auto minmax(10em, 16em); }
 .cl-note { min-width: 0; }
-.cl-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
-.cl-fields .field { margin-bottom: 8px; }
-.cl-fields input[type="date"], .cl-fields input[type="month"] { width: auto; min-width: 11em; }
-.cl-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
-.cl-checks.one-col { grid-template-columns: 1fr; }
-.cl-check {
-  display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); font-size: 13.5px; line-height: 1.45; cursor: pointer; min-width: 0;
-}
-.cl-check > span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.cl-check input { margin-top: 3px; flex: none; }
-.cl-check.on { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
-.cl-check .tag { flex: none; }
-.cl-check.dim { opacity: .55; }
-.cl-check.emph { border-color: var(--warn); box-shadow: inset 3px 0 0 var(--warn); }
-.cl-questions { margin: 0 0 8px; padding-left: 1.6em; display: flex; flex-direction: column; gap: 6px; }
-.cl-questions li { font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
-.cl-memo { margin-bottom: 4px; }
-.cl-memo textarea { min-height: 70px; }
-.cl-notify-note { margin: -4px 0 6px; }
-.cl-flow { margin: 12px 0 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 600; }
-
-.dim { opacity: .55; }
 
 .cl-overall-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
 .cl-overall-row .cl-label { flex: 1; min-width: 10em; }
-.cl-score { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 12px 0 6px; font-size: 14px; font-weight: 600; }
-.cl-score #clScoreTotal { font-size: 26px; }
-.cl-score-pct { font-size: 16px; font-weight: 800; }
-.cl-must-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.cl-must-summary:empty { display: none; }
-.cl-ms-label { font-size: 13px; font-weight: 700; }
 .cl-notes-field { margin-top: 10px; margin-bottom: 0; }
 #overallWarn { margin-top: 6px; }
 
@@ -632,12 +551,9 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 #sumMust .sum-val { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 #sumPersona .sum-val { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; }
 
-/* ② の上部の案内（面接中はメモ中心）・総評の人物像（1〜5 点）・質問の 1 行表示（docs/SPEC-persona.md 3 章） */
-.cl-guide { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 13.5px; font-weight: 600; }
-/*   文言は残りの幅で折り返す（1 行に入らない幅でもボタンを 2 行目へ追い出さない）。ボタンと並べられないほど狭い画面（文言が 16em 未満）だけボタンを次の行へ（💡 は文言の行に残る） */
-.cl-guide-t { flex: 1 1 0; min-width: 16em; }
-.cl-guide .btn { margin-left: auto; }
+/* 総評の人物像（1〜5 点。docs/SPEC-persona.md 3 章）。台本 1 枚目の前書きの話し方・敬語を付ける場所の 1 行（.cl-lead-ps）は人物像の見出しの下 */
 .cl-persona { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
+.cl-persona .cl-lead-ps { margin: -2px 0 8px; font-weight: 600; }
 .cl-ps-head { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .cl-ps-head h3 { font-size: 14.5px; font-weight: 700; }
 .cl-ps-legend { font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -650,36 +566,176 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
 .seg-btn.cl-ps-btn.active.s1 { background: var(--danger); color: var(--on-status); }
 .seg-btn.cl-ps-btn.active.s2 { background: var(--warn); color: var(--on-status); }
 .seg-btn.cl-ps-btn.active.s4, .seg-btn.cl-ps-btn.active.s5 { background: var(--ok); color: var(--on-status); }
-.cl-ps-btn:focus-visible, .cl-q:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cl-ps-btn:focus-visible, .iv-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .cl-ps-total { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 14px; font-weight: 600; }
 .cl-ps-total #clPsSum { font-size: 22px; }
 #clPsWarn { margin-top: 6px; }
 .cl-ps-off { margin: 0 0 10px; }
-.cl-q-list { list-style: none; padding-left: 0; gap: 4px; }
-.cl-q-list li { font-size: inherit; line-height: inherit; }
-.cl-q { display: flex; align-items: baseline; gap: 10px; width: 100%; min-width: 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; line-height: 1.5; text-align: left; cursor: pointer; }
-.cl-q:hover { background: var(--surface-3); }
-.cl-q-no { flex: none; color: var(--muted); font-weight: 700; font-size: 12.5px; }
-.cl-q-short { flex: none; font-weight: 700; white-space: nowrap; }
-.cl-q-full { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cl-q.open { align-items: flex-start; }
-.cl-q.open .cl-q-full { white-space: normal; overflow: visible; color: var(--text); font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
-.cl-q-all { margin-left: auto; }
-@media (max-width: 840px) { .cl-ps-row { grid-template-columns: minmax(0, 1fr); } .cl-q { flex-wrap: wrap; } .cl-q-short { white-space: normal; } }
+@media (max-width: 840px) { .cl-ps-row { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) { .seg-btn.cl-ps-btn { width: 40px; } }
 
 @media (max-width: 840px) {
   .cl-row, .cl-must-row, .cl-rate-row { grid-template-columns: minmax(0, 1fr); }
-  .cl-unknown.is-off { display: none; }
-  .cl-unknown { justify-self: start; }
-  .cl-fields, .cl-checks { grid-template-columns: minmax(0, 1fr); }
-  .cl-nav { top: 0; position: static; }
   .cl-legend { margin-left: 0; }
 }
 @media (max-width: 480px) {
   .seg-btn.wide { padding: 0 8px; font-size: 12.5px; }
   .cl-seg.lg .seg-btn { padding: 0 10px; }
 }
+
+/* ---------- 4 ステップの流れ（準備 → 面接 → 評価 → 報告書。docs/SPEC-flow.md 付録 A） ---------- */
+/*   文字色は地（--warn-soft・--danger-soft・白）に対して 4.5:1 以上（--warn-text 5.4:1・--danger-text 5.5:1・--ok-strong の地に白字 5.5:1）。ダークは明るい色そのもの */
+:root { --k-check: var(--accent); --k-say: #7c3aed; --k-ask: #0f766e; --warn-text: #a3480a; --danger-text: #b91c1c; --ok-strong: #047857; }
+:root[data-theme="dark"] { --k-say: #b392f0; --k-ask: #2dd4bf; --warn-text: var(--warn); --danger-text: var(--danger); --ok-strong: var(--ok); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --k-say: #b392f0; --k-ask: #2dd4bf; --warn-text: var(--warn); --danger-text: var(--danger); --ok-strong: var(--ok); } }
+.step-lead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13.5px; line-height: 1.5; }
+.step-lead > b { flex: none; padding: 1px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 800; }
+.judge-layout.no-summary { grid-template-columns: minmax(0, 1fr); }
+.judge-layout.no-summary .summary { display: none; }
+/* 操作行: 左に戻る・右端に主ボタン（面接・評価は画面の下に固定） */
+.flow-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.flow-foot .spacer { flex: 1 1 auto; }
+.flow-foot.is-sticky { position: sticky; bottom: 0; z-index: 12; padding: 12px 0; background: linear-gradient(to bottom, transparent, var(--bg) 12px); }
+/*   面接・評価は本文の高さを画面いっぱいにして、内容が短い段階でも操作行（主ボタン）を画面の右下の同じ位置に置く（docs/SPEC-flow.md G8） */
+/*   画面の下の余白と著作権の 1 行は面接・評価では出さない（出すと短い段階でも縦にスクロールする） */
+html.flow-pad #view-judge { padding-bottom: 0; }
+html.flow-pad #view-judge > .view-footer { display: none; }
+html.flow-pad #stepContent { min-height: calc(100vh - var(--topbar-h, 57px) - 22px); }
+html.flow-pad #stepContent > .flow-foot.is-sticky { margin-top: auto; }
+.btn.lg { padding: 11px 22px; font-size: 15.5px; border-radius: 9px; }
+@media (min-width: 841px) { html.flow-pad { scroll-padding-top: calc(var(--topbar-h, 57px) + 80px); scroll-padding-bottom: 84px; } }
+/* はじめての方へ（準備の画面。初回だけ） */
+.intro { padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: var(--radius); background: var(--accent-soft); }
+.intro h2 { font-size: 15px; font-weight: 800; }
+.intro-lead { margin: 2px 0 8px; font-size: 13px; color: var(--muted); }
+.intro-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; counter-reset: intro; }
+.intro-steps li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface); font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.intro-steps li b { font-size: 14px; color: var(--text); }
+.intro-steps li b::before { counter-increment: intro; content: counter(intro) " "; color: var(--accent); }
+.intro-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+@media (max-width: 840px) { .intro-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .intro-steps { grid-template-columns: minmax(0, 1fr); } }
+/* 面接（1 段階ずつの進行画面）: 上の帯（段階のチップ・タイマー・必須条件の案内。トップバーの下に固定）・本文（1100px 以上は 2 列） */
+.iv-top, .ev-top { position: sticky; top: var(--topbar-h, 57px); z-index: 15; display: flex; flex-direction: column; gap: 8px; margin-top: -8px; padding-top: 8px; background: var(--bg); }
+.iv-bar { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.iv-chips { display: flex; gap: 5px; flex-wrap: wrap; min-width: 0; }
+.iv-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 3px 11px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.iv-chip:hover { background: var(--surface-3); }
+.iv-chip-s { font-size: 11.5px; font-weight: 800; }
+.iv-chip-s:empty { display: none; }
+.iv-chip.is-done .iv-chip-s { color: var(--ok); }
+.iv-chip.is-skip { border-style: dashed; color: var(--muted); }
+.iv-chip.is-skip .iv-chip-s { color: var(--danger); }
+.iv-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.iv-chip.is-current .iv-chip-s { color: inherit; }
+.iv-timer { margin-left: auto; display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.iv-timer b { font-size: 20px; font-weight: 800; color: var(--text); }
+.iv-t-stage { padding: 1px 10px; border-radius: 8px; }
+.iv-t-stage.is-over { background: var(--warn-soft); }
+.iv-t-stage.is-over b, .iv-t-stage.is-over small { color: var(--warn-text); }
+.iv-t-stage.is-late { background: var(--danger-soft); }
+.iv-t-stage.is-late b, .iv-t-stage.is-late small { color: var(--danger-text); }
+.iv-must { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 14px; border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent); border-radius: var(--radius-sm); background: var(--danger-soft); font-size: 14.5px; font-weight: 700; line-height: 1.5; }
+.iv-must .ico { color: var(--danger); }
+.iv-must .btn { margin-left: auto; }
+.iv-stage { padding: 14px 22px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.iv-stage-head { display: flex; align-items: baseline; gap: 4px 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.iv-stage-head h2 { font-size: 20px; font-weight: 800; outline: none; }
+.iv-no { color: var(--accent); margin-right: 6px; }
+.iv-who { margin-left: auto; min-width: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.iv-who b { font-size: 15px; color: var(--text); }
+.iv-lead { width: 100%; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.iv-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 32px; align-items: start; }
+@media (min-width: 1100px) { .iv-cols.is-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.iv-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.iv-grp { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.iv-grp.k-check { --k: var(--k-check); }
+.iv-grp.k-say { --k: var(--k-say); }
+.iv-grp.k-ask { --k: var(--k-ask); }
+.iv-k { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; min-height: 24px; font-size: 12.5px; font-weight: 800; letter-spacing: .08em; color: var(--k); }
+.iv-k::before { content: ""; width: 4px; height: 15px; border-radius: 2px; background: currentColor; }
+.iv-k > span:first-of-type { white-space: nowrap; }
+.iv-k small { font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+.iv-k-act { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; letter-spacing: 0; }
+.iv-note { font-size: 12.5px; color: var(--muted); }
+.iv-grp .cl-must-row { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; padding: 2px 0 6px; border-bottom: 1px dashed var(--border); }
+.iv-grp .cl-must-row .cl-label { flex: 1 1 14em; font-size: 15.5px; font-weight: 700; line-height: 1.45; }
+.iv-grp .cl-must-row .seg-btn { height: 42px; min-width: 84px; font-size: 15px; }
+.iv-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
+.iv-fields .field { margin-bottom: 4px; gap: 4px; }
+.iv-fields .field > label { font-size: 13px; }
+.iv-fields input, .iv-fields select { padding: 7px 10px; }
+.iv-fields .seg-btn { height: 38px; }
+.iv-fields input[type="date"], .iv-fields input[type="month"] { width: auto; min-width: 11em; }
+.iv-say-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.iv-say-i { display: flex; align-items: baseline; gap: 8px; font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.iv-say-i::before { content: "・"; flex: none; color: var(--k); font-weight: 800; }
+.iv-say-i .tag { flex: none; }
+.iv-say-list.is-items .iv-say-i::before { content: none; }
+.iv-say-i label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
+.iv-say-i label > span { display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.iv-say-i input { flex: none; width: 18px; height: 18px; margin: 0; transform: translateY(3px); }
+.iv-say-list.is-items .iv-say-i:not(.is-on) > label > span { color: var(--muted); }
+.btn.iv-said { min-width: 8.5em; padding: 7px 16px; font-size: 14.5px; }
+.btn.iv-said[aria-pressed="true"] { background: var(--ok-strong); border-color: var(--ok-strong); color: var(--on-status); }
+.btn.iv-said[aria-pressed="mixed"] { background: var(--warn-soft); border-color: var(--warn); color: var(--warn-text); }
+.iv-q { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-left: 3px solid var(--k-ask); border-radius: var(--radius-sm); background: var(--surface-2); }
+.iv-q-text { font-size: 17px; font-weight: 700; line-height: 1.55; overflow-wrap: anywhere; }
+textarea.iv-q-memo { min-height: 0; height: 42px; resize: none; overflow: hidden; padding: 8px 12px; font-size: 15px; line-height: 1.5; }
+.iv-oldmemo, .iv-memo { margin-bottom: 0; }
+.iv-oldmemo textarea, .iv-memo textarea { min-height: 60px; }
+.iv-flow { padding: 8px 12px; border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 13.5px; font-weight: 600; }
+/* 評価（面接のあとに付ける）: 上の結果カード（固定）・面接時間・段階のカード（面接のメモ＋確認点）・総評 */
+.ev-result { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--border); border-left: 5px solid var(--muted); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.ev-result[data-result="recommend"] { border-left-color: var(--ok); }
+.ev-result[data-result="review"] { border-left-color: var(--warn); }
+.ev-result[data-result="reject"] { border-left-color: var(--danger); }
+.ev-res-k { font-size: 12px; font-weight: 700; color: var(--muted); }
+.ev-res-why { flex: 1 1 14em; min-width: 0; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-res-miss { font-size: 13px; font-weight: 700; color: var(--warn-text); }
+.ev-res-miss.is-none { color: var(--ok); }
+.ev-res-miss.is-gate { color: var(--muted); }
+.ev-res-score { width: 100%; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.ev-time { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.ev-time-k { font-weight: 700; color: var(--text); }
+.ev-time input { width: 5.5em; min-width: 0; padding: 5px 8px; }
+.ev-time-st { display: inline-flex; gap: 10px; flex-wrap: wrap; }
+.ev-sec .card-head { align-items: baseline; margin-bottom: 10px; }
+.ev-sec-time { font-size: 12.5px; color: var(--muted); }
+.ev-fix { margin-left: auto; }
+.ev-memo { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.ev-must { display: flex; flex-direction: column; gap: 6px; }
+.ev-memo .cl-must-row { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; padding: 0; border: 0; background: none; }
+.ev-memo .cl-must-row .cl-label { flex: 1 1 14em; }
+dl.ev-kv { margin: 0; display: flex; flex-wrap: wrap; gap: 2px 18px; font-size: 13.5px; }
+dl.ev-kv > div { display: flex; gap: 6px; align-items: baseline; }
+dl.ev-kv dt { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+dl.ev-kv dd { margin: 0; font-weight: 700; }
+.ev-said { font-size: 13.5px; font-weight: 600; }
+.ev-said.is-off { color: var(--warn-text); }
+dl.ev-qa { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+dl.ev-qa > div { display: grid; grid-template-columns: minmax(8em, 15em) minmax(0, 1fr); gap: 2px 12px; }
+dl.ev-qa dt { font-size: 13px; font-weight: 700; color: var(--muted); }
+dl.ev-qa dd { margin: 0; font-size: 14.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+dl.ev-qa .is-empty dd { color: var(--muted); }
+.ev-memo-k { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.ev-memo-v { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ev-rate-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; font-size: 13.5px; font-weight: 700; }
+.ev-miss { display: none; margin-left: 6px; }
+.cl-rate-row.is-missing, .ev-memo .cl-must-row.is-missing, .cl-ps-row.is-missing { box-shadow: inset 4px 0 0 var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, var(--border)); }
+.ev-memo .cl-must-row.is-missing { padding-left: 10px; }
+.cl-overall-row.is-missing { padding: 6px 10px; border: 1px solid var(--warn); border-radius: var(--radius-sm); }
+.is-missing .ev-miss { display: inline-flex; }
+@media (max-width: 840px) {
+  .iv-top, .ev-top { position: static; margin-top: 0; padding-top: 0; }
+  .iv-timer { margin-left: 0; }
+  .iv-fields { grid-template-columns: minmax(0, 1fr); }
+  .iv-stage { padding: 12px 14px 14px; }
+  .iv-who { margin-left: 0; width: 100%; }
+  dl.ev-qa > div { grid-template-columns: minmax(0, 1fr); }
+  .ev-fix { margin-left: 0; }
+}
+@media print { .intro, .iv-top, .ev-top, .flow-foot, .step-lead { display: none !important; } }
 
 /* 設定画面: 面接チェックリストの編集（docs/SPEC-checklist.md 5 章） */
 .s-cl-max { font-size: 13.5px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
@@ -719,14 +775,13 @@ input.invalid, select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3
   .s-cl-item .row-actions { grid-column: 2; }
 }
 
-/* ---------- 面接チェックリスト報告（A4）の印刷ホスト（docs/SPEC-a4.md 2-3）。中身は ③ の紙と同じ用紙（div.a4。見た目は storage.checklistSheetCss）。
+/* ---------- 面接チェックリスト報告（A4）の印刷ホスト（docs/SPEC-a4.md 2-3）。中身は報告書の紙と同じ用紙（div.a4。見た目は storage.checklistSheetCss）。
    計測のあいだは画面外に置き、印刷では用紙そのものを余白 0 の 1 ページに出す ---------- */
 .cl-sheet-host { display: none; }
 body.print-checklist .cl-sheet-host { display: block; position: absolute; left: -10000px; top: 0; }
 @page a4sheet { size: A4 portrait; margin: 0; }
 @media print {
-  /* ② の目次（.cl-nav 内の .cl-chip）だけ隠す */
-  .cl-nav, .cl-skip-note { display: none !important; }
+  .cl-skip-note { display: none !important; }
   body.print-checklist { page: a4sheet; background: #fff; }
   body.print-checklist .app, body.print-checklist .toast { display: none !important; }
   body.print-checklist .cl-sheet-host { position: static; left: auto; }

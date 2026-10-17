@@ -5,8 +5,9 @@
  * - checklistSummary    : 面接チェックリストの表示用ビューモデル（② 面接チェックリスト・③ 報告書・右サマリー・保存レポート・A4 報告で共用）
  * - evaluateScript      : 採用可否の判定（面接者の総合判断が基準。必須条件の不一致は不採用推奨。docs/SPEC-script-mode.md）。
  *                         人物像（1〜5 点）の合計・1 点の項目・未入力で下げる方向にだけ調整する（docs/SPEC-persona.md）
- * - personaModel        : 人物像（接客。1〜5 点）の集計（② の総評・右サマリー・A4 報告・判定で共用）
- * - scriptApplicantRows : 応募者情報の行（① 応募者の入力と台本のヘッダー）
+ * - personaModel        : 人物像（接客。1〜5 点）の集計（評価の画面の総評・右サマリー・A4 報告・判定で共用）
+ * - timingSummary       : 面接の時間（タイマーの段階ごとの秒・評価の画面で入れた分。評価の画面・A4 報告。docs/SPEC-flow.md 6-4）
+ * - scriptApplicantRows : 応募者情報の行（準備の入力と台本のヘッダー）
  *
  * 劇場固有の数値・文言はすべて profile（config.default.js）から受け取る。
  * 2026-10-14 の面接特化で削除した判定は docs/SPEC-slim.md と docs/HANDOFF.md の「削除済み機能」を参照。
@@ -245,6 +246,38 @@
     return out;
   }
 
+  // 面接の時間（docs/SPEC-flow.md 6-4）。回答 cl.timing = { startedAt, endedAt, stage, perStage: { 段階 id: 秒 }, min? }（アプリのタイマーと評価の画面の手入力）。
+  //   記録が無い（startedAt も min も無い）ときは null。合計は perStage の全キーの和（台本の編集で消えた段階の秒も費やした時間として数える）。
+  //   報告書の値 text は 手入力の分 → タイマーの分（四捨五入。60 秒未満は「1分未満」）→ ''（出さない）。目安 goalMin は台本の段階の分の合計。
+  //   stages は台本の段階ごと（visited: 表示したことがある＝perStage にキーがある。over: 目安を過ぎた・late: 目安の 1.5 倍以上。目安 0 分の段階は色を変えない）
+  function timingSummary(def, cl) {
+    def = U.isObj(def) ? def : {};
+    const t = U.isObj(cl) && U.isObj(cl.timing) ? cl.timing : null;
+    if (!t) return null;
+    const startedAt = typeof t.startedAt === 'string' ? t.startedAt : '';
+    const mv = Number(t.min);
+    const manualMin = (typeof t.min === 'number' || typeof t.min === 'string') && mv % 1 === 0 && mv >= 1 && mv <= 600 ? mv : null;
+    if (!startedAt && manualMin == null) return null;
+    const ps = U.isObj(t.perStage) ? t.perStage : {};
+    const secOf = function (k) { const v = Number(ps[k]); return typeof ps[k] === 'number' && isFinite(v) && v > 0 ? Math.floor(v) : 0; };
+    const totalSec = Object.keys(ps).reduce(function (a, k) { return a + secOf(k); }, 0);
+    let goalMin = 0;
+    const stages = (Array.isArray(def.sections) ? def.sections : []).filter(function (s) { return U.isObj(s); }).map(function (s, i) {
+      const minutes = Math.max(0, Math.floor(num(s.minutes, 0)));
+      goalMin += minutes;
+      const sec = secOf(s.id);
+      return { id: s.id, noMark: circled(i + 1), title: clStr(s.title), sec: sec, visited: Object.prototype.hasOwnProperty.call(ps, s.id),
+        minutes: minutes, minutesMax: s.minutesMax === true, over: minutes > 0 && sec > minutes * 60, late: minutes > 0 && sec >= minutes * 90 };
+    });
+    const timerMin = totalSec >= 60 ? Math.round(totalSec / 60) : null;
+    return {
+      startedAt: startedAt, endedAt: typeof t.endedAt === 'string' ? t.endedAt : '', stage: typeof t.stage === 'string' ? t.stage : '',
+      totalSec: totalSec, timerMin: timerMin, manualMin: manualMin, goalMin: goalMin,
+      text: manualMin != null ? manualMin + '分' : timerMin != null ? timerMin + '分' : totalSec > 0 ? '1分未満' : '',
+      stages: stages
+    };
+  }
+
   // 表示用のビューモデル（② 面接チェックリスト・③ 報告書・右サマリー・レポート・A4 報告で共用）。opts = { management }
   function checklistSummary(applicant, cl, profile, opts) {
     opts = opts || {};
@@ -351,7 +384,9 @@
         rated: model.rated, ratable: model.ratable, counts: model.counts },
       sections: sections,
       pages: Array.isArray(def.pages) ? def.pages : [],
-      minutesTotal: minutesTotal
+      minutesTotal: minutesTotal,
+      // 面接の時間（docs/SPEC-flow.md 6-4。タイマーの記録も手入力も無ければ null）
+      timing: timingSummary(def, cl)
     };
   }
 
@@ -609,6 +644,8 @@
     mustSummary: mustSummary,
     checklistSummary: checklistSummary,
     checklistDiff: checklistDiff,
+    // 面接の時間（SPEC-flow）
+    timingSummary: timingSummary,
     // 人物像（SPEC-persona）
     PERSONA_SCALE: PERSONA_SCALE,
     PERSONA_RESULTS: PERSONA_RESULTS,
