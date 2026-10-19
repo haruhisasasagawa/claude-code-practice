@@ -72,10 +72,10 @@
     return '<input ' + attrs + '>';
   }
 
-  // ラベルが上の欄（.field。docs/DESIGN.md 3-5）
+  // ラベルが上の欄（.field。docs/DESIGN.md 3-5）。opts.unit: 欄の中の右の単位（「%」。.input-unit・目安の「分」と同じ部品）・opts.suffix: 欄の右の説明（折り返す）
   function sInput(path, label, opts) {
     opts = opts || {};
-    const tag = inputTag(path, opts);
+    const tag = opts.unit ? '<span class="input-unit">' + inputTag(path, opts) + '<span class="unit">' + esc(opts.unit) + '</span></span>' : inputTag(path, opts);
     return '<div class="field"><label for="' + fid(path) + '">' + esc(label) + '</label>' +
       (opts.suffix ? '<div class="inline">' + tag + '<span class="suffix">' + esc(opts.suffix) + '</span></div>' : tag) +
       hintHtml(opts.hint) + '</div>';
@@ -100,7 +100,7 @@
       '<div class="field-hint hint">1行に1項目。' + (opts.hint ? esc(opts.hint) : '') + '</div></div>';
   }
 
-  // チェックボックスの行（ラベル全体を押せる。太字の名前＋補足）
+  // チェックボックスの行（ラベル全体を押せる。名前〔本文の 15/400〕＋補足）
   function sCheck(path, label, hint) {
     return '<label class="check-row"><input type="checkbox" id="' + fid(path) + '" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + '>' +
       '<span class="check-text"><span class="lbl">' + esc(label) + '</span>' + (hint ? '<span class="hint">' + esc(hint) + '</span>' : '') + '</span></label>';
@@ -243,7 +243,7 @@
     const shortTag = b.type === 'question' || b.type === 'notify' || b.type === 'fields' || b.type === 'explain' || b.type === 'rating'
       ? sPair(ip + '.short', '報告書での短い名前', { pairCls: 's-short', placeholder: '任意。空なら文言の先頭 14 文字' }) : '';
     if (b.type === 'rating') {
-      extra = sPair(ip + '.hint', '補足', { pairCls: 's-hint', placeholder: '任意。例: 「大丈夫です」のみ連呼は要注意' });
+      extra = sPair(ip + '.hint', '補足', { pairCls: 's-hint', placeholder: '任意。例：「大丈夫です」のみ連呼は要注意' });
     } else if (b.type === 'explain') {
       extra = checkTag(ip + '.shortOnly', '※短期求人のみ（応募した求人が短期求人のとき強調）');
     } else if (b.type === 'fields') {
@@ -268,7 +268,7 @@
     return '<div class="s-block s-cl-block" data-block-type="' + esc(b.type) + '">' +
       '<div class="s-block-head"><span class="badge navy">' + marks(CL_TYPE_NAMES[b.type] || b.type) + '</span>' +
         (isNote
-          ? inputTag(bp + '.note', { aria: '注記の本文', placeholder: '注記の本文（例: 条件一致：2へ）' })
+          ? inputTag(bp + '.note', { aria: '注記の本文', placeholder: '注記の本文（例：条件一致：2へ）' })
           : inputTag(bp + '.title', { aria: '見出し', placeholder: '見出し（【】は自動で付きます）' })) +
         rowBtns('cl-block', attrs, j, len, { what: 'ブロック' }) +
       '</div>' +
@@ -345,8 +345,8 @@
       '<div class="field"><label for="' + fid('checklist.persona.items') + '">項目（1 行に「項目名|短い名前|説明」）</label><textarea id="' + fid('checklist.persona.items') + '" data-bind="checklist.persona.items" data-type="persona" data-repaint rows="8">' + esc(psText) + '</textarea>' +
         '<div class="field-hint hint">短い名前（判定の理由・記入シート）と説明（' + stepRef(3) + 'に小さく表示）は省略できます。上から表示の順です。項目名を変えなければ、並べ替えても入力済みの点は引き継ぎます。</div></div>' +
       '<div class="field-row">' +
-        sInput('checklist.persona.keepPct', 'そのまま（得点率）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（満点 ' + psMax + ' 点では ' + Math.ceil(psMax * n(pd.keepPct, 70) / 100) + ' 点以上）' }) +
-        sInput('checklist.persona.rejectBelowPct', '不採用推奨（得点率）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 未満（' + Math.ceil(psMax * n(pd.rejectBelowPct, 40) / 100) + ' 点未満。その間は' + resultTitle('review') + 'まで）' }) +
+        sInput('checklist.persona.keepPct', 'そのまま（得点率）', { type: 'number', min: 0, max: 100, repaint: true, unit: '%', suffix: '以上（満点 ' + psMax + ' 点では ' + Math.ceil(psMax * n(pd.keepPct, 70) / 100) + ' 点以上）' }) +
+        sInput('checklist.persona.rejectBelowPct', '不採用推奨（得点率）', { type: 'number', min: 0, max: 100, repaint: true, unit: '%', suffix: '未満（' + Math.ceil(psMax * n(pd.rejectBelowPct, 40) / 100) + ' 点未満。その間は' + resultTitle('review') + 'まで）' }) +
       '</div>' +
       '<div class="field-row">' +
         sSelect('checklist.persona.onePointResult', '1 点の項目があるとき', capOpts) +
@@ -356,8 +356,8 @@
     const th = (draft.evaluation || {}).thresholds || {};
     const bMax = clMax();
     const bandHtml = '<div class="field-row" id="clBandInputs">' +
-          sInput('evaluation.thresholds.recommendPct', '面接評価の帯: 高', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（現在の満点 ' + bMax + '点では ' + Math.ceil(bMax * n(th.recommendPct, 70) / 100) + '点以上）' }) +
-          sInput('evaluation.thresholds.reviewPct', '面接評価の帯: 中', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（' + Math.ceil(bMax * n(th.reviewPct, 40) / 100) + '点以上。未満は 低）' }) +
+          sInput('evaluation.thresholds.recommendPct', '面接評価の帯：高', { type: 'number', min: 0, max: 100, repaint: true, unit: '%', suffix: '以上（現在の満点 ' + bMax + '点では ' + Math.ceil(bMax * n(th.recommendPct, 70) / 100) + '点以上）' }) +
+          sInput('evaluation.thresholds.reviewPct', '面接評価の帯：中', { type: 'number', min: 0, max: 100, repaint: true, unit: '%', suffix: '以上（' + Math.ceil(bMax * n(th.reviewPct, 40) / 100) + '点以上。未満は 低）' }) +
         '</div>' +
         '<p class="hint s-note">報告書の「面接評価（確認点）」に出す 高・中・低 の境界です。結果（推奨）は総合判断で決まり、この境界では変わりません。</p>';
 
@@ -406,7 +406,7 @@
 
       groupH('台本') +
       '<p class="hint">段階を開いて、ブロック（必須条件・記入欄・説明・質問・確認点・合否連絡・注記）と項目を編集します。面接の画面・評価の画面・A4 の報告書・記入シートに、この台本がそのまま使われます。</p>' +
-      '<div class="field-row">' + sInput('checklist.version', '版（例: 2026-10-08）', { hint: '報告書（A4）の「台本 … 版」に表示します。' }) + '</div>' +
+      '<div class="field-row">' + sInput('checklist.version', '版（例：2026-10-08）', { hint: '報告書（A4）の「台本 … 版」に表示します。' }) + '</div>' +
       '<div class="field-row">' + pages.map(function (pg, k) {
         return '<div class="s-page">' + sInput('checklist.pages[' + k + '].title', (pg.no || k + 1) + '枚目の見出し') + sTextarea('checklist.pages[' + k + '].lead', (pg.no || k + 1) + '枚目の説明', { rows: 2 }) + '</div>';
       }).join('') + '</div>' +
@@ -519,7 +519,7 @@
         }).join('') + '</div>' +
         '<div class="field s-split-side"><span class="field-label">ハンコのプレビュー</span><div class="stamp-preview">' + preview + '</div><div class="field-hint hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div>' +
       '</div>' +
-      sLines('management.managers', '担当者名簿（氏名|印字名|役職|等級）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人|S3 。印字名を省略すると姓（スペースの前）を使います。等級は任意（押印には使いません）。', rows: Math.min(Math.max((Array.isArray(mg.managers) ? mg.managers.length : 0) + 1, 4), 17) }) +
+      sLines('management.managers', '担当者名簿（氏名|印字名|役職|等級）', { type: 'managers', hint: '例：笹川 晴央|笹川|副支配人|S3 。印字名を省略すると姓（スペースの前）を使います。等級は任意（押印には使いません）。', rows: Math.min(Math.max((Array.isArray(mg.managers) ? mg.managers.length : 0) + 1, 4), 17) }) +
       sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。') +
       decisionSettingsHtml(fields) + finalLockHtml());
   }

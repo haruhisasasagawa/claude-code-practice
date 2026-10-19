@@ -20,7 +20,7 @@
 - 人物像は**接客重視の 7 項目**（1 挨拶ができていたか／2 第一印象・身だしなみ（服装・清潔感）／3 笑顔・表情／4 声のトーン・ハキハキさ／5 目を見て話していたか／6 言葉遣い・説明のわかりやすさ／7 志望動機・接客で大切にしたいこと）。各 1〜5 点（1=不採用レベル・2=やや不安・3=普通・4=良い・5=とても良い）。35 点満点。設定画面で編集できる
 - 判定への反映: 得点率 70% 以上はそのまま、40% 以上 70% 未満は「上長最終判断要」まで、40% 未満は「不採用推奨」。1 点の項目が 1 つでもあれば「上長最終判断要」まで。**下げる方向だけ**（`down()` と同じ扱いで adjustments に理由）
 - 台本の確認点（○△×）は残し、人物像は最後の総評（総合判断）のところに追加
-- 紙: **A4 1 枚の記入シートを印刷**できる（アプリと同じ並び）。面接中は紙に書き、終わったらアプリに転記
+- 紙: **A4 1 枚の記入シートを印刷**できる（アプリと同じ並び。※ 2026-10-19 の注: 並びは 面接 ①〜⑤ → 評価。段階の中は台本の順で、2026-10-18 からの面接の画面〔どの段階も 話す → 聞く → 確かめる〕とは違う。転記は項目の名前で合わせる。`docs/SPEC-flow.md` 16-8）。面接中は紙に書き、終わったらアプリに転記
 
 ### 0-3. オーケストレータの決定（P1〜P10。本書はこれを具体化する）
 P1 データ `profile.checklist.persona`・回答 `record.checklist.persona` ／ P2 `evaluateScript` の人物像の上限・旧レコードは判定を変えない ／ P3 確認点 `rt_manner` を既定から外す（6 項目）・旧既定と同一の保存済み台本だけ置き換え ／ P4 ② の総評カード・面接中はメモ中心の案内・質問の 1 行表示 ／ P5 A4 報告（ストリップ・確認点｜人物像の 2 カラム・確認点のメモを面接メモの枠へ・1 ページ維持） ／ P6 面接記入シート ／ P7 右サマリー・設定・使い方 ／ P8 テスト ／ P9 docs ／ P10 仕上げ
@@ -285,7 +285,7 @@ if (ps && !mustGate) {
 
 ### 3-4. 入力と表示の更新
 - `onContentClick` の `case 'ps-set'`: `psSet(id, psGet(id) === n ? 0 : n)`。`psSet` は `cl.persona` が object のときだけ、1〜5 は数値で入れ、0 は `delete` → `touchChecklist()`（dirty・判定の無効化）→ `updateChecklistUI()`。全体は描き直さない（フォーカスを保つ）
-- `updateChecklistUI`（`sum.persona` があるとき）: 各行の `.is-set`・`.is-one`、ボタンの `.active`・`aria-pressed`・`tabindex`／`#clPsSum`＝`scored ? total : '—'`、`#clPsMax`＝max、`#clPsPct`＝`complete ? '（' + pct + '%）' : ''`／`#clPsState`: 未入力あり → `badge muted`「未入力 {n}」、`band` keep → `badge ok`「{keepPct}% 以上」、review → `badge warn`「{resultTitle('review')}まで」、reject → `badge danger`「{resultTitle('reject')}」（**補完 4（11-9）で、人物像で下がる結果の上限〔未入力・合計・1 点のいちばん低いもの。「調整しない」は数えない〕を出すように変えた**: 上限 review → `warn`「{review}まで」・reject → `danger`「{reject}」、未入力があれば前に「未入力 {n}・」、下がらなければ `ok`「{keepPct}% 以上」／未入力だけなら `muted`「未入力 {n}」）／`#clPsWarn`: `ones` があるとき表示、文言 `1 点の項目があります（{names}）。` ＋（onePointResult が review なら `結果は{上長最終判断要}以下になります。`、reject なら `結果は{不採用推奨}になります。`、none なら付けない）
+- `updateChecklistUI`（`sum.persona` があるとき）: 各行の `.is-set`・`.is-one`、ボタンの `.active`・`aria-pressed`・`tabindex`／`#clPsSum`＝`scored ? total : '—'`、`#clPsMax`＝max、`#clPsPct`＝`complete ? '（' + pct + '%）' : ''`／`#clPsState`: 未入力あり → `badge muted`「未入力 {n}」、`band` keep → `badge ok`「{keepPct}% 以上」、review → `badge warn`「{resultTitle('review')}まで」、reject → `badge danger`「{resultTitle('reject')}」（**補完 4（11-9）で、人物像で下がる結果の上限〔未入力・合計・1 点のいちばん低いもの。「調整しない」は数えない〕を出すように変えた**: 上限 review → `warn`「{review}まで」・reject → `danger`「{reject}」、未入力があれば前に「未入力 {n}・」、下がらなければ `ok`「{keepPct}% 以上」／未入力だけなら `muted`「未入力 {n}」。**2026-10-19 レビュー修正 D〔`docs/SPEC-flow.md` 16-10 の 10〕: 必須条件の不一致で不採用推奨に固定〔mustGate〕のときは人物像を判定に使わないので、上限を出さず中立の `badge`「未入力 {n}（任意）」・全部入れたら札を出さない。`#clPsWarn` の「結果は…」も付けない**）／`#clPsWarn`: `ones` があるとき表示、文言 `1 点の項目があります（{names}）。` ＋（onePointResult が review なら `結果は{上長最終判断要}以下になります。`、reject なら `結果は{不採用推奨}になります。`、none なら付けない）
 - ③ の `#scriptWarnings` の「面接チェックリストで入力する」ボタンは、総合判断が未入力**または人物像に未入力がある**ときに出す
 
 ### 3-5. 質問の 1 行表示（P4・D9。`clBlockHtml` の `case 'question'`）

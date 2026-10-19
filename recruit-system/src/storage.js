@@ -771,22 +771,31 @@
       // メモの窓は高さ 60vh まで。本文（.pop-b）だけをスクロールし、見出しと［閉じる］は常に見せる
       '.pop[data-kind="memo"],.pop[data-kind="memos"]{width:380px;max-height:60vh;display:flex;flex-direction:column}',
       '.pop[data-kind="memo"] .pop-b,.pop[data-kind="memos"] .pop-b{flex:1 1 auto;min-height:0;overflow:auto}',
-      '.pop-h{font-weight:800;font-size:13.5px}.pop-sub,.pop-ref{font-size:11.5px;color:#525d70}',
+      // 窓の文字はアプリの段階（docs/DESIGN.md 1-4）: 題 13/700・補足とラベル 12（本文は .pop の 13）。窓は印刷に出ないので用紙の 1 ページの計測には影響しない
+      '.pop-h{font-weight:700;font-size:13px}.pop-sub,.pop-ref{font-size:12px;color:#525d70}',
       '.pop-b{display:flex;flex-direction:column;gap:6px;margin:8px 0}',
-      '.pop-l{display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:700;color:#525d70}',
-      '.pop select,.pop input{font:inherit;font-size:13px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;background:#fff;color:#161e2e;width:100%}',
+      '.pop-l{display:flex;flex-direction:column;gap:2px;font-size:12px;font-weight:700;color:#525d70}',
+      //   部品の枠はアプリの入力欄・副ボタンと同じ #848fa1（--border-control。地に対して 3:1）・角丸 8（docs/DESIGN.md 1-2・3-5・4-9。寸法は変えない）
+      '.pop select,.pop input{font:inherit;font-size:13px;font-weight:400;padding:5px 8px;border:1px solid #848fa1;border-radius:8px;background:#fff;color:#161e2e;width:100%}',
+      // フォーカスの輪はアプリと同じ 2px の紺 #3b5791（--focus。ブラウザ既定の黒い輪にしない）: 欄は枠も紺・輪の間 1、ボタンは輪の間 2（キーボードのときだけ）
+      '.pop select:focus,.pop input:focus{border-color:#3b5791;outline:2px solid #3b5791;outline-offset:1px}',
+      '.pop button:focus-visible,.savebar button:focus-visible{outline:2px solid #3b5791;outline-offset:2px}',
       '.pop input[hidden]{display:none}',
       '.pop-note{font-size:12px;color:#7a4106;background:#fdf4e3;border:1px solid #efcf94;border-radius:6px;padding:3px 8px}',
       '.pop-err{font-size:12px;font-weight:700;color:#b42318}.pop-err:empty{display:none}',
       // 最終承認のパスワード（ロックがあり、このページでまだ解錠していないとき。docs/SPEC-a4.md 11 章）
       '.pop-lock{font-size:12px;font-weight:700;color:#525d70}',
       '.pop-text{white-space:pre-wrap;overflow-wrap:anywhere}',
-      '.pop-memos{margin:0}.pop-memos dt{font-size:11.5px;font-weight:700;color:#525d70;margin-top:6px}.pop-memos dt:first-child{margin-top:0}.pop-memos dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}',
+      '.pop-memos{margin:0}.pop-memos dt{font-size:12px;font-weight:700;color:#525d70;margin-top:6px}.pop-memos dt:first-child{margin-top:0}.pop-memos dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}',
       '.pop-f{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}',
-      '.pop-f button,.savebar-btn{font:inherit;font-size:13px;font-weight:700;padding:5px 12px;border-radius:8px;border:1px solid #c7d0db;background:#fff;color:#161e2e;cursor:pointer}',
+      '.pop-f button,.savebar-btn{font:inherit;font-size:13px;font-weight:700;padding:5px 12px;border-radius:8px;border:1px solid #848fa1;background:#fff;color:#161e2e;cursor:pointer}',
       '.pop-f button.primary,.savebar-btn{background:#223a70;border-color:#223a70;color:#fff}',
-      '.pop-dec{color:var(--dec) !important;border:1.5px solid var(--dec) !important}.pop-hire{--dec:var(--dec-hire,#c8232c)}.pop-reject{--dec:var(--dec-reject,#1f4e8c)}',
-      '.pop-dec:hover,.pop-dec.on{background:var(--dec) !important;color:#fff !important}',
+      //   副ボタン（［取消］［閉じる］）のホバーはアプリの副ボタンと同じ淡い灰（--surface-3）。紺の［確認］［押印］と押した合否（.on）は変えない
+      '.pop-f button:not(.primary):not(.on):hover{background:#eef1f5}',
+      // 最終合否の［採用］［不採用］はアプリの報告書のセグメント（docs/DESIGN.md 3-4）と同じ色: 押す前は中立（白地・枠 #848fa1・文字 #3c4658。ホバーは淡い灰）、
+      //   押した方（.on）は 採用＝緑 #146c43・不採用＝赤 #b42318 の塗りに白い文字。スタンプのインク（朱・藍。設定の hireColor／rejectColor）はハンコの絵だけ（4-9）
+      '.pop-f .pop-dec{border-color:#848fa1;color:#3c4658}.pop-f .pop-dec:hover{background:#eef1f5;color:#161e2e}',
+      '.pop-f .pop-hire.on{background:#146c43;border-color:#146c43;color:#fff}.pop-f .pop-reject.on{background:#b42318;border-color:#b42318;color:#fff}',
       // 保存バー（右下。押印・合否を変えたときだけスクリプトが作る）。出ているあいだは body.a4-sb で下に余白（バーの高さ＋12px。--a4-sbh はスクリプトが置く）を足し、
       //   いちばん下までスクロールすれば用紙と注記がバーに隠れない（画面だけ。印刷の 1 ページに影響させない）。保存後は［×］で閉じられる
       '.savebar{position:fixed;z-index:40;right:12px;bottom:12px;max-width:calc(100vw - 24px);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:8px;background:#fdf4e3;border:1px solid #efcf94;box-shadow:0 4px 14px rgba(16,24,40,.15);font-size:13px}',
@@ -1266,6 +1275,8 @@
       '.cl-mode-sheet .cl-dec-stamp{flex:none;display:grid;place-items:center}.cl-mode-sheet .cl-dec-stamp .verdict-stamp{width:64px;height:41px;mix-blend-mode:multiply;filter:none}',
       '.cl-mode-sheet .cl-dec-meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}',
       '.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#525d70}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}',
+      //   「採用」「不採用」の文字は意味の色（採用＝緑・不採用＝赤。同じ帯の結果のタイル・アプリのセグメントと同じ）。スタンプのインク（朱・藍）はハンコの絵だけ（docs/DESIGN.md 1-1・4-9）
+      '.cl-mode-sheet .cl-decision.is-hire .cl-dec-v{color:#146c43}.cl-mode-sheet .cl-decision.is-reject .cl-dec-v{color:#b42318}',
       '.cl-mode-sheet .cl-dec-by,.cl-mode-sheet .cl-dec-date{font-size:8.5px;color:#3c4658;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-decision.is-none{padding:3px 6px}',
       '.cl-mode-sheet .cl-dec-empty{width:72px;height:44px;border:1.5px dashed #b8c2cf;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.3;color:#525d70;text-align:center}',
@@ -1891,7 +1902,6 @@
       pop.setAttribute("role", "dialog"); pop.setAttribute("aria-labelledby", "a4PopH"); pop.setAttribute("data-kind", kind);
       pop.innerHTML = "<div class=\"pop-h\" id=\"a4PopH\">" + esc(h) + "</div>" + (sub ? "<div class=\"pop-sub\">" + esc(sub) + "</div>" : "") +
         "<div class=\"pop-b\">" + body + "</div><div class=\"pop-f\">" + foot + "</div>";
-      if (kind === "decision") { pop.style.setProperty("--dec-hire", String(D.hireColor || "#c8232c")); pop.style.setProperty("--dec-reject", String(D.rejectColor || "#1f4e8c")); }
       if (memo) pop.querySelector(".pop-text").textContent = memo.v;
       if (kind === "memos") {
         each(sheet.querySelectorAll(".cl-nm-row"), function (row) {

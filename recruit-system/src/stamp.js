@@ -135,6 +135,8 @@
 
   // A4 報告（面接チェックリスト報告）の【判定サマリー】右端に置く最終合否のブロック（外側の div を含む）
   // dec: 正規化済みの decision または null / o: { id, svgId, title, hireLabel, rejectLabel, hireColor, rejectColor, sub, size }
+  // インクの色（hireColor／rejectColor。朱・藍）はスタンプの絵だけに使う。「採用」「不採用」の文字の色は用紙の CSS（.cl-decision.is-hire／.is-reject。
+  //   採用＝緑・不採用＝赤の意味の色。docs/DESIGN.md 1-1・4-9）。文字に style で色を付けない
   function decisionSheetHtml(dec, o) {
     o = o || {};
     var esc = function (s) {
@@ -157,7 +159,7 @@
     return '<div class="cl-decision is-' + dec.result + '"' + idAttr + ' data-result="' + dec.result + '">' +
       '<div class="cl-dec-stamp">' + svg + '</div>' +
       '<div class="cl-dec-meta">' +
-        '<span class="cl-dec-kv"><span class="cl-dec-k">' + esc(title) + '</span><b class="cl-dec-v" style="color:' + esc(color) + '">' + esc(label) + '</b></span>' +
+        '<span class="cl-dec-kv"><span class="cl-dec-k">' + esc(title) + '</span><b class="cl-dec-v">' + esc(label) + '</b></span>' +
         (name ? '<span class="cl-dec-by">' + esc(name) + (btitle ? '（' + esc(btitle) + '）' : '') + '</span>' : '') +
         '<span class="cl-dec-date">' + esc(dec.date || '') + '</span>' +
       '</div></div>';

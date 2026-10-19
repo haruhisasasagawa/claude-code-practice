@@ -138,7 +138,7 @@ A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内�
   </div>
 </div>
 ```
-- 取消（`unstamp`/`undecide`）は押印済み／合否ありのときだけ出す。採用／不採用のボタンの色は `--dec-hire`/`--dec-reject`（`D.hireColor`/`D.rejectColor`）を窓の style に置く
+- 取消（`unstamp`/`undecide`）は押印済み／合否ありのときだけ出す。採用／不採用のボタンの色は ~~`--dec-hire`/`--dec-reject`（`D.hireColor`/`D.rejectColor`）を窓の style に置く~~ → **2026-10-19 からアプリの報告書のセグメントと同じ**（押す前は中立・押した方〔`.on`〕は 採用＝緑 #146c43・不採用＝赤 #b42318 の塗り。スタンプのインクの色はハンコの絵だけ。`docs/DESIGN.md` 4-9・`docs/SPEC-flow.md` 16-8）。用紙の「最終合否 採用／不採用」の文字（`decisionSheetHtml` の `.cl-dec-v`）も 2026-10-19 からインクの style を付けず、用紙の CSS で 採用＝#146c43・不採用＝#b42318（`.cl-decision.is-hire`／`.is-reject`。同じ帯の結果のタイルと同じ意味の色。16-10 の 1）。窓の選択・入力欄と［取消］［閉じる］の枠は #848fa1・角丸 8（16-10 の 2。2-2）
 - 担当者の初期選択: stamp = その欄の押印者 → （欄が `cfg.interviewerField` なら）`rec.checklist.header.interviewer` → なし。decision = `rec.management[D.stampField]` の押印者 → `rec.decision.by` → なし。名簿に無い名前は `__free`＋氏名欄に入れる（`allowFreeName` のとき）
 - 見出し: stamp = 欄の label、decision = `D.label`、memo = 行の名前（`.cl-nm-k` の文字。確認点は「{①} {確認点の名前} のメモ」）、memos =「面接メモ（全文）」
 
@@ -177,6 +177,7 @@ A1 保存 HTML は body 直下の用紙 `main.a4#a4`（210×297mm 固定・内�
 - **用紙の中に画面幅で変わる規則（`@media (max-width…)`）を置かない**（画面と印刷で文字組みが変わり計測がずれる）
 
 ### 2-2. 保存 HTML 専用 `reportCss()`（作り直し。旧規則は全部消す）
+> 色は 2026-10-18 に `docs/DESIGN.md` 4-9 の値へ置き換えた（このブロックの #1a2233・#5b6675・#1f5fbf などはその前の値）。窓 `.pop` の文字・フォーカス・最終合否のボタンは 2026-10-19 に下のとおり（`docs/SPEC-flow.md` 16-8）。
 ```css
 :root{color-scheme:light}
 *{box-sizing:border-box}
@@ -198,19 +199,24 @@ body>.a4{margin:24px auto}
 .pop{position:absolute;z-index:30;width:260px;max-width:calc(100vw - 16px);padding:10px 12px;background:#fff;color:#1a2233;border:1px solid #c9d2dd;border-radius:8px;box-shadow:0 8px 24px rgba(16,24,40,.18);font-size:13px;line-height:1.5}
 .pop[data-kind="memo"],.pop[data-kind="memos"]{width:380px;max-height:60vh;display:flex;flex-direction:column}
 .pop[data-kind="memo"] .pop-b,.pop[data-kind="memos"] .pop-b{flex:1 1 auto;min-height:0;overflow:auto}   /* 本文だけスクロール。見出しと［閉じる］は常に見える */
-.pop-h{font-weight:800;font-size:13.5px}.pop-sub,.pop-ref{font-size:11.5px;color:#5b6675}
+.pop-h{font-weight:700;font-size:13px}.pop-sub,.pop-ref{font-size:12px;color:#525d70}   /* 2026-10-19: 13.5/800・11.5 → アプリの段階 */
 .pop-b{display:flex;flex-direction:column;gap:6px;margin:8px 0}
-.pop-l{display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:700;color:#5b6675}
-.pop select,.pop input{font:inherit;font-size:13px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;background:#fff;color:#1a2233;width:100%}
+.pop-l{display:flex;flex-direction:column;gap:2px;font-size:12px;font-weight:700;color:#525d70}
+.pop select,.pop input{font:inherit;font-size:13px;font-weight:400;padding:5px 8px;border:1px solid #848fa1;border-radius:8px;background:#fff;color:#161e2e;width:100%}   /* 2026-10-19 レビュー修正 D: 枠 #c7d0db・角丸 6 → アプリの入力欄と同じ #848fa1（地に 3:1）・8。寸法はそのまま */
+.pop select:focus,.pop input:focus{border-color:#3b5791;outline:2px solid #3b5791;outline-offset:1px}   /* 2026-10-19: ブラウザ既定の黒い輪 → --focus */
+.pop button:focus-visible,.savebar button:focus-visible{outline:2px solid #3b5791;outline-offset:2px}
 .pop-note{font-size:12px;color:#9a5b00;background:#fdf1dc;border:1px solid #f3cf8a;border-radius:6px;padding:3px 8px}
 .pop-err{font-size:12px;font-weight:700;color:#b42318}.pop-err:empty{display:none}
 .pop-text{white-space:pre-wrap;overflow-wrap:anywhere}
-.pop-memos{margin:0}.pop-memos dt{font-size:11.5px;font-weight:700;color:#5b6675;margin-top:6px}.pop-memos dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.pop-memos{margin:0}.pop-memos dt{font-size:12px;font-weight:700;color:#525d70;margin-top:6px}.pop-memos dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .pop-f{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .pop-f button,.savebar-btn{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:#1a2233;cursor:pointer}
 .pop-f button.primary,.savebar-btn{background:#1f5fbf;border-color:#1f5fbf;color:#fff}
-.pop-dec{color:var(--dec) !important;border:1.5px solid var(--dec) !important}.pop-hire{--dec:var(--dec-hire,#c8232c)}.pop-reject{--dec:var(--dec-reject,#1f4e8c)}
-.pop-dec:hover,.pop-dec.on{background:var(--dec) !important;color:#fff !important}
+/* 2026-10-19 レビュー修正 D: 窓のボタンの枠も #c7d0db → #848fa1（［採用｜不採用］と［取消］［閉じる］で副ボタンの見た目を 1 つに）・副ボタンのホバー #eef1f5（紺の［確認］［押印］と押した合否は変えない） */
+.pop-f button{border-color:#848fa1}.pop-f button:not(.primary):not(.on):hover{background:#eef1f5}
+/* 最終合否の［採用］［不採用］（2026-10-19。それまではインクの --dec-hire／--dec-reject で 採用＝朱・不採用＝藍）: アプリの報告書のセグメントと同じ色 */
+.pop-f .pop-dec{border-color:#848fa1;color:#3c4658}.pop-f .pop-dec:hover{background:#eef1f5;color:#161e2e}
+.pop-f .pop-hire.on{background:#146c43;border-color:#146c43;color:#fff}.pop-f .pop-reject.on{background:#b42318;border-color:#b42318;color:#fff}
 .savebar{position:fixed;z-index:40;right:12px;bottom:12px;max-width:calc(100vw - 24px);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:8px;background:#fdf1dc;border:1px solid #f3cf8a;box-shadow:0 4px 14px rgba(16,24,40,.15);font-size:13px}
 .savebar-x{font:inherit;font-size:16px;line-height:1;padding:3px 6px;border:0;border-radius:6px;background:transparent;color:#5b6675;cursor:pointer}.savebar-x:hover{background:rgba(0,0,0,.06)}
 @media screen{body.a4-sb{padding-bottom:calc(var(--a4-sbh,49px) + 12px)}}
@@ -242,6 +248,7 @@ body.print-checklist .cl-sheet-host{display:block;position:absolute;left:-10000p
 }
 ```
 - アプリの全体の `@page{size:A4;margin:10mm 11mm}`（設定・使い方の画面の印刷用）はそのまま
+- **アプリの部品の規則を用紙に漏らさない**（2026-10-19 レビュー修正 D。`docs/SPEC-flow.md` 16-10 の 11）: 用紙は `.stamp-box`・`.stamp-label`・`.stamp-meta` など、報告書のカード「応募者の管理（押印）」と同じ class を使う。カードの規則（縦並び・中央寄せ・行の高さ。2026-10-18）が `#appPaper`・`#clSheet` の用紙に効いて、押印行が縦並び（52 → 89px）になり、保存 HTML の用紙と違っていた（S13・A10）→ カードの規則は `#mgmtCard` に絞る。e2e E24 (1) が、アプリの報告書の紙・印刷ホストの用紙と保存 HTML の用紙の全要素の計算されたスタイル（並び・文字・色・余白・枠・大きさ）を比べる
 
 ### 2-4. 寸法の根拠
 - 96dpi: 1mm = 3.7795px。210mm = 793.7px、297mm = 1122.5px、内寸 190×281mm = 718.1×1062.0px
@@ -384,7 +391,7 @@ function exportHtml(){closePop(false);
 
 ## 5. アプリ側（app.js・styles.css・index.html）
 - ③ の紙: `reportStepHtml` の `<div class="report-paper" id="appPaper">` を `<div class="a4" id="appPaper">` に。中身は `S.checklistSheetHtml(S.buildRecord(state), state.profile, { decisionId: 'appPaperDecision', decisionSvgId: 'vdAppPaper', stampSvgPrefix: 'ap' })`（押印行入り）。cap の文言:「<b>面接チェックリスト報告（A4）</b><span>保存した HTML はこの用紙 1 枚で開きます。押印・合否は下のカードで（保存した HTML では用紙の欄をクリック）</span>」。紙の欄にはクリックの処理を付けない（A10）。押印・取消・合否で `rerenderReportPaper()`（現行どおり呼ばれている）
-- `fitReportPaper`: `S.fitChecklistSheet(sh)`（上限は既定）。縮小（0.95 まで）・`.paper-stack` の処理はそのまま
+- `fitReportPaper`: `S.fitChecklistSheet(sh)`（上限は既定）。縮小（0.95 まで）・`.paper-stack` の処理はそのまま（2026-10-19 に `.paper-stack` は削除。報告書は 1 列〔`.page.reading`〕で右サマリーはいつも紙の下。`docs/SPEC-flow.md` 16-9）
 - 印刷: `prepareChecklistSheet(true)` は `#clSheet` に `'<div class="a4">' + S.checklistSheetHtml(rec, state.profile, {}) + '</div>'` を描いて `body.print-checklist`、`S.fitChecklistSheet($('#clSheet .cl-sheet'))`。`printChecklistSheet`・beforeprint/afterprint・`#btnPrint`・`#clPrintBtn`・`#reportPrintBtn` の経路は変えない
 - 削除: `checklistStampsHtml`・app 内の `checklistSheetLimit`。`renderBrand` は `S.brandLogo()` を使う
 - index.html: `#clSheet` のコメントを「A4 の用紙（③ と同じ部品）を印刷の直前だけ描く」に

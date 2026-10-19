@@ -931,7 +931,7 @@ const fillScript = async (o) => {
     <div class="field" id="saPosting"><label>応募した求人</label>{clSegHtml('header.posting', 「通常」「短期」)}</div>
   </div>
   <div class="field-row sa-row sa-row3">
-    <div class="field"><label for="saTaxi">タクシー可否・料金</label><input type="text" id="saTaxi" data-cl="header.taxi" placeholder="例: 可・2,500円"></div>
+    <div class="field"><label for="saTaxi">タクシー可否・料金</label><input type="text" id="saTaxi" data-cl="header.taxi" placeholder="例：可・2,500円"></div>
     {fTextarea('reviewerNotes','メモ（任意）',{rows:2})}
   </div>
 </div>
@@ -1009,7 +1009,7 @@ const fillScript = async (o) => {
 ### 13-2. 1 ページ保証
 - `storage.fitChecklistSheet(sheet, limit)`（= `clFitSheet`）: 押印行（とその上の余白）を除いた高さが上限 `checklistSheetLimit(押印欄の件数)`（3 件まで 950px＝1040 − 押印行 90。4〜6 件 890px）を超えたら `.cl-compact`（本文 9px・質問の回答 2 行のまま・面接所見 10 行まで）→ `.cl-compact-q1`（質問の回答 1 行・所見 6 行）→ `.cl-compact-2`（質問の回答を省いて案内・所見 4 行）→ `zoom`（縮小後の高さを測り直して上限まで下げる）。メモが「…」で切れたら `.cl-nm-cut` で案内 1 行（13-7）
 - アプリ: 印刷用（`prepareChecklistSheet(true)` → `fitChecklistSheet()`）と ③ の紙プレビュー（`fitReportPaper()`＝ `renderStep` の ③・`rerenderReportPaper`・画面幅の変更）。保存 HTML: 埋め込みスクリプト 1 に同じ関数のソース（`clFitSheet.toString()`）を入れ、`__prepareChecklistSheet(true)` と紙プレビュー（読み込み時・`setView('report')`・`window.__fitChecklistPaper`）で使う
-- ③ の紙プレビューは等倍（本文 9.5px）: 右サマリーの横に紙が入らない幅（1280px・1366px）は右サマリーを紙の下に回す（`.judge-layout.paper-stack`）。それでも列が紙より狭いときだけ `#appPaper` を `zoom` で縮め、縮小は 0.95 倍まで（それより狭い画面は等倍で紙だけ横スクロール。E36）。旧: 0.7 倍まで縮めていた（1280px で 0.80 倍）
+- ③ の紙プレビューは等倍（本文 9.5px）: 右サマリーの横に紙が入らない幅（1280px・1366px）は右サマリーを紙の下に回す（`.judge-layout.paper-stack`。2026-10-18 から報告書は 1 列で右サマリーはいつも紙の下になり、2026-10-19 に `paper-stack` は削除。`docs/SPEC-flow.md` 16-9）。それでも列が紙より狭いときだけ `#appPaper` を `zoom` で縮め、縮小は 0.95 倍まで（それより狭い画面は等倍で紙だけ横スクロール。E36）。旧: 0.7 倍まで縮めていた（1280px で 0.80 倍）
 - 旧版の `.cl-page`・`.cl-fit`・2 ページ目の強制改ページは削除した
 
 ### 13-3. 短い名前（`short`）

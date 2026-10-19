@@ -6,6 +6,7 @@
  * 2026-10-14 の面接特化（docs/SPEC-slim.md 5-1）で、削除した機能のテスト（#01〜#52・#56〜#60・#62・#72）は外した（番号は振り直さない）。
  * 2026-10-16 の人物像（docs/SPEC-persona.md 7-1）: 既定の確認点は 6 項目（面接評価 14 点満点。rt_manner を外した）。#94〜#97 を追加
  * 2026-10-16 の面接の流れ（docs/SPEC-flow.md 9-1）: 内部の step は 1〜4（#85）・timingSummary（#63・#88・#99）・記入シートの新しい並び（#97）。#98〜#100 を追加
+ * 2026-10-19 の画面の見直しのレビュー修正 C（docs/SPEC-flow.md 16-9）: デザインシステムの静的な確認 #101（アイコンの参照とスプライト）・#102（余白は 4 の倍数か例外の表）を追加
  */
 const vm = require('vm'), fs = require('fs'), path = require('path'), assert = require('assert');
 
@@ -641,7 +642,13 @@ test('67 最終合否スタンプ（verdictSvg・decisionSheetHtml・source）',
   const none = ST.decisionSheet(null, { id: 'clDecision' });
   assert.ok(none.indexOf('class="cl-decision is-none"') >= 0 && none.indexOf('id="clDecision"') > 0 && none.indexOf('未押印') > 0 && none.indexOf('verdict-stamp') < 0, none);
   const hire = ST.decisionSheet({ result: 'hire', label: '採用', date: '2026.10.10', at: '', by: { name: '笹川 晴央', short: '笹川', title: '副支配人' } }, { id: 'x', hireColor: '#c8232c' });
-  ['is-hire', 'data-result="hire"', 'verdict-stamp', '笹川 晴央（副支配人）', '2026.10.10', 'style="color:#c8232c"'].forEach(function (t) { assert.ok(hire.indexOf(t) > 0, 'decisionSheet に ' + t); });
+  ['is-hire', 'data-result="hire"', 'verdict-stamp', '笹川 晴央（副支配人）', '2026.10.10', 'stroke="#c8232c"', '<b class="cl-dec-v">採用</b>'].forEach(function (t) { assert.ok(hire.indexOf(t) > 0, 'decisionSheet に ' + t); });
+  //   インク（朱・藍）はスタンプの絵だけ: 「採用」「不採用」の文字に style の色を付けない（文字の色は用紙の CSS の意味の色。docs/DESIGN.md 1-1・4-9。2026-10-19 レビュー修正 D）
+  const rej = ST.decisionSheet(DEC_REJECT, { id: 'y', rejectColor: '#1f4e8c' });
+  assert.ok(rej.indexOf('stroke="#1f4e8c"') > 0 && rej.indexOf('<b class="cl-dec-v">不採用</b>') > 0 && !/style="[^"]*color/.test(hire + rej), 'decisionSheet の文字にインクの色を付けない: ' + rej);
+  const sheetCss = S.checklistSheetCss();
+  assert.ok(sheetCss.indexOf('.cl-mode-sheet .cl-decision.is-hire .cl-dec-v{color:#146c43}') >= 0 && sheetCss.indexOf('.cl-mode-sheet .cl-decision.is-reject .cl-dec-v{color:#b42318}') >= 0,
+    '用紙の CSS: 最終合否の文字は 採用＝緑 #146c43・不採用＝赤 #b42318');
   const src = ST.source();
   ['function verdictSvg(', 'function decisionSheetHtml(', 'function decisionFilename(', 'function stampSvg(', 'function shortName('].forEach(function (t) { assert.ok(src.indexOf(t) >= 0, 'source に ' + t); });
   assert.ok(src.indexOf('</' + 'script') < 0 && src.indexOf('<!--') < 0, 'source に閉じタグ・コメント開始が無い');
@@ -2608,6 +2615,73 @@ test('100 A4 の面接メモは質問ごとの行・面接時間・保存 HTML �
   const el = function (row, text) { return { closest: function () { return row; }, textContent: text }; };
   assert.deepStrictEqual(plain(memoOf(el(fakeRow({ 'data-cl-note': 'q_term' }, ['cl-nm-row', 'cl-nm-q'], '①短期／長期の希望'), '長期で…'))), { k: '①短期／長期の希望', v: '長期で働きたい' });
   assert.deepStrictEqual(plain(memoOf(el(fakeRow({ 'data-cl-block': 'continuity_q' }, ['cl-nm-row', 'cl-nm-q'], '②…'), '以前…'))), { k: '②…', v: '以前のメモ' });
+});
+
+// ======================================================================
+// デザインシステムの静的な確認（docs/DESIGN.md。2026-10-19 のレビュー修正 C・docs/SPEC-flow.md 16-9。#101〜#102）
+// ======================================================================
+test('101 SVG のアイコン: src の参照（ico()・icon:・helpCard／section のアイコン・href="#i-…"・トグルの href）はどれも index.html の <symbol id="i-…"> にあり、スプライトのアイコンはどれも参照される（docs/DESIGN.md 2 章）', function () {
+  const dir = path.join(__dirname, '../src');
+  const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+  const sprite = (html.match(/<symbol id="i-[a-z0-9-]+"/g) || []).map(function (m) { return m.slice('<symbol id="i-'.length, -1); });
+  assert.ok(sprite.length >= 28 && new Set(sprite).size === sprite.length, 'スプライト: ' + sprite.join(','));
+  const refs = {};   // id → 参照している場所（ファイル: 書き方）
+  const add = function (id, where) { (refs[id] = refs[id] || []).push(where); };
+  const quoted = function (t) { return (t.match(/'([^']+)'/g) || []).map(function (q) { return q.slice(1, -1); }); };
+  //   条件つき（cond ? 'a' : 'b'）は ? の後ろの文字列だけ（条件の中の比べる文字列〔st === 'off'〕を数えない）
+  const branches = function (t) { return quoted(t.indexOf('?') >= 0 ? t.slice(t.indexOf('?') + 1) : t); };
+  ['index.html', 'app.js', 'settings.js'].forEach(function (f) {
+    const t = fs.readFileSync(path.join(dir, f), 'utf8');
+    let m;
+    //   ico('x')・ico('x', 'cls')・ico(cond ? 'a' : 'b')（1 つ目の引数の中の文字列。ico(o.icon) などの変数は icon: と helpCard／section の方で数える）
+    const reIco = /\bico\(([^)]*)\)/g;
+    while ((m = reIco.exec(t))) branches(m[1].split(',')[0]).forEach(function (id) { add(id, f + ': ico(' + m[1] + ')'); });
+    const reIcon = /\bicon:\s*'([^']+)'/g;
+    while ((m = reIcon.exec(t))) add(m[1], f + ': icon:');
+    const reCard = /\b(?:helpCard|section)\('[^']*',\s*'([^']+)'/g;   // helpCard(id, icon, …)・設定の section(id, icon, …)
+    while ((m = reCard.exec(t))) add(m[1], f + ': ' + m[0]);
+    const reHref = /href="#i-([a-z0-9-]+)"/g;
+    while ((m = reHref.exec(t))) add(m[1], f + ': href');
+    const reDyn = /'#i-'\s*\+\s*\(([^)]*)\)/g;   // '#i-' + (st === 'off' ? 'circle' : 'check')
+    while ((m = reDyn.exec(t))) branches(m[1]).forEach(function (id) { add(id, f + ": '#i-' + (…)"); });
+  });
+  const missing = Object.keys(refs).filter(function (id) { return sprite.indexOf(id) < 0; }).map(function (id) { return id + '〔' + refs[id].join(' / ') + '〕'; });
+  const unused = sprite.filter(function (id) { return !refs[id]; });
+  assert.ok(Object.keys(refs).length >= 25, '参照を数えられていない: ' + Object.keys(refs).join(','));
+  assert.deepStrictEqual(missing, [], 'スプライトに無いアイコンの参照（綴りの誤りなど。描かれず 16px の空の箱になる）');
+  assert.deepStrictEqual(unused, [], 'どこからも参照されないアイコン（使っていないものはスプライトから消す）');
+});
+
+test('102 styles.css の余白（gap・margin・padding・top／left など）は 4 の倍数か --sp-*（docs/DESIGN.md 0-3 の 6・1-5）。4 の倍数でない値は 1-5 の例外の表（位置合わせ・部品の内側の寸法）のものだけ', function () {
+  const css = fs.readFileSync(path.join(__dirname, '../src/styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  //   docs/DESIGN.md 1-5 の例外の表と同じ（選択子|属性|値）。足すときは DESIGN.md の表にも書く
+  const ALLOW = [
+    // 位置合わせ（1 行目・部品の中央にそろえるずらし）
+    '.kv-k|padding-top|2px', '.check input|margin-top|1px', '.check-row input|margin-top|2px', '.iv-say-i label input|margin-top|5px',
+    '.alert > .ico|margin-top|1px', '.iv-note .ico|margin-top|1px', '.iv-flow .ico|margin-top|1px', '.ps-ref .ico|margin-top|1px', '.iv-q .q-no|margin-top|2px',
+    '.ev-res-time > .ico:first-child|top|1px',
+    '.help-list > li::before|top|5px', '.iv-say-i::before|top|calc(var(--sp-1) + .85em - 3px)', '.iv-say-i:first-child::before|top|calc(.85em - 3px)',
+    '.help-list.dots > li::before|top|calc(.85em - 3px)', '.help-list.dots > li::before|left|calc((20px - 6px) / 2)',
+    // 部品の内側の寸法
+    'textarea|padding|7px var(--sp-3)', '.q-no|padding|0 6px', '.iv-chip|gap|6px', '.iv-t-stage, .iv-t-total|padding|2px var(--sp-2)', '.report-paper-wrap|padding|2px 2px var(--sp-2)',
+    '.seg-btn + .seg-btn|margin-left|-1px', '.sr-only, .sym|margin|-1px', '.iv-must|top|var(--iv-timer-h, 37px)'
+  ];
+  const found = [];
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  let m;
+  while ((m = re.exec(css))) {
+    const sel = m[1].trim().replace(/\s+/g, ' ');
+    m[2].split(';').forEach(function (d) {
+      const i = d.indexOf(':');
+      if (i < 0) return;
+      const prop = d.slice(0, i).trim(), val = d.slice(i + 1).trim().replace(/\s+/g, ' ');
+      if (!/^((row-|column-)?gap|margin(-[a-z]+)?|padding(-[a-z]+)?|inset|top|left|right|bottom)$/.test(prop)) return;
+      if ((val.match(/-?\d*\.?\d+px/g) || []).some(function (x) { return Math.abs(parseFloat(x)) % 4 !== 0; })) found.push(sel + '|' + prop + '|' + val);
+    });
+  }
+  assert.ok(found.length >= 10, '余白の宣言を読めていない: ' + found.length);
+  assert.deepStrictEqual(found.filter(function (k) { return ALLOW.indexOf(k) < 0; }), [], '4 の倍数でない余白（--sp-* にするか、位置合わせなら DESIGN.md 1-5 の例外に書く）');
+  assert.deepStrictEqual(ALLOW.filter(function (k) { return found.indexOf(k) < 0; }), [], '例外の表にあるが styles.css に無いもの（表を直す）');
 });
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

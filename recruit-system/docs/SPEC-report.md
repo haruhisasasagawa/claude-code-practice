@@ -174,7 +174,7 @@ if (U.isObj(dc) && dc.enabled !== false) {
 <div class="cl-decision is-hire|is-reject" id="ID" data-result="hire|reject">
  <div class="cl-dec-stamp">{verdictSvg({ label:L, date:dec.date, color:C, size:o.size, id:o.svgId, sub:o.sub })}</div>
  <div class="cl-dec-meta">
-  <span class="cl-dec-kv"><span class="cl-dec-k">TITLE</span><b class="cl-dec-v" style="color:C">L</b></span>
+  <span class="cl-dec-kv"><span class="cl-dec-k">TITLE</span><b class="cl-dec-v">L</b></span>   ← 2026-10-19 から style="color:C" を付けない（文字は用紙の CSS の意味の色 .cl-decision.is-hire／.is-reject。C はスタンプの絵だけ。docs/SPEC-flow.md 16-10）
   <span class="cl-dec-by">氏名（役職）</span>   ← by.title が空なら「氏名」だけ。by.name が空なら span ごと省略
   <span class="cl-dec-date">DATE</span>
  </div></div>
@@ -525,7 +525,7 @@ sCheck('management.decision.filenameSuffix', '合否を付けて保存すると�
 - エスケープ: `ST.verdict({ label:'<b>', date:'"x' })` に `&lt;b&gt;` があり `<b>` が無い
 - 長いラベル `ST.verdict({ label:'アルバイト採用決定' })` に `textLength="88"`、2 文字には `textLength` が無い
 - `ST.decisionSheet(null, { id:'clDecision' })` に `class="cl-decision is-none"`・`id="clDecision"`・`未押印` があり `verdict-stamp` が無い
-- `ST.decisionSheet({ result:'hire', label:'採用', date:'2026.10.10', at:'', by:{ name:'笹川 晴央', short:'笹川', title:'副支配人' } }, { id:'x', hireColor:'#c8232c' })` に `is-hire`・`data-result="hire"`・`verdict-stamp`・`笹川 晴央（副支配人）`・`2026.10.10`・`style="color:#c8232c"`
+- `ST.decisionSheet({ result:'hire', label:'採用', date:'2026.10.10', at:'', by:{ name:'笹川 晴央', short:'笹川', title:'副支配人' } }, { id:'x', hireColor:'#c8232c' })` に `is-hire`・`data-result="hire"`・`verdict-stamp`・`笹川 晴央（副支配人）`・`2026.10.10`・~~`style="color:#c8232c"`~~ → 2026-10-19 から `stroke="#c8232c"`（スタンプの絵）・`<b class="cl-dec-v">採用</b>`（文字に style の色なし）・用紙の CSS に `.cl-decision.is-hire .cl-dec-v{color:#146c43}`（不採用は `#1f4e8c` の stroke・`#b42318` の文字）
 - `ST.source()` に `function verdictSvg(`・`function decisionSheetHtml(`・`function decisionFilename(`・`function stampSvg(`・`function shortName(` があり、`</script`・`<!--` が無い
 - 外部参照なし: `vm.runInNewContext(ST.source() + '\n;[verdictSvg({label:"採用",date:"2026.10.10"}).indexOf("<svg class=\\"verdict-stamp\\""), decisionSheetHtml({result:"reject",label:"不採用",date:"2026.10.10",by:{name:"笹川 晴央",title:""}},{}).indexOf("is-reject") > 0, decisionFilename("a.html",{result:"hire",label:"採用"},{})]', {})` を `plain(...)` して（別 realm の配列なので）`[0, true, 'a_採用.html']` と deepStrictEqual
 

@@ -2,6 +2,7 @@
    リクルート判定システム — スタイル（docs/DESIGN.md v2 のトークンと部品だけで組む）
    1 トークン → 2 ベース → 3 骨格 → 4 部品 → 5 画面 → 6 幅ごと → 7 ダーク → 8 印刷
    色は役割トークンだけを使う。文字は 12・13・15・17・20・24px、太さは 400・700 だけ（A4 の用紙は storage.js の用紙の CSS）。
+   余白（gap・margin・padding）は --sp-*（4 の倍数）。4 の倍数でない値は docs/DESIGN.md 1-5 の例外（位置合わせ・部品の内側の寸法）だけ（tests/rules.test.js #102 が確かめる）。
    ===================================================================== */
 
 /* ---------- 1. トークン ---------- */
@@ -123,7 +124,7 @@ code { font-family: var(--mono); font-size: .85em; }
   border-radius: var(--r-md); background: var(--primary); color: var(--on-primary); font-size: var(--fs-17); font-weight: var(--fw-bold);
 }
 .brand-title { font-size: var(--fs-13); font-weight: var(--fw-bold); line-height: var(--lh-tight); }
-.brand-sub { font-size: var(--fs-12); color: var(--muted); line-height: var(--lh-tight); margin-top: 2px; }
+.brand-sub { font-size: var(--fs-12); color: var(--muted); line-height: var(--lh-tight); margin-top: var(--sp-1); }
 /* ロゴ（brand.js。ローカル版だけ）があるとき: ロゴを上に置き、アプリ名・劇場名をその下に */
 .brand.has-logo { flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
 .brand-logo { display: block; width: 100%; max-width: 200px; height: auto; }
@@ -176,8 +177,8 @@ code { font-family: var(--mono); font-size: .85em; }
 .work { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-6); }
 .summary { position: sticky; top: calc(var(--topbar-h, 56px) + var(--sp-6)); display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
 #stepContent[data-step="1"] ~ .summary { position: static; }   /* 準備の右サマリーは固定しない（低い画面でもスクロールで見える） */
-/* 右サマリーを本文の下に回すとき（報告書・1180px 以下） */
-.judge-layout.paper-stack .summary, .page.reading .summary { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; }
+/* 右サマリーを本文の下に回すとき（報告書はどの幅でも 1 列なので紙の下。準備は 1180px 以下で本文の下〔6 章〕） */
+.page.reading .summary { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; }
 /* 面接・評価は右サマリーを出さない（上の .page.reading .summary より後ろに置く。同じ詳細度なので後ろが勝つ） */
 .judge-layout.no-summary > .summary { display: none; }
 .view-footer { padding: 0 0 var(--sp-4); font-size: var(--fs-12); line-height: var(--lh-label); color: var(--muted); text-align: center; }
@@ -198,6 +199,7 @@ code { font-family: var(--mono); font-size: .85em; }
 .flow-foot > .btn.primary { order: 3; min-width: 200px; margin-left: auto; }
 .flow-foot .ff-note { order: 0; font-size: var(--fs-13); line-height: var(--lh-label); color: var(--muted); }
 .lbl-s { display: none; }
+.lbl-s::before { content: attr(data-lbl); }   /* 480px 以下だけ出す短い文字（textContent は変えない。「前の段階」→「戻る」） */
 
 /* ---------- 4. 部品 ---------- */
 /* 4-1 ボタン（md 40・sm 32。文字は 700） */
@@ -221,10 +223,15 @@ code { font-family: var(--mono); font-size: .85em; }
 .btn.danger { color: var(--danger-text); border-color: currentColor; }
 .btn.danger:hover { background: var(--danger-soft); }
 .btn.sm { height: var(--h-sm); padding: 0 var(--sp-3); font-size: var(--fs-13); }
+/* 文字の中の番号の丸（［次へ：② 継続性・報連相 →］）: 文字と丸を 1 つのまとまりにして縦の中心をそろえる。丸と名前の間は 4（名前を隠すときは間も消える） */
+.btn .lbl-nb { display: inline-flex; align-items: center; }
+.btn .lbl-nb > .lbl-t { margin-left: var(--sp-1); }
 .btn.icon { width: var(--h-md); padding: 0; }
 .btn.sm.icon { width: var(--h-sm); }
 .btn.icon.danger { border-color: var(--border-control); }
 .btn.icon.danger:hover { border-color: currentColor; }
+/* ボタンの中身（アイコン・文字）はクリックの的にしない: 押した要素はいつもボタン自身（押した瞬間にメモ欄の change で表示を直しても、クリックが落ちない。2026-10-19） */
+.btn > *, .seg-btn > *, .iv-chip > *, .link-btn > *, .ev-res-time > *, .nav-item > * { pointer-events: none; }
 /* トグル（［説明した］［伝えた］）: 幅は操作列と同じ 280px で固定（3 つの状態で位置も幅も変えない）。
    オフ＝副ボタン（○）／オン＝淡い紺の地・紺の枠と文字（✓）／一部＝淡い琥珀（✓）。紺の塗りにはしない */
 .btn.toggle { width: var(--op-w); flex: none; }
@@ -260,13 +267,17 @@ code { font-family: var(--mono); font-size: .85em; }
 }
 .card-band > .ico { width: 20px; height: 20px; color: var(--band-icon); }
 .card-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); min-width: 0; font-size: var(--fs-17); font-weight: var(--fw-bold); line-height: var(--lh-tight); }
+/* アイコン・番号と題はいつも同じ行（題が残りの幅より長いときは題の中で折り返す。帯の折り返しで題だけが次の行へ行かない。390px の使い方の 1 枚目など。docs/DESIGN.md 3-2） */
+.card-band > .ico + .card-title, .card-band > .nb + .card-title { max-width: calc(100% - 20px - var(--sp-3)); }
 .card-title small { font-size: var(--fs-13); font-weight: var(--fw-regular); color: var(--text-2); }
 .card-title label { cursor: pointer; }
 .card-meta { font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); }
 .card-actions { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 .card-body { padding: var(--sp-4) var(--sp-5); }
-.card-body > :first-child, .card-body > .rows:first-child > :first-child { margin-top: 0; padding-top: 0; border-top: 0; }
-.card-body > :last-child, .card-body > .rows:last-child > :last-child { margin-bottom: 0; padding-bottom: 0; }
+/* 本文の最初の要素の上の余白・線と、最後の要素の下の余白を消す。枠のある部品（入力欄・選択・メモ欄・警告・読み取り専用のまとまり）は除く
+   （本文がその部品だけのとき〔面接所見の欄〕に、部品の枠の上辺・内側の余白まで消さない。docs/DESIGN.md 3-2） */
+.card-body > :first-child:not(:where(input, select, textarea, .alert, .panel)), .card-body > .rows:first-child > :first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.card-body > :last-child:not(:where(input, select, textarea, .alert, .panel)), .card-body > .rows:last-child > :last-child { margin-bottom: 0; padding-bottom: 0; }
 .card-note { font-size: var(--fs-13); line-height: var(--lh-label); color: var(--muted); }
 .card-body > * + * { margin-top: var(--sp-3); }
 .card-body > .rows + .field, .card-body > .rows + .alert { margin-top: var(--sp-4); }
@@ -284,13 +295,16 @@ code { font-family: var(--mono); font-size: .85em; }
 .rows > .row:first-child, .group-h + .row, .row-group > .row:first-child { border-top: 0; }
 .row-label { grid-area: label; min-width: 0; font-size: var(--fs-15); line-height: var(--lh-label); overflow-wrap: anywhere; }
 .row-label .badge, .row-label .q-no { margin-left: var(--sp-2); vertical-align: 1px; }
-.row-hint { display: block; margin-top: 2px; font-size: var(--fs-13); line-height: var(--lh-label); color: var(--muted); }
+.row-hint { display: block; margin-top: var(--sp-1); font-size: var(--fs-13); line-height: var(--lh-label); color: var(--muted); }
 .row-no { margin-right: var(--sp-2); font-family: var(--font-num); color: var(--muted); font-weight: var(--fw-bold); }
 .row-ctl { grid-area: ctl; width: var(--op-w); min-width: 0; }
 .row-ctl > .seg, .row-ctl > input, .row-ctl > select, .row-ctl > .input-unit { width: 100%; }
 .row-ctl > * + * { margin-top: var(--sp-2); }
 .row-memo { grid-area: memo; min-width: 0; }
 .row.has-memo { grid-template-areas: "label ctl" "memo ."; }
+/* 押した後の［取消］（報告書の最終合否）: 操作列の下の行の右端（行の間 8。押印の欄の［押印］の下の［取消］と同じ位置関係。docs/DESIGN.md 3-14） */
+.row.has-undo { grid-template-areas: "label ctl" ". undo"; }
+.row-undo { grid-area: undo; justify-self: end; }
 .row-memo input[type="text"] { height: var(--h-sm); padding: 0 var(--sp-3); font-size: var(--fs-13); }
 /* 行の状態: 必須条件の不一致（.is-ng 赤）・評価の未入力（.is-missing 琥珀）・人物像の 1 点（.is-one 赤）。地の色＋角丸 8・左右に 12 はみ出す */
 .row.is-ng, .row.is-missing, .row.is-one { margin: 0 calc(-1 * var(--sp-3)); padding-left: var(--sp-3); padding-right: var(--sp-3); border-radius: var(--r-md); border-top-color: transparent; }
@@ -314,6 +328,9 @@ code { font-family: var(--mono); font-size: .85em; }
 .kv-v.is-empty, .kv-v .is-empty { color: var(--muted); }
 .kv-v.is-off { color: var(--warn-text); font-weight: var(--fw-bold); }
 .kv-v.is-off .ico { color: var(--warn-strong); }
+/* 必須条件の不一致で打ち切って省略できる段階（評価の .cl-skippable。②〜④）は注意にしない: 中立の文字・⚠ なし（琥珀は実際に行った段階だけ。必須条件を一致に戻すと琥珀に戻る。docs/DESIGN.md 3-3） */
+.cl-skippable .kv-v.is-off { color: var(--text-2); font-weight: var(--fw-regular); }
+.cl-skippable .kv-v.is-off .ico { display: none; }
 .panel { padding: var(--sp-1) var(--sp-4); border-radius: var(--r-md); background: var(--surface-2); }
 .panel .kv { border-top-color: var(--panel-line); }
 .panel > :first-child > .kv:first-child, .panel > .kv:first-child { border-top: 0; }
@@ -421,9 +438,12 @@ input.no-spin::-webkit-inner-spin-button, input.no-spin::-webkit-outer-spin-butt
 .iv-chip.is-skip .nb { border-style: dashed; color: var(--muted); }
 .iv-chip.is-skip .iv-chip-t { display: none; }   /* 名前は title・aria-label に残す */
 .iv-chip.is-skip .iv-chip-s { font-size: var(--fs-13); color: var(--muted); }
-/* チップが 1 行に入らないとき（JS が測って .is-compact）: 今の段階以外は番号だけ。済みは「丸に番号（淡い紺）＋後ろに ✓」 */
+/* チップが 1 行に入らないとき（JS が測って .is-compact）: 今の段階以外は番号だけ（名前も状態の文字「省略可」「未確認」も隠す。状態は枠〔点線・琥珀〕と title・aria-label に残る）。
+   済みは「丸に番号（淡い紺）＋後ろに ✓」 */
 .iv-chips.is-compact .iv-chip:not(.is-current) { padding: 0 var(--sp-2); }
-.iv-chips.is-compact .iv-chip:not(.is-current) .iv-chip-t { display: none; }
+.iv-chips.is-compact .iv-chip:not(.is-current) .iv-chip-t, .iv-chips.is-compact .iv-chip:not(.is-current):not(.is-done) .iv-chip-s { display: none; }
+.iv-chips.is-tight .iv-chip.is-current { padding: 0 var(--sp-2); }   /* それでも入らないとき: 今の段階も番号だけ（名前は段階の見出しにある） */
+.iv-chips.is-tight .iv-chip.is-current .iv-chip-t { display: none; }
 .iv-chips.is-compact .iv-chip.is-done .nb::before { content: attr(data-no); content: attr(data-no) / ""; width: auto; height: auto; background: none; -webkit-mask: none; mask: none; }
 .iv-chips.is-compact .iv-chip.is-done .iv-chip-s { position: static; clip: auto; overflow: hidden; width: 12px; height: 12px; font-size: 0; background: var(--accent-text); -webkit-mask: var(--mask-check) center / contain no-repeat; mask: var(--mask-check) center / contain no-repeat; }
 
@@ -443,8 +463,10 @@ input.no-spin::-webkit-inner-spin-button, input.no-spin::-webkit-outer-spin-butt
 .alert.info > .ico { color: var(--accent-text); }
 
 /* 4-10 トースト・ダイアログ */
+/* トースト: 本文の列（.main。サイドバーを除いた範囲）の下中央・操作行の上。幅は文に合わせて最大 560（狭い画面は左右 16 の余白まで広がる）。
+   left と right の両方を決めて margin で中央に寄せる（left: 50% だけだと、内容に合わせて縮む幅の上限が画面の半分になり、390px で 195px・4 行になったため。docs/DESIGN.md 3-13） */
 .toast {
-  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); z-index: 100; max-width: min(90vw, 560px);
+  position: fixed; left: var(--sidebar-w); right: 0; bottom: 88px; z-index: 100; width: max-content; max-width: min(calc(100% - var(--sidebar-w) - var(--sp-12)), 560px); margin: 0 auto;
   padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--toast-bg); color: var(--toast-text);
   font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: var(--lh-label); box-shadow: var(--shadow-3);
   opacity: 0; pointer-events: none; transition: opacity .2s ease;
@@ -497,6 +519,7 @@ input.no-spin::-webkit-inner-spin-button, input.no-spin::-webkit-outer-spin-butt
 .iv-goal { font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); }
 .iv-who { margin-left: auto; min-width: 0; text-align: right; font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); overflow-wrap: anywhere; }
 .iv-who b { font-size: var(--fs-17); color: var(--text); }
+.iv-who-san { margin-left: var(--sp-1); }   /* 氏名と「さん」の間 4（右サマリー・トップバーと同じ） */
 .iv-who-sub { display: block; }
 .iv-lead { width: 100%; font-size: var(--fs-13); line-height: 1.6; color: var(--text-2); overflow-wrap: anywhere; }
 
@@ -541,19 +564,27 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .ev-res-why { min-width: 0; font-size: var(--fs-15); line-height: var(--lh-label); }
 .ev-res-miss { margin-left: auto; display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-13); font-weight: var(--fw-bold); line-height: var(--lh-label); color: var(--warn-text); }
 .ev-res-miss .ico { color: var(--warn-strong); }
+/* 未入力の数（文字だけのボタンの行。高さ 32）が 2 行に折れても、⚠ は 1 行目の中央（docs/DESIGN.md 1-5「アイコンは 1 行目にそろえる」） */
+.ev-res-miss:not(.is-none):not(.is-gate) { align-items: flex-start; }
+.ev-res-miss:not(.is-none):not(.is-gate) > .ico { margin-top: calc((var(--h-sm) - 16px) / 2); }
 .ev-res-miss.is-none, .ev-res-miss.is-gate { font-weight: var(--fw-regular); color: var(--text-2); }
 .ev-res-miss.is-none .ico { color: var(--accent-text); }
 .ev-res-miss.is-gate .ico { color: var(--muted); }
 .ev-res-score { width: 100%; font-size: var(--fs-13); line-height: var(--lh-label); color: var(--muted); }
 .ev-res-score b { color: var(--text-2); font-family: var(--font-num); }
-.ev-res-time { display: inline-flex; align-items: center; gap: var(--sp-1); width: 100%; padding: 0; border: 0; background: none; color: var(--warn-text); font-size: var(--fs-13); font-weight: var(--fw-bold); line-height: var(--lh-label); text-align: left; }
+/* 面接時間を確かめる 1 行（ボタン）: 文と行き先「→ 面接時間の欄へ」を 1 つの文として流す（狭い画面で 2 列に割れて語の途中で折れないように）。
+   ⚠ は左の余白に置いて 1 行目にそろえる・「面接時間の欄へ」は折らない・行頭に長音「ー」を置かない（docs/DESIGN.md 4-4） */
+.ev-res-time { position: relative; display: block; width: 100%; padding: 0 0 0 calc(16px + var(--sp-1)); border: 0; background: none; color: var(--warn-text); font-size: var(--fs-13); font-weight: var(--fw-bold); line-height: var(--lh-label); text-align: left; line-break: strict; }
 .ev-res-time .ico { color: var(--warn-strong); }
+.ev-res-time > .ico:first-child { position: absolute; left: 0; top: 1px; }
+.ev-res-time > .ico:not(:first-child) { margin: 0 var(--sp-1); vertical-align: -3px; }
+.ev-res-time > span:last-child { white-space: nowrap; }
 .ev-res-time:hover span { text-decoration: underline; }
 .ev-sec .card-actions { margin-left: auto; }
 .cl-skip-note { display: none; }
 .cl-skippable .cl-skip-note { display: inline-flex; }
 .ev-time-st { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); }
-.ev-time-st .ev-t-i { display: inline-flex; align-items: center; gap: 6px; }
+.ev-time-st .ev-t-i { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .ev-time-st b { font-family: var(--font-num); }
 #evTime.is-check .input-unit input { border-color: var(--warn-strong); background: var(--warn-soft); }
 #evTime.is-check .row-hint { color: var(--warn-text); font-weight: var(--fw-bold); }
@@ -576,7 +607,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .intro-lead { flex: 1 1 12em; font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); }
 .intro-foot { display: flex; gap: var(--sp-2); }
 .intro-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-2); }
-.intro-steps li { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--surface); font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); }
+.intro-steps li { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--surface); font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); }
 .intro-steps li b { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-15); color: var(--text); }
 /* 応募者の 3 行（1 行目は flex。卒業予定年月は学生の区分のときだけ末尾に出る。入らないときだけ次の行へ） */
 #scriptApplicantCard .card-body > .field-row + .field-row { margin-top: var(--sp-4); }
@@ -587,13 +618,14 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .sa-row1 > .field:nth-child(3) { flex: .8 1 128px; }    /* 性別（最長の「回答しない」が ▾ と重ならない幅） */
 .sa-row1 > .field:nth-child(4) { flex: 1 1 140px; }     /* 区分 */
 .sa-row1 > .field:nth-child(5) { flex: 1 1 160px; max-width: 240px; }   /* 卒業予定年月 */
-.sa-row2 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* 2 行目（面接日・面接担当者・応募した求人）: 面接担当者を広く（「笹川 晴央（副支配人）」が 1181〜1280px で「…」に切れないように）・求人の［通常｜短期］は狭くてよい */
+.sa-row2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, .75fr); }
 .sa-row3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
 #scriptApplicantCard textarea { min-height: 72px; resize: vertical; }
 
 /* 5-4 右サマリー（小さいカード・値の行） */
 .sum-name { font-size: var(--fs-20); font-weight: var(--fw-bold); line-height: var(--lh-tight); }
-.sum-name small { margin-left: 2px; font-size: var(--fs-13); font-weight: var(--fw-regular); color: var(--text-2); }
+.sum-name small { margin-left: var(--sp-1); font-size: var(--fs-13); font-weight: var(--fw-regular); color: var(--text-2); }
 .sum-sub { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); padding: var(--sp-1) 0 var(--sp-2); font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); }
 .card-body > .sum-sub { margin-top: 0; }
 .sum-row { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--divider); font-size: var(--fs-13); line-height: var(--lh-label); }
@@ -602,6 +634,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .sum-label { color: var(--muted); white-space: nowrap; }
 .sum-val { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--sp-1); font-size: var(--fs-13); font-weight: var(--fw-bold); text-align: right; min-width: 0; }
 .sum-stamps { font-size: var(--fs-13); font-weight: var(--fw-bold); text-align: right; }
+.sum-stamps .ico { color: var(--accent-text); vertical-align: -3px; margin-right: var(--sp-1); }   /* 押印済みの ✓（i-check。紺） */
 .sum-saved { padding-top: var(--sp-2); border-top: 1px solid var(--divider); font-size: var(--fs-12); line-height: var(--lh-label); color: var(--muted); }
 .card-body > .sum-saved { margin-top: 0; }
 
@@ -611,15 +644,17 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .report-paper-cap span { font-size: var(--fs-13); line-height: var(--lh-label); color: var(--muted); }
 .report-paper-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px var(--sp-2); margin-top: calc(-1 * var(--sp-3)); }
 #appPaper.a4 { margin: 0 auto; }
-.stamp-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); }
-.stamp-row.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.stamp-box { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-2); min-width: 0; padding: var(--sp-4); border-radius: var(--r-md); background: var(--surface-2); }
+/* 押印の欄（カード「応募者の管理（押印）」）。用紙の押印行も同じ class（.cl-sheet .stamp-box など。形は storage.js の用紙の CSS）なので、カードの規則は #mgmtCard に絞る
+   （報告書の紙 #appPaper・印刷ホスト #clSheet の押印行に縦並び・中央寄せが漏れて、保存 HTML の用紙と違ってしまったため。docs/DESIGN.md 3-14・4-9） */
+#mgmtCard .stamp-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); }
+#mgmtCard .stamp-row.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#mgmtCard .stamp-box { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-2); min-width: 0; padding: var(--sp-4); border-radius: var(--r-md); background: var(--surface-2); }
 .stamp-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--sp-2); }
-.stamp-label { font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: var(--lh-label); }
+#mgmtCard .stamp-label { font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: var(--lh-label); }
 .stamp-hint { font-size: var(--fs-13); line-height: var(--lh-label); color: var(--muted); }
-.stamp-area { height: 100px; display: grid; place-items: center; }
-.stamp-empty { width: 84px; height: 84px; display: grid; place-items: center; border: 2px dashed var(--border-control); border-radius: 50%; background: var(--surface); font-size: var(--fs-12); color: var(--muted); }
-.stamp-meta { min-height: 20px; font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); text-align: center; }
+#mgmtCard .stamp-area { height: 100px; display: grid; place-items: center; }
+#mgmtCard .stamp-empty { width: 84px; height: 84px; display: grid; place-items: center; border: 2px dashed var(--border-control); border-radius: 50%; background: var(--surface); font-size: var(--fs-12); color: var(--muted); }
+#mgmtCard .stamp-meta { min-height: 20px; font-size: var(--fs-13); line-height: var(--lh-label); color: var(--text-2); text-align: center; }
 .stamp-ctl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2); }
 .stamp-ctl .stamp-free { grid-column: 1 / -1; grid-row: 2; }
 .stamp-ctl .ghost { grid-column: 1 / -1; justify-self: end; }
@@ -643,7 +678,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 
 /* 5-6 設定: 左に節のメニュー・右に節のカード・下に保存バー（操作行と同じ部品）。docs/DESIGN.md 4-6 */
 .settings-layout { flex: 1 0 auto; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--sp-6); align-items: start; padding-bottom: var(--sp-8); }
-.settings-nav { position: sticky; top: calc(var(--topbar-h, 56px) + var(--sp-6)); display: flex; flex-direction: column; gap: 2px; }
+.settings-nav { position: sticky; top: calc(var(--topbar-h, 56px) + var(--sp-6)); display: flex; flex-direction: column; gap: var(--sp-1); }
 .settings-nav a { display: flex; align-items: center; min-height: 36px; padding: 0 var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-15); line-height: var(--lh-label); color: var(--text-2); text-decoration: none; }
 .settings-nav a:hover { background: var(--surface-3); color: var(--text); }
 .settings-nav a.active { background: var(--accent-soft-2); color: var(--accent-text); font-weight: var(--fw-bold); }
@@ -658,10 +693,10 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .s-max .hint { font-size: var(--fs-13); }
 .check-row { display: flex; align-items: flex-start; gap: var(--sp-3); cursor: pointer; }
 .check-row input { margin-top: 2px; }
-.check-row .lbl { display: block; font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: var(--lh-label); }
-.check-row .hint { display: block; margin-top: 2px; }
-/* 単位・説明つきの数の欄（得点率・帯の境界）: 欄は 96px、説明は残りの幅で折り返す */
-.inline > input[type="number"] { width: 96px; flex: none; }
+.check-row .lbl { display: block; font-size: var(--fs-15); font-weight: var(--fw-regular); line-height: var(--lh-label); }   /* 文は本文と同じ 15/400（太字は小見出し・ボタンだけ。docs/DESIGN.md 1-4） */
+.check-row .hint { display: block; margin-top: var(--sp-1); }
+/* 単位・説明つきの数の欄（得点率・帯の境界）: 単位「%」は欄の中の右（.input-unit。目安の「分」と同じ部品）。欄は 96px、説明は残りの幅で折り返す */
+.inline > .input-unit { width: 96px; flex: none; }
 .inline > .suffix { flex: 1 1 8em; min-width: 0; white-space: normal; line-height: var(--lh-label); }
 /* 横に並べる小さいラベル＋欄（台本の項目の補足・短い名前・入力の種類・注記・メモ欄の名前） */
 .s-pair { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
@@ -699,7 +734,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .s-items:empty { display: none; }
 .s-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; gap: var(--sp-2); padding: var(--sp-2) 0; border-top: 1px solid var(--panel-line); }
 .s-item:first-child { border-top: 0; }
-.s-item .row-no { margin: 0; padding-top: 9px; text-align: right; line-height: var(--lh-label); }
+.s-item .row-no { margin: 0; padding-top: calc((var(--h-md) - var(--lh-label) * 1em) / 2); text-align: right; line-height: var(--lh-label); }   /* 番号の文字を 40px の欄の文字の高さに合わせる（位置合わせ。1-5） */
 .s-item-main { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .s-item-main textarea { min-height: 64px; }
 .s-item-extra { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); min-width: 0; }
@@ -725,7 +760,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .help-list { display: flex; flex-direction: column; gap: var(--sp-1); counter-reset: hl; }
 .help-list > li { position: relative; padding-left: 28px; font-size: var(--fs-15); line-height: var(--lh-body); }
 .help-list > li::before { counter-increment: hl; content: counter(hl); position: absolute; left: 0; top: 5px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border-control); font-family: var(--font-num); font-size: var(--fs-12); font-weight: var(--fw-bold); line-height: 1; color: var(--text-2); }
-.help-list.dots > li::before { content: ""; top: calc(.85em - 3px); left: 7px; width: 6px; height: 6px; border: 0; background: var(--band-icon); }
+.help-list.dots > li::before { content: ""; top: calc(.85em - 3px); left: calc((20px - 6px) / 2); width: 6px; height: 6px; border: 0; background: var(--band-icon); }   /* 点の中心を番号の丸（20px）の中心にそろえる */
 .help-list > li b { font-weight: var(--fw-bold); }
 .help-back { display: flex; }
 
@@ -734,7 +769,12 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
   .judge-layout { grid-template-columns: minmax(0, 1fr); }
   .summary { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; }
 }
-@media (max-width: 1099px) { :root { --gutter: 24px; } }
+@media (max-width: 1099px) {
+  :root { --gutter: 24px; }
+  /* 操作行を 1 段に収める（本文の幅が狭い: サイドバーの横の 841〜1099px・840px 以下）。面接で［評価に戻る］も出すときは主ボタンを「次へ：③ →」（段階の名前を隠す）・
+     準備の記入シートは「（手書き用）」を隠す（「▼ 下にあと n 項目」が並ぶため）。textContent は変えない（docs/DESIGN.md 3-10） */
+  .flow-foot.has-sub .lbl-t, #saPaperBtn .lbl-x { display: none; }
+}
 @media (max-width: 1099px) and (min-width: 841px) { .iv-must { padding-top: var(--sp-1); padding-bottom: var(--sp-1); } }
 @media (max-width: 900px) {
   .settings-layout { grid-template-columns: minmax(0, 1fr); }
@@ -758,7 +798,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
   #stepSection { grid-column: 1 / -1; }
   .side-section-title { display: none; }
   .steps { flex-direction: row; gap: var(--sp-1); }
-  .step { flex: 1 1 0; grid-template-columns: 24px auto; gap: 6px; align-items: center; padding: var(--sp-1) var(--sp-2); }
+  .step { flex: 1 1 0; grid-template-columns: 24px auto; gap: var(--sp-1); align-items: center; padding: var(--sp-1) var(--sp-2); }
   .step .nb.lg { width: 24px; height: 24px; }
   .step .nb.lg::before { font-size: var(--fs-12); }
   .step-label { font-size: var(--fs-13); }
@@ -777,13 +817,13 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
   .iv-timer b { font-size: var(--fs-20); }
   .iv-t-stage, .iv-t-total { flex-direction: row; align-items: baseline; gap: var(--sp-2); }
   .iv-must { position: sticky; top: var(--iv-timer-h, 37px); z-index: 15; margin: calc(-1 * var(--sp-6)) calc(-1 * var(--gutter)) 0; border: 0; border-bottom: 1px solid var(--danger-border); border-radius: 0; padding: var(--sp-1) var(--gutter); flex-wrap: nowrap; }
-  .iv-must .link-btn { display: none; }
   .ev-top { position: static; margin: 0; padding: 0; }
   .help-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .iv-more { display: none !important; }
+  .toast { left: 0; max-width: min(calc(100% - var(--sp-8)), 560px); }   /* サイドバーは上に並ぶので画面の中央・左右 16 の余白まで */
 }
 @media (max-width: 760px) {
-  .stamp-row, .stamp-row.cols-2 { grid-template-columns: minmax(0, 1fr); }
+  #mgmtCard .stamp-row, #mgmtCard .stamp-row.cols-2 { grid-template-columns: minmax(0, 1fr); }
   .decision-body { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 720px) {
@@ -794,8 +834,9 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 }
 @media (max-width: 600px) {
   .row, .row.has-memo { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "ctl" "memo"; }
+  .row.has-undo { grid-template-areas: "label" "ctl" "undo"; }
   .row-ctl { width: 100%; }
-  .kv { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+  .kv { grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-1); }
   .card-band { padding: var(--sp-2) var(--sp-4); }
   .card-body { padding: var(--sp-3) var(--sp-4); }
   .card-actions { width: 100%; }
@@ -805,7 +846,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
   .iv-who { margin-left: 0; text-align: left; width: 100%; }
   .iv-q { grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--sp-2); }
   .field-row, .sa-row2, .sa-row3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .field-row > .f-wide, .sa-row2 > #saPosting, .sa-row3 > .field { grid-column: 1 / -1; }
+  .sa-row2 > #saPosting, .sa-row3 > .field { grid-column: 1 / -1; }
   .sa-row1 > .field, .sa-row1 > .field:nth-child(n) { flex: 1 1 100%; max-width: none; }
   .intro-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ev-res-miss { margin-left: 0; }
@@ -820,6 +861,9 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
   .s-pair > input, .s-pair > select { flex-basis: 100%; }
   .s-item-extra > .s-pair, .s-block-memo .s-pair { flex: 1 1 100%; }
   .flow-foot > .btn.primary { min-width: 0; }
+  /* 必須条件の案内は短い文（全文は「該当の行へ」と［⑤ 逆質問へ］と並ぶと 3 行になるため。docs/DESIGN.md 3-11） */
+  .iv-must .iv-must-txt > :not(.iv-must-short) { display: none; }
+  .iv-must .iv-must-short { display: inline; }
 }
 @media (max-width: 480px) {
   .iv-chip:not(.is-current) .iv-chip-t, .iv-chip:not(.is-current) .iv-chip-s { display: none; }
@@ -832,8 +876,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
   .iv-timer .lbl-x { display: none; }
   .nav-item { flex: 1 1 auto; justify-content: center; padding: 0 var(--sp-2); }
   .nav-item .ico { display: none; }
-  .iv-must .iv-must-txt > :not(.iv-must-short) { display: none; }
-  .iv-must .iv-must-short { display: inline; }
+  .iv-must .link-btn { display: none; }   /* 「該当の行へ」は 480px 以下だけ出さない（短い文＋［⑤ 逆質問へ］。docs/DESIGN.md 3-11） */
   .save-bar .ff-note { display: none; }
   .field-row, .sa-row2, .sa-row3 { grid-template-columns: minmax(0, 1fr); }
   .intro-steps { grid-template-columns: minmax(0, 1fr); }
@@ -884,11 +927,11 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
     color-scheme: dark;
   }
   :root:not([data-theme="light"]) .hanko { filter: brightness(1.25); }
-  :root:not([data-theme="light"]) .brand-logo { background: #fff; padding: 6px 8px; border-radius: var(--r-md); }
+  :root:not([data-theme="light"]) .brand-logo { background: #fff; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-md); }
   :root:not([data-theme="light"]) #decisionCard .verdict-stamp, :root:not([data-theme="light"]) .verdict-preview .verdict-stamp { filter: brightness(1.35); }
 }
 /* ダークでもロゴは白い台紙に載せる。スタンプは明るさを補正（画面の押印欄と最終合否だけ。A4 の紙は白地のまま補正しない） */
-:root[data-theme="dark"] .brand-logo { background: #fff; padding: 6px 8px; border-radius: var(--r-md); }
+:root[data-theme="dark"] .brand-logo { background: #fff; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-md); }
 :root[data-theme="dark"] #decisionCard .verdict-stamp, :root[data-theme="dark"] .verdict-preview .verdict-stamp { filter: brightness(1.35); }
 
 /* ---------- 8. 印刷 ---------- */
