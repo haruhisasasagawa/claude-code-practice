@@ -471,7 +471,8 @@ test('65 validateProfile（面接チェックリスト）', function () {
   one(function (c) { c.overallOptions.hold = ' '; }, 'overallOptions 空');
   one(function (c) { c.sections[0].minutes = 61; }, 'minutes 61');
   one(function (c) { c.sections[0].page = 0; }, 'page 0');
-  one(function (c) { c.sections[2].title = ''; }, 'セクション名 空');
+  const rt = one(function (c) { c.sections[2].title = ''; }, '段階の名前 空');
+  assert.strictEqual(rt.errors[0], '面接チェックリストの③の段階の名前が空です。');
   one(function (c) { c.sections[0].blocks[0].type = 'video'; }, 'block type');
   one(function (c) { c.mustFailResult = 'xxx'; }, 'mustFailResult');
   one(function (c) { c.mustUnknownResult = 'reject'; }, 'mustUnknownResult');
@@ -483,7 +484,7 @@ test('65 validateProfile（面接チェックリスト）', function () {
   const pm = P(); pm.checklist.header.morningOnlyEnd = '12時'; pm.checklist.header.negatives = 'x';
   assert.deepStrictEqual(plain(S.validateProfile(pm)), { errors: [], warnings: [] });
   const r0 = plain(S.validateProfile((function () { const px = P(); px.checklist.sections = []; return px; })()));
-  assert.ok(r0.errors.some(function (e) { return e.indexOf('セクションがありません') >= 0; }), JSON.stringify(r0));
+  assert.ok(r0.errors.some(function (e) { return e.indexOf('段階がありません') >= 0; }), JSON.stringify(r0));
   // warnings: 確認点 0・必須条件 0・押印欄なし
   const pw = P();
   pw.checklist.sections.forEach(function (s) { s.blocks = s.blocks.filter(function (b) { return b.type !== 'rating' && b.type !== 'must'; }); });
@@ -1189,7 +1190,7 @@ test('80 A4 面接チェックリスト報告（1 ページの要約。docs/SPEC
   ['.cl-mode-sheet.cl-compact{font-size:9px', '.cl-mode-sheet.cl-compact-2 .cl-nm-q{display:none}', '.cl-mode-sheet.cl-nm-cut .cl-nm-ref,.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q{display:block}', '-webkit-line-clamp:2',
     // A4 縦の用紙（210×297mm・内側の余白 8mm／10mm）。用紙のハンコはアプリのダークテーマの明るさ補正を受けない
     '.a4{display:block;box-sizing:border-box;width:210mm;height:297mm;padding:8mm 10mm;', '.cl-sheet .hanko,.cl-sheet .verdict-stamp{filter:none !important}',
-    '.cl-mode-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #24324a}',
+    '.cl-mode-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #1a2e5a}',   // 見出しの下線は紺（docs/DESIGN.md 4-9。2026-10-18 に #24324a から）
     // 面接所見は行数の上限を固定（.cl-compact 10 行 → .cl-compact-q1 6 行 → .cl-compact-2 4 行）。質問の回答は .cl-compact では 2 行のまま、.cl-compact-q1 で 1 行
     '.cl-mode-sheet.cl-compact .cl-nm-iv .cl-nm-v,.cl-mode-sheet.cl-compact .cl-nm-memo .cl-nm-v{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:10;overflow:hidden}',
     '.cl-mode-sheet.cl-compact-q1 .cl-nm-q .cl-nm-v,.cl-mode-sheet.cl-compact-q1 .cl-nm-b .cl-nm-v{-webkit-line-clamp:1}', '.cl-mode-sheet.cl-compact-q1 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:6}', '.cl-mode-sheet.cl-compact-2 .cl-nm-iv .cl-nm-v{-webkit-line-clamp:4}',

@@ -2,10 +2,11 @@
  * 設定画面（劇場プロファイル編集）
  * ----------------------------------------------------------------------
  * data-bind="path.to.value" を持つ入力をプロファイルの下書き（draft）に双方向バインドする。
- * 構造が変わる操作（面接チェックリストのセクション・ブロック・項目の追加・削除・並べ替え）は draft を変更してから再描画する。
+ * 構造が変わる操作（面接チェックリストの段階・ブロック・項目の追加・削除・並べ替え）は draft を変更してから再描画する。
  * data-repaint を持つ入力は change で再描画する（満点・境界値の表示更新用）。
  * 「設定を保存」で RecruitStorage.validateProfile を通し、エラーが無ければ app 側の onSave に draft を渡す。
  * 節は 劇場情報／応募者の属性／面接チェックリスト／応募者の管理（押印）／書き出し・読み込み の 5 つ（docs/SPEC-slim.md 4 章）。
+ * 見た目は docs/DESIGN.md 4-6（節ごとに見出し帯つきのカード・台本の編集は 段階 → ブロック → 項目 の入れ子・下に保存バー〔操作行と同じ部品〕）。
  */
 ;(function (global) {
   'use strict';
@@ -31,6 +32,12 @@
   // 区分のグループで変わるのは、学生かどうか（準備の卒業予定年月の欄）だけ（rules.isStudentGroup）
   const GROUP_HINT = '学生は highschool（高校）/ university（大学・大学院）/ vocational（専門学校）で、「準備」に卒業予定年月の欄を出します。それ以外は other（freeter などほかの値も学生以外として扱います）';
 
+  // 節のメニュー（左。今見ている節に .active）
+  const NAV = [['s-meta', '劇場情報'], ['s-applicant', '応募者の属性'], ['s-checklist', '面接チェックリスト'], ['s-mgmt', '応募者の管理（押印）'], ['s-io', '書き出し／読み込み']];
+  let navCur = NAV[0][0];
+  let navHoldUntil = 0;   // メニューを押した直後は、押した節を今の節にしておく（末尾の短い節はページの上まで来ないため）
+  let spyBound = false;
+
   // ---------- 描画ヘルパー ----------
   function val(path) {
     const v = U.getPath(draft, path);
@@ -39,10 +46,20 @@
 
   function n(v, def) { const x = Number(v); return v === '' || v == null || isNaN(x) ? def : x; }
 
+  // アイコン（index.html のスプライト。docs/DESIGN.md 2 章）
+  function ico(id, cls) { return '<svg class="ico' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + id + '"/></svg>'; }
+  // 文の中の ○△× は和文のフォントで描く（docs/DESIGN.md 1-4）
+  function marks(s) { return esc(s).replace(/[○△×]/g, function (m) { return '<span class="ja">' + m + '</span>'; }); }
+  // 欄の id（ラベルの for に使う）。data-bind のパスから作る
+  function fid(path) { return 'sb-' + String(path).replace(/[^A-Za-z0-9_-]+/g, '-'); }
+  function hintHtml(h) { return h ? '<div class="field-hint hint">' + esc(h) + '</div>' : ''; }
+
   function inputTag(path, opts) {
     opts = opts || {};
     const attrs = [
       'type="' + (opts.type || 'text') + '"',
+      'id="' + fid(path) + '"',
+      opts.cls ? 'class="' + opts.cls + '"' : '',
       'data-bind="' + esc(path) + '"',
       'value="' + esc(val(path)) + '"',
       opts.min !== undefined ? 'min="' + opts.min + '"' : '',
@@ -55,19 +72,20 @@
     return '<input ' + attrs + '>';
   }
 
+  // ラベルが上の欄（.field。docs/DESIGN.md 3-5）
   function sInput(path, label, opts) {
     opts = opts || {};
     const tag = inputTag(path, opts);
-    return '<div class="field"><label>' + esc(label) + '</label>' +
+    return '<div class="field"><label for="' + fid(path) + '">' + esc(label) + '</label>' +
       (opts.suffix ? '<div class="inline">' + tag + '<span class="suffix">' + esc(opts.suffix) + '</span></div>' : tag) +
-      (opts.hint ? '<div class="hint">' + esc(opts.hint) + '</div>' : '') + '</div>';
+      hintHtml(opts.hint) + '</div>';
   }
 
   function sTextarea(path, label, opts) {
     opts = opts || {};
-    return '<div class="field"><label>' + esc(label) + '</label>' +
-      '<textarea data-bind="' + esc(path) + '" rows="' + (opts.rows || 3) + '">' + esc(val(path)) + '</textarea>' +
-      (opts.hint ? '<div class="hint">' + esc(opts.hint) + '</div>' : '') + '</div>';
+    return '<div class="field"><label for="' + fid(path) + '">' + esc(label) + '</label>' +
+      '<textarea id="' + fid(path) + '" data-bind="' + esc(path) + '" rows="' + (opts.rows || 3) + '">' + esc(val(path)) + '</textarea>' +
+      hintHtml(opts.hint) + '</div>';
   }
 
   function sLines(path, label, opts) {
@@ -77,31 +95,46 @@
     if (opts.type === 'categories') text = arr.map(function (c) { return c.value + '|' + (c.group || 'other'); }).join('\n');
     else if (opts.type === 'managers') text = arr.map(function (c) { return [c.name, c.short || '', c.title || ''].concat(c.grade ? [c.grade] : []).join('|'); }).join('\n');
     else text = arr.join('\n');
-    return '<div class="field"><label>' + esc(label) + '</label>' +
-      '<textarea data-bind="' + esc(path) + '" data-type="' + (opts.type || 'lines') + '" rows="' + (opts.rows || Math.min(Math.max(arr.length + 1, 3), 12)) + '">' + esc(text) + '</textarea>' +
-      '<div class="hint">1行に1項目。' + (opts.hint ? esc(opts.hint) : '') + '</div></div>';
+    return '<div class="field"><label for="' + fid(path) + '">' + esc(label) + '</label>' +
+      '<textarea id="' + fid(path) + '" data-bind="' + esc(path) + '" data-type="' + (opts.type || 'lines') + '" rows="' + (opts.rows || Math.min(Math.max(arr.length + 1, 3), 12)) + '">' + esc(text) + '</textarea>' +
+      '<div class="field-hint hint">1行に1項目。' + (opts.hint ? esc(opts.hint) : '') + '</div></div>';
   }
 
+  // チェックボックスの行（ラベル全体を押せる。太字の名前＋補足）
   function sCheck(path, label, hint) {
-    return '<label class="check-row"><input type="checkbox" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + '>' +
-      '<div><div class="lbl">' + esc(label) + '</div>' + (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div></label>';
+    return '<label class="check-row"><input type="checkbox" id="' + fid(path) + '" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + '>' +
+      '<span class="check-text"><span class="lbl">' + esc(label) + '</span>' + (hint ? '<span class="hint">' + esc(hint) + '</span>' : '') + '</span></label>';
   }
 
   function selectTag(path, options, opts) {
     opts = opts || {};
     const cur = String(val(path));
-    return '<select data-bind="' + esc(path) + '"' + (opts.repaint ? ' data-repaint' : '') + (opts.aria ? ' aria-label="' + esc(opts.aria) + '"' : '') + '>' +
+    return '<select id="' + fid(path) + '" data-bind="' + esc(path) + '"' + (opts.repaint ? ' data-repaint' : '') + (opts.aria ? ' aria-label="' + esc(opts.aria) + '"' : '') + '>' +
       options.map(function (o) { return '<option value="' + esc(o.value) + '"' + (String(o.value) === cur ? ' selected' : '') + '>' + esc(o.label) + '</option>'; }).join('') +
       '</select>';
   }
 
-  function sSelect(path, label, options, hint) {
-    return '<div class="field"><label>' + esc(label) + '</label>' + selectTag(path, options) +
-      (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div>';
+  function sSelect(path, label, options, hint, opts) {
+    return '<div class="field"><label for="' + fid(path) + '">' + esc(label) + '</label>' + selectTag(path, options, opts) + hintHtml(hint) + '</div>';
   }
 
-  function section(id, title, desc, body) {
-    return '<section class="card" id="' + id + '"><div class="card-head"><h2>' + esc(title) + '</h2>' + (desc ? '<p>' + esc(desc) + '</p>' : '') + '</div>' + body + '</section>';
+  // 横に並べる小さいラベル＋欄（台本の項目の「補足」「報告書での短い名前」など）
+  function sPair(path, label, opts) {
+    opts = opts || {};
+    return '<span class="s-pair' + (opts.pairCls ? ' ' + opts.pairCls : '') + '"><label for="' + fid(path) + '">' + esc(label) + '</label>' +
+      (opts.select ? selectTag(path, opts.select, opts) : inputTag(path, opts)) + '</span>';
+  }
+
+  // 節のカード（見出し帯: アイコン＋題＋数。本文の先頭に .card-note。docs/DESIGN.md 3-3・4-6）
+  function section(id, icon, title, small, noteHtml, body) {
+    return '<section class="card" id="' + id + '" aria-labelledby="' + id + '-h">' +
+      '<header class="card-band">' + ico(icon) + '<h2 class="card-title" id="' + id + '-h"><span>' + esc(title) + '</span>' + (small ? '<small>' + esc(small) + '</small>' : '') + '</h2></header>' +
+      '<div class="card-body">' + (noteHtml ? '<p class="card-note">' + noteHtml + '</p>' : '') + body + '</div></section>';
+  }
+  // カードの中の小見出し（15/700 紺。2 つ目からは上に区切りの線。docs/DESIGN.md 3-4）
+  function groupH(title, opts) {
+    opts = opts || {};
+    return '<h3 class="group-h"' + (opts.id ? ' id="' + opts.id + '"' : '') + '>' + esc(title) + (opts.small ? '<small>' + esc(opts.small) + '</small>' : '') + '</h3>';
   }
 
   function resultTitle(r) {
@@ -114,7 +147,7 @@
 
   // 準備で選ぶ区分・性別と卒業予定年月の表示
   function applicantHtml() {
-    return section('s-applicant', '応募者の属性', stepRef(1) + 'で選ぶ区分・性別と、学生の卒業予定年月の表示です。',
+    return section('s-applicant', 'user', '応募者の属性', '3 項目', esc(stepRef(1) + 'で選ぶ区分・性別と、学生の卒業予定年月の表示です。'),
       '<div class="field-row">' +
         sLines('options.categories', '区分', { type: 'categories', hint: '「値|グループ」の形式。' + GROUP_HINT }) +
         sLines('options.genders', '性別') +
@@ -123,31 +156,36 @@
   }
 
   // ---------- テンプレート ----------
+  //   .page（1120 の枠）の中に 左の節のメニュー＋右の節のカード、最後の子に保存バー（.flow-foot。4 画面の操作行と同じ座標。docs/DESIGN.md 3-10）。
+  //   保存バーの DOM は主ボタンが先（Tab で最後の入力の次が［設定を保存］）。見た目は 左に注記・右に［変更を破棄］［設定を保存］
   function template() {
     return '' +
-    '<div class="settings-layout">' +
-      '<nav class="settings-nav">' +
-        '<a href="#s-meta">劇場情報</a><a href="#s-applicant">応募者の属性</a><a href="#s-checklist">面接チェックリスト</a>' +
-        '<a href="#s-mgmt">応募者の管理（押印）</a><a href="#s-io">書き出し／読み込み</a>' +
-      '</nav>' +
-      '<div class="settings-body">' +
-        issuesHtml() +
-        metaHtml() + applicantHtml() + checklistHtml() + mgmtHtml() + ioHtml() +
+    '<div class="page settings-page">' +
+      '<div class="settings-layout">' +
+        '<nav class="settings-nav" aria-label="設定の節">' + NAV.map(function (x) {
+          return '<a href="#' + x[0] + '"' + (x[0] === navCur ? ' class="active" aria-current="true"' : '') + '>' + esc(x[1]) + '</a>';
+        }).join('') + '</nav>' +
+        '<div class="settings-body">' +
+          issuesHtml() +
+          metaHtml() + applicantHtml() + checklistHtml() + mgmtHtml() + ioHtml() +
+        '</div>' +
       '</div>' +
-    '</div>' +
-    '<div class="save-bar"><span class="note">変更は「設定を保存」で反映されます。</span>' +
-      '<button type="button" class="btn ghost" data-action="discard">変更を破棄</button>' +
-      '<button type="button" class="btn primary" data-action="save">設定を保存</button></div>';
+      '<div class="flow-foot save-bar">' +
+        '<button type="button" class="btn primary" data-action="save">設定を保存</button>' +
+        '<button type="button" class="btn" data-action="discard">変更を破棄</button>' +
+        '<span class="ff-note">変更は「設定を保存」で反映されます。</span><span class="spacer"></span>' +
+      '</div>' +
+    '</div>';
   }
 
   function issuesHtml() {
     if (!issues || !issues.errors.length) return '';
-    return '<div class="alert danger s-issues" id="settingsIssues"><div><b>保存できません。次の項目を直してください。</b><ul>' +
+    return '<div class="alert danger s-issues" id="settingsIssues" role="alert">' + ico('alert') + '<div class="alert-body"><p class="alert-title">保存できません。次の項目を直してください。</p><ul class="alert-list">' +
       issues.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul></div></div>';
   }
 
   function metaHtml() {
-    return section('s-meta', '劇場情報', '画面上部・保存ファイルに表示されます。',
+    return section('s-meta', 'settings', '劇場情報', '4 項目', '画面上部・保存ファイルに表示されます。',
       '<div class="field-row">' + sInput('meta.theaterName', '劇場名') + sInput('meta.appTitle', 'アプリ名') + '</div>' +
       '<div class="field-row">' + sInput('meta.version', 'バージョン表記') + '</div>' +
       sTextarea('meta.footer', 'フッター（著作権表記など）', { rows: 2 }));
@@ -157,10 +195,12 @@
   const CL_TYPE_NAMES = { must: '必須条件', fields: '記入欄', explain: '説明', question: '質問', rating: '確認点（○△×）', notify: '合否連絡', note: '注記' };
   const CL_NEW_TITLE = { must: '必須条件', fields: '', explain: '説明', question: '質問', rating: '確認点', notify: '合否連絡', note: '' };
   const CL_KINDS = [{ value: 'text', label: '文字' }, { value: 'date', label: '日付' }, { value: 'month', label: '年月' }, { value: 'choice', label: '選択式' }];
-  let clOpen = {};   // 台本のセクション（<details>）の開閉。再描画で閉じないように覚える
+  let clOpen = {};   // 台本の段階（<details>）の開閉。再描画で閉じないように覚える
 
   function clR() { return R(); }
   function clCirc(n) { const f = clR().circled; return f ? f(n) : '(' + n + ')'; }
+  // 番号の部品（丸に数字。中の丸数字の文字は見た目だけ消す。docs/DESIGN.md 3-7）
+  function nb(k) { return '<span class="nb" data-no="' + k + '">' + esc(clCirc(k)) + '</span>'; }
   function clDraft() {
     if (!U.isObj(draft.checklist) || !Array.isArray(draft.checklist.sections)) {
       draft.checklist = U.deepClone(global.RECRUIT_DEFAULT_PROFILE.checklist);
@@ -176,86 +216,97 @@
     const Rr = clR();
     return Rr.checklistItems ? Rr.checklistItems(clDraft(), 'rating').length : 0;
   }
+  // 並べ替え・削除（アイコンだけの sm ボタン。aria-label 必須。削除は赤の文字。docs/DESIGN.md 3-1）
   function rowBtns(prefix, attrs, idx, len, opts) {
     opts = opts || {};
-    return '<div class="row-actions">' +
-      '<button type="button" class="btn ghost" data-action="' + prefix + '-up" ' + attrs + ' title="上へ"' + (idx === 0 ? ' disabled' : '') + '>↑</button>' +
-      '<button type="button" class="btn ghost" data-action="' + prefix + '-down" ' + attrs + ' title="下へ"' + (idx === len - 1 ? ' disabled' : '') + '>↓</button>' +
-      '<button type="button" class="btn ghost danger" data-action="' + prefix + '-del" ' + attrs + ' title="削除"' + (opts.noDelete ? ' disabled' : '') + '>削除</button>' +
-    '</div>';
+    const what = opts.what || '';
+    return '<span class="s-item-ops">' +
+      '<button type="button" class="btn sm icon" data-action="' + prefix + '-up" ' + attrs + ' aria-label="' + esc(what) + 'を上へ" title="上へ"' + (idx === 0 ? ' disabled' : '') + '>' + ico('arrow-up') + '</button>' +
+      '<button type="button" class="btn sm icon" data-action="' + prefix + '-down" ' + attrs + ' aria-label="' + esc(what) + 'を下へ" title="下へ"' + (idx === len - 1 ? ' disabled' : '') + '>' + ico('arrow-down') + '</button>' +
+      '<button type="button" class="btn sm icon danger" data-action="' + prefix + '-del" ' + attrs + ' aria-label="' + esc(what) + 'を削除" title="削除"' + (opts.noDelete ? ' disabled' : '') + '>' + ico('trash') + '</button>' +
+    '</span>';
   }
   function checkTag(path, label, opts) {
     opts = opts || {};
-    return '<label class="s-cl-check"><input type="checkbox" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + (opts.repaint ? ' data-repaint' : '') + '><span>' + esc(label) + '</span></label>';
+    return '<label class="s-check"><input type="checkbox" id="' + fid(path) + '" data-bind="' + esc(path) + '"' + (val(path) ? ' checked' : '') + (opts.repaint ? ' data-repaint' : '') + '><span>' + esc(label) + '</span></label>';
   }
 
+  // 項目の行: 番号・文の入力（質問は 2 行）・補足など・↑↓削除（docs/DESIGN.md 4-6）
   function clItemHtml(b, ip, i, j, k, len) {
     const it = b.items[k];
     const attrs = 'data-sec="' + i + '" data-block="' + j + '" data-index="' + k + '"';
     const label = b.type === 'question'
-      ? '<textarea data-bind="' + esc(ip + '.label') + '" rows="2" aria-label="質問文">' + esc(it.label || '') + '</textarea>'
+      ? '<textarea id="' + fid(ip + '.label') + '" data-bind="' + esc(ip + '.label') + '" rows="2" aria-label="質問文">' + esc(it.label || '') + '</textarea>'
       : inputTag(ip + '.label', { aria: b.type === 'fields' ? '欄の名前' : '文言' });
     let extra = '';
     // A4「面接チェックリスト報告」（1 枚）と面接記入シートで使う短い名前（質問・合否連絡・記入欄・説明・確認点。空なら文言の先頭 14 文字。docs/SPEC-persona.md D16）
     const shortTag = b.type === 'question' || b.type === 'notify' || b.type === 'fields' || b.type === 'explain' || b.type === 'rating'
-      ? '<div class="inline s-cl-short">' + inputTag(ip + '.short', { aria: '報告書での短い名前', placeholder: '報告書（A4 1 枚）での短い名前（任意。空なら文言の先頭 14 文字）' }) + '</div>' : '';
+      ? sPair(ip + '.short', '報告書での短い名前', { pairCls: 's-short', placeholder: '任意。空なら文言の先頭 14 文字' }) : '';
     if (b.type === 'rating') {
-      extra = inputTag(ip + '.hint', { aria: '補足', placeholder: '補足（任意。例: 「大丈夫です」のみ連呼は要注意）' });
+      extra = sPair(ip + '.hint', '補足', { pairCls: 's-hint', placeholder: '任意。例: 「大丈夫です」のみ連呼は要注意' });
     } else if (b.type === 'explain') {
       extra = checkTag(ip + '.shortOnly', '※短期求人のみ（応募した求人が短期求人のとき強調）');
     } else if (b.type === 'fields') {
       const kind = CL_KINDS.some(function (o) { return o.value === it.kind; }) ? it.kind : 'text';
-      extra = '<div class="inline">' + selectTag(ip + '.kind', CL_KINDS, { repaint: true, aria: '入力の種類' }) + '</div>';
+      extra = sPair(ip + '.kind', '入力の種類', { pairCls: 's-kind', select: CL_KINDS, repaint: true });
       if (kind === 'choice') {
         const text = (Array.isArray(it.options) ? it.options : []).map(function (o) { return o.value + '|' + (o.label || ''); }).join('\n');
-        extra += '<div class="field s-cl-options"><label>選択肢（1行に「値|表示名」）</label><textarea data-bind="' + esc(ip + '.options') + '" data-type="options" rows="2">' + esc(text) + '</textarea></div>';
+        extra += '<div class="field s-cl-options"><label for="' + fid(ip + '.options') + '">選択肢（1行に「値|表示名」）</label><textarea id="' + fid(ip + '.options') + '" data-bind="' + esc(ip + '.options') + '" data-type="options" rows="2">' + esc(text) + '</textarea></div>';
       }
     }
-    return '<div class="s-cl-item" data-item-id="' + esc(it.id) + '"><span class="idx">' + (k + 1) + '</span>' +
-      '<div class="s-cl-item-main">' + label + (extra || shortTag ? '<div class="s-cl-item-extra">' + extra + shortTag + '</div>' : '') + '</div>' +
-      rowBtns('cl-item', attrs, k, len) + '</div>';
+    return '<div class="s-item s-cl-item" data-item-id="' + esc(it.id) + '"><span class="row-no">' + (k + 1) + '</span>' +
+      '<div class="s-item-main">' + label + (extra || shortTag ? '<div class="s-item-extra">' + extra + shortTag + '</div>' : '') + '</div>' +
+      rowBtns('cl-item', attrs, k, len, { what: '項目' }) + '</div>';
   }
 
+  // ブロック（地 --surface-2）: 種類のバッジ（紺）・見出し・↑↓削除 → 注記 → メモ欄 → 項目の行 → ［＋ 項目を追加］
   function clBlockHtml(b, bp, i, j, len) {
     const attrs = 'data-sec="' + i + '" data-block="' + j + '"';
     const items = Array.isArray(b.items) ? b.items : (b.items = []);
     const memoable = b.type === 'question' || b.type === 'explain';
-    return '<div class="s-cl-block" data-block-type="' + esc(b.type) + '">' +
-      '<div class="s-cl-block-head"><span class="badge info">' + esc(CL_TYPE_NAMES[b.type] || b.type) + '</span>' +
-        (b.type === 'note' ? '' : inputTag(bp + '.title', { aria: '見出し', placeholder: '見出し（【】は自動で付きます）' })) +
-        inputTag(bp + '.note', { aria: b.type === 'note' ? '注記の本文' : '注記', placeholder: b.type === 'note' ? '注記の本文（例: 条件一致：2へ）' : '注記（任意）' }) +
-        rowBtns('cl-block', attrs, j, len) +
+    const isNote = b.type === 'note';
+    return '<div class="s-block s-cl-block" data-block-type="' + esc(b.type) + '">' +
+      '<div class="s-block-head"><span class="badge navy">' + marks(CL_TYPE_NAMES[b.type] || b.type) + '</span>' +
+        (isNote
+          ? inputTag(bp + '.note', { aria: '注記の本文', placeholder: '注記の本文（例: 条件一致：2へ）' })
+          : inputTag(bp + '.title', { aria: '見出し', placeholder: '見出し（【】は自動で付きます）' })) +
+        rowBtns('cl-block', attrs, j, len, { what: 'ブロック' }) +
       '</div>' +
-      (memoable ? '<div class="s-cl-memo">' + checkTag(bp + '.memo', 'メモ欄を出す', { repaint: true }) +
-        (b.memo ? inputTag(bp + '.memoLabel', { aria: 'メモ欄の名前', placeholder: 'メモ' }) : '') + '</div>' : '') +
-      (b.type === 'note' ? '' : items.map(function (it, k) { return clItemHtml(b, bp + '.items[' + k + ']', i, j, k, items.length); }).join('') +
-        '<div class="actions s-cl-item-add"><button type="button" class="btn sm ghost" data-action="cl-item-add" ' + attrs + '>＋ 項目を追加</button></div>') +
+      (isNote ? '' : sPair(bp + '.note', '注記', { pairCls: 's-block-note', placeholder: '任意' })) +
+      (memoable ? '<div class="s-block-memo">' + checkTag(bp + '.memo', 'メモ欄を出す', { repaint: true }) +
+        (b.memo ? sPair(bp + '.memoLabel', 'メモ欄の名前', { placeholder: 'メモ' }) : '') + '</div>' : '') +
+      (isNote ? '' : '<div class="s-items">' + items.map(function (it, k) { return clItemHtml(b, bp + '.items[' + k + ']', i, j, k, items.length); }).join('') + '</div>' +
+        '<div class="s-add s-cl-item-add"><button type="button" class="btn sm ghost" data-action="cl-item-add" ' + attrs + '>' + ico('plus') + '<span>項目を追加</span></button></div>') +
     '</div>';
   }
 
+  // 段階（details.s-stage。summary に番号・名前・目安とブロックの数・▾）→ 開いた中に 名前・目安・ページ・並び → 説明 → ブロック → ［種類］［＋ ブロックを追加］
   function clSectionHtml(sec, i, len, pageOpts) {
     const sp = 'checklist.sections[' + i + ']';
     const blocks = Array.isArray(sec.blocks) ? sec.blocks : (sec.blocks = []);
     const counts = {};
     blocks.forEach(function (b) { counts[b.type] = (counts[b.type] || 0) + (Array.isArray(b.items) ? b.items.length : 0); });
-    const sumText = ['must', 'rating'].filter(function (t) { return counts[t]; }).map(function (t) { return (t === 'must' ? '必須条件 ' : '確認点 ') + counts[t]; }).join('・');
+    const meta = [sec.minutes ? (sec.minutesMax ? '最大 ' : '目安 ') + sec.minutes + ' 分' : '', blocks.length + ' ブロック']
+      .concat(['must', 'rating'].filter(function (t) { return counts[t]; }).map(function (t) { return (t === 'must' ? '必須条件 ' : '確認点 ') + counts[t]; }))
+      .filter(Boolean).join('・');
     const open = Object.prototype.hasOwnProperty.call(clOpen, sec.id) ? clOpen[sec.id] : i === 0;
-    return '<details class="s-details s-cl-sec" data-sec-id="' + esc(sec.id) + '"' + (open ? ' open' : '') + '>' +
-      '<summary><span class="s-cl-no">' + clCirc(i + 1) + '</span> ' + esc(sec.title || '（名前なし）') +
-        (sec.minutes ? ' <span class="hint">' + (sec.minutesMax ? '最大' : '') + sec.minutes + '分</span>' : '') +
-        (sumText ? ' <span class="hint">' + esc(sumText) + '</span>' : '') + '</summary>' +
-      '<div class="s-cl-sec-row">' +
-        '<div class="field"><label>セクション名</label>' + inputTag(sp + '.title', { aria: 'セクション名' }) + '</div>' +
-        '<div class="field"><label>目安時間</label><div class="inline">' + inputTag(sp + '.minutes', { type: 'number', min: 0, max: 60, step: 1, aria: '目安時間' }) + '<span class="suffix">分</span>' +
-          checkTag(sp + '.minutesMax', '最大') + '</div></div>' +
-        '<div class="field"><label>ページ（印刷）</label>' + selectTag(sp + '.page', pageOpts, { repaint: true, aria: 'ページ' }) + '</div>' +
-        '<div class="field"><label>並び・削除</label>' + rowBtns('cl-sec', 'data-sec="' + i + '"', i, len, { noDelete: len <= 1 }) + '</div>' +
+    return '<details class="s-stage s-cl-sec" data-sec-id="' + esc(sec.id) + '"' + (open ? ' open' : '') + '>' +
+      '<summary>' + nb(i + 1) + '<span class="s-stage-t"><span class="s-stage-name">' + esc(sec.title || '（名前なし）') + '</span><span class="s-stage-meta">' + esc(meta) + '</span></span>' + ico('chevron-down', 'chev') + '</summary>' +
+      '<div class="s-stage-body">' +
+        '<div class="s-stage-row">' +
+          sInput(sp + '.title', '段階の名前') +
+          '<div class="field"><label for="' + fid(sp + '.minutes') + '">目安</label><div class="s-min">' +
+            '<span class="input-unit">' + inputTag(sp + '.minutes', { type: 'number', min: 0, max: 60, step: 1, cls: 'no-spin' }) + '<span class="unit">分</span></span>' +
+            checkTag(sp + '.minutesMax', '最大') + '</div></div>' +
+          sSelect(sp + '.page', 'ページ（印刷）', pageOpts, '', { repaint: true }) +
+          '<div class="field s-ops-field"><span class="field-label">並び・削除</span>' + rowBtns('cl-sec', 'data-sec="' + i + '"', i, len, { noDelete: len <= 1, what: '段階' }) + '</div>' +
+        '</div>' +
+        sTextarea(sp + '.lead', '段階の説明（任意）', { rows: 1 }) +
+        blocks.map(function (b, j) { return clBlockHtml(b, sp + '.blocks[' + j + ']', i, j, blocks.length); }).join('') +
+        '<div class="s-add s-cl-add"><select data-cl-newtype aria-label="追加するブロックの種類">' +
+          Object.keys(CL_TYPE_NAMES).map(function (t) { return '<option value="' + t + '"' + (t === 'rating' ? ' selected' : '') + '>' + esc(CL_TYPE_NAMES[t]) + '</option>'; }).join('') +
+          '</select><button type="button" class="btn sm" data-action="cl-block-add" data-sec="' + i + '">' + ico('plus') + '<span>ブロックを追加</span></button></div>' +
       '</div>' +
-      sTextarea(sp + '.lead', 'セクションの説明（任意）', { rows: 1 }) +
-      blocks.map(function (b, j) { return clBlockHtml(b, sp + '.blocks[' + j + ']', i, j, blocks.length); }).join('') +
-      '<div class="actions s-cl-add"><select data-cl-newtype aria-label="追加するブロックの種類">' +
-        Object.keys(CL_TYPE_NAMES).map(function (t) { return '<option value="' + t + '"' + (t === 'rating' ? ' selected' : '') + '>' + esc(CL_TYPE_NAMES[t]) + '</option>'; }).join('') +
-        '</select><button type="button" class="btn sm" data-action="cl-block-add" data-sec="' + i + '">＋ ブロックを追加</button></div>' +
     '</details>';
   }
 
@@ -286,13 +337,13 @@
       while (parts.length > 1 && !parts[parts.length - 1]) parts.pop();
       return parts.join('|');
     }).join('\n');
-    const personaHtml = '<h3 class="sub" id="s-persona">人物像（1〜5 点）</h3>' +
-      '<div class="hint">' + stepRef(3) + 'の総評で項目ごとに 1〜5 点（' + esc([0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・')) + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</div>' +
+    const personaHtml = groupH('人物像（1〜5 点）', { id: 's-persona' }) +
+      '<p class="hint">' + stepRef(3) + 'の総評で項目ごとに 1〜5 点（' + esc([0, 1, 2, 3, 4].map(function (i) { return (i + 1) + ' ' + (psLabels[i] || ''); }).join('・')) + '）を付けます。結果（推奨）は下げる方向にだけ使います（上げることはありません）。</p>' +
       sCheck('checklist.persona.enabled', '人物像を使う', 'OFF にすると' + stepRef(3) + 'に出さず、判定にも使いません。保存済みの報告書（HTML）は保存したときのままです。') +
-      '<div class="s-cl-max" id="clPsMaxNote">人物像 <b>' + psItems.length + '</b> 項目 × 5 点 ＝ 満点 <b>' + psMax + '</b> 点</div>' +
+      '<div class="s-max" id="clPsMaxNote">人物像 <b>' + psItems.length + '</b> 項目 × 5 点 ＝ 満点 <b>' + psMax + '</b> 点</div>' +
       '<div class="field-row">' + sInput('checklist.persona.title', '見出し（' + stepRef(3) + 'と報告書）') + '</div>' +
-      '<div class="field"><label>項目（1 行に「項目名|短い名前|説明」）</label><textarea data-bind="checklist.persona.items" data-type="persona" data-repaint rows="8">' + esc(psText) + '</textarea>' +
-        '<div class="hint">短い名前（判定の理由・記入シート）と説明（' + stepRef(3) + 'に小さく表示）は省略できます。上から表示の順です。項目名を変えなければ、並べ替えても入力済みの点は引き継ぎます。</div></div>' +
+      '<div class="field"><label for="' + fid('checklist.persona.items') + '">項目（1 行に「項目名|短い名前|説明」）</label><textarea id="' + fid('checklist.persona.items') + '" data-bind="checklist.persona.items" data-type="persona" data-repaint rows="8">' + esc(psText) + '</textarea>' +
+        '<div class="field-hint hint">短い名前（判定の理由・記入シート）と説明（' + stepRef(3) + 'に小さく表示）は省略できます。上から表示の順です。項目名を変えなければ、並べ替えても入力済みの点は引き継ぎます。</div></div>' +
       '<div class="field-row">' +
         sInput('checklist.persona.keepPct', 'そのまま（得点率）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（満点 ' + psMax + ' 点では ' + Math.ceil(psMax * n(pd.keepPct, 70) / 100) + ' 点以上）' }) +
         sInput('checklist.persona.rejectBelowPct', '不採用推奨（得点率）', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 未満（' + Math.ceil(psMax * n(pd.rejectBelowPct, 40) / 100) + ' 点未満。その間は' + resultTitle('review') + 'まで）' }) +
@@ -308,60 +359,60 @@
           sInput('evaluation.thresholds.recommendPct', '面接評価の帯: 高', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（現在の満点 ' + bMax + '点では ' + Math.ceil(bMax * n(th.recommendPct, 70) / 100) + '点以上）' }) +
           sInput('evaluation.thresholds.reviewPct', '面接評価の帯: 中', { type: 'number', min: 0, max: 100, repaint: true, suffix: '% 以上（' + Math.ceil(bMax * n(th.reviewPct, 40) / 100) + '点以上。未満は 低）' }) +
         '</div>' +
-        '<div class="hint" style="margin:-6px 0 8px">報告書の「面接評価（確認点）」に出す 高・中・低 の境界です。結果（推奨）は総合判断で決まり、この境界では変わりません。</div>';
+        '<p class="hint s-note">報告書の「面接評価（確認点）」に出す 高・中・低 の境界です。結果（推奨）は総合判断で決まり、この境界では変わりません。</p>';
 
-    return section('s-checklist', '面接チェックリスト',
-      '面接台本のチェックリストです。必須条件（一致／不一致）と確認点（○△×）・総合判断で面接評価を計算します。文言・項目の増減・確認点の有無を編集できます。面接評価の帯（高・中・低）の境界と、人物像（1〜5 点）の項目・結果を下げる境界もこの節で設定します。',
-      '<div class="s-cl-max" id="clMaxNote">確認点 <b>' + nRating + '</b> 項目＋総合判断 ＝ 満点 <b>' + clMax() + '</b> 点<span class="hint">（○2・△1・×0、総合判断 採用2・保留1・不採用0）</span></div>' +
+    return section('s-checklist', 'check-list', '面接チェックリスト（台本）', secs.length + ' 段階',
+      marks('面接台本のチェックリストです。必須条件（一致／不一致）と確認点（○△×）・総合判断で面接評価を計算します。文言・項目の増減・確認点の有無を編集できます。面接評価の帯（高・中・低）の境界と、人物像（1〜5 点）の項目・結果を下げる境界もこの節で設定します。'),
+      '<div class="s-max" id="clMaxNote">確認点 <b>' + nRating + '</b> 項目＋総合判断 ＝ 満点 <b>' + clMax() + '</b> 点<span class="hint">' + marks('（○2・△1・×0、総合判断 採用2・保留1・不採用0）') + '</span></div>' +
 
-      '<h3 class="sub">判定</h3>' +
+      groupH('判定') +
       '<div class="field-row">' +
         sSelect('checklist.mustFailResult', '必須条件に不一致があるとき', [{ value: 'reject', label: resultTitle('reject') }, { value: 'review', label: resultTitle('review') }],
-          '台本どおりなら「' + resultTitle('reject') + '」。' + stepRef(2) + 'では「不一致のとき案内するセクション」へ進んで面接を終えるよう案内します。「' + resultTitle('review') + '」にすると、ほかのセクションの確認点も評価するよう案内します（どちらも未入力のまま報告書へ進めます）。') +
+          '台本どおりなら「' + resultTitle('reject') + '」。' + stepRef(2) + 'では「不一致のとき案内する段階」へ進んで面接を終えるよう案内します。「' + resultTitle('review') + '」にすると、ほかの段階の確認点も評価するよう案内します（どちらも未入力のまま報告書へ進めます）。') +
         sSelect('checklist.mustUnknownResult', '必須条件に未確認が残るとき', [{ value: 'none', label: '警告のみ（判定は変えない）' }, { value: 'review', label: '採用推奨に留めない（' + resultTitle('review') + 'まで）' }]) +
       '</div>' +
       '<div class="field-row">' +
         sSelect('checklist.overallCaps.hold', '総合判断「' + (oo.hold || '保留') + '」のとき', capOpts) +
         sSelect('checklist.overallCaps.reject', '総合判断「' + (oo.reject || '不採用') + '」のとき', capOpts) +
       '</div>' +
-      '<div class="hint" id="clCapsScriptHint" style="margin:-6px 0 8px">総合判断がそのまま結果になります（採用→採用推奨・保留→上長最終判断要・不採用→不採用推奨）。ここで厳しくした場合だけ結果が下がります。</div>' +
+      '<p class="hint s-note" id="clCapsScriptHint">総合判断がそのまま結果になります（採用→採用推奨・保留→上長最終判断要・不採用→不採用推奨）。ここで厳しくした場合だけ結果が下がります。</p>' +
       '<div class="field-row">' +
-        sSelect('checklist.mustFailJumpTo', '不一致のとき案内するセクション', [{ value: '', label: '案内しない' }].concat(secs.map(function (s, i) { return { value: s.id, label: clCirc(i + 1) + ' ' + (s.title || '') }; }))) +
+        sSelect('checklist.mustFailJumpTo', '不一致のとき案内する段階', [{ value: '', label: '案内しない' }].concat(secs.map(function (s, i) { return { value: s.id, label: clCirc(i + 1) + ' ' + (s.title || '') }; }))) +
       '</div>' +
       bandHtml +
 
-      '<h3 class="sub">総合判断</h3>' +
+      groupH('総合判断', { small: '点は 採用 2・保留 1・不採用 0 で固定です。' }) +
       '<div class="field-row">' + sInput('checklist.overallLabel', '見出し') + sInput('checklist.overallHint', '説明（' + stepRef(3) + 'に表示）') + '</div>' +
       '<div class="field-row cols-3">' +
         sInput('checklist.overallOptions.hire', '「採用」の表示名') + sInput('checklist.overallOptions.hold', '「保留」の表示名') + sInput('checklist.overallOptions.reject', '「不採用」の表示名') +
       '</div>' +
-      '<div class="hint" style="margin:-6px 0 8px">点は 採用 2・保留 1・不採用 0 で固定です。</div>' +
 
       personaHtml +
 
       // 消極属性（negatives・morningOnlyEnd）の行は 2026-10-13 に削除（docs/SPEC-script-mode.md 12 章）
-      '<h3 class="sub">ヘッダー</h3>' +
+      groupH('ヘッダー') +
       '<div class="field-row">' +
         sSelect('checklist.header.interviewerField', '担当と連動する押印欄', [{ value: '', label: '連動しない' }].concat(mfields.map(function (f) { return { value: f.id, label: f.label || f.id }; })),
           '担当が空欄のときは、この押印欄の氏名を報告書の担当に使います（自動で押印はしません）。') +
       '</div>' +
       '<div class="field-row">' + sInput('checklist.header.posting.label', '「応募した求人」の見出し') +
-        '<div class="field"><label>選択肢の表示名</label><div class="inline">' + pOpts.map(function (o, m) {
+        '<div class="field"><span class="field-label">選択肢の表示名</span><div class="s-opts">' + pOpts.map(function (o, m) {
           return inputTag('checklist.header.posting.options[' + m + '].label', { aria: '表示名（値: ' + o.value + '）' });
-        }).join('') + '</div><div class="hint">値 short（短期求人）のとき「※短期求人のみ」の説明を強調します。</div></div>' +
+        }).join('') + '</div><div class="field-hint hint">値 short（短期求人）のとき「※短期求人のみ」の説明を強調します。</div></div>' +
       '</div>' +
 
       // 「印刷」の行（checklist.print.showQuestions＝保存 HTML の「詳細」に質問文を載せる）は 2026-10-14 に削除（「詳細」表示ごと削除。docs/SPEC-a4.md）。
       //   報告書は常に A4 1 枚の要約（質問文・説明文は載せない）。キーは旧い設定・記録の互換のため正規化で残す
 
-      '<h3 class="sub">台本</h3>' +
+      groupH('台本') +
+      '<p class="hint">段階を開いて、ブロック（必須条件・記入欄・説明・質問・確認点・合否連絡・注記）と項目を編集します。面接の画面・評価の画面・A4 の報告書・記入シートに、この台本がそのまま使われます。</p>' +
       '<div class="field-row">' + sInput('checklist.version', '版（例: 2026-10-08）', { hint: '報告書（A4）の「台本 … 版」に表示します。' }) + '</div>' +
       '<div class="field-row">' + pages.map(function (pg, k) {
-        return '<div>' + sInput('checklist.pages[' + k + '].title', (pg.no || k + 1) + '枚目の見出し') + sTextarea('checklist.pages[' + k + '].lead', (pg.no || k + 1) + '枚目の説明', { rows: 2 }) + '</div>';
+        return '<div class="s-page">' + sInput('checklist.pages[' + k + '].title', (pg.no || k + 1) + '枚目の見出し') + sTextarea('checklist.pages[' + k + '].lead', (pg.no || k + 1) + '枚目の説明', { rows: 2 }) + '</div>';
       }).join('') + '</div>' +
-      '<div class="s-cl-secs">' + secs.map(function (sec, i) { return clSectionHtml(sec, i, secs.length, pageOpts); }).join('') + '</div>' +
-      '<div class="actions" style="margin-top:10px">' +
-        '<button type="button" class="btn sm" data-action="cl-sec-add">＋ セクションを追加</button>' +
+      '<div class="s-stages">' + secs.map(function (sec, i) { return clSectionHtml(sec, i, secs.length, pageOpts); }).join('') + '</div>' +
+      '<div class="actions">' +
+        '<button type="button" class="btn sm" data-action="cl-sec-add">' + ico('plus') + '<span>段階を追加</span></button>' +
         '<button type="button" class="btn sm ghost" data-action="cl-default">既定の台本（2026-10-08 版）に戻す</button>' +
       '</div>');
   }
@@ -395,12 +446,12 @@
       case 'cl-sec-add': {
         const lastPage = secs.reduce(function (m, s) { return Math.max(m, n(s.page, 1)); }, 1);
         const id = U.uid('sec');
-        secs.push({ id: id, title: '新しいセクション', minutes: 0, minutesMax: false, page: lastPage, lead: '', blocks: [clNewBlock('rating')] });
+        secs.push({ id: id, title: '新しい段階', minutes: 0, minutesMax: false, page: lastPage, lead: '', blocks: [clNewBlock('rating')] });
         clOpen[id] = true;
         break;
       }
       case 'cl-sec-del':
-        if (!sec || secs.length <= 1 || !clDelConfirm('セクション')) return true;
+        if (!sec || secs.length <= 1 || !clDelConfirm('段階')) return true;
         if (cl.mustFailJumpTo === sec.id) cl.mustFailJumpTo = '';
         secs.splice(si, 1);
         break;
@@ -460,15 +511,15 @@
     const mg = draft.management || {};
     const fields = Array.isArray(mg.fields) ? mg.fields : [];
     const preview = global.RecruitStamp ? global.RecruitStamp.svg({ name: ((mg.managers || [])[0] || {}).short || '笹川', title: ((mg.managers || [])[0] || {}).title || '副支配人', date: global.RecruitStamp.stampDate(new Date()), size: 76, id: 'stPreview' }) : '';
-    return section('s-mgmt', '応募者の管理（押印）', '報告書（A4 の用紙）の最下段に押印欄を出します。名簿から担当者を選ぶと日付入りのハンコが押され、保存した HTML でも用紙の欄をクリックして押印・保存できます。',
-      '<div class="field-row">' +
-        '<div>' + fields.map(function (fl, i) {
-          return sInput('management.fields[' + i + '].label', '押印欄 ' + (i + 1) + '（' + esc(fl.id) + '）') +
-            sInput('management.fields[' + i + '].hint', '　説明（任意）', { placeholder: '例：面接を行った担当者' });
+    return section('s-mgmt', 'stamp', '応募者の管理（押印）', fields.length + ' 欄', esc('報告書（A4 の用紙）の最下段に押印欄を出します。名簿から担当者を選ぶと日付入りのハンコが押され、保存した HTML でも用紙の欄をクリックして押印・保存できます。'),
+      '<div class="s-split">' +
+        '<div class="s-split-main">' + fields.map(function (fl, i) {
+          return '<div class="field-row">' + sInput('management.fields[' + i + '].label', '押印欄 ' + (i + 1) + '（' + fl.id + '）') +
+            sInput('management.fields[' + i + '].hint', '押印欄 ' + (i + 1) + ' の説明（任意）', { placeholder: '例：面接を行った担当者' }) + '</div>';
         }).join('') + '</div>' +
-        '<div><div class="field"><label>ハンコのプレビュー</label><div class="stamp-preview">' + preview + '</div><div class="hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div></div>' +
+        '<div class="field s-split-side"><span class="field-label">ハンコのプレビュー</span><div class="stamp-preview">' + preview + '</div><div class="field-hint hint">印字名・日付・役職の 3 段。印字名は 2〜4 文字が目安です。</div></div>' +
       '</div>' +
-      sLines('management.managers', '担当者名簿（氏名|印字名|役職|等級）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人|S3 。印字名を省略すると姓（スペースの前）を使います。等級は任意（押印には使いません）。', rows: 17 }) +
+      sLines('management.managers', '担当者名簿（氏名|印字名|役職|等級）', { type: 'managers', hint: '例: 笹川 晴央|笹川|副支配人|S3 。印字名を省略すると姓（スペースの前）を使います。等級は任意（押印には使いません）。', rows: Math.min(Math.max((Array.isArray(mg.managers) ? mg.managers.length : 0) + 1, 4), 17) }) +
       sCheck('management.allowFreeName', '名簿にない担当者を手入力で押せるようにする', 'OFF にすると名簿の担当者だけ選べます。') +
       decisionSettingsHtml(fields) + finalLockHtml());
   }
@@ -487,11 +538,12 @@
     const key = function (l) { return lockIsOn(l) ? l.salt + ':' + l.hash : ''; };
     const pending = key(lk) !== key(saved);
     let body = '';
+    // 確定のボタンは副（主ボタンは保存バーの［設定を保存］だけ。docs/DESIGN.md 3-1）
     if (lockForm === 'change') {
       body = '<div class="lock-form" id="finalLockForm" data-lock-form="change">' +
         (on ? pwField('lockCur', '現在のパスワード') : '') + pwField('lockNew', '新しいパスワード') + pwField('lockNew2', '新しいパスワード（確認）') +
         '<div class="lock-err" id="finalLockErr" role="alert"></div>' +
-        '<div class="actions"><button type="button" class="btn sm primary" data-action="lock-apply" id="finalLockApply">' + (on ? '変更する' : '設定する') + '</button>' +
+        '<div class="actions"><button type="button" class="btn sm" data-action="lock-apply" id="finalLockApply">' + ico('lock') + '<span>' + (on ? '変更する' : '設定する') + '</span></button>' +
         '<button type="button" class="btn sm ghost" data-action="lock-cancel">キャンセル</button></div></div>';
     } else if (lockForm === 'remove') {
       body = '<div class="lock-form" id="finalLockForm" data-lock-form="remove">' + pwField('lockCur', '現在のパスワード') +
@@ -499,15 +551,15 @@
         '<div class="actions"><button type="button" class="btn sm danger" data-action="lock-remove-apply" id="finalLockRemoveApply">パスワードを外す</button>' +
         '<button type="button" class="btn sm ghost" data-action="lock-cancel">キャンセル</button></div></div>';
     } else {
-      body = '<div class="actions"><button type="button" class="btn sm" data-action="lock-change" id="finalLockChange">' + (on ? '変更' : '設定する') + '</button>' +
-        (on ? '<button type="button" class="btn sm ghost danger" data-action="lock-remove" id="finalLockRemove">パスワードを外す</button>' : '') + '</div>';
+      body = '<div class="actions"><button type="button" class="btn sm" data-action="lock-change" id="finalLockChange">' + ico('lock') + '<span>' + (on ? '変更' : '設定する') + '</span></button>' +
+        (on ? '<button type="button" class="btn sm danger" data-action="lock-remove" id="finalLockRemove">パスワードを外す</button>' : '') + '</div>';
     }
-    return '<h3 class="sub" id="s-finalLock">最終承認のパスワード</h3>' +
-      '<div class="hint">最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（' + stepRef(4) + 'の画面と保存した HTML の両方。面接対応者の押印には要りません）。' +
+    return groupH('最終承認のパスワード', { id: 's-finalLock' }) +
+      '<p class="hint">最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（' + stepRef(4) + 'の画面と保存した HTML の両方。面接対応者の押印には要りません）。' +
         '誤操作を防ぐための鍵で、HTML をテキストで開いて書き換える人までは防げません。パスワードそのものは保存せず、照合用の値（ハッシュ）だけを設定に持ちます。' +
-        '保存した HTML は保存した時点のパスワードで照合します。パスワードがあるとき、「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えて保存するには現在のパスワードが要ります（押印欄の説明・名簿だけなら不要）。</div>' +
-      '<div class="lock-status" id="finalLockStatus"><span class="badge ' + (on ? 'ok' : 'muted') + '">' + (on ? '設定済み' : '未設定') + '</span>' +
-        (pending ? '<span class="hint">未保存の変更です。「設定を保存」で確定します。</span>' : '') + '</div>' + body;
+        '保存した HTML は保存した時点のパスワードで照合します。パスワードがあるとき、「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えて保存するには現在のパスワードが要ります（押印欄の説明・名簿だけなら不要）。</p>' +
+      '<div class="lock-status" id="finalLockStatus"><span class="badge' + (on ? ' navy' : '') + '">' + (on ? ico('lock') : '') + (on ? '設定済み' : '未設定') + '</span>' +
+        (pending ? '<span class="s-pending">' + ico('alert') + '<span>未保存の変更です。「設定を保存」で確定します。</span></span>' : '') + '</div>' + body;
   }
   function lockFocus() {
     const el = root && root.querySelector('#finalLockForm .lock-pw');
@@ -557,15 +609,15 @@
       ? St.verdict({ label: dc.hireLabel, date: today, color: dc.hireColor, size: 96, id: 'stVdHire', sub: dc.sub }) +
         St.verdict({ label: dc.rejectLabel, date: today, color: dc.rejectColor, size: 96, id: 'stVdReject', sub: dc.sub })
       : '';
-    return '<h3 class="sub">最終合否（採用／不採用のスタンプ）</h3>' +
+    return groupH('最終合否（採用／不採用のスタンプ）') +
       sCheck('management.decision.enabled', '最終合否のスタンプを使う', '保存ファイル（HTML）と' + stepRef(4) + 'に「採用」「不採用」のボタンを出します。アプリの判定（推奨）とは別の、最終確認者の決定として記録します。') +
-      '<div class="field-row">' +
-        '<div>' + sInput('management.decision.label', '表示名') +
-          sInput('management.decision.hireLabel', '「採用」の表示名', { repaint: true }) +
-          sInput('management.decision.rejectLabel', '「不採用」の表示名', { repaint: true }) +
-          sInput('management.decision.hint', '説明（任意）') + '</div>' +
-        '<div><div class="field"><label>スタンプのプレビュー</label><div class="stamp-preview verdict-preview">' + preview + '</div>' +
-          '<div class="hint">採用は朱、不採用は藍。日付と劇場名が入ります。</div></div></div>' +
+      '<div class="s-split s-split-wide">' +
+        '<div class="s-split-main">' +
+          '<div class="field-row">' + sInput('management.decision.label', '表示名') + sInput('management.decision.hint', '説明（任意）') + '</div>' +
+          '<div class="field-row">' + sInput('management.decision.hireLabel', '「採用」の表示名', { repaint: true }) + sInput('management.decision.rejectLabel', '「不採用」の表示名', { repaint: true }) + '</div>' +
+        '</div>' +
+        '<div class="field s-split-side"><span class="field-label">スタンプのプレビュー</span><div class="stamp-preview verdict-preview">' + preview + '</div>' +
+          '<div class="field-hint hint">採用は朱、不採用は藍。日付と劇場名が入ります。</div></div>' +
       '</div>' +
       sSelect('management.decision.stampField', '押印欄と連動', fields.filter(function (fl) { return fl && fl.id; }).map(function (fl) { return { value: fl.id, label: fl.label + '（' + fl.id + '）' }; }).concat([{ value: '', label: '連動しない' }]),
         '合否を押したとき、この押印欄にも同じ担当者の印を押せます。最終承認のパスワードがあるときは、最終確認の欄（final）とこの欄の押印にパスワードが要ります。また、この「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成（追加・削除）・押印欄の表示名を変えて保存するには、現在のパスワードが要ります。') +
@@ -574,13 +626,14 @@
   }
 
   function ioHtml() {
-    return section('s-io', 'プロファイルの書き出し／読み込み', '他劇場へ展開するときは JSON を書き出して、相手側で読み込みます。',
-      '<div class="actions">' +
-        '<button type="button" class="btn" data-action="export">⬇ JSONを書き出す</button>' +
-        '<button type="button" class="btn" data-action="import">⬆ JSONを読み込む</button>' +
-        '<button type="button" class="btn danger" data-action="reset">初期設定（新宿既定）に戻す</button>' +
+    return section('s-io', 'download', '書き出し／読み込み', '3 操作', esc('他劇場へ展開するときは JSON を書き出して、相手側で読み込みます。'),
+      '<div class="actions s-io-actions">' +
+        '<button type="button" class="btn" data-action="export">' + ico('download') + '<span>JSON を書き出す</span></button>' +
+        '<button type="button" class="btn" data-action="import">' + ico('upload') + '<span>JSON を読み込む</span></button>' +
+        '<span class="spacer"></span>' +
+        '<button type="button" class="btn danger" data-action="reset">' + ico('trash') + '<span>初期設定（新宿既定）に戻す</span></button>' +
       '</div>' +
-      '<div class="hint" style="margin-top:10px">設定はこのブラウザ（端末）内に保存されます。別の端末で使う場合は JSON を書き出して持ち運んでください。v1 形式の JSON は読み込むと既定の設定になります。削除した機能の設定は読み飛ばします。</div>');
+      '<p class="hint">設定はこのブラウザ（端末）内に保存されます。別の端末で使う場合は JSON を書き出して持ち運んでください。v1 形式の JSON は読み込むと既定の設定になります。削除した機能の設定は読み飛ばします。</p>');
   }
 
   // ---------- イベント ----------
@@ -675,6 +728,35 @@
     }, true);
   }
 
+  // 節のメニューの「今の節」: 上の帯（トップバー）の下に来ている最後の節。ページの末尾まで来たら最後の節
+  function setNav(cur) {
+    navCur = cur;
+    if (!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll('.settings-nav a'), function (a) {
+      const on = a.getAttribute('href') === '#' + cur;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    });
+  }
+  function spy() {
+    if (!root || root.classList.contains('hidden') || !root.querySelector('.settings-body') || Date.now() < navHoldUntil) return;
+    const top = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--flow-top-h')) || 0) + 32;
+    let cur = NAV[0][0];
+    NAV.forEach(function (x) { const el = root.querySelector('#' + x[0]); if (el && el.getBoundingClientRect().top <= top) cur = x[0]; });
+    const de = document.documentElement;
+    if (window.scrollY > 0 && window.innerHeight + window.scrollY >= de.scrollHeight - 2) cur = NAV[NAV.length - 1][0];
+    if (cur !== navCur) setNav(cur);
+  }
+  function bindSpy() {
+    if (spyBound) return;
+    spyBound = true;
+    let raf = 0;
+    window.addEventListener('scroll', function () {
+      if (raf) return;
+      raf = requestAnimationFrame(function () { raf = 0; spy(); });
+    }, { passive: true });
+  }
+
   function swap(arr, i, j) {
     if (i < 0 || j < 0 || i >= arr.length || j >= arr.length) return false;
     const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
@@ -700,6 +782,9 @@
   }
 
   function onClick(e) {
+    // 節のメニュー（アンカーで節へ移る。押した節をしばらく今の節にする）
+    const nav = e.target.closest('.settings-nav a[href^="#"]');
+    if (nav) { navHoldUntil = Date.now() + 300; setNav(nav.getAttribute('href').slice(1)); return; }
     const b = e.target.closest('[data-action]');
     if (!b) return;
     const act = b.dataset.action;
@@ -749,7 +834,7 @@
 
   function paint(scrollY) {
     repaintPending = false;
-    // 面接チェックリストのセクション（<details>）の開閉を覚えておく
+    // 面接チェックリストの段階（<details>）の開閉を覚えておく
     if (root) Array.prototype.forEach.call(root.querySelectorAll('details.s-cl-sec[data-sec-id]'), function (d) { clOpen[d.getAttribute('data-sec-id')] = d.open; });
     root.innerHTML = template();
     root.oninput = onEdit;
@@ -766,13 +851,16 @@
     issues = null;
     clOpen = {};
     lockForm = '';
+    navCur = NAV[0][0];
+    navHoldUntil = 0;
     bindPointer();
+    bindSpy();
     paint();
   }
 
   // 下書きが p と同じ（未保存の変更が無い）か。別のタブで設定が保存されたとき、描き直してよいかの判定に使う（app.js）
   function isDraftOf(p) { return !!draft && JSON.stringify(draft) === JSON.stringify(p); }
-  // 別のタブで設定が保存されたとき（未保存の変更が無いとき。app.js）: 最新の設定 p で描き直す（スクロール位置・台本の節の開閉は残す）。
+  // 別のタブで設定が保存されたとき（未保存の変更が無いとき。app.js）: 最新の設定 p で描き直す（スクロール位置・台本の段階の開閉は残す）。
   //   keepLock なら開いているパスワードの入力欄と入力中の値を残す（最終承認のロックが変わっていないとき。docs/SPEC-a4.md 11 章 L5d）。
   //   入力欄を開いていたのに閉じたら true
   function reload(p, keepLock) {

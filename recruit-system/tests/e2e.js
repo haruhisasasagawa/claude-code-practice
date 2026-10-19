@@ -40,6 +40,10 @@
  *       スクリーンショット p13-prep.png・p13-interview-1.png・p13-interview-2.png・p13-interview-must-ng.png・p13-evaluate.png・p13-report.png・p13-paper.png・p13-interview-390.png
  *   E19 初見の操作の補完（docs/SPEC-flow.md 15 章。2026-10-17）: 下見してからの「面接を始める」（タイマーは 0 から・① から）・評価／報告書まで進んだ記録の準備の主ボタン・評価から面接に戻ったときのタイマー（再開・endedAt の上書き）・
  *       面接時間を確かめる（紙からの転記・スリープ）・4 つの画面の主ボタンの位置・① の列の幅・必須条件の案内が出たままの ⑤・操作行の Tab の順・狭い画面のタイマーと案内・報告書の 1 行・トップバーの「🖨 報告書を印刷」
+ *   E20 画面の統一（docs/SPEC-flow.md 16 章・docs/DESIGN.md v2。2026-10-18）: どの段階も 話す → 聞く → 確かめる・帯は同じ色・［説明した］［伝えた］は 3 つの状態とも操作列と同じ端・
+ *       面接と評価の［一致｜不一致］は同じ x・上の帯は 1 段（1366×768・1280×720）・「該当の行へ」・設定の［設定を保存］も主ボタンと同じ座標
+ *   2026-10-18 の画面の見直し（縦一列の 3 枚のカード・本文の枠の操作行・見出し帯つきのカード）で E1・E2・E8・E10・E12・E14・E17〜E19 の確かめ方を書き換えた
+ *   （落とした性質は無い。docs/SPEC-flow.md 16-6 の対応表）
  *   2026-10-16 の面接の流れで画面は 準備（step 1）→ 面接（2）→ 評価（3）→ 報告書（4）の 4 ステップになった。ヘルパ（setCl・setPs・rateAll・judge）は押すボタンが今の画面に無ければ
  *   その画面へ移ってから押す（docs/SPEC-flow.md 9-2）。E1・E2・E4〜E8・E10・E12・E17 は新しい画面に合わせて書き直した（落とした性質は無い。9-3 の対応表）
  */
@@ -284,16 +288,17 @@ const pdfTextOf = (f) => {
   expect(f32.card && f32.name && f32.age && f32.gender && f32.category && f32.posting === 2 && f32.noNeg && f32.taxi && f32.date === '2026-10-10' && f32.ivOpts.includes('笹川 晴央') && f32.notes,
     'E1 準備に氏名（必須）・年齢・性別・区分・応募した求人・タクシー可否・料金・面接日（今日）・面接担当者（名簿）・メモ（任意・2 行）。消極属性は無い: ' + JSON.stringify(f32));
   // 1 枚のカード・3 行（docs/SPEC-script-mode.md 12 章）。説明文は冒頭の 1 行だけ・各入力の下の補足文なし
+  //   （2026-10-18 の見直しで見出し帯つきのカードに: 行は .card-body の子・説明文は .card-note。docs/DESIGN.md 4-2）
   const lay32 = await page.evaluate(() => {
     const card = document.getElementById('scriptApplicantCard');
-    const rows = Array.from(card.querySelectorAll(':scope > .field-row'));
+    const rows = Array.from(card.querySelectorAll(':scope > .card-body > .field-row'));
     const sel = (row) => Array.from(row.children).map(f => { const c = f.querySelector('[data-field], [data-cl], [id^="sa"]'); return f.id || (c ? (c.dataset.field || c.id) : ''); });
     const btns = Array.from(document.querySelectorAll('#saPosting .seg-btn')).map(b => b.textContent);
     return {
       cards: document.querySelectorAll('#stepContent .card').length, rows: rows.length, r: rows.map(sel),
-      lead: Array.from(card.querySelectorAll('.card-head p')).map(e => e.textContent), hints: card.querySelectorAll('.hint').length, subs: card.querySelectorAll('h3.sub').length,
+      lead: Array.from(card.querySelectorAll(':scope > .card-body > .card-note')).map(e => e.textContent), hints: card.querySelectorAll('.hint').length, subs: card.querySelectorAll('h3.sub, .group-h').length,
       ivTitle: (document.getElementById('saInterviewer').title || '').includes('応募者の管理（押印）'), taxiPh: document.getElementById('saTaxi').placeholder,
-      btns, postLabel: (document.querySelector('#saPosting > label') || {}).textContent
+      btns, postLabel: (document.querySelector('#saPosting > label, #saPosting > .field-label') || {}).textContent
     };
   });
   expect(lay32.cards === 1 && lay32.rows === 3 && JSON.stringify(lay32.r) === JSON.stringify([['name', 'age', 'gender', 'category', 'grp-graduation'], ['saDate', 'saInterviewer', 'saPosting'], ['saTaxi', 'reviewerNotes']]) &&
@@ -334,7 +339,7 @@ const pdfTextOf = (f) => {
   const sum32 = await page.textContent('#summaryPanel');
   expect(['台本 花子', '大学2年生', '20歳', '短期求人', '笹川 晴央'].every(t => sum32.includes(t)) && !['シフト貢献度', '留意点', '通勤', '消極属性', '短期希望', '朝～12時のみ'].some(t => sum32.includes(t)),
     'E1 右サマリーに氏名・属性・短期求人・担当。消極属性・貢献度・留意点・通勤は出さない');
-  const sa32 = await page.evaluate(() => { const c = document.getElementById('sumApplicant'); return { kids: Array.from(c.children).filter(e => e.tagName !== 'H4').map(e => e.id || e.className), badges: Array.from(c.querySelectorAll('.badge')).map(b => b.textContent) }; });
+  const sa32 = await page.evaluate(() => { const c = document.getElementById('sumApplicant'); return { kids: Array.from(c.querySelector('.card-body').children).map(e => e.id || e.className), badges: Array.from(c.querySelectorAll('.badge')).map(b => b.textContent) }; });
   expect(JSON.stringify(sa32.kids) === JSON.stringify(['sum-name', 'sum-sub', 'sumDate', 'sumInterviewer']) && JSON.stringify(sa32.badges) === JSON.stringify(['短期求人']),
     'E1 右サマリーの「応募者」は 氏名・区分/年齢/性別・面接日・担当 の 4 行（チップは短期求人 1 つだけ）: ' + JSON.stringify(sa32));
   await setCl('header.posting', 'regular');
@@ -405,14 +410,16 @@ const pdfTextOf = (f) => {
       cur: Array.from(document.querySelectorAll('#ivChips .iv-chip.is-current')).map(c => c.dataset.sec + ':' + c.getAttribute('aria-current')),
       stage: q('#ivStage') ? q('#ivStage').dataset.sec : '', h: (q('#ivStageH') || {}).textContent, who: (q('#ivWho') || {}).textContent,
       groups: Array.from(document.querySelectorAll('#ivStage .iv-grp')).map(g => g.dataset.kind + ':' + g.querySelector('.iv-k > span').textContent),
-      cols: document.querySelectorAll('#ivStage .iv-cols.is-two > .iv-col').length,
+      //   縦一列（2026-10-18。docs/DESIGN.md 4-3）: 段階のカードは同じ左端・同じ幅で上から順に積む（2 列・高さそろえは無い）
+      oneCol: (() => { const r = Array.from(document.querySelectorAll('#ivStage > section.card')).map(c => c.getBoundingClientRect());
+        return r.length > 0 && r.every((x, i) => Math.abs(x.left - r[0].left) <= 1 && Math.abs(x.width - r[0].width) <= 1 && (i === 0 || x.top >= r[i - 1].bottom)) && !document.querySelector('#ivStage .iv-cols, #ivStage .iv-col'); })(),
       qs: Array.from(document.querySelectorAll('#ivStage .iv-q')).map(e => e.dataset.item),
       must: Array.from(document.querySelectorAll('#ivStage .cl-must-row')).map(e => e.dataset.item),
       timer: [q('#ivTStageVal'), q('#ivTStageGoal'), q('#ivTTotal')].map(e => e ? e.textContent : '?').join(' '),
       flow: (q('#ivStage .iv-flow') || {}).textContent || '',
       prev: (q('#ivPrev') || {}).textContent, next: (q('#ivNext') || {}).textContent, nextAct: q('#ivNext') ? q('#ivNext').dataset.action : '', toEval: !!q('#ivToEval'),
       no: ['.cl-rate-row', '#clPersona', '#clOverall', '[data-action="ps-set"]', '[data-cl="overall"]', '#clHeader', '[data-action="explain-all"]', '.cl-auto', '.cl-auto-hint'].filter(s => !!document.querySelector('#stepContent ' + s)),
-      noSummary: document.querySelector('#view-judge .judge-layout').classList.contains('no-summary'), lead: (q('#stepLead span') || {}).textContent
+      noSummary: document.querySelector('#view-judge .judge-layout').classList.contains('no-summary') && getComputedStyle(document.getElementById('summaryPanel')).display === 'none', lead: (q('#stepLead span') || {}).textContent
     };
   });
   const iv33 = await ivNow();
@@ -422,16 +429,26 @@ const pdfTextOf = (f) => {
     'E2 面接は上の帯（段階のチップ ①〜⑤・今の段階 ①）と 1 段階だけ。○△×・人物像・総合判断・旧ヘッダー・自動表示・右サマリーは出さない: ' + JSON.stringify(iv33));
   expect(iv33.who === '台本 花子さん・大学2年生・20歳・短期求人' && !iv33.who.includes('消極属性') && !iv33.who.includes('短期希望'),
     'E2 段階の見出しの右に応募者の 1 行（氏名・区分・年齢・求人。消極属性なし）: ' + iv33.who);
-  // ① は 2 列（最初の質問ブロック〔その直前の【質問】の記入欄〕より前を左）。種類の見出しは 確かめること → 話すこと｜聞くこと（【質問】の記入欄 → 質問 3 つ）・流れの 1 行。
-  //   【質問】の記入欄（短期／長期の希望・契約開始日の希望など）はその答えを聞く 1 問目のカードのすぐ上（同じ列。docs/SPEC-flow.md 14 章）
-  const f2pos33 = await page.evaluate(() => { const f = document.querySelector('#ivStage .k-ask .iv-ask-fields[data-block="conditions_f2"]'), q = document.querySelector('#ivStage .iv-q[data-item="q_term"]');
-    return f && q ? { col: f.closest('.iv-col') === q.closest('.iv-col'), above: f.getBoundingClientRect().bottom <= q.getBoundingClientRect().top + 1, gap: Math.round(q.getBoundingClientRect().top - f.getBoundingClientRect().bottom),
-      items: Array.from(f.querySelectorAll('.cl-field')).map(e => e.dataset.item), left: !!document.querySelector('#ivStage .iv-col:first-child [data-block="conditions_f2"]') } : null; });
-  expect(JSON.stringify(iv33.groups) === JSON.stringify(['check:確かめること', 'say:話すこと', 'ask:聞くこと']) && iv33.cols === 2 &&
+  // ① は縦一列の 3 枚のカード（2026-10-18。docs/DESIGN.md 4-3）: 話すこと → 聞くこと（質問 3 つ）→ 確かめること（いつも最後＝［次へ］のすぐ上）→ 流れの注記（小さく）。
+  //   確かめることの行は 2 つのまとまり: 「必須条件」（必須条件の行＋直後の記入欄）・「勤務条件の確認」（台本の【質問】の記入欄〔短期／長期の希望・契約開始日の希望など〕。
+  //   注記「聞くことの答えを選ぶ・記入する」・質問と同じ短い名前の欄には Q 番号のタグ）。行の操作は右の固定幅の列（同じ左端）
+  const chk33 = await page.evaluate(() => {
+    const c = document.querySelector('#ivStage .k-check');
+    const cards = Array.from(document.querySelectorAll('#ivStage > section.card'));
+    if (!c) return null;
+    const ctl = Array.from(c.querySelectorAll('.row > .row-ctl')).map(e => Math.round(e.getBoundingClientRect().left));
+    return { last: cards[cards.length - 1] === c, flowAfter: !!document.querySelector('#ivStage > .k-check ~ .iv-flow'),
+      groups: Array.from(c.querySelectorAll('.group-h')).map(h => h.firstChild.textContent + '|' + ((h.querySelector('small') || {}).textContent || '')),
+      rows: Array.from(c.querySelectorAll('.row')).map(e => e.dataset.item + ((e.querySelector('.q-no') || {}).textContent ? ':' + e.querySelector('.q-no').textContent : '')),
+      ctlSame: ctl.length > 0 && ctl.every(x => x === ctl[0]) };
+  });
+  expect(JSON.stringify(iv33.groups) === JSON.stringify(['say:話すこと', 'ask:聞くこと', 'check:確かめること']) && iv33.oneCol &&
     JSON.stringify(iv33.qs) === JSON.stringify(['q_term', 'q_two_months', 'q_family']) && JSON.stringify(iv33.must) === JSON.stringify(['must_weekly', 'must_busy']) &&
     iv33.flow === '→ 条件一致：2へ　／　必須条件不一致：追加質問してみて、解消しなければ「５」へ' && iv33.timer === '00:00 / 目安 10分 00:00' &&
-    !!f2pos33 && f2pos33.col && f2pos33.above && f2pos33.gap <= 16 && !f2pos33.left && JSON.stringify(f2pos33.items) === JSON.stringify(['term', 'start_date', 'first_end', 'open_late']),
-    'E2 ① は 2 列（左: 確かめること・話すこと／右: 聞くこと〔【質問】の記入欄 4 つ → 質問 3 つ〕・流れの 1 行）・記入欄は 1 問目のカードのすぐ上・タイマー「00:00 / 目安 10分」（固定時計）: ' + JSON.stringify({ g: iv33.groups, cols: iv33.cols, timer: iv33.timer, f2pos33 }));
+    !!chk33 && chk33.last && chk33.flowAfter && chk33.ctlSame &&
+    JSON.stringify(chk33.groups) === JSON.stringify(['必須条件|1つでも不一致なら不採用（追加質問して解消しなければ「⑤」へ）', '勤務条件の確認|聞くことの答えを選ぶ・記入する']) &&
+    JSON.stringify(chk33.rows) === JSON.stringify(['must_weekly', 'must_busy', 'weekend', 'busy_ng', 'term:Q1', 'start_date', 'first_end', 'open_late']),
+    'E2 ① は縦一列（話すこと → 聞くこと〔質問 3 つ〕→ 確かめること〔必須条件 2・記入欄 2｜勤務条件の確認: 【質問】の記入欄 4 つ・短期／長期の希望に Q1〕）・確かめることは最後のカード・その下に流れの注記・操作の列は同じ左端・タイマー「00:00 / 目安 10分」（固定時計）: ' + JSON.stringify({ g: iv33.groups, oneCol: iv33.oneCol, timer: iv33.timer, chk33 }));
   expect(iv33.prev === '← 準備に戻る' && iv33.next === '次へ：② 継続性・報連相 →' && iv33.nextAct === 'iv-next' && !iv33.toEval,
     'E2 ① の操作行は「← 準備に戻る」と右端の「次へ：② 継続性・報連相 →」: ' + JSON.stringify({ prev: iv33.prev, next: iv33.next }));
   // 本文が狭い 1366px・1280px でもチップは 1 行・タイマーと重ならない
@@ -470,15 +487,11 @@ const pdfTextOf = (f) => {
   await wait(200);
   const iv33b = await ivNow();
   const done33 = await page.$eval('#ivChips [data-sec="conditions"]', c => c.classList.contains('is-done') && c.querySelector('.iv-chip-s').textContent === '✓');
-  //   ② は 2 列の高さをそろえる: 左に 話すこと＋1 問目、右に「聞くこと（つづき）」の 2・3 問目（台本の順は 左 → 右 のまま。docs/SPEC-flow.md 14 章）
-  const bal33 = await page.evaluate(() => { const cols = Array.from(document.querySelectorAll('#ivStage .iv-cols > .iv-col'));
-    return { qs: cols.map(c => Array.from(c.querySelectorAll('.iv-q')).map(q => q.dataset.item)), cont: (document.querySelector('#ivStage .iv-col:last-child .k-ask .iv-k') || {}).textContent || '',
-      h: cols.map(c => Math.round(c.getBoundingClientRect().height)) }; });
-  expect(iv33b.stage === 'continuity' && iv33b.prev === '← 前の段階' && iv33b.next === '次へ：③ 仕事内容の説明 →' && done33 && iv33b.cols === 2 &&
-    JSON.stringify(iv33b.groups) === JSON.stringify(['say:話すこと', 'ask:聞くこと', 'ask:聞くこと']) &&
-    JSON.stringify(bal33.qs) === JSON.stringify([['q_prev_job'], ['q_cant_3days', 'q_sudden_absence']]) && bal33.cont === '聞くこと（つづき）' && Math.abs(bal33.h[0] - bal33.h[1]) <= 60 &&
+  //   ② も縦一列: 話すこと → 聞くこと（質問 3 つを 1 枚のカードに台本の順で。確かめることの無い段階はそのカードを出さない）
+  expect(iv33b.stage === 'continuity' && iv33b.prev === '← 前の段階' && iv33b.next === '次へ：③ 仕事内容の説明 →' && done33 && iv33b.oneCol &&
+    JSON.stringify(iv33b.groups) === JSON.stringify(['say:話すこと', 'ask:聞くこと']) && JSON.stringify(iv33b.qs) === JSON.stringify(['q_prev_job', 'q_cant_3days', 'q_sudden_absence']) &&
     await page.evaluate(() => document.activeElement === document.getElementById('ivStageH') && window.scrollY === 0),
-    'E2 ［次へ］で ②（2 列: 話すこと・1 問目｜聞くこと（つづき）2・3 問目。列の高さがそろう）・① のチップに ✓・見出しにフォーカスして先頭へ: ' + JSON.stringify({ stage: iv33b.stage, prev: iv33b.prev, next: iv33b.next, done33, bal33 }));
+    'E2 ［次へ］で ②（縦一列: 話すこと → 聞くこと〔3 問〕。確かめることのカードは無い）・① のチップに ✓・見出しにフォーカスして先頭へ: ' + JSON.stringify({ stage: iv33b.stage, prev: iv33b.prev, next: iv33b.next, done33, g: iv33b.groups, qs: iv33b.qs, oneCol: iv33b.oneCol }));
   await page.click('[data-action="iv-said-items"][data-sec="continuity"][data-kind="explain"]');
   await wait(120);
   const items33 = await page.$$eval('#ivStage .iv-say-list.is-items input[type="checkbox"]', els => els.map(e => e.dataset.cl));
@@ -490,13 +503,12 @@ const pdfTextOf = (f) => {
     'E2 「一部説明しなかった ▾」で項目ごとのチェック（3 つ）・全部付けるとボタンは「✓ 説明した」: ' + JSON.stringify({ items33, part33, ea33c }));
   await said('continuity');
   expect((await exVals(['ex_submit', 'ex_phone', 'ex_absence'])).every(x => !x) && (await saidBtn('continuity')).t === '説明した', 'E2 済みの「✓ 説明した」を押すと ② の説明を全部外す');
-  // ⑤（チップ）: 2 列（左に質問・右に話すこと〔合否連絡の［伝えた］〕。台本の順は 左 → 右。docs/SPEC-flow.md 15 章で F4 を変更）・「面接を終えて評価へ →」
+  // ⑤（チップ）: どの段階も同じ順（2026-10-18。docs/DESIGN.md 4-3）＝ 話すこと〔合否連絡の［伝えた］〕→ 聞くこと・「面接を終えて評価へ →」
   await ivGo('reverse');
   const iv33c = await ivNow();
-  const col33c = await page.evaluate(() => Array.from(document.querySelectorAll('#ivStage .iv-cols.is-two > .iv-col')).map(c => Array.from(c.querySelectorAll('.iv-grp')).map(g => g.dataset.kind).join('+')));
-  expect(iv33c.stage === 'reverse' && iv33c.cols === 2 && JSON.stringify(col33c) === JSON.stringify(['ask', 'say']) && JSON.stringify(iv33c.groups) === JSON.stringify(['ask:聞くこと', 'say:話すこと']) &&
-    iv33c.next === '面接を終えて評価へ →' && iv33c.nextAct === 'iv-end' && iv33c.timer === '00:00 / 最大 10分 00:00' && (await page.textContent('#ivStage .k-say .iv-k small')) === '合否連絡',
-    'E2 ⑤ は 2 列（左: 聞くこと → 右: 話すこと〔合否連絡〕）・目安「/ 最大 10分」・主ボタン「面接を終えて評価へ →」: ' + JSON.stringify({ g: iv33c.groups, col33c, next: iv33c.next, timer: iv33c.timer }));
+  expect(iv33c.stage === 'reverse' && iv33c.oneCol && JSON.stringify(iv33c.groups) === JSON.stringify(['say:話すこと', 'ask:聞くこと']) &&
+    iv33c.next === '面接を終えて評価へ →' && iv33c.nextAct === 'iv-end' && iv33c.timer === '00:00 / 最大 10分 00:00' && (await page.textContent('#ivStage .k-say .iv-k small')) === '合否連絡 2 項目',
+    'E2 ⑤ も縦一列で 話すこと〔合否連絡 2 項目〕→ 聞くこと の順（どの段階も同じ順）・目安「/ 最大 10分」・主ボタン「面接を終えて評価へ →」: ' + JSON.stringify({ g: iv33c.groups, oneCol: iv33c.oneCol, next: iv33c.next, timer: iv33c.timer }));
   await said('reverse', 'notify');
   const nt33 = { v: await exVals(['nt_hire', 'nt_reject']), b: await saidBtn('reverse', 'notify') };
   expect(nt33.v.every(Boolean) && nt33.b.t === '✓ 伝えた' && nt33.b.p === 'true', 'E2 ⑤ の［伝えた］で合否連絡 2 項目が済み・「✓ 伝えた」: ' + JSON.stringify(nt33));
@@ -548,12 +560,13 @@ const pdfTextOf = (f) => {
   await ivGo('conditions');
   await setCl('values.must_weekly', 'mismatch');
   await wait(150);
-  const ma33 = await st(() => ({ text: document.getElementById('ivMustAlertText').textContent, title: document.getElementById('ivMustAlert').title,
+  const ma33 = await st(() => ({ text: document.getElementById('ivMustLead').textContent + document.getElementById('ivMustAlertText').textContent, title: document.getElementById('ivMustAlert').title,
     skip: Array.from(document.querySelectorAll('#ivChips .iv-chip.is-skip')).map(c => c.dataset.sec + ':' + c.querySelector('.iv-chip-s').textContent),
     jump: (document.getElementById('ivMustJump') || {}).textContent }));
-  expect(await visible('#ivMustAlert') && ma33.text === '必須条件が合いません。追加で確認し、解消しなければ ⑤ 逆質問へ進んで最大 10 分で終了します' && ma33.title === '不一致: 土日を含む週3日以上、5時間以上' &&
+  //   案内は上の帯の 2 行目に 1 行（1 文目「必須条件が不一致です。」＋続き。docs/DESIGN.md 3-11 の文）
+  expect(await visible('#ivMustAlert') && ma33.text === '必須条件が不一致です。追加で確認し、解消しなければ ⑤ 逆質問へ（最大 10 分で終了）' && ma33.title === '不一致: 土日を含む週3日以上、5時間以上' &&
     JSON.stringify(ma33.skip) === JSON.stringify(['continuity:省略可', 'job:省略可', 'teamwork:省略可']) && await visible('#ivMustJump') && ma33.jump === '⑤ 逆質問へ',
-    'E2 必須条件の不一致: 赤い案内「…⑤ 逆質問へ進んで最大 10 分で終了します」（title に不一致の項目）・②〜④ のチップに省略可（⑤ は対象外）・「⑤ 逆質問へ」ボタン: ' + JSON.stringify(ma33));
+    'E2 必須条件の不一致: 赤い案内「必須条件が不一致です。追加で確認し、解消しなければ ⑤ 逆質問へ（最大 10 分で終了）」（title に不一致の項目）・②〜④ のチップに省略可（⑤ は対象外）・「⑤ 逆質問へ」ボタン: ' + JSON.stringify(ma33));
   await page.click('#ivMustJump');
   await wait(250);
   expect(await st(() => document.getElementById('ivStage').dataset.sec) === 'reverse' && await visible('#ivMustAlert') && !(await visible('#ivMustJump')),
@@ -1031,8 +1044,9 @@ const pdfTextOf = (f) => {
     if (w === 1280) await sshot('49-script-step3-1280.png');
   }
   expect(wide39.every(x => x.app.doc <= 1 && x.app.wrap <= 1 && x.rep.doc <= 1 && x.rep.zoom === '' && x.res <= 160), 'E8 1280px・1366px・1440px で横スクロールなし（アプリの報告書の紙・保存 HTML の用紙は縮小しない）: ' + JSON.stringify(wide39.map(x => ({ w: x.w, app: x.app, rep: x.rep, res: x.res }))));
-  expect(wide39.every(x => x.fz.zoom === 1 && x.fz.body >= 9.5 && x.fz.label >= 8.5 && x.fz.res >= 14 && x.fz.stack === (x.w < 1440) && x.fz.below === x.fz.stack),
-    'E8 アプリの報告書の紙は 1280px・1366px でも等倍（本文 9.5px・ラベル 8.5px・結果 14px）。右サマリーの横に入らない幅は右サマリーを紙の下へ: ' + JSON.stringify(wide39.map(x => Object.assign({ w: x.w }, x.fz))));
+  //   （2026-10-18 から報告書は 920 の 1 列〔.page.reading〕なので、右サマリーはどの幅でも紙の下。docs/DESIGN.md 4-5）
+  expect(wide39.every(x => x.fz.zoom === 1 && x.fz.body >= 9.5 && x.fz.label >= 8.5 && x.fz.res >= 14 && x.fz.below),
+    'E8 アプリの報告書の紙は 1280px・1366px・1440px でも等倍（本文 9.5px・ラベル 8.5px・結果 14px）。右サマリーは紙の横に並べず紙の下: ' + JSON.stringify(wide39.map(x => Object.assign({ w: x.w }, x.fz))));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await rp39.setViewportSize({ width: 1440, height: 1000 });
   await wait(200);
@@ -1443,7 +1457,7 @@ const pdfTextOf = (f) => {
     'E10 data-action は台本の編集・保存／破棄／書き出し／読み込み／初期化・最終承認のパスワードの設定だけ: ' + set10.actions.join(','));
   const txt10 = await page.evaluate(() => ({ cl: document.getElementById('s-checklist').textContent, mgmt: document.getElementById('s-mgmt').textContent, io: document.getElementById('s-io').textContent,
     band: !!document.querySelector('#clBandInputs [data-bind="evaluation.thresholds.recommendPct"]') && !!document.getElementById('clCapsScriptHint') }));
-  expect(txt10.cl.includes('説明（「評価」に表示）') && txt10.cl.includes('「面接」では「不一致のとき案内するセクション」へ進んで面接を終えるよう案内します') && txt10.band &&
+  expect(txt10.cl.includes('説明（「評価」に表示）') && txt10.cl.includes('「面接」では「不一致のとき案内する段階」へ進んで面接を終えるよう案内します') && txt10.band &&
     txt10.mgmt.includes('保存ファイル（HTML）と「報告書」に「採用」「不採用」のボタン') && txt10.mgmt.includes('（「報告書」の画面と保存した HTML の両方') && !/Step[①②③]/.test(txt10.cl + txt10.mgmt) &&
     txt10.io.includes('v1 形式の JSON は読み込むと既定の設定になります') && !txt10.io.includes('新しい設定項目が既定値で補われます'),
     'E10 文言: 画面は「準備」「面接」「評価」「報告書」で呼ぶ（総合判断の説明は「評価」・必須条件の案内は「面接」・最終合否は「報告書」。Step① などは使わない）・帯の境界は面接チェックリストの節・書き出しの注記');
@@ -1585,9 +1599,9 @@ const pdfTextOf = (f) => {
   await wait(400);
   await setCl('values.must_weekly', 'mismatch');
   await wait(150);
-  const rv12 = await st(() => ({ text: document.getElementById('ivMustAlertText').textContent, skip: document.querySelectorAll('#ivChips .iv-chip.is-skip').length,
+  const rv12 = await st(() => ({ text: document.getElementById('ivMustLead').textContent + document.getElementById('ivMustAlertText').textContent, skip: document.querySelectorAll('#ivChips .iv-chip.is-skip').length,
     jump: !!document.getElementById('ivMustJump') && !document.getElementById('ivMustJump').classList.contains('hidden') }));
-  expect(await visible('#ivMustAlert') && rv12.text === '必須条件が合いません。追加で確認してください（このまま続けると、結果は上長最終判断要以下になります）' && rv12.skip === 0 && !rv12.jump,
+  expect(await visible('#ivMustAlert') && rv12.text === '必須条件が不一致です。追加で確認してください（このまま続けると、結果は上長最終判断要以下）' && rv12.skip === 0 && !rv12.jump,
     'E12 mustFailResult=review の面接の案内（追加で確認・続けると上長最終判断要以下。省略可のチップ・「⑤ 逆質問へ」は出さない）: ' + JSON.stringify(rv12));
   await setCl('overall', 'hire');
   await wait(150);
@@ -1985,7 +1999,7 @@ const pdfTextOf = (f) => {
   const esc14 = await p14.evaluate(() => ({ pop: !!document.getElementById('a4Pop'), focus: document.activeElement && document.activeElement.getAttribute('data-field-id'), exp: document.querySelector('#a4 .stamp-box[data-field-id="final"]').getAttribute('aria-expanded') }));
   expect(!!pp14 && pp14.role === 'dialog' && pp14.h === '最終確認' && pp14.focus && pp14.exp === 'true' && pp14.body && pp14.shown && pp14.label === '最終確認の押印' && !esc14.pop && esc14.focus === 'final' && esc14.exp === null,
     'E14 (3) 用紙の押印欄をクリックすると窓（role=dialog・欄名・担当者にフォーカス・body 直下）・Esc で閉じて欄にフォーカスが戻る: ' + JSON.stringify({ pp14, esc14 }));
-  //   キーボード操作の直後（Esc で欄に戻った・Shift+Tab で「最終合否」に移った）に印刷しても、欄のフォーカス枠は紙に出ない（画面では青い枠）
+  //   キーボード操作の直後（Esc で欄に戻った・Shift+Tab で「最終合否」に移った）に印刷しても、欄のフォーカス枠は紙に出ない（画面では紺の枠。2026-10-18 に #1f5fbf から --focus の #3b5791 へ。docs/DESIGN.md 4-9）
   const ring14 = async () => {
     const scr = await p14.evaluate(() => { const a = document.activeElement, cs = getComputedStyle(a); return { id: a.id || a.getAttribute('data-field-id'), style: cs.outlineStyle, color: cs.outlineColor }; });
     await p14.emulateMedia({ media: 'print' });
@@ -2004,9 +2018,9 @@ const pdfTextOf = (f) => {
     await p14.pdf({ path: pdf, format: 'A4', printBackground: true });
     ringP14 = await diff14(png14(pdf, path.join(OUT, 'a4-print-focus')), prn14);
   }
-  expect(ringF14.id === 'final' && ringF14.style === 'solid' && ringF14.color === 'rgb(31, 95, 191)' && ringF14.print === 'none' &&
+  expect(ringF14.id === 'final' && ringF14.style === 'solid' && ringF14.color === 'rgb(59, 87, 145)' && ringF14.print === 'none' &&
     ringD14.id === 'a4Decision' && ringD14.style === 'solid' && ringD14.print === 'none' && (ringP14 === null || (ringP14.size && ringP14.n === 0)),
-    'E14 (3) キーボード操作の直後に印刷しても欄のフォーカス枠は出ない（画面は青い枠・印刷は outline なし・PDF の画像はフォーカスなしの印刷と画素単位で同じ）: ' + JSON.stringify({ ringF14, ringD14, ringP14 }));
+    'E14 (3) キーボード操作の直後に印刷しても欄のフォーカス枠は出ない（画面は紺の枠・印刷は outline なし・PDF の画像はフォーカスなしの印刷と画素単位で同じ）: ' + JSON.stringify({ ringF14, ringD14, ringP14 }));
   await p14.focus('#a4 .stamp-box[data-field-id="final"]');
   await p14.keyboard.press('Enter');
   await p14.waitForTimeout(80);
@@ -3310,7 +3324,7 @@ const pdfTextOf = (f) => {
     //   マウスは要素の外へ（ホバーの色を写さない）・要素の中のフォーカスは外す（入力欄のフォーカス枠を写さない）・toast は消す
     const shotEl17 = async (sel, file) => {
       await page.mouse.move(1, 1);
-      await page.evaluate((q) => { const s = document.createElement('style'); s.id = 'e2eNoSticky'; s.textContent = '.topbar,.iv-top,.ev-top,.iv-timer,.iv-must,.flow-foot.is-sticky,.flow-foot.is-pinned{position:static !important}'; document.head.appendChild(s);
+      await page.evaluate((q) => { const s = document.createElement('style'); s.id = 'e2eNoSticky'; s.textContent = '.topbar,.iv-top,.ev-top,.iv-timer,.iv-must,.flow-foot{position:static !important}'; document.head.appendChild(s);
         const a = document.activeElement, el = document.querySelector(q); if (a && el && el.contains(a) && a.blur) a.blur();
         const t = document.getElementById('toast'); if (t) t.classList.remove('show'); }, sel);
       await wait(80);
@@ -3350,24 +3364,28 @@ const pdfTextOf = (f) => {
     const s17 = await page.evaluate(() => {
       const ov = document.getElementById('clOverall');
       const rows = Array.from(document.querySelectorAll('#clPersona .cl-ps-row'));
+      //   総評は 3 枚のカード（2026-10-18。docs/DESIGN.md 4-4）: 人物像（#clPersona）→ 総合判断（#clOverall）→ 面接所見（#clNotes）が続けて並ぶ
+      const trio = ['clPersona', 'clOverall', 'clNotes'].map(id => document.getElementById(id));
       return {
-        old: ['#clGuide', '.cl-chip', '.cl-page-head', '#clNav', '#clPaperBtn'].filter(q => !!document.querySelector(q)), h2: (ov.querySelector('.card-head h2') || {}).textContent,
-        order: Array.from(ov.querySelectorAll('#clPersona, .cl-overall-row, .cl-notes-field')).map(e => e.id || (e.classList.contains('cl-overall-row') ? 'overall' : 'notes')),
+        old: ['#clGuide', '.cl-chip', '.cl-page-head', '#clNav', '#clPaperBtn'].filter(q => !!document.querySelector(q)),
+        cards: trio.every(c => !!c && c.matches('section.card') && !!c.querySelector(':scope > .card-band .card-title')) && trio[0].nextElementSibling === trio[1] && trio[1].nextElementSibling === trio[2],
+        order: Array.from(document.querySelectorAll('#clPersona, #clOverall .cl-overall-row, #clNotes textarea[data-note="interview"]')).map(e => e.id === 'clPersona' ? 'clPersona' : e.classList.contains('cl-overall-row') ? 'overall' : 'notes'),
         rows: rows.map(r => r.dataset.psRow), btns: rows.map(r => Array.from(r.querySelectorAll('button.cl-ps-btn[data-action="ps-set"]')).map(b => b.dataset.persona === r.dataset.psRow ? b.dataset.score : 'x').join('')),
         legend: (document.getElementById('clPsLegend') || {}).textContent, h3: (document.getElementById('clPersonaH') || {}).textContent, hint: (document.querySelector('[data-ps-row="ps_impression"] .hint') || {}).textContent,
         tabs: rows.map(r => Array.from(r.querySelectorAll('.cl-ps-btn')).filter(b => b.tabIndex === 0).map(b => b.dataset.score).join('')),
-        off: !!document.getElementById('clPersonaOff'), ovHint: Array.from(ov.querySelectorAll(':scope > .hint')).map(h => h.textContent).join(' '),
+        off: !!document.getElementById('clPersonaOff'), ovHint: Array.from(ov.querySelectorAll('.card-note')).map(h => h.textContent).join(' '),
         lead: Array.from(document.querySelectorAll('.cl-lead-ps')).map(n => n.dataset.psRef + ':' + n.textContent),
-        leadAfter: (() => { const n = document.querySelector('#clPersona .cl-lead-ps'); return !!n && !!n.previousElementSibling && n.previousElementSibling.classList.contains('cl-ps-head'); })()
+        //   見出し帯の下（凡例のすぐ下・行の前）
+        leadAfter: (() => { const n = document.querySelector('#clPersona .cl-lead-ps'); return !!n && !!n.previousElementSibling && n.previousElementSibling.id === 'clPsLegend' && !!n.nextElementSibling && n.nextElementSibling.classList.contains('cl-ps-rows'); })()
       };
     });
-    expect(s17.old.length === 0 && s17.h2 === '総評' && JSON.stringify(s17.order) === JSON.stringify(['clPersona', 'overall', 'notes']) && JSON.stringify(s17.rows) === JSON.stringify(PS17) &&
+    expect(s17.old.length === 0 && s17.cards && JSON.stringify(s17.order) === JSON.stringify(['clPersona', 'overall', 'notes']) && JSON.stringify(s17.rows) === JSON.stringify(PS17) &&
       s17.btns.every(b => b === '12345') && s17.legend === '1 不採用レベル　2 やや不安　3 普通　4 良い　5 とても良い' && s17.h3 === '人物像（接客）' && s17.hint === '服装・清潔感' &&
       s17.tabs.every(t => t === '1') && !s17.off && s17.ovHint.includes('人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます。'),
-      'E17 (1) 評価の総評は 人物像 → 総合判断 → 面接所見（7 行×1〜5・凡例・行ごとに 1 つのタブ位置）・総合判断の説明に人物像で下がる条件（合計・1 点・未入力）。旧 ② の案内・目次・ページの見出しは無い: ' + JSON.stringify(s17));
+      'E17 (1) 評価の総評は 人物像 → 総合判断 → 面接所見 の 3 枚の見出し帯つきのカード（7 行×1〜5・凡例・行ごとに 1 つのタブ位置）・総合判断の説明に人物像で下がる条件（合計・1 点・未入力）。旧 ② の案内・目次・ページの見出しは無い: ' + JSON.stringify(s17));
     //   台本 1 枚目の前書き「…最低限の話し方、敬語が可能か。…」（台本の文言は変えない）の付ける場所（人物像の「言葉遣い・説明のわかりやすさ」）を人物像の見出しの下に 1 行（docs/SPEC-flow.md 4-6）
     expect(JSON.stringify(s17.lead) === JSON.stringify(['ps_speech:→ 台本 1 枚目の「最低限の話し方、敬語が可能か」は、この人物像（接客）「言葉遣い・説明のわかりやすさ」で 1〜5 点を付けます。']) && s17.leadAfter,
-      'E17 (1) 台本 1 枚目の前書きの「最低限の話し方、敬語が可能か」は、人物像の見出しの下に「言葉遣い・説明のわかりやすさ」で付ける旨の 1 行（1 つだけ）: ' + JSON.stringify(s17.lead));
+      'E17 (1) 台本 1 枚目の前書きの「最低限の話し方、敬語が可能か」は、人物像のカードの凡例の下（行の前）に「言葉遣い・説明のわかりやすさ」で付ける旨の 1 行（1 つだけ）: ' + JSON.stringify(s17.lead));
     const u17a = await psUi17();
     expect(u17a.sum === '—' && u17a.max === '35' && u17a.pct === '' && u17a.state === '未入力 7・上長最終判断要まで' && u17a.stateCls.includes('warn') && u17a.warn === '' && u17a.nav.includes('人物像 —/35') && u17a.sum2.includes('未入力 7'),
       'E17 (1) 入力前: 合計 —/35・琥珀「未入力 7・上長最終判断要まで」（このまま報告書に進むと上長最終判断要）・結果カードに「人物像 —/35」・右サマリーの人物像「未入力 7」: ' + JSON.stringify(u17a));
@@ -3422,7 +3440,7 @@ const pdfTextOf = (f) => {
     await setPsAll([4, 4, 1, 4, 4, 4, 4]);
     await page.fill('textarea[data-note="interview"]', '受け答えは丁寧。笑顔が少なく表情が硬い。');
     const one17 = { ui: await psUi17(), row: await st(() => document.querySelector('[data-ps-row="ps_smile"]').className), btn: await st(() => getComputedStyle(document.querySelector('[data-persona="ps_smile"][data-score="1"]')).backgroundColor) };
-    await shotEl17('#clOverall', 'p12-step2-persona.png');
+    await shotEl17('#clPersona', 'p12-step2-persona.png');
     expect(one17.ui.warn === '1 点の項目があります（笑顔・表情）。結果は上長最終判断要以下になります。' && one17.row.includes('is-one') && one17.ui.sum === '25' && one17.ui.pct === '（71%）' &&
       one17.ui.state === '上長最終判断要まで' && one17.ui.stateCls.includes('warn') && !one17.ui.stateCls.includes('ok') && one17.ui.sum2.includes('25/35点・71%') && one17.ui.sum2.includes('1点あり'),
       'E17 (4) 1 点の項目: 警告「1 点の項目があります（笑顔・表情）。…」・行は赤（.is-one）・合計が 70% 以上でも状態は琥珀「上長最終判断要まで」（緑「70% 以上」にしない）・右サマリーに「1点あり」: ' + JSON.stringify(one17));
@@ -3521,7 +3539,8 @@ const pdfTextOf = (f) => {
     expect(await step() === 3 && !!(await page.$('#clPersona')), 'E17 (6) 「評価で入力する」で評価（人物像のある画面）に戻る');
     // (10) 評価の画面の幅: 390px でも横スクロールなし（人物像の行は 1 列）・人物像の凡例（「点 意味」ごとの span）は語の途中で折り返さない
     const lay17 = () => page.evaluate(() => ({ legendItems: document.querySelectorAll('#clPsLegend > span').length,
-      legendSplit: Array.from(document.querySelectorAll('#clPsLegend > span')).filter(sp => sp.getClientRects().length > 1).map(sp => sp.textContent) }));
+      //   折り返したかは行の数（上端の違う矩形）で見る（2026-10-18 から点の数字は <b>。同じ行でも子の要素の前後で矩形が分かれるため、矩形の数では数えない）
+      legendSplit: Array.from(document.querySelectorAll('#clPsLegend > span')).filter(sp => new Set(Array.from(sp.getClientRects()).map(r => Math.round(r.top))).size > 1).map(sp => sp.textContent) }));
     await page.setViewportSize({ width: 390, height: 900 });
     await wait(250);
     const nw17 = await page.evaluate(() => ({ ov: document.documentElement.scrollWidth - window.innerWidth, row: getComputedStyle(document.querySelector('.cl-ps-row')).gridTemplateColumns.split(' ').length,
@@ -3541,10 +3560,12 @@ const pdfTextOf = (f) => {
     await setCl('values.rt_hourensou', 'fair');
     await setCl('values.rt_turnover', 'poor');
     await setCl('overall', 'hold');
+    //   ボタンの文字・地の色は transition（.12s）で変わるので、テーマを切り替えた直後に測るときは transition を止める（E18 の con18 と同じ。途中の色を測らない）
     const con17 = () => st(() => {
+      if (!document.getElementById('e2eNoTr17')) { const s = document.createElement('style'); s.id = 'e2eNoTr17'; s.textContent = '*{transition:none !important}'; document.head.appendChild(s); }
       const lum = (c) => { const v = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(x => { x /= 255; return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
       const out = {};
-      Array.from(document.querySelectorAll('#view-judge .cl-sec .seg-btn.active, #clOverall .seg-btn.active')).forEach(b => { const cs = getComputedStyle(b), a = lum(cs.color), c = lum(cs.backgroundColor);
+      Array.from(document.querySelectorAll('#view-judge .cl-sec .seg-btn.active, #clPersona .seg-btn.active, #clOverall .seg-btn.active')).forEach(b => { const cs = getComputedStyle(b), a = lum(cs.color), c = lum(cs.backgroundColor);
         out[b.dataset.persona ? 'ps' + b.dataset.score : b.dataset.value] = { r: +((Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05)).toFixed(2), color: cs.color }; });
       return out;
     });
@@ -3557,9 +3578,11 @@ const pdfTextOf = (f) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await st((t) => { if (t) document.documentElement.setAttribute('data-theme', t); }, theme17);
     const lt17 = await con17();
+    await st(() => { const s = document.getElementById('e2eNoTr17'); if (s) s.remove(); });
     const KINDS17 = ['ps1', 'ps2', 'ps3', 'ps4', 'ps5', 'good', 'fair', 'poor', 'match', 'hold'];
-    expect([dk17a, dk17b].every(d => KINDS17.every(k => d[k] && d[k].r >= 4.5)) && ['ps1', 'ps2', 'ps4', 'good', 'fair', 'poor', 'match', 'hold'].every(k => lt17[k] && lt17[k].color === 'rgb(255, 255, 255)'),
-      'E17 (10) ダークモードでも押下中のボタン（人物像 1〜5・○△×・一致・総合判断）の文字は 4.5:1 以上（data-theme・prefers-color-scheme の両方。ライトは白字のまま）: ' + JSON.stringify({ dk17a, dk17b, lt17 }));
+    //   （2026-10-18 から琥珀の塗り〔△・保留・2 点〕は濃い文字。docs/DESIGN.md 1-2。ライトも文字の色ではなくコントラストで確かめる）
+    expect([dk17a, dk17b, lt17].every(d => KINDS17.every(k => d[k] && d[k].r >= 4.5)) && ['ps1', 'ps4', 'good', 'poor', 'match'].every(k => lt17[k].color === 'rgb(255, 255, 255)'),
+      'E17 (10) ライト・ダークとも押下中のボタン（人物像 1〜5・○△×・一致・総合判断）の文字は 4.5:1 以上（ダークは data-theme・prefers-color-scheme の両方。緑・赤の塗りは白字）: ' + JSON.stringify({ dk17a, dk17b, lt17 }));
     // (9) 記入シート（手書き用）: 準備で氏名が空でも印刷できる（印刷の瞬間だけ body.print-checklist と #clSheet .pp-sheet）・判定は走らない・保存しない
     await page.click('#btnNew');
     await wait(200);
@@ -3873,7 +3896,7 @@ const pdfTextOf = (f) => {
       rule: Array.from(document.querySelectorAll('#view-help .card')).map(c => c.textContent).find(t => t.includes('結果（推奨）の決まり方')) || '',
       settings: Array.from(document.querySelectorAll('#view-help .card')).map(c => c.textContent).find(t => t.includes('設定（劇場プロファイル）')) || '',
       off: !!document.getElementById('helpPersonaOff') }));
-    expect(help17.steps === 4 && ['人物像（1〜5 点）と記入シート', '評価の画面の総評で', '記入シート（手書き用）', '70% 以上はそのまま', '40% 未満は不採用推奨', '最低限の話し方、敬語が可能か'].every(t => help17.card.includes(t)) &&
+    expect(help17.steps === 4 && ['人物像（1〜5 点）と記入シート', '評価の画面の人物像のカードで', '記入シート（手書き用）', '70% 以上はそのまま', '40% 未満は不採用推奨', '最低限の話し方、敬語が可能か'].every(t => help17.card.includes(t)) &&
       help17.step3.includes('人物像（1〜5 点）') && help17.step3.includes('面接のあとに') && help17.rule.includes('人物像（1〜5 点）の合計が低い') &&
       help17.rule.includes('40% 未満なら不採用推奨') && !help17.off && !help17.rule.includes('いまの設定では人物像を使いません') && !help17.card.includes('面接中はメモを中心に'),
       'E17 (13) 使い方に「人物像（1〜5 点）と記入シート」（評価の画面の総評・判定への反映・記入シート・rt_manner を外した理由）・ステップ 3（評価）と結果の決まり方にも 1 行（.help-step は 4 つ。面接中のメモの案内は「面接の進め方」へ）: ' + JSON.stringify({ steps: help17.steps, len: help17.card.length }));
@@ -3882,7 +3905,8 @@ const pdfTextOf = (f) => {
       help17.iv.includes('1 対 1 でない面接は記入シートに書き、終わったら面接の画面に転記してください。転記にかかった時間は面接時間ではないので、評価の画面の「面接時間」に記入シートの分を入れます（目安から大きく外れていると「面接時間を確かめてください」と出ます）。') && !help17.card.includes('1 対 1 でなくても') && !help17.iv.some(t => t.includes('1 対 1 でなくても')),
       'E17 (13) 使い方の「面接の進め方」: 面接中はメモ・評価は面接のあとでまとめて・1 対 1 でない面接は記入シートに書いて転記（転記の時間は面接時間ではないので評価で分を入れる。docs/SPEC-flow.md 15-2）: ' + JSON.stringify(help17.iv));
     //   使い方のほかの箇所も人物像・記入シートに合わせる（記入シートのボタンの場所は準備・設定のカード・前書きの話し方・敬語の付け先。docs/SPEC-persona.md 11-9 補完 5）
-    expect(help17.card.includes('準備の画面の「🖨 記入シート（手書き用）」（「面接を始める →」の左）で A4 1 枚を印刷できます（面接 → 評価の画面と同じ並び・質問ごとに答えの線。') &&
+    //   （ボタンの 🖨 は 2026-10-18 から SVG のアイコン。文の中ではボタンの名前だけを書く）
+    expect(help17.card.includes('準備の画面の「記入シート（手書き用）」（「面接を始める →」の左）で A4 1 枚を印刷できます（面接 → 評価の画面と同じ並び・質問ごとに答えの線。') &&
       !help17.card.includes('Step①') && !help17.card.includes('Step②') &&
       help17.settings.includes('面接チェックリスト（台本の文言・項目・確認点・人物像）') && help17.settings.includes('台本を変えると面接・評価の画面と記入シートにそのまま反映されます') &&
       help17.card.includes('台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます'),
@@ -3915,7 +3939,7 @@ const pdfTextOf = (f) => {
     //   1 項目を未入力に戻す（未入力＝調整しない）→ 灰「未入力 1」（下がらない）・笑顔・表情を 1 点（1 点＝不採用推奨）→ 赤「未入力 1・不採用推奨」と警告
     await toView('judge');
     await navStep(3);
-    const ov17r = async () => Object.assign(await psUi17(), { hint: await st(() => Array.from(document.querySelectorAll('#clOverall > .hint')).map(h => h.textContent).join(' ')) });
+    const ov17r = async () => Object.assign(await psUi17(), { hint: await st(() => Array.from(document.querySelectorAll('#clOverall .card-note')).map(h => h.textContent).join(' ')) });
     const ov17a = await ov17r();
     await setPs('ps_greeting', 0);
     await wait(80);
@@ -3975,7 +3999,7 @@ const pdfTextOf = (f) => {
     const e18 = [];
     const PS18 = ['ps_greeting', 'ps_impression', 'ps_smile', 'ps_voice', 'ps_eye', 'ps_speech', 'ps_motivation'];
     const SECS18 = ['conditions', 'continuity', 'job', 'teamwork', 'reverse'];
-    const NOSTICKY18 = '.topbar,.iv-top,.ev-top,.iv-timer,.iv-must,.flow-foot.is-sticky,.flow-foot.is-pinned{position:static !important}';   // 準備・報告書の操作行（固定）・狭い画面のタイマーと案内（固定）も
+    const NOSTICKY18 = '.topbar,.iv-top,.ev-top,.iv-timer,.iv-must,.flow-foot{position:static !important}';   // 準備・報告書の操作行（固定）・狭い画面のタイマーと案内（固定）も
     // 全体のスクリーンショット（撮るあいだだけ sticky を外す・先頭へ・toast とフォーカスを外す）／見えている範囲のスクリーンショット
     const full18 = async (pg, name) => {
       await pg.mouse.move(1, 1);
@@ -3993,9 +4017,29 @@ const pdfTextOf = (f) => {
       await pg.screenshot({ path: path.join(OUT, name) });
       await pg.evaluate(() => { const s = document.getElementById('e2eNoToast18'); if (s) s.remove(); });
     };
-    // 面接の段階が画面に収まるか（段階の下端と操作行の上端・縦スクロールの量）
-    const fit18 = (pg) => pg.evaluate(() => { const s = document.getElementById('ivStage').getBoundingClientRect(), f = document.getElementById('ivFoot').getBoundingClientRect();
-      return { sec: document.getElementById('ivStage').dataset.sec, over: Math.round(s.bottom - f.top), scroll: document.documentElement.scrollHeight - window.innerHeight, footBottom: Math.round(innerHeight - f.bottom) }; });
+    // 面接の段階が見えるか（2026-10-18 から縦一列のカードなので、段階は 1 画面に収まるとは限らない。docs/DESIGN.md 4-3）:
+    //   先頭で操作行に隠れている項目（数え方は「▼ 下にあと n 項目」と同じ）・その案内の文・いちばん下までスクロールしたときの最後の要素の下端と操作行の上端（隠れたままにならない）・操作行は画面の下端
+    const IV_ITEMS18 = '#ivStage .row, #ivStage .iv-say-i, #ivStage .iv-q, #ivStage .iv-oldmemo, #ivStage .iv-memo, #ivStage .iv-flow';
+    const fit18 = (pg) => pg.evaluate(async (sel) => {
+      const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const st = document.getElementById('ivStage'), ft = document.getElementById('ivFoot'), mb = document.getElementById('ivMore');
+      const hiddenNow = () => { const t = ft.getBoundingClientRect().top; return Array.from(document.querySelectorAll(sel)).filter(e => e.offsetParent !== null && e.getBoundingClientRect().bottom > t + 2).length; };
+      //   「▼ 下にあと n 項目」はスクロールのあとの描画のフレームで数え直す（1 フレームに 1 回）。案内の出し入れが落ち着くまで待つ（最大 30 回）
+      const settle = async () => { for (let k = 0; k < 30; k++) { await frame(); if ((hiddenNow() > 0) === (!!mb && !mb.classList.contains('hidden'))) break; } };
+      window.scrollTo(0, 0);
+      await settle();
+      const top = { hidden: hiddenNow(), more: mb && !mb.classList.contains('hidden') ? mb.textContent : '' };
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      await settle();
+      const last = st.lastElementChild.getBoundingClientRect(), f = ft.getBoundingClientRect();
+      const r = { sec: st.dataset.sec, hidden: top.hidden, more: top.more, over: Math.round(last.bottom - f.top), endHidden: hiddenNow(), footBottom: Math.round(innerHeight - f.bottom),
+        endMore: mb && !mb.classList.contains('hidden') ? mb.textContent : '' };
+      window.scrollTo(0, 0);
+      await settle();
+      return r;
+    }, IV_ITEMS18);
+    //   見える: 最後の要素まで操作行の上に出せる・隠れている項目があるときだけ「▼ 下にあと n 項目」（n は隠れている数）・いちばん下では出さない
+    const seen18 = (o) => o.over <= 0 && o.endHidden === 0 && !o.endMore && (o.hidden > 0 ? o.more === '▼ 下にあと ' + o.hidden + ' 項目' : o.more === '');
     // 今の段階のメモ（質問ごと）を埋める（スクリーンショット用に答えらしい文。無い質問は「（段階）の答え」）
     const ANS18 = { q_term: '長期希望。卒業まで続けたい', q_two_months: '問題なし。試験期間も週3日は出せる', q_family: '反対なし。終電の時間も家族と確認済み',
       q_prev_job: '飲食で1年。学業との両立のため退職', q_cant_3days: '分かった時点で早めに相談する', q_sudden_absence: 'すぐ電話で連絡する',
@@ -4070,9 +4114,10 @@ const pdfTextOf = (f) => {
     await wait(300);
     expect(s18a.said === '✓ 説明した|true' && s18a.v.every(Boolean) && ce18.sec === 'teamwork' && ce18.focus === 'ivStageH' && end18 === '面接を終えて評価へ →' && await step() === 3,
       'E18 (1) 面接: ① で［説明した］（短期求人なので 4 項目）・Ctrl+Enter で次の段階（④・見出しにフォーカス）・⑤ の「面接を終えて評価へ →」で評価へ: ' + JSON.stringify({ s18a, ce18, end18 }));
-    // 1440×900: ①〜⑤ とも段階の下端が操作行より上（スクロールなし。① は列の幅の比で高さをそろえる。docs/SPEC-flow.md 15 章。それまでは ① だけ 38px はみ出した）。操作行は画面の下端
-    expect(SECS18.every(k => f18[k].over <= 0 && f18[k].scroll <= 1) && Object.keys(f18).every(k => Math.abs(f18[k].footBottom) <= 1),
-      'E18 1440×900: ①〜⑤ は段階が操作行より上でスクロールなし・操作行は画面の下端: ' + JSON.stringify(f18));
+    // 1440×900: ①〜⑤ とも、隠れている項目は「▼ 下にあと n 項目」で知らせ、いちばん下までスクロールすれば最後の要素（流れの注記・最後のカード）が操作行の上に見える。操作行は画面の下端
+    //   （2026-10-18 に 2 列 → 縦一列。「1 画面に収まる」は「操作行が中身を隠さない・最後の項目までスクロールで届く」に置き換え。docs/DESIGN.md 4-3）
+    expect(SECS18.every(k => seen18(f18[k])) && Object.keys(f18).every(k => Math.abs(f18[k].footBottom) <= 1),
+      'E18 1440×900: ①〜⑤ とも操作行が中身を隠さない（隠れている項目は「▼ 下にあと n 項目」・いちばん下までスクロールすると最後の要素は操作行の上）・操作行は画面の下端: ' + JSON.stringify(f18));
     // 評価: 確認点 6 つに ○・人物像 7 つに 4・総合判断「採用」・面接所見 → 報告書へ
     for (const b of await page.$$('#stepContent .cl-rate-row [data-action="cl-set"][data-value="good"]')) await b.click();
     for (const id of PS18) await page.click('[data-action="ps-set"][data-persona="' + id + '"][data-score="4"]');
@@ -4081,11 +4126,12 @@ const pdfTextOf = (f) => {
     await wait(150);
     const ev18 = await page.evaluate(() => ({ res: document.getElementById('evResultTitle').textContent, why: document.getElementById('evResultWhy').textContent, miss: document.getElementById('evMissing').textContent,
       qa: Array.from(document.querySelectorAll('#cl-conditions .ev-qa > div')).map(d => d.querySelector('dt').textContent + '=' + d.querySelector('dd').textContent),
-      said: Array.from(document.querySelectorAll('.ev-said')).map(e => e.textContent), kv: Array.from(document.querySelectorAll('#cl-conditions .ev-kv > div')).map(d => d.querySelector('dt').textContent + '=' + d.querySelector('dd').textContent) }));
+      said: Array.from(document.querySelectorAll('.ev-said')).map(d => d.querySelector('dt').textContent + '=' + d.querySelector('dd').textContent), kv: Array.from(document.querySelectorAll('#cl-conditions .ev-kv > div')).map(d => d.querySelector('dt').textContent + '=' + d.querySelector('dd').textContent) }));
     await full18(page, 'p13-evaluate.png');
     expect(ev18.res === '採用推奨' && ev18.why === '総合判断「採用」のとおり' && ev18.miss === '未入力はありません' &&
-      JSON.stringify(ev18.qa) === JSON.stringify(['短期／長期の希望=' + ANS18.q_term, '最初の2か月で条件を満たせない可能性=' + ANS18.q_two_months, '家族の反対=' + ANS18.q_family]) &&
-      JSON.stringify(ev18.said) === JSON.stringify(['説明：✓ 説明した（4/4）', '説明：✓ 説明した（3/3）', '説明：✓ 説明した（4/4）', '説明：✓ 説明した（3/3）', '合否連絡：✓ 伝えた']) &&
+      //   （2026-10-18 から面接のメモは値の行〔左にラベル・右に値〕。質問には面接の画面と同じ Q 番号。docs/DESIGN.md 4-4）
+      JSON.stringify(ev18.qa) === JSON.stringify(['Q1短期／長期の希望=' + ANS18.q_term, 'Q2最初の2か月で条件を満たせない可能性=' + ANS18.q_two_months, 'Q3家族の反対=' + ANS18.q_family]) &&
+      JSON.stringify(ev18.said) === JSON.stringify(['説明=✓ 説明した（4/4）', '説明=✓ 説明した（3/3）', '説明=✓ 説明した（4/4）', '説明=✓ 説明した（3/3）', '合否連絡=✓ 伝えた']) &&
       ev18.kv.includes('土日勤務可否=両日') && ev18.kv.includes('短期／長期の希望=長期希望') && ev18.kv.includes('契約開始日の希望=2026/11/01') && ev18.kv.includes('初回契約終了=—'),
       'E18 (1) 評価: 段階のカードに面接のメモ（質問ごと・記入欄・説明）・いまの結果「採用推奨」（総合判断「採用」のとおり・未入力はありません）: ' + JSON.stringify(ev18));
     await page.click('#toReportBtn');
@@ -4205,7 +4251,7 @@ const pdfTextOf = (f) => {
       st: Array.from(document.querySelectorAll('#evTime .ev-t-i')).map(e => e.textContent), sec: Array.from(document.querySelectorAll('.ev-sec .ev-sec-time')).map(e => e.textContent) }));
     expect(ev18t.step === 3 && st18b.endedAt === new Date(T0 + 372000 + 229000 + 299000 + 60000 + 185000).toISOString() && st18b.startedAt === new Date(T0).toISOString() &&
       JSON.stringify(st18b.perStage) === JSON.stringify({ conditions: 900, continuity: 185, reverse: 0 }) && st18b.stage === 'reverse' &&
-      ev18t.sub === '（タイマー 18分05秒・目安 41分）' && ev18t.ph === '18' && ev18t.val === '' && JSON.stringify(ev18t.st) === JSON.stringify(['① 15:00', '② 3:05', '③ —', '④ —', '⑤ 0:00']) &&
+      ev18t.sub === 'タイマー 18分05秒・目安 41分' && ev18t.ph === '18' && ev18t.val === '' && JSON.stringify(ev18t.st) === JSON.stringify(['① 15:00', '② 3:05', '③ —', '④ —', '⑤ 0:00']) &&
       JSON.stringify(ev18t.sec) === JSON.stringify(['15:00（目安 10分）', '3:05（目安 3分）', '—（目安 10分）', '—（目安 8分）', '0:00（最大 10分）']),
       'E18 (2) 面接を終えると endedAt・perStage（① 900・② 185・⑤ 0）。評価の面接時間は「タイマー 18分05秒・目安 41分」・入力欄の placeholder 18・段階ごとの時間（表示しなかった段階は —）: ' + JSON.stringify({ st18b, ev18t }));
     // 評価を付けて報告書へ: A4 の面接時間「18分（目安 41分）」→ 評価で 35 分と入れると「35分（目安 41分）」
@@ -4302,7 +4348,7 @@ const pdfTextOf = (f) => {
     await page.click('[data-action="cl-set"][data-cl="values.must_busy"][data-value="match"]');
     await page.click('[data-action="cl-set"][data-cl="values.must_weekly"][data-value="mismatch"]');
     await wait(150);
-    const mm18 = await page.evaluate(() => ({ shown: !document.getElementById('ivMustAlert').classList.contains('hidden'), text: document.getElementById('ivMustAlertText').textContent,
+    const mm18 = await page.evaluate(() => ({ shown: !document.getElementById('ivMustAlert').classList.contains('hidden'), text: document.getElementById('ivMustLead').textContent + document.getElementById('ivMustAlertText').textContent,
       chips: Array.from(document.querySelectorAll('#ivChips .iv-chip')).map(c => c.querySelector('.iv-chip-no').textContent + c.querySelector('.iv-chip-s').textContent),
       jump: !document.getElementById('ivMustJump').classList.contains('hidden') }));
     await view18(page, 'p13-interview-must-ng.png');
@@ -4314,7 +4360,7 @@ const pdfTextOf = (f) => {
     const mm18c = await page.evaluate(() => ({ step: window.RecruitApp.state.step, skip: Array.from(document.querySelectorAll('.ev-sec.cl-skippable')).map(e => e.dataset.sec), missing: document.querySelectorAll('.is-missing').length,
       res: document.getElementById('evResultTitle').textContent, why: document.getElementById('evResultWhy').textContent, miss: document.getElementById('evMissing').textContent,
       note: Array.from(document.querySelectorAll('.ev-sec.cl-skippable .cl-skip-note')).map(e => getComputedStyle(e).display !== 'none') }));
-    expect(mm18.shown && mm18.text === '必須条件が合いません。追加で確認し、解消しなければ ⑤ 逆質問へ進んで最大 10 分で終了します' && JSON.stringify(mm18.chips) === JSON.stringify(['①', '②省略可', '③省略可', '④省略可', '⑤']) && mm18.jump &&
+    expect(mm18.shown && mm18.text === '必須条件が不一致です。追加で確認し、解消しなければ ⑤ 逆質問へ（最大 10 分で終了）' && JSON.stringify(mm18.chips) === JSON.stringify(['①', '②省略可', '③省略可', '④省略可', '⑤']) && mm18.jump &&
       mm18b.sec === 'reverse' && mm18b.shown && !mm18b.jump && mm18c.step === 3 && JSON.stringify(mm18c.skip) === JSON.stringify(['continuity', 'job', 'teamwork']) && mm18c.missing === 0 &&
       mm18c.res === '不採用推奨' && mm18c.why === '必須条件が不一致のため' && mm18c.miss === '必須条件の不一致のため、ほかの入力は任意です' && mm18c.note.length === 3 && mm18c.note.every(Boolean),
       'E18 (3) 必須条件の不一致: 案内（⑤ 逆質問へ・最大 10 分）・②〜④ のチップに省略可・「⑤ 逆質問へ」で ⑤（案内は残りボタンは消える）・評価は ②〜④ が省略可・未入力の強調なし・不採用推奨: ' + JSON.stringify({ mm18, mm18b, mm18c }));
@@ -4394,9 +4440,9 @@ const pdfTextOf = (f) => {
     await rateAll('good');
     await judge();
     const nm18 = await page.evaluate(() => { const r = document.querySelector('#appPaper .cl-nm-q[data-cl-note="q_term"]'); return r ? { k: r.querySelector('.cl-nm-k').textContent, v: r.querySelector('.cl-nm-v').textContent, img: document.querySelectorAll('#appPaper img').length, x: window.__x18 === 1 } : null; });
-    expect(tab18 === 'notes.q_two_months' && h18b > h18a + 15 && n18.term === XSS18 && n18.family.split('\n').length === 3 && n18.two === 2500 && !!qa18 && qa18.k === '短期／長期の希望' && qa18.v === XSS18 && qa18.img === 0 &&
+    expect(tab18 === 'notes.q_two_months' && h18b > h18a + 15 && n18.term === XSS18 && n18.family.split('\n').length === 3 && n18.two === 2500 && !!qa18 && qa18.k === 'Q1短期／長期の希望' && qa18.v === XSS18 && qa18.img === 0 &&
       !!nm18 && nm18.k === '①短期／長期の希望' && nm18.v === XSS18 && nm18.img === 0 && !nm18.x,
-      'E18 (5) 質問ごとのメモ: notes.q_term に入る・Tab で次の質問のメモ・3 行で高さが増える・評価の ① のカードに「短期／長期の希望」と答え・A4 に「①短期／長期の希望」の行・<img onerror> は文字のまま: ' +
+      'E18 (5) 質問ごとのメモ: notes.q_term に入る・Tab で次の質問のメモ・3 行で高さが増える・評価の ① のカードに「Q1 短期／長期の希望」と答え・A4 に「①短期／長期の希望」の行・<img onerror> は文字のまま: ' +
       JSON.stringify({ tab18, h18a, h18b, n18, qa18, nm18 }));
     const sv18b = await saveRecord('p13-memo.html');
     const rp18b = await newReportPage(e18);
@@ -4511,7 +4557,7 @@ const pdfTextOf = (f) => {
     await wait(250);
     const ol18iv = await page.evaluate(() => { const t = document.querySelector('#ivStage .iv-oldmemo textarea[data-cl="notes.continuity_q"]');
       return t ? { v: t.value, label: t.closest('.iv-oldmemo').querySelector('label').textContent, sec: document.getElementById('ivStage').dataset.sec,
-        foot: Array.from(document.querySelectorAll('#ivFoot .btn:not(.hidden)')).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(b => b.textContent), val: document.getElementById('ivTStageVal').textContent, total: document.getElementById('ivTTotal').textContent,
+        foot: Array.from(document.querySelectorAll('#ivFoot .btn:not(.hidden):not(.iv-more)')).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(b => b.textContent), val: document.getElementById('ivTStageVal').textContent, total: document.getElementById('ivTTotal').textContent,
         started: !!(window.RecruitApp.state.checklist.timing || {}).startedAt } : null; });
     await page.click('#ivToEval');
     await wait(250);
@@ -4525,7 +4571,7 @@ const pdfTextOf = (f) => {
     await page.setInputFiles('#fileInput', fo18b);
     await wait(500);
     const ol18e = await page.evaluate(() => ({ step: window.RecruitApp.state.step, stage: document.getElementById('ivStage') ? document.getElementById('ivStage').dataset.sec : '' }));
-    expect(ol18.step === 3 && ol18.k === '（以前のメモ）' && ol18.v === '前職は飲食で2年。学業との両立のため退職。' && ol18.sub === '（タイマーの記録なし・目安 41分）' && ol18.timing && ol18.first && ol18.none === 0 &&
+    expect(ol18.step === 3 && ol18.k === '（以前のメモ）' && ol18.v === '前職は飲食で2年。学業との両立のため退職。' && ol18.sub === 'タイマーの記録なし・目安 41分' && ol18.timing && ol18.first && ol18.none === 0 &&
       JSON.stringify(ol18a4.k) === JSON.stringify(['②前のバイトの期間・退職理由 ほか2問']) && ol18a4.q === 0 && ol18a4.kv > 0 && ol18a4.time === null &&
       !!ol18iv && ol18iv.v === '前職は飲食で2年。学業との両立のため退職。' && ol18iv.label === '（以前のメモ）' && ol18iv.sec === 'continuity' &&
       JSON.stringify(ol18iv.foot) === JSON.stringify(['← 前の段階', '評価に戻る', '次へ：③ 仕事内容の説明 →']) && ol18iv.val === '—' && ol18iv.total === '—' && !ol18iv.started && ol18iv.back === 3 &&
@@ -4575,15 +4621,15 @@ const pdfTextOf = (f) => {
     await wait(200);
     const f18b = {};
     for (const sec of SECS18) { await ivGo(sec); f18b[sec] = await fit18(page); }
-    expect(['continuity', 'job', 'teamwork', 'reverse'].every(k => f18b[k].over <= 0 && f18b[k].scroll <= 1),
-      'E18 1280×800: ②〜⑤ は段階が操作行より上でスクロールなし: ' + JSON.stringify(f18b));
+    expect(SECS18.every(k => seen18(f18b[k])),
+      'E18 1280×800: ①〜⑤ とも操作行が中身を隠さない（隠れている項目は「▼ 下にあと n 項目」・いちばん下までスクロールすると最後の要素は操作行の上）: ' + JSON.stringify(f18b));
     await page.setViewportSize({ width: 390, height: 844 });
     await wait(250);
     await ivGo('conditions');
     //   主ボタンは操作行が 2 段に折り返しても右端（①・②〔ラベルが長い〕と ③〜⑤ で同じ右下）
     const nextR18 = () => page.evaluate(() => { const n = document.getElementById('ivNext').getBoundingClientRect(), f = document.getElementById('ivFoot').getBoundingClientRect();
       return { right: Math.round(innerWidth - n.right), bottom: Math.round(f.bottom - n.bottom) }; });
-    const w18 = { iv: await overflowX(), cols: await page.evaluate(() => document.querySelectorAll('#ivStage .iv-col').length && getComputedStyle(document.querySelector('#ivStage .iv-cols')).gridTemplateColumns.split(' ').length),
+    const w18 = { iv: await overflowX(), cols: await page.evaluate(() => { const r = Array.from(document.querySelectorAll('#ivStage > section.card')).map(c => c.getBoundingClientRect()); return r.length && r.every(x => Math.abs(x.left - r[0].left) <= 1) ? 1 : r.length; }),
       foot: await page.evaluate(() => { const f = document.getElementById('ivFoot').getBoundingClientRect(); return Math.round(innerHeight - f.bottom); }), next1: await nextR18() };
     await full18(page, 'p13-interview-390.png');
     //   ［不一致］で必須条件の案内が本文の上に出ても、押した行は同じ位置のまま（狭い画面は上の帯が固定でない）
@@ -4696,8 +4742,8 @@ const pdfTextOf = (f) => {
     await page.click('#saNext');
     await wait(300);
     const more18 = () => page.evaluate(() => { const b = document.getElementById('ivMore'); return b && !b.classList.contains('hidden') ? b.textContent : ''; });
-    const hid18 = () => page.evaluate(() => { const ft = document.getElementById('ivFoot').getBoundingClientRect().top;
-      return Array.from(document.querySelectorAll('#ivStage .cl-must-row, #ivStage .iv-fields .field, #ivStage .iv-say-list, #ivStage .iv-q, #ivStage .iv-flow')).filter(e => e.getBoundingClientRect().bottom > ft + 2).length; });
+    const hid18 = () => page.evaluate((sel) => { const ft = document.getElementById('ivFoot').getBoundingClientRect().top;
+      return Array.from(document.querySelectorAll(sel)).filter(e => e.offsetParent !== null && e.getBoundingClientRect().bottom > ft + 2).length; }, IV_ITEMS18);
     const vp18 = {};
     for (const [w, h] of [[1366, 657], [1280, 680]]) {
       await page.setViewportSize({ width: w, height: h });
@@ -4713,9 +4759,10 @@ const pdfTextOf = (f) => {
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await wait(200);
-    expect(Object.keys(vp18).every(k => ['continuity', 'job', 'teamwork', 'reverse'].every(sec => vp18[k][sec].over <= 0 && vp18[k][sec].scroll <= 1 && !vp18[k][sec].more && vp18[k][sec].hidden === 0) &&
-      vp18[k].conditions.hidden > 0 && vp18[k].conditions.more === '▼ 下にあと ' + vp18[k].conditions.hidden + ' 項目' && vp18[k].clicks >= 1 && !vp18[k].after.more && vp18[k].after.hidden === 0),
-      'E18 (12) 1366×657・1280×680: ②〜⑤ はスクロールなし（隠れた項目なし・案内なし）・① は「▼ 下にあと n 項目」（隠れている数）が出て、押すと全部見える: ' + JSON.stringify(vp18));
+    //   （2026-10-18 から縦一列。どの段階も、隠れている項目があれば数を出し、押すか スクロールで全部見える。docs/DESIGN.md 4-3）
+    expect(Object.keys(vp18).every(k => SECS18.every(sec => seen18(vp18[k][sec])) &&
+      vp18[k].conditions.hidden > 0 && vp18[k].clicks >= 1 && !vp18[k].after.more && vp18[k].after.hidden === 0),
+      'E18 (12) 1366×657・1280×680: ①〜⑤ とも隠れている項目の数「▼ 下にあと n 項目」が出て（隠れていなければ出ない）、最後の要素までスクロールで届く・① は押すと全部見える: ' + JSON.stringify(vp18));
 
     // (13) タイマーの目安（/ 目安 10分）は経過と並べて読めるように 14px 以上・本文の色（超過で琥珀・赤）。
     //   必須条件の案内が出て上の帯が高くなっても、キーボードで戻ったときの［一致］［不一致］は上の帯に隠れない（1280×600。scroll-padding に上の帯の高さ）
@@ -4749,8 +4796,9 @@ const pdfTextOf = (f) => {
     await page.click('[data-action="cl-set"][data-cl="values.must_weekly"][data-value="mismatch"]');
     await page.setViewportSize({ width: 1440, height: 1000 });
     await wait(200);
-    expect(goal18.size >= 14 && goal18.color && goal18.weight >= 600 && Object.keys(sp18).every(k => sp18[k].hidden && sp18[k].focus && sp18[k].top >= sp18[k].band),
-      'E18 (13) 目安は 14px 以上・経過と同じ本文の色・太字。必須条件の案内が出ていても Shift+Tab で戻った［不一致］は上の帯の下に見える: ' + JSON.stringify({ goal18, sp18 }));
+    //   （2026-10-18 から目安は 15px・400〔太さは 400 と 700 だけ。経過の 24px・700 と並べて読む〕。docs/DESIGN.md 3-11）
+    expect(goal18.size >= 15 && goal18.color && Object.keys(sp18).every(k => sp18[k].hidden && sp18[k].focus && sp18[k].top >= sp18[k].band),
+      'E18 (13) 目安は 15px 以上・経過と同じ本文の色。必須条件の案内が出ていても Shift+Tab で戻った［不一致］は上の帯の下に見える: ' + JSON.stringify({ goal18, sp18 }));
 
     // (14) 使い方の上と下に「← （いまの手順）の画面に戻る」（サイドバーの手順は使い方では隠れる）。面接から開けば面接へ戻る
     await toView('help');
@@ -4995,15 +5043,38 @@ const pdfTextOf = (f) => {
       o.rpEnd = await rr('#reportSaveBtn');
       //   押印のボタンを画面の下端に出しても（scrollIntoView block:end）、操作行の上に見えてそのまま押せる（scroll-padding-bottom）
       o.hit = await page.$eval('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]', b => { b.scrollIntoView({ block: 'end' }); const r = b.getBoundingClientRect();
-        return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b && r.bottom <= document.getElementById('rpFoot').getBoundingClientRect().top + 1; });
+        const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);   // ボタンの中のアイコン・文字の要素でもよい（2026-10-18 から SVG のアイコン＋文字）
+        return !!at && b.contains(at) && r.bottom <= document.getElementById('rpFoot').getBoundingClientRect().top + 1; });
       pos19[w + 'x' + h] = o;
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await wait(150);
-    expect(Object.keys(pos19).every(k => { const o = pos19[k]; return o.prep === '28,10' && o.iv === o.prep && o.ev === o.prep && o.rp === o.prep && o.rpEnd === o.prep && o.end.length === 0 && o.hit; }),
-      'E19 (3) 主ボタン（面接を始める・次へ・報告書へ・報告書を保存）は 4 つの画面とも右から 28px・下から 10px の同じ位置（1440×900・1366×657・1280×800）・報告書の最後まで操作行に隠れない・押印のボタンは操作行の上: ' + JSON.stringify(pos19));
+    //   （2026-10-18 から操作行のボタンは本文の枠〔1120px〕の右端。1440px は右から 36px・1366／1280px はガターの 32px。下は操作行の内側 12px。docs/DESIGN.md 3-10）
+    expect(Object.keys(pos19).every(k => { const o = pos19[k]; return o.prep === (k.indexOf('1440') === 0 ? '36,12' : '32,12') && o.iv === o.prep && o.ev === o.prep && o.rp === o.prep && o.rpEnd === o.prep && o.end.length === 0 && o.hit; }),
+      'E19 (3) 主ボタン（面接を始める・次へ・報告書へ・報告書を保存）は 4 つの画面とも同じ位置（1440×900 は右から 36px・1366×657・1280×800 は 32px、下から 12px）・報告書の最後まで操作行に隠れない・押印のボタンは操作行の上: ' + JSON.stringify(pos19));
 
-    // (4) ① は列の幅の比で高さをそろえる（右の列が【質問】の記入欄で始まりカードを動かせない。台本の順は変えない）・必須条件の案内が出たままの ⑤ も合否連絡まで見える（docs/SPEC-flow.md 15 章）
+    // (4) 縦一列の段階（2026-10-18。docs/DESIGN.md 4-3）: ① は 話すこと → 聞くこと（質問は台本の順）→ 確かめること（【質問】の記入欄は「勤務条件の確認」に・1 問目と同じ欄に Q1）。
+    //   どの段階も操作行は中身を隠さない（隠れている項目の数「▼ 下にあと n 項目」・いちばん下までスクロールすると最後の要素は操作行の上）。必須条件の案内が出たままの ⑤ も合否連絡・逆質問まで届く
+    const IV_ITEMS19 = '#ivStage .row, #ivStage .iv-say-i, #ivStage .iv-q, #ivStage .iv-oldmemo, #ivStage .iv-memo, #ivStage .iv-flow';
+    const fit19 = () => page.evaluate(async (sel) => {
+      const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const st = document.getElementById('ivStage'), ft = document.getElementById('ivFoot'), mb = document.getElementById('ivMore');
+      const hiddenNow = () => { const t = ft.getBoundingClientRect().top; return Array.from(document.querySelectorAll(sel)).filter(e => e.offsetParent !== null && e.getBoundingClientRect().bottom > t + 2).length; };
+      const settle = async () => { for (let k = 0; k < 30; k++) { await frame(); if ((hiddenNow() > 0) === (!!mb && !mb.classList.contains('hidden'))) break; } };
+      window.scrollTo(0, 0);
+      await settle();
+      const o = { sec: st.dataset.sec, hidden: hiddenNow(), more: mb && !mb.classList.contains('hidden') ? mb.textContent : '',
+        kinds: Array.from(st.querySelectorAll(':scope > section.card')).map(c => c.dataset.kind).join('+'), alert: !document.getElementById('ivMustAlert').classList.contains('hidden') };
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      await settle();
+      o.over = Math.round(st.lastElementChild.getBoundingClientRect().bottom - ft.getBoundingClientRect().top);
+      o.endHidden = hiddenNow();
+      o.endMore = mb && !mb.classList.contains('hidden') ? mb.textContent : '';
+      window.scrollTo(0, 0);
+      await settle();
+      return o;
+    }, IV_ITEMS19);
+    const ok19 = (o) => o.over <= 0 && o.endHidden === 0 && !o.endMore && (o.hidden > 0 ? o.more === '▼ 下にあと ' + o.hidden + ' 項目' : o.more === '');
     const cw19 = {};
     for (const [w, h] of [[1440, 789], [1280, 800]]) {
       await page.setViewportSize({ width: w, height: h });
@@ -5012,19 +5083,9 @@ const pdfTextOf = (f) => {
       await fillScript({ name: '列 確認', posting: 'short' });
       await page.click('#saNext');
       await wait(300);
-      cw19[w + 'x' + h] = await page.evaluate(() => {
-        const cols = document.querySelector('#ivStage .iv-cols'), st = document.getElementById('ivStage'), ft = document.getElementById('ivFoot');
-        const over = () => Math.round(st.getBoundingClientRect().bottom - ft.getBoundingClientRect().top);
-        const hs = () => Array.from(cols.children).map(c => Math.round(c.offsetHeight));
-        const o = { ratio: cols.style.getPropertyValue('--iv-cols'), over: over(), h: hs() };
-        const f2 = document.querySelector('#ivStage .iv-ask-fields'), q1 = document.querySelector('#ivStage .iv-q[data-item="q_term"]');
-        o.f2 = !!f2 && f2.closest('.iv-col') === q1.closest('.iv-col') && f2.getBoundingClientRect().bottom <= q1.getBoundingClientRect().top + 1;
-        o.order = Array.from(document.querySelectorAll('#ivStage .iv-q')).map(e => e.dataset.item).join(',');
-        cols.style.removeProperty('--iv-cols');   // 1:1 のときと比べる
-        o.over11 = over(); o.h11 = hs();
-        cols.style.setProperty('--iv-cols', o.ratio);
-        return o;
-      });
+      cw19[w + 'x' + h] = Object.assign(await fit19(), await page.evaluate(() => ({
+        order: Array.from(document.querySelectorAll('#ivStage .iv-q')).map(e => e.dataset.item).join(','),
+        term: (() => { const r = document.querySelector('#ivStage .k-check .cl-field[data-item="term"]'); return r ? (r.querySelector('.q-no') || {}).textContent || '' : null; })() })));
     }
     const r5 = {};
     for (const [w, h] of [[1366, 657], [1366, 625], [1280, 680]]) {
@@ -5038,17 +5099,14 @@ const pdfTextOf = (f) => {
       await page.click('#ivMustJump');
       await wait(250);
       if (h === 625) await snap19(page, 'p13-interview-5-must-ng-1366x625.png', true);
-      r5[w + 'x' + h] = await page.evaluate(() => { const st = document.getElementById('ivStage'), ft = document.getElementById('ivFoot').getBoundingClientRect().top, more = document.getElementById('ivMore');
-        return { sec: st.dataset.sec, alert: !document.getElementById('ivMustAlert').classList.contains('hidden'), over: Math.round(st.getBoundingClientRect().bottom - ft), scroll: document.documentElement.scrollHeight - innerHeight,
-          hidden: Array.from(st.querySelectorAll('.iv-say-i, .iv-q, .iv-k')).filter(e => e.getBoundingClientRect().bottom > ft + 1).length, more: !more.classList.contains('hidden'),
-          cols: Array.from(document.querySelectorAll('#ivStage .iv-cols.is-two > .iv-col')).map(c => Array.from(c.querySelectorAll('.iv-grp')).map(g => g.dataset.kind).join('+')).join('|') }; });
+      r5[w + 'x' + h] = await fit19();
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await wait(150);
-    expect(Object.keys(cw19).every(k => { const o = cw19[k]; return /2fr|3fr|5fr/.test(o.ratio) && o.f2 && o.order === 'q_term,q_two_months,q_family' && o.over <= o.over11 - 50 && Math.max(...o.h) <= Math.max(...o.h11) - 45; }) &&
-      cw19['1440x789'].over <= 60 && Object.keys(r5).every(k => { const o = r5[k]; return o.sec === 'reverse' && o.alert && o.over <= 0 && o.scroll <= 1 && o.hidden === 0 && !o.more && o.cols === 'ask|say'; }),
-      'E19 (4) ① は列の幅の比で高い列を広げ（記入欄は 1 問目のすぐ上・質問の順は台本どおり）、1:1 より 50px 以上低い（1440×789 ではみ出し 60px 以内）。必須条件の案内が出たままの ⑤（左に聞くこと・右に合否連絡）は ' +
-      '1366×657・1366×625・1280×680 でもスクロールなし・隠れた項目なし: ' + JSON.stringify({ cw19, r5 }));
+    expect(Object.keys(cw19).every(k => { const o = cw19[k]; return o.sec === 'conditions' && o.kinds === 'say+ask+check' && o.order === 'q_term,q_two_months,q_family' && o.term === 'Q1' && ok19(o) && o.hidden > 0; }) &&
+      Object.keys(r5).every(k => { const o = r5[k]; return o.sec === 'reverse' && o.alert && o.kinds === 'say+ask' && ok19(o); }),
+      'E19 (4) ① は縦一列（話すこと → 聞くこと〔台本の順〕→ 確かめること〔短期／長期の希望に Q1〕）で、隠れている項目は「▼ 下にあと n 項目」・最後まで操作行の上に出せる。必須条件の案内が出たままの ⑤（話すこと〔合否連絡〕→ 聞くこと）も ' +
+      '1366×657・1366×625・1280×680 で最後まで届く（隠れたままにならない）: ' + JSON.stringify({ cw19, r5 }));
 
     // (5) 操作行の Tab の順: 最後の入力欄の次は主ボタン（DOM は主ボタンが先・見た目の左右は CSS の order）。② の最後のメモ → Tab → Enter で ③（前に戻らない）
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -5062,12 +5120,14 @@ const pdfTextOf = (f) => {
     tab19.prep = await act19();
     await page.click('#saNext');
     await wait(250);
+    //   段階の最後の入力欄（① は確かめることの最後の記入欄・②⑤ は最後の質問のメモ。どの段階も 話す → 聞く → 確かめる の順なので最後の欄が［次へ］のすぐ前）
     for (const sec of ['conditions', 'continuity', 'reverse']) {
       await ivGo(sec);
-      const ms = await page.$$eval('#ivStage textarea.iv-q-memo', els => els.map(e => e.getAttribute('data-cl')));
-      await page.focus('#ivStage textarea[data-cl="' + ms[ms.length - 1] + '"]');
-      const seq = [];
-      for (let k = 0; k < (sec === 'reverse' ? 3 : 2); k++) { await page.keyboard.press('Tab'); seq.push(await act19()); }
+      const last = await page.evaluate(() => { const els = Array.from(document.querySelectorAll('#ivStage textarea, #ivStage input')).filter(e => e.offsetParent !== null); const e = els[els.length - 1];
+        return e.id ? '#' + e.id : '#ivStage [data-cl="' + e.getAttribute('data-cl') + '"]'; });
+      await page.focus(last);
+      const seq = [last];
+      for (let k = 0; k < 2; k++) { await page.keyboard.press('Tab'); seq.push(await act19()); }
       tab19[sec] = seq;
     }
     await ivGo('continuity');
@@ -5076,20 +5136,20 @@ const pdfTextOf = (f) => {
     await page.keyboard.press('Enter');
     await wait(250);
     tab19.enter = await st(() => document.getElementById('ivStage').dataset.sec);
-    tab19.vis = await page.evaluate(() => Array.from(document.querySelectorAll('#ivFoot .btn')).filter(b => b.offsetParent).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(b => b.id));
+    tab19.vis = await page.evaluate(() => Array.from(document.querySelectorAll('#ivFoot .btn:not(.iv-more)')).filter(b => b.offsetParent).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(b => b.id));
     await ivGo('reverse');
     await page.click('#ivNext');
     await wait(250);
-    await page.focus('#clIvNotes');
+    await page.focus('#evTimeMin');   // 評価の最後の入力欄は面接時間（2026-10-18 から面接所見の下。docs/DESIGN.md 4-4）
     await page.keyboard.press('Tab');
     tab19.ev = await act19();
     await page.click('#toReportBtn');
     await wait(400);
     tab19.rp = await page.evaluate(() => ({ dom: Array.from(document.querySelectorAll('#rpFoot .btn')).map(b => b.id), vis: Array.from(document.querySelectorAll('#rpFoot .btn')).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(b => b.id) }));
-    expect(tab19.prep === 'saNext' && JSON.stringify(tab19.conditions) === JSON.stringify(['ivNext', 'ivPrev']) && JSON.stringify(tab19.continuity) === JSON.stringify(['ivNext', 'ivPrev']) &&
-      JSON.stringify(tab19.reverse) === JSON.stringify(['iv-said', 'iv-said-items', 'ivNext']) && tab19.enter === 'job' && JSON.stringify(tab19.vis) === JSON.stringify(['ivPrev', 'ivNext']) && tab19.ev === 'toReportBtn' &&
+    expect(tab19.prep === 'saNext' && JSON.stringify(tab19.conditions) === JSON.stringify(['#ivF-open_late', 'ivNext', 'ivPrev']) && JSON.stringify(tab19.continuity) === JSON.stringify(['#ivStage [data-cl="notes.q_sudden_absence"]', 'ivNext', 'ivPrev']) &&
+      JSON.stringify(tab19.reverse) === JSON.stringify(['#ivStage [data-cl="notes.q_concerns"]', 'ivNext', 'ivPrev']) && tab19.enter === 'job' && JSON.stringify(tab19.vis) === JSON.stringify(['ivPrev', 'ivNext']) && tab19.ev === 'toReportBtn' &&
       JSON.stringify(tab19.rp.dom) === JSON.stringify(['reportSaveBtn', 'reportPrintBtn', 'backToChecklist']) && JSON.stringify(tab19.rp.vis) === JSON.stringify(['backToChecklist', 'reportPrintBtn', 'reportSaveBtn']),
-      'E19 (5) 最後の入力欄から Tab で主ボタン（準備のメモ → 面接を始める・①② の最後のメモ → 次へ → 戻る・⑤ は 伝えた → 一部伝えなかった → 面接を終えて評価へ・面接所見 → 報告書へ）・② で Tab → Enter は ③ へ（戻らない）・' +
+      'E19 (5) 最後の入力欄から Tab で主ボタン（準備のメモ → 面接を始める・① の最後の記入欄（OPEN／25時）・②⑤ の最後のメモ → 次へ／面接を終えて評価へ → 戻る・面接時間 → 報告書へ）・② で Tab → Enter は ③ へ（戻らない）・' +
       '見た目は左に戻る・右端に主ボタンのまま: ' + JSON.stringify(tab19));
 
     // (6) 狭い画面（タブレット縦・スマホ）: 段階のチップは流し、タイマーと必須条件の案内はトップバーの下に固定（質問のメモまで進んでも見える）。スマホの幅は短い文
@@ -5107,16 +5167,17 @@ const pdfTextOf = (f) => {
       await wait(200);
       if (w === 768) await snap19(page, 'p13-interview-768-scrolled.png');
       nw19[w] = await page.evaluate(() => { const tb = document.querySelector('.topbar').getBoundingClientRect().bottom;
-        const box = (s) => { const e = document.querySelector(s), r = e.getBoundingClientRect(); return { pos: getComputedStyle(e).position, top: Math.round(r.top - tb), seen: r.top >= tb - 1 && r.bottom <= innerHeight && r.height > 0 }; };
+        //   top: 見えている上端（トップバーが見えていればその下端・流れて見えなければ画面の上端。840px 以下のトップバーは固定しない。docs/DESIGN.md 3-9）からの位置
+        const box = (s) => { const e = document.querySelector(s), r = e.getBoundingClientRect(); return { pos: getComputedStyle(e).position, top: Math.round(r.top - Math.max(0, tb)), seen: r.top >= Math.max(0, tb) - 1 && r.bottom <= innerHeight && r.height > 0 }; };
         const t = box('#ivTimer'), a = box('#ivMustAlert'), c = box('#ivChips'), m = box('#ivStage textarea[data-cl="notes.q_family"]');
-        const full = document.getElementById('ivMustAlertText'), short = document.getElementById('ivMustShort');
-        return { sy: Math.round(scrollY), timer: t, alert: a, chips: c.pos + (c.seen ? ':seen' : ':gone'), memo: m.seen, full: full.offsetParent !== null ? full.textContent : '', short: short.offsetParent !== null ? short.textContent : '',
+        const lead = document.getElementById('ivMustLead'), full = document.getElementById('ivMustAlertText'), short = document.getElementById('ivMustShort');
+        return { sy: Math.round(scrollY), timer: t, alert: a, chips: c.pos + (c.seen ? ':seen' : ':gone'), memo: m.seen, full: full.offsetParent !== null ? lead.textContent + full.textContent : '', short: short.offsetParent !== null ? short.textContent : '',
           jump: !document.getElementById('ivMustJump').classList.contains('hidden'), ov: document.documentElement.scrollWidth - innerWidth }; });
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await wait(150);
     expect([390, 768].every(w => { const o = nw19[w]; return o.sy > 300 && o.timer.pos === 'sticky' && o.timer.seen && o.timer.top === 0 && o.alert.pos === 'sticky' && o.alert.seen && o.chips === 'static:gone' && o.memo && o.jump && o.ov <= 1; }) &&
-      nw19[390].short === '必須条件が不一致' && nw19[390].full === '' && nw19[768].full === '必須条件が合いません。追加で確認し、解消しなければ ⑤ 逆質問へ進んで最大 10 分で終了します' && nw19[768].short === '',
+      nw19[390].short === '必須条件が不一致' && nw19[390].full === '' && nw19[768].full === '必須条件が不一致です。追加で確認し、解消しなければ ⑤ 逆質問へ（最大 10 分で終了）' && nw19[768].short === '',
       'E19 (6) 390×844・768×1024: 最後の質問のメモまでスクロールしても、タイマー（トップバーのすぐ下）と必須条件の案内（「⑤ 逆質問へ」つき）は固定で見える・チップは流れる・横スクロールなし。390px の案内は短い文: ' + JSON.stringify(nw19));
 
     // (7) 報告書の「この画面ですること」・はじめての方への手順 4: 面接者が押すのは「面接対応者」だけ（最終確認・最終合否は副支配人）
@@ -5156,11 +5217,110 @@ const pdfTextOf = (f) => {
     await p8.evaluate(() => window.dispatchEvent(new Event('afterprint')));
     await p8.close();
     expect(tb19.text === '🖨 報告書を印刷' && tb19.title.includes('記入シート（手書き用）') && dl19.length === 2 && dl19[0].indexOf('confirm:まだ面接の回答がありません。報告書（A4 の面接チェックリスト報告）を印刷しますか？') === 0 &&
-      dl19[0].includes('「🖨 記入シート（手書き用）」') && pc19a.printed === 0 && pc19a.focus === 'saPaperBtn' && pc19a.host === 0 && pc19b.printed === 1 && pc19b.report && pc19c === 2,
+      dl19[0].includes('「記入シート（手書き用）」') && pc19a.printed === 0 && pc19a.focus === 'saPaperBtn' && pc19a.host === 0 && pc19b.printed === 1 && pc19b.report && pc19c === 2,
       'E19 (8) トップバーは「🖨 報告書を印刷」（title に記入シートの案内）・回答が無いうちは確かめる（［キャンセル］で印刷せず「🖨 記入シート」にフォーカス・［OK］で報告書を印刷）・回答があれば確かめずに印刷: ' +
       JSON.stringify({ tb19, dl19: dl19.map(x => x.slice(0, 40)), pc19a, pc19b, pc19c }));
     await ctx19.close();
     expect(e19.length === 0, 'E19 ページエラー・console error なし: ' + (e19.join(' / ') || 'none'));
+  }
+
+
+  // =====================================================================
+  // E20 画面の統一（2026-10-18。docs/DESIGN.md v2・docs/SPEC-flow.md 16 章。副支配人「境目がわかりにくい・ヒアリングや確認ボタンの位置にばらつき・もう少し全体的に統一感を」）
+  //   (1) どの段階も 話す → 聞く → 確かめる の順・見出しの帯は同じ色（色は意味のある所だけ）(2) ［説明した］［伝えた］は 3 つの状態とも確かめることの行の操作列と同じ左端・右端
+  //   (3) 面接と評価の［一致｜不一致］は同じ x (4) 面接の上の帯は 1 段（必須条件の案内は 2 行目の 1 行）(5) 「該当の行へ」で不一致の行の［不一致］が帯の下・操作行の上に見える
+  //   (6) 設定の［設定を保存］も 4 画面の主ボタンと同じ座標
+  // =====================================================================
+  console.log('\n== E20 画面の統一 ==');
+  {
+    const SECS20 = ['conditions', 'continuity', 'job', 'teamwork', 'reverse'];
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await fresh();
+    if (await page.$('#introOk')) await page.click('#introOk');
+    await fillScript({ name: '統一 確認', posting: 'short' });
+    await page.click('#saNext');
+    await wait(300);
+    // (1) カードの順と帯の色
+    const ord20 = {};
+    for (const sec of SECS20) {
+      await ivGo(sec);
+      ord20[sec] = await page.evaluate(() => { const cards = Array.from(document.querySelectorAll('#ivStage > section.card'));
+        return { kinds: cards.map(c => c.dataset.kind).join('+'), band: Array.from(new Set(cards.map(c => getComputedStyle(c.querySelector(':scope > .card-band')).backgroundColor))).join('|'),
+          icon: cards.every(c => !!c.querySelector(':scope > .card-band > svg.ico')) }; });
+    }
+    const bands20 = new Set(SECS20.map(k => ord20[k].band));
+    expect(SECS20.every(k => /^(say\+)?(ask\+)?check$|^say(\+ask)?$|^ask$/.test(ord20[k].kinds) && ord20[k].icon && ord20[k].band.indexOf('|') < 0) && bands20.size === 1 &&
+      ord20.conditions.kinds === 'say+ask+check' && ord20.reverse.kinds === 'say+ask',
+      'E20 (1) どの段階もカードは 話す → 聞く → 確かめる の順（無い種類は飛ばす）・帯はアイコンつきで同じ色: ' + JSON.stringify(ord20));
+    // (2) ［説明した］［伝えた］と操作列（オフ・オン・一部）
+    await ivGo('conditions');
+    const col20 = await page.evaluate(() => { const cs = Array.from(document.querySelectorAll('#ivStage .k-check .row-ctl')).map(c => c.getBoundingClientRect());
+      return cs.length ? { l: Math.round(cs[0].left), r: Math.round(cs[0].right), same: cs.every(c => Math.abs(c.left - cs[0].left) <= 1 && Math.abs(c.right - cs[0].right) <= 1) } : null; });
+    const tg20 = (sec, kind) => page.$eval(`[data-action="iv-said"][data-sec="${sec}"][data-kind="${kind}"]`, b => { const r = b.getBoundingClientRect(); return { l: Math.round(r.left), r: Math.round(r.right), p: b.getAttribute('aria-pressed') }; });
+    const t20 = { off: await tg20('conditions', 'explain') };
+    await page.click('[data-action="iv-said"][data-sec="conditions"][data-kind="explain"]');
+    await wait(100);
+    t20.on = await tg20('conditions', 'explain');
+    await page.click('[data-action="iv-said-items"][data-sec="conditions"][data-kind="explain"]');
+    await wait(100);
+    await page.click('#ivStage .iv-say-list input[data-cl="values.ex_hours"]');
+    await wait(100);
+    t20.mixed = await tg20('conditions', 'explain');
+    await ivGo('reverse');
+    t20.notify = await tg20('reverse', 'notify');
+    expect(!!col20 && col20.same && Math.abs(col20.r - col20.l - 280) <= 1 && ['off', 'on', 'mixed', 'notify'].every(k => Math.abs(t20[k].l - col20.l) <= 1 && Math.abs(t20[k].r - col20.r) <= 1) &&
+      t20.off.p === 'false' && t20.on.p === 'true' && t20.mixed.p === 'mixed',
+      'E20 (2) ［説明した］［伝えた］は 3 つの状態（オフ・オン・一部）とも確かめることの行の操作列（幅 280px）と同じ左端・右端: ' + JSON.stringify({ col20, t20 }));
+    // (3) 面接と評価の［一致｜不一致］は同じ x
+    await goTo(3);
+    const ev20 = await page.evaluate(() => { const c = document.querySelector('#cl-conditions .ev-must .row-ctl'); if (!c) return null; const r = c.getBoundingClientRect(); return { l: Math.round(r.left), r: Math.round(r.right) }; });
+    expect(!!ev20 && Math.abs(ev20.l - col20.l) <= 1 && Math.abs(ev20.r - col20.r) <= 1,
+      'E20 (3) 評価の必須条件の［一致｜不一致］は面接の確かめることと同じ位置（左端・右端）: ' + JSON.stringify({ ev20, col20 }));
+    // (4) 上の帯は 1 段（ノート PC の幅。必須条件の案内が出たままの ① と ⑤）
+    await goTo(2);
+    await ivGo('conditions');
+    await page.click('[data-action="cl-set"][data-cl="values.must_busy"][data-value="mismatch"]');
+    await wait(150);
+    const band20 = {};
+    for (const [w, h] of [[1366, 768], [1280, 720]]) {
+      await page.setViewportSize({ width: w, height: h });
+      await wait(200);
+      for (const sec of ['conditions', 'reverse']) {
+        await ivGo(sec);
+        await wait(100);
+        band20[w + ':' + sec] = await page.evaluate(() => {
+          const chips = Array.from(document.querySelectorAll('#ivChips .iv-chip')).map(c => c.getBoundingClientRect()), mids = chips.map(r => r.top + r.height / 2);
+          const tm = document.getElementById('ivTimer').getBoundingClientRect(), main = document.querySelector('#ivBar .iv-bar-main').getBoundingClientRect(), al = document.getElementById('ivMustAlert').getBoundingClientRect();
+          return { chips: Math.round(Math.max(...mids) - Math.min(...mids)), timer: tm.top >= main.top - 1 && tm.bottom <= main.bottom + 1, alert: Math.round(al.height), inBar: !!document.querySelector('#ivBar #ivMustAlert') };
+        });
+      }
+    }
+    expect(Object.keys(band20).every(k => { const o = band20[k]; return o.chips <= 2 && o.timer && o.alert > 0 && o.alert <= 48 && o.inBar; }),
+      'E20 (4) 1366×768・1280×720 でも面接の上の帯は 1 段（チップとタイマーが 1 行・必須条件の案内は帯の 2 行目の 1 行〔48px 以下〕）。不一致のままの ① と ⑤: ' + JSON.stringify(band20));
+    // (5) 「該当の行へ」（⑤ から押すと ① へ移り、不一致の行の［不一致］が上の帯の下・操作行の上に見える）
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await wait(150);
+    await ivGo('reverse');
+    await page.click('#ivMustAlert [data-action="iv-must-row"]');
+    await wait(300);
+    const go20 = await page.evaluate(() => { const a = document.activeElement, r = a.getBoundingClientRect(), band = document.getElementById('ivTop').getBoundingClientRect(), ft = document.getElementById('ivFoot').getBoundingClientRect();
+      return { sec: document.getElementById('ivStage').dataset.sec, act: a && a.dataset ? a.dataset.cl + ':' + a.dataset.value : '', ng: !!a.closest('.row.is-ng'), below: r.top >= band.bottom - 1, above: r.bottom <= ft.top + 1 }; });
+    expect(go20.sec === 'conditions' && go20.act === 'values.must_busy:mismatch' && go20.ng && go20.below && go20.above,
+      'E20 (5) 案内の「該当の行へ」（⑤ から）で ① へ移り、不一致の行（淡い赤）の［不一致］にフォーカス（上の帯の下・操作行の上に見える）: ' + JSON.stringify(go20));
+    // (6) 設定の［設定を保存］も主ボタンと同じ座標（ページの先頭・末尾とも）
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await wait(150);
+    const at20 = (sel) => page.$eval(sel, e => { const r = e.getBoundingClientRect(); return Math.round(innerWidth - r.right) + ',' + Math.round(innerHeight - r.bottom); });
+    const pos20 = { iv: await at20('#ivNext') };
+    await toView('settings');
+    pos20.settings = await at20('#view-settings .save-bar [data-action="save"]');
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await wait(150);
+    pos20.settingsEnd = await at20('#view-settings .save-bar [data-action="save"]');
+    pos20.nav = await page.evaluate(() => Array.from(document.querySelectorAll('.settings-nav a.active')).map(a => a.getAttribute('href')).join(','));
+    await toView('judge');
+    expect(pos20.iv === '36,12' && pos20.settings === pos20.iv && pos20.settingsEnd === pos20.iv && pos20.nav === '#s-io',
+      'E20 (6) 設定の［設定を保存］も 4 画面の主ボタンと同じ位置（1440×900 で右から 36px・下から 12px。ページの末尾でも）・末尾までスクロールすると節のメニューは「書き出し／読み込み」: ' + JSON.stringify(pos20));
   }
 
   await fresh();

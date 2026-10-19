@@ -18,6 +18,26 @@
   const $ = function (sel, root) { return (root || document).querySelector(sel); };
   const $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
 
+  // ---------- デザインシステムの部品（docs/DESIGN.md 2〜3 章） ----------
+  //   アイコン（index.html の <symbol id="i-…">）・テストと読み上げの互換のために textContent に残す記号（.sym。見た目は消す）・番号の丸（.nb。中の丸数字は見た目だけ消す）
+  function ico(id, cls) { return '<svg class="ico' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + id + '"/></svg>'; }
+  function sym(s) { return '<span class="sym" aria-hidden="true">' + s + '</span>'; }
+  //   deco: 飾り（リストの番号など。読み上げない・中の文字なし）
+  function nbHtml(n, mark, cls, deco) { return '<span class="nb' + (cls ? ' ' + cls : '') + '" data-no="' + esc(n) + '"' + (deco ? ' aria-hidden="true"' : '') + '>' + esc(mark) + '</span>'; }
+  // 丸数字（①）→ 番号の丸の部品（文の中の丸数字はそのまま。画面の部品の番号だけ）
+  function nbOf(mark, cls) { const k = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'.indexOf(String(mark)); return nbHtml(k >= 0 ? k + 1 : String(mark).replace(/\D/g, '') || '?', mark, cls); }
+  // カード（見出し帯＋本文。docs/DESIGN.md 3-2）。o: { id, cls, attrs, icon, no（帯の番号の部品の HTML）, title（HTML）, titleId, small, meta（HTML）, badge（HTML）, actions（HTML）, actCls, bandCls, bodyCls }
+  function cardHtml(o, body) {
+    const hid = o.titleId || (o.id ? o.id + 'H' : '');
+    return '<section class="card' + (o.cls ? ' ' + o.cls : '') + '"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + (o.attrs || '') + (hid ? ' aria-labelledby="' + esc(hid) + '"' : '') + '>' +
+      '<header class="card-band' + (o.bandCls ? ' ' + o.bandCls : '') + '">' + (o.icon ? ico(o.icon) : '') + (o.no || '') +
+        '<h3 class="card-title' + (o.titleCls ? ' ' + o.titleCls : '') + '"' + (hid && !o.titleInner ? ' id="' + esc(hid) + '"' : '') + '>' +
+          (o.titleInner ? '<span id="' + esc(hid) + '">' + o.title + '</span>' : '<span>' + o.title + '</span>') + (o.small ? '<small>' + o.small + '</small>' : '') + '</h3>' +
+        (o.meta ? '<span class="card-meta' + (o.metaCls ? ' ' + o.metaCls : '') + '">' + o.meta + '</span>' : '') + (o.badge || '') +
+        (o.actions ? '<div class="card-actions' + (o.actCls ? ' ' + o.actCls : '') + '">' + o.actions + '</div>' : '') +
+      '</header><div class="card-body' + (o.bodyCls ? ' ' + o.bodyCls : '') + '">' + body + '</div></section>';
+  }
+
   // n は内部キー（state.step）、no は表示番号（docs/SPEC-flow.md 1-1。同じ値）
   const STEPS = [
     { n: 1, no: 1, label: '準備', hint: '応募者の名前と面接の情報' },
@@ -160,6 +180,17 @@
       if (paperRaf || !$('#appPaper')) return;
       paperRaf = requestAnimationFrame(function () { paperRaf = 0; fitReportPaper(); });
     });
+    // 上の帯・操作行の高さが変わったら（必須条件の案内・結果カードの折り返し・メモの伸び）scroll-padding を測り直す（docs/DESIGN.md 3-11）
+    if (window.ResizeObserver) {
+      let roRaf = 0;
+      const ro = new ResizeObserver(function () {
+        if (roRaf) return;
+        roRaf = requestAnimationFrame(function () { roRaf = 0; measureFlow(); });
+      });
+      ['.topbar', '#stepContent', '#stepFoot', '#view-settings'].forEach(function (s) { const el = $(s); if (el) ro.observe(el); });
+    }
+    // Tab の移動先が上の帯・操作行に少しでも掛かったら、帯の下（scroll-padding）まで送る（ブラウザは一部が見えていると動かさないことがあるため。docs/DESIGN.md 3-11）
+    document.addEventListener('focusin', onFocusIn);
     // 面接の「▼ 下にあと n 項目」はスクロールで見えたら消す（1 フレームに 1 回）
     window.addEventListener('scroll', function () {
       if (moreRaf || state.view !== 'judge' || state.step !== 2) return;
@@ -170,6 +201,14 @@
       const li = e.target.closest('[data-step]');
       if (!li || li.classList.contains('disabled')) return;
       goStep(Number(li.dataset.step));
+    });
+    //   手順は role="button"（Tab で移れる）なので Enter・Space でも押せる
+    $('#stepNav').addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const li = e.target.closest('[data-step]');
+      if (!li) return;
+      e.preventDefault();
+      if (!li.classList.contains('disabled')) goStep(Number(li.dataset.step));
     });
     // 使い方の「← （手順）の画面に戻る」
     $('#view-help').addEventListener('click', function (e) { if (e.target.closest('[data-action="back-to-judge"]')) showView('judge'); });
@@ -182,7 +221,8 @@
     $('#btnPrint').addEventListener('click', onTopPrint);
     $('#btnTheme').addEventListener('click', toggleTheme);
 
-    const content = $('#stepContent');
+    //   本文（#stepContent）と操作行（#stepFoot。.page の最後の子）の両方の操作を受ける
+    const content = $('#view-judge');
     content.addEventListener('input', onFieldEvent);
     content.addEventListener('change', onFieldEvent);
     content.addEventListener('click', onContentClick);
@@ -237,7 +277,10 @@
     const html = document.documentElement;
     if (t === 'dark' || t === 'light') html.setAttribute('data-theme', t); else html.removeAttribute('data-theme');
     const isDark = t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    $('#btnTheme').textContent = isDark ? '☀ ライトモード' : '🌙 ダークモード';
+    //   アイコン（i-sun／i-moon）＋文字。840px 以下は文字を隠すので aria-label にも同じ名前
+    const b = $('#btnTheme'), label = isDark ? 'ライトモード' : 'ダークモード';
+    b.innerHTML = ico(isDark ? 'sun' : 'moon') + '<span class="theme-label">' + label + '</span>';
+    b.setAttribute('aria-label', label);
   }
 
   function toggleTheme() {
@@ -391,7 +434,7 @@
     $('#stepSection').classList.toggle('hidden', view !== 'judge');
     $('#topActions').classList.toggle('hidden', view !== 'judge');
     $('#applicantChip').classList.toggle('hidden', view !== 'judge');
-    $('#topTitle').textContent = view === 'judge' ? JUDGE_VIEW_TITLE : view === 'settings' ? '設定（劇場プロファイル）' : '使い方';
+    $('#topTitle').textContent = view === 'judge' ? JUDGE_VIEW_TITLE : view === 'settings' ? '設定（劇場ルール）' : '使い方';
 
     if (view === 'judge') {
       renderStepNav(); renderStep(); renderSummary();
@@ -405,31 +448,66 @@
     if (view === 'judge' && state.step === 2) ivFocusHead();
   }
 
-  // 面接・評価の上の帯（sticky）はトップバーの下に付ける（--topbar-h）。面接・評価では scroll-padding（html.flow-pad）で
-  //   Tab のフォーカスやクリックの先が上の帯・下の操作行に隠れないようにする（付録 A。docs/SPEC-flow.md 1-1）
-  //   上の帯の高さ（--flow-top-h）は必須条件の案内・結果カードの折り返しで変わるので測って scroll-padding に足す（docs/SPEC-flow.md 14 章）
-  //   準備・報告書の操作行も画面の右下に固定する（html.foot-pin・.flow-foot.is-pinned。本文の下に操作行の高さ --flow-foot-h の余白。15 章）。
-  //   840px 以下の面接はタイマーと必須条件の案内だけを細い帯にして固定する（段階のチップは流す。--iv-timer-h は案内を固定する位置。15 章）
+  // 本文の枠（#judgePage）の形と、固定の部分の高さ（docs/DESIGN.md 3-10・3-11・4-1）。
+  //   面接・評価・報告書は 920 の 1 列（.page.reading）・面接と評価は著作権の行を出さない（.no-footer）。操作行は .page の最後の子（sticky。4 画面と設定で同じ座標）。
+  //   面接の段階のチップが 1 行に入らなければ番号だけにする（fitChips）。固定の部分の高さを測って scroll-padding に入れる（measureFlow）
   function syncFlowLayout() {
+    const pg = $('#judgePage');
+    if (pg) {
+      pg.classList.toggle('reading', state.step >= 2);
+      pg.classList.toggle('no-footer', state.step === 2 || state.step === 3);
+    }
+    if (state.view === 'judge' && state.step === 2) fitChips();
+    measureFlow();
+  }
+  function isNarrow() { return !!(window.matchMedia && window.matchMedia('(max-width: 840px)').matches); }
+  // 固定の部分の高さ: --topbar-h（トップバー。固定していない 840px 以下は 0）・--flow-top-h（固定している帯の下端のいちばん下。トップバー＋面接の上の帯〔狭い画面はタイマー＋案内〕・評価の結果）・
+  //   --flow-foot-h（操作行）・--iv-timer-h（狭い画面で案内を固定する位置）。html の scroll-padding と上の帯の位置に使う
+  function measureFlow() {
     const html = document.documentElement;
-    const judge = state.view === 'judge';
-    html.classList.toggle('flow-pad', judge && (state.step === 2 || state.step === 3));
-    html.classList.toggle('foot-pin', judge && (state.step === 1 || state.step === 4));
     const tb = $('.topbar');
-    if (tb && tb.offsetHeight) html.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
-    const narrow = !!(window.matchMedia && window.matchMedia('(max-width: 840px)').matches);
+    const tbFixed = !!tb && getComputedStyle(tb).position === 'sticky';
+    html.style.setProperty('--topbar-h', (tbFixed ? tb.offsetHeight : 0) + 'px');
+    const judge = state.view === 'judge';
     const timer = judge ? $('#ivTimer') : null;
     if (timer && timer.offsetHeight) html.style.setProperty('--iv-timer-h', timer.offsetHeight + 'px');
-    if (judge && narrow) {
-      //   狭い画面: 固定しているのは面接のタイマーと必須条件の案内だけ（評価の結果カードは流す）
-      const al = $('#ivMustAlert');
-      html.style.setProperty('--flow-top-h', (timer ? timer.offsetHeight + (al ? al.offsetHeight : 0) : 0) + 'px');
-    } else {
-      const band = judge ? $('#ivTop') || $('#evTop') : null;
-      if (band && band.offsetHeight) html.style.setProperty('--flow-top-h', band.offsetHeight + 'px');
-    }
-    const foot = judge ? $('#stepContent > .flow-foot') : null;
-    if (foot && foot.offsetHeight) html.style.setProperty('--flow-foot-h', foot.offsetHeight + 'px');
+    let edge = 0;
+    [tb].concat(judge ? $$('#ivTop, #evTop, #ivTimer, #ivMustAlert') : []).forEach(function (el) {
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      if (cs.position !== 'sticky' || cs.display === 'contents' || cs.display === 'none') return;
+      edge = Math.max(edge, (parseFloat(cs.top) || 0) + el.getBoundingClientRect().height);
+    });
+    html.style.setProperty('--flow-top-h', Math.round(edge) + 'px');
+    const vw = $('#view-' + state.view);
+    const foot = vw ? $('.flow-foot', vw) : null;
+    html.style.setProperty('--flow-foot-h', (foot && foot.offsetHeight ? foot.offsetHeight : 0) + 'px');
+  }
+  // 段階のチップが 1 行に入らないとき（列が狭い・台本の段階の名前が長い）は、今の段階以外を番号だけにする（帯は 1 段のまま。840px 以下は流れるので付けない。docs/DESIGN.md 3-8）
+  function fitChips() {
+    const nav = $('#ivChips');
+    if (!nav) return;
+    nav.classList.remove('is-compact');
+    if (isNarrow()) return;
+    const tops = {};
+    Array.prototype.forEach.call(nav.children, function (c) { if (c.offsetParent !== null) tops[Math.round(c.getBoundingClientRect().top)] = 1; });
+    if (Object.keys(tops).length > 1) nav.classList.add('is-compact');
+  }
+  // キーボードで移った先（Tab・Shift+Tab・プログラムのフォーカス）が上の帯・操作行に少しでも掛かっていたら、帯の下・操作行の上まで送る。
+  //   マウス・タッチで押した直後は動かさない（押している最中にボタンが動くと、押した位置が別の要素になってクリックが届かない）
+  let lastPointerAt = 0;
+  document.addEventListener('pointerdown', function () { lastPointerAt = Date.now(); }, true);
+  function onFocusIn(e) {
+    const el = e.target;
+    if (!el || !el.closest || !el.getBoundingClientRect || Date.now() - lastPointerAt < 600) return;
+    const view = el.closest('.view');
+    if (!view || el.closest('.topbar, .iv-top, .ev-top, .flow-foot, .iv-timer, .iv-must, .dlg-back')) return;
+    const r = el.getBoundingClientRect();
+    if (!r.height) return;
+    const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--flow-top-h')) || 0;
+    const foot = $('.flow-foot', view);
+    const fb = foot && getComputedStyle(foot).position === 'sticky' ? foot.getBoundingClientRect().top : window.innerHeight;
+    if (r.top < top + 4 || r.bottom > fb - 4) el.scrollIntoView({ block: 'nearest' });
   }
 
   // =====================================================================
@@ -485,42 +563,46 @@
       else if (s.n < state.step) cls.push('done');
       if (s.n > state.maxStepReached) cls.push('disabled');
       const hint = s.n === 3 ? '面接のあとに ' + evalWhatText(false) : s.hint;   // 人物像を使わない設定では人物像を言わない
-      return '<li class="' + cls.join(' ') + '" data-step="' + s.n + '" role="button" tabindex="0">' +
-        '<span class="step-num">' + (s.n < state.step ? '✓' : s.no) + '</span>' +
-        '<span><span class="step-label">' + esc(s.label) + '</span><br><span class="step-hint">' + esc(hint) + '</span></span></li>';
+      //   番号は丸の部品（今＝紺の塗り・済み＝淡い紺に ✓・まだ＝枠。docs/DESIGN.md 3-7）。ヒントの ○△× は和文のフォント（.ja）
+      return '<li class="' + cls.join(' ') + '" data-step="' + s.n + '" role="button" tabindex="0"' + (s.n === state.step ? ' aria-current="step"' : '') + (s.n > state.maxStepReached ? ' aria-disabled="true"' : '') + '>' +
+        '<span class="step-num nb lg' + (s.n === state.step ? ' fill' : s.n < state.step ? ' done' : '') + '" data-no="' + s.no + '">' + (s.n < state.step ? '✓' : s.no) + '</span>' +
+        '<span><span class="step-label">' + esc(s.label) + '</span><span class="step-hint">' + esc(hint).replace('○△×', '<span class="ja">○△×</span>') + '</span></span></li>';
     }).join('');
   }
 
   function renderStep() {
-    const c = $('#stepContent');
-    c.setAttribute('data-step', String(state.step));   // 準備・面接・評価は部品の間を詰める（styles.css）
-    // 右サマリーは準備と報告書だけ（面接・評価は 1 列で広く使う。docs/SPEC-flow.md F2）。紙の下に回すのは報告書だけ（fitReportPaper が付け直す）
+    const c = $('#stepContent'), f = $('#stepFoot');
+    c.setAttribute('data-step', String(state.step));
+    // 右サマリーは準備と報告書だけ（面接・評価は 1 列で広く使う。docs/SPEC-flow.md F2）。報告書は紙の下（.page.reading）
     const layout = $('#view-judge .judge-layout');
     if (layout) {
       layout.classList.remove('paper-stack');
       layout.classList.toggle('no-summary', state.step === 2 || state.step === 3);
     }
     syncFlowLayout();
+    // 本文（#stepContent）と操作行（#stepFoot。.page の最後の子）を描く。操作行は「下にあと n 項目」の計算に要るので本文の直後に入れる
     switch (state.step) {
       case 1:
-        fillChecklistDefaults(); c.innerHTML = prepStepHtml(); applyVisibility(); break;
+        fillChecklistDefaults(); c.innerHTML = prepStepHtml(); f.innerHTML = prepFootHtml(); applyVisibility(); break;
       case 2: {
         fillChecklistDefaults();
         const sec = ivCurrentSec();
         if (sec && state.view === 'judge') ivStart(sec);
         c.innerHTML = interviewStepHtml(sec);
+        f.innerHTML = ivFootHtml(sec);
         ivAfterRender();
         updateChecklistUI(true);
         break;
       }
       case 3:
-        fillChecklistDefaults(); c.innerHTML = evalStepHtml(); updateChecklistUI(true); break;
+        fillChecklistDefaults(); c.innerHTML = evalStepHtml(); f.innerHTML = evFootHtml(); updateChecklistUI(true); break;
       case 4:
         if (!state.judgment) { state.judgment = evaluateNow(); state.judgmentStale = false; }
         c.innerHTML = reportStepHtml();
+        f.innerHTML = rpFootHtml();
         fitReportPaper();
         break;
-      default: c.innerHTML = '';
+      default: c.innerHTML = ''; f.innerHTML = '';
     }
     syncFlowLayout();   // 描いた画面の操作行・上の帯の高さ（--flow-foot-h・--flow-top-h）
   }
@@ -537,23 +619,27 @@
     }).join('');
   }
 
-  function labelHtml(label, o) {
-    return '<label>' + esc(label) + (o.required ? '<span class="req">*</span>' : '') + '</label>';
+  // ラベルが上の欄（.field。docs/DESIGN.md 3-5）。必須は紺の小さいバッジ「必須」
+  function labelHtml(label, o, forId) {
+    return '<label' + (forId ? ' for="' + esc(forId) + '"' : '') + '>' + esc(label) + (o.required ? '<span class="req">必須</span>' : '') + '</label>';
   }
 
-  // 準備の応募者の入力部品（呼び出しは prepStepHtml だけ）。o: fSelect { placeholder }／fInput { type, required, placeholder, min, max, step, autocomplete, suffix, id }
+  // 準備の応募者の入力部品（呼び出しは prepStepHtml だけ）。o: fSelect { placeholder }／fInput { type, required, placeholder, min, max, step, autocomplete, suffix（欄の中の単位）, id }
   function fSelect(path, label, options, o) {
     o = o || {};
     const value = U.getPath(state.applicant, path) || '';
-    return '<div class="field">' + labelHtml(label, o) +
-      '<select data-field="' + esc(path) + '"><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select></div>';
+    const fid = 'f-' + path;
+    return '<div class="field">' + labelHtml(label, o, fid) +
+      '<select id="' + esc(fid) + '" data-field="' + esc(path) + '"><option value="">' + esc(o.placeholder || '選択してください') + '</option>' + optHtml(options, value) + '</select></div>';
   }
 
   function fInput(path, label, o) {
     o = o || {};
     const value = U.getPath(state.applicant, path);
+    const fid = 'f-' + path;
     const attrs = [
       'type="' + (o.type || 'text') + '"',
+      'id="' + esc(fid) + '"',
       'data-field="' + esc(path) + '"',
       'value="' + esc(value == null ? '' : value) + '"',
       o.required ? 'data-required' : '',
@@ -561,17 +647,19 @@
       o.min !== undefined ? 'min="' + o.min + '"' : '',
       o.max !== undefined ? 'max="' + o.max + '"' : '',
       o.step !== undefined ? 'step="' + o.step + '"' : '',
-      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : ''
+      o.autocomplete ? 'autocomplete="' + o.autocomplete + '"' : '',
+      o.type === 'number' ? 'class="no-spin" inputmode="numeric"' : ''
     ].filter(Boolean).join(' ');
     const input = '<input ' + attrs + '>';
-    return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + '>' + labelHtml(label, o) +
-      (o.suffix ? '<div class="inline">' + input + '<span class="suffix">' + esc(o.suffix) + '</span></div>' : input) + '</div>';
+    return '<div class="field"' + (o.id ? ' id="' + esc(o.id) + '"' : '') + '>' + labelHtml(label, o, fid) +
+      (o.suffix ? '<span class="input-unit">' + input + '<span class="unit">' + esc(o.suffix) + '</span></span>' : input) + '</div>';
   }
 
   function fTextarea(path, label, o) {
     o = o || {};
-    return '<div class="field"><label>' + esc(label) + '</label>' +
-      '<textarea data-field="' + esc(path) + '" rows="' + (o.rows || 3) + '" placeholder="' + esc(o.placeholder || '') + '">' + esc(U.getPath(state.applicant, path) || '') + '</textarea></div>';
+    const fid = 'f-' + path;
+    return '<div class="field"><label for="' + esc(fid) + '">' + esc(label) + '</label>' +
+      '<textarea id="' + esc(fid) + '" data-field="' + esc(path) + '" rows="' + (o.rows || 3) + '" placeholder="' + esc(o.placeholder || '') + '">' + esc(U.getPath(state.applicant, path) || '') + '</textarea></div>';
   }
 
   // 可視の必須欄を検査し、未入力に .invalid を付ける
@@ -607,17 +695,19 @@
     if (nm) nm.focus();
   }
   function introHtml() {
-    //   見出し・説明・ボタンは 1 行、4 つの手順は各 2 行まで（ノート PC の表示の高さでも「面接を始める →」まで見える。docs/SPEC-flow.md 14 章）
+    //   見出し・説明・ボタンは 1 行、4 つの手順は各 2 行まで（ノート PC の表示の高さでも「面接を始める →」まで見える。docs/SPEC-flow.md 14 章）。
+    //   地は淡い紺（.intro。docs/DESIGN.md 4-2）・［わかった］は副ボタン（紺の塗りは操作行の主ボタンだけ）。手順の番号は丸の部品（リストの番号なので読み上げない）
+    const step = function (n, name, text) { return '<li><b>' + nbHtml(n, '', '', true) + '<span>' + name + '</span></b><span>' + text + '</span></li>'; };
     return '<section class="intro no-print" id="introCard" aria-labelledby="introH">' +
-      '<div class="intro-head"><h2 id="introH">はじめての方へ</h2>' +
+      '<div class="intro-head">' + ico('info') + '<h2 id="introH">はじめての方へ</h2>' +
         '<p class="intro-lead">4 つの手順で、A4 1 枚の報告書ができます。</p>' +
         '<div class="intro-foot"><button type="button" class="btn sm ghost" data-action="show-help">使い方を見る</button>' +
-          '<button type="button" class="btn sm primary" id="introOk" data-action="intro-ok">わかった</button></div></div>' +
+          '<button type="button" class="btn sm" id="introOk" data-action="intro-ok">わかった</button></div></div>' +
       '<ol class="intro-steps">' +
-        '<li><b>準備</b><span>名前と面接の情報を入れる（氏名だけ必須）</span></li>' +
-        '<li><b>面接</b><span>台本の ①〜⑤ を 1 段階ずつ話す・聞く・メモ</span></li>' +
-        '<li><b>評価</b><span>' + esc('面接のあとに ' + evalWhatText()) + '</span></li>' +
-        '<li><b>報告書</b><span>' + esc(reportLeadText(true)) + '</span></li>' +   // 面接者が押すのは「面接対応者」だけ（docs/SPEC-flow.md 15 章）
+        step(1, '準備', '名前と面接の情報を入れる（氏名だけ必須）') +
+        step(2, '面接', '台本の ①〜⑤ を 1 段階ずつ話す・聞く・メモ') +
+        step(3, '評価', esc('面接のあとに ' + evalWhatText()).replace('○△×', '<span class="ja">○△×</span>')) +
+        step(4, '報告書', esc(reportLeadText(true))) +   // 面接者が押すのは「面接対応者」だけ（docs/SPEC-flow.md 15 章）
       '</ol>' +
     '</section>';
   }
@@ -638,40 +728,43 @@
     const inRoster = managers.some(function (m) { return m && m.name === iv; });
     const cats = (o.categories || []).filter(function (c) { return c && c.value; }).map(function (c) { return { value: c.value, label: c.value }; });
     // 求人のボタンは「通常」「短期」（表示名の末尾の「求人」を省く。報告書では表示名のまま）
-    const pBtn = function (x) { const full = String(x.label || x.value); return { value: x.value, label: full.replace(/求人$/, '') || full, title: full, cls: 'wide' }; };
-    const nx = prepNext();
+    const pBtn = function (x) { const full = String(x.label || x.value); return { value: x.value, label: full.replace(/求人$/, '') || full, title: full }; };
+    const nItems = 8 + (pOpts.length ? 1 : 0);   // 氏名・年齢・性別・区分・面接日・面接担当者・（応募した求人）・タクシー・メモ（卒業予定年月は学生だけ）
+    //   カード（帯: 応募者・項目数）の本文は 3 行（docs/DESIGN.md 4-2・docs/SPEC-script-mode.md 12 章）。欄はラベルが上
     return stepLeadHtml(1) + (introShown() ? introHtml() : '') +
-      '<div class="card" id="scriptApplicantCard">' +
-      '<div class="card-head"><h2>応募者</h2><p>氏名だけ必須です。あとは分かる範囲で入力してください。</p></div>' +
-      '<div class="field-row sa-row sa-row1">' +
-        fInput('name', '氏名', { required: true, placeholder: '例：山田 太郎', autocomplete: 'off' }) +
-        fInput('age', '年齢', { type: 'number', min: 15, max: 99, step: 1, suffix: '歳' }) +
-        fSelect('gender', '性別', o.genders, { placeholder: '選択' }) +   // 1 行目は狭いので未選択の文言は短く（「選択してください」は PC 幅で切れる）
-        fSelect('category', '区分', cats) +
-        (f.graduationDate ? fInput('graduationDate', '卒業予定年月', { type: 'month', id: 'grp-graduation' }) : '') +
-      '</div>' +
-      '<div class="field-row cols-3 sa-row sa-row2">' +
-        '<div class="field"><label for="saDate">面接日</label><input type="date" id="saDate" data-cl="header.date" value="' + esc(h.date || '') + '"></div>' +
-        '<div class="field"><label for="saInterviewer">面接担当者</label>' +
-          '<select id="saInterviewer" data-cl="header.interviewer" title="名簿は設定の「応募者の管理（押印）」で編集します。報告書の押印欄「面接対応者」の初期選択になります。"><option value="">選択してください</option>' +
-            managers.filter(function (m) { return m && m.name; }).map(function (m) {
-              return '<option value="' + esc(m.name) + '"' + (m.name === iv ? ' selected' : '') + '>' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>';
-            }).join('') +
-            (iv && !inRoster ? '<option value="' + esc(iv) + '" selected>' + esc(iv) + '（名簿外）</option>' : '') +
-          '</select></div>' +
-        (pOpts.length ? '<div class="field" id="saPosting"><label>' + esc(posting.label || '応募した求人') + '</label>' +
-          clSegHtml('header.posting', pOpts.map(pBtn), { aria: posting.label || '応募した求人' }) + '</div>' : '') +
-      '</div>' +
-      '<div class="field-row sa-row sa-row3">' +
-        '<div class="field"><label for="saTaxi">タクシー可否・料金</label><input type="text" id="saTaxi" data-cl="header.taxi" value="' + esc(h.taxi || '') + '" placeholder="例: 可・2,500円" title="深夜帯の帰宅にタクシーを使えるか・料金の目安"></div>' +
-        fTextarea('reviewerNotes', 'メモ（任意）', { rows: 2, placeholder: '例：電話の受け答えが丁寧。' }) +
-      '</div>' +
-    '</div>' +
-    // 記入シート（手書き用。docs/SPEC-flow.md 5-3）: 氏名が空でも印刷できる（紙に書いて面接し、あとでアプリに転記する）。
-    //   操作行は面接・評価と同じ画面の右下に固定（.is-pinned）。DOM は主ボタンが先（Tab で最後の入力欄の次は主ボタン。見た目の左右は CSS の order。15 章）
-    '<div class="flow-foot is-pinned" id="saActions">' +
-      '<button type="button" class="btn primary lg" id="saNext" data-action="script-next">' + esc(nx.label + ' →') + '</button>' +
-      '<button type="button" class="btn ff-start" id="saPaperBtn" data-action="print-paper" title="' + esc(PAPER_BTN_TITLE) + '">🖨 記入シート（手書き用）</button>' +
+      cardHtml({ id: 'scriptApplicantCard', icon: 'user', title: '応募者', small: nItems + ' 項目' },
+        '<p class="card-note">氏名だけ必須です。あとは分かる範囲で入力してください。</p>' +
+        '<div class="field-row sa-row sa-row1">' +
+          fInput('name', '氏名', { required: true, placeholder: '例：山田 太郎', autocomplete: 'off' }) +
+          fInput('age', '年齢', { type: 'number', min: 15, max: 99, step: 1, suffix: '歳' }) +
+          fSelect('gender', '性別', o.genders, { placeholder: '選択' }) +   // 1 行目は狭いので未選択の文言は短く（「選択してください」は PC 幅で切れる）
+          fSelect('category', '区分', cats) +
+          (f.graduationDate ? fInput('graduationDate', '卒業予定年月', { type: 'month', id: 'grp-graduation' }) : '') +
+        '</div>' +
+        '<div class="field-row sa-row sa-row2">' +
+          '<div class="field"><label for="saDate">面接日</label><input type="date" id="saDate" data-cl="header.date" value="' + esc(h.date || '') + '"></div>' +
+          '<div class="field"><label for="saInterviewer">面接担当者</label>' +
+            '<select id="saInterviewer" data-cl="header.interviewer" title="名簿は設定の「応募者の管理（押印）」で編集します。報告書の押印欄「面接対応者」の初期選択になります。"><option value="">選択してください</option>' +
+              managers.filter(function (m) { return m && m.name; }).map(function (m) {
+                return '<option value="' + esc(m.name) + '"' + (m.name === iv ? ' selected' : '') + '>' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>';
+              }).join('') +
+              (iv && !inRoster ? '<option value="' + esc(iv) + '" selected>' + esc(iv) + '（名簿外）</option>' : '') +
+            '</select></div>' +
+          (pOpts.length ? '<div class="field" id="saPosting"><span class="field-label" id="saPostingL">' + esc(posting.label || '応募した求人') + '</span>' +
+            clSegHtml('header.posting', pOpts.map(pBtn), { labelledby: 'saPostingL' }) + '</div>' : '') +
+        '</div>' +
+        '<div class="field-row sa-row sa-row3">' +
+          '<div class="field"><label for="saTaxi">タクシー可否・料金</label><input type="text" id="saTaxi" data-cl="header.taxi" value="' + esc(h.taxi || '') + '" placeholder="例: 可・2,500円" title="深夜帯の帰宅にタクシーを使えるか・料金の目安"></div>' +
+          fTextarea('reviewerNotes', 'メモ（任意）', { rows: 2, placeholder: '例：電話の受け答えが丁寧。' }) +
+        '</div>');
+  }
+  // 準備の操作行（docs/SPEC-flow.md 5-3・15 章）: 左に記入シート（手書き用。氏名が空でも印刷できる）・右端に主ボタン（面接を始める／面接・評価・報告書に戻る）。
+  //   DOM は主ボタンが先（Tab で最後の入力欄の次は主ボタン。見た目の左右は CSS の order）
+  function prepFootHtml() {
+    const nx = prepNext();
+    return '<div class="flow-foot" id="saActions">' +
+      '<button type="button" class="btn primary" id="saNext" data-action="script-next"><span>' + esc(nx.label) + '</span>' + sym(' →') + ico('arrow-right') + '</button>' +
+      '<button type="button" class="btn ff-start" id="saPaperBtn" data-action="print-paper" title="' + esc(PAPER_BTN_TITLE) + '">' + ico('printer') + sym('🖨 ') + '<span>記入シート<span class="lbl-x">（手書き用）</span></span></button>' +
       '<span class="spacer"></span></div>';
   }
 
@@ -808,11 +901,23 @@
         // 「▼ 下にあと n 項目」: 操作行に隠れている分を見せる
         ivShowMore();
         break;
+      case 'iv-must-row': {
+        // 必須条件の案内の「該当の行へ」（docs/DESIGN.md 3-11）: 不一致の最初の行を帯の下に出し、その［不一致］にフォーカス。その行が今の段階に無ければ（⑤ など）その段階へ移ってから
+        const ng = R.checklistItems(clDefNow(), 'must').find(function (x) { return clGet('values.' + x.item.id) === 'mismatch'; });
+        if (!ng) break;
+        if (ivCurrentSec() !== ng.section.id) ivShow(ng.section.id);
+        const row = $('#ivStage .cl-must-row[data-item="' + (window.CSS && CSS.escape ? CSS.escape(ng.item.id) : ng.item.id) + '"]');
+        if (!row) break;
+        row.scrollIntoView({ block: 'start' });
+        const nb = $('[data-value="mismatch"]', row);
+        if (nb) nb.focus({ preventScroll: true });
+        break;
+      }
       case 'ev-time': {
-        // 「面接時間を確かめてください」（評価の結果カード・報告書の確認事項）: 評価の面接時間の欄へ（docs/SPEC-flow.md 15 章）
+        // 「面接時間を確かめてください」（評価の結果カード・報告書の確認事項）: 評価の面接時間の欄へ（docs/SPEC-flow.md 15 章。面接時間のカードは評価の最後）
         if (state.step !== 3) goStep(3);
         const tm = $('#evTimeMin');
-        if (tm) { tm.scrollIntoView({ block: 'center' }); tm.focus({ preventScroll: true }); tm.select(); }
+        if (tm) { tm.scrollIntoView({ block: 'center', behavior: 'auto' }); tm.focus({ preventScroll: true }); tm.select(); }
         break;
       }
       case 'iv-said':
@@ -979,14 +1084,15 @@
   // 1 ページの報告書・記入シートと同じ短い名前（short → 既定の台本の short → 文言の先頭 14 文字）
   function shortLabel(it) { return S.checklistShortLabel(it); }
 
-  // ボタン式の選択（data-action="cl-set"。押下中を再度押すと解除）
+  // ボタン式の選択（セグメントボタン .seg。data-action="cl-set"。押下中を再度押すと解除。docs/DESIGN.md 3-4）。
+  //   押下中の色は値の class で決まる（一致・○・採用＝緑／△・保留＝琥珀／不一致・×・不採用＝赤／ほか＝紺）。o: { cls, aria, labelledby }
   function clSegHtml(path, options, o) {
     o = o || {};
     const cur = String(clGet(path));
-    return '<div class="score-seg cl-seg' + (o.cls ? ' ' + o.cls : '') + '" role="group"' + (o.aria ? ' aria-label="' + esc(o.aria) + '"' : '') + '>' + options.map(function (op) {
+    return '<div class="seg' + (o.cls ? ' ' + o.cls : '') + '" role="group"' + (o.aria ? ' aria-label="' + esc(o.aria) + '"' : '') + (o.labelledby ? ' aria-labelledby="' + esc(o.labelledby) + '"' : '') + '>' + options.map(function (op) {
       const on = cur === String(op.value);
       return '<button type="button" class="seg-btn' + (op.cls ? ' ' + op.cls : '') + (on ? ' active' : '') + '" data-action="cl-set" data-cl="' + esc(path) + '" data-value="' + esc(op.value) + '"' +
-        ' aria-pressed="' + (on ? 'true' : 'false') + '"' + (op.title ? ' title="' + esc(op.title) + '"' : '') + '>' + esc(op.label) + '</button>';
+        ' aria-pressed="' + (on ? 'true' : 'false') + '"' + (op.title ? ' title="' + esc(op.title) + '"' : '') + '>' + (op.html || esc(op.label)) + '</button>';
     }).join('') + '</div>';
   }
 
@@ -1018,16 +1124,48 @@
     return '<span class="badge ' + (tone || '') + '"' + (id ? ' id="' + id + '"' : '') + '>' + esc(text) + '</span>';
   }
 
-  // 必須条件のボタンの行（面接の「確かめること」と評価の段階のカードで同じ部品）
+  // 必須条件の行（面接の「確かめること」と評価の段階のカードで同じ部品。左にラベル・右の操作列に［一致｜不一致］。docs/DESIGN.md 3-3）。
+  //   ［不一致］にした行は .is-ng（地を淡い赤。updateInterviewUI・updateEvalUI）。withBadge: 評価の「未確認」の印（未入力の行だけ見える）
   function mustRowHtml(it, withBadge) {
-    return '<div class="cl-must-row" data-item="' + esc(it.id) + '"><div class="cl-label">' + esc(it.label) + '</div>' +
-      clSegHtml('values.' + it.id, [{ value: 'match', label: '一致', cls: 'wide match' }, { value: 'mismatch', label: '不一致', cls: 'wide mismatch' }], { aria: it.label }) +
-      (withBadge ? '<span class="badge warn ev-miss">未確認</span>' : '') + '</div>';
+    const ng = clGet('values.' + it.id) === 'mismatch';
+    return '<div class="row cl-must-row' + (ng ? ' is-ng' : '') + '" data-item="' + esc(it.id) + '"><div class="row-label"><span class="cl-label">' + esc(it.label) + '</span>' +
+        (withBadge ? '<span class="badge warn ev-miss">未確認</span>' : '') + '</div>' +
+      '<div class="row-ctl">' + clSegHtml('values.' + it.id, [{ value: 'match', label: '一致', cls: 'match' }, { value: 'mismatch', label: '不一致', cls: 'mismatch' }], { aria: it.label }) + '</div></div>';
   }
-  // 台本の編集でメモを付けたブロック（質問以外）のメモ欄
+  // 台本の編集でメモを付けたブロック（質問以外）のメモ欄（そのブロックのカードの本文の末尾。ラベルが上の欄）
   function blockMemoHtml(b) {
     return '<div class="field iv-memo" data-block="' + esc(b.id) + '"><label for="ivMemo-' + esc(b.id) + '">' + esc(b.memoLabel || 'メモ') + '</label>' +
       '<textarea id="ivMemo-' + esc(b.id) + '" rows="2" data-cl="notes.' + esc(b.id) + '">' + esc(clGet('notes.' + b.id)) + '</textarea></div>';
+  }
+  // 文字の記入欄の見本（空の欄が無効に見えないよう。docs/DESIGN.md 3-5）: 台本の placeholder（任意）→ 既定の台本の例（文言が既定のままの欄だけ）→「記入」
+  const FIELD_EXAMPLES = { busy_ng: '例：12/24〜12/26', open_late: '例：タクシー可・25時まで可' };
+  function fieldPlaceholder(it) {
+    if (typeof it.placeholder === 'string' && it.placeholder.trim()) return it.placeholder.trim();
+    const ex = FIELD_EXAMPLES[it.id];
+    if (ex) {
+      let d = null;
+      ((((global.RECRUIT_DEFAULT_PROFILE || {}).checklist || {}).sections) || []).forEach(function (s) {
+        (s.blocks || []).forEach(function (b) { (b.items || []).forEach(function (x) { if (x.id === it.id) d = x; }); });
+      });
+      if (d && d.label === it.label) return ex;
+    }
+    return '記入';
+  }
+  // 記入欄の行（面接の「確かめること」。選択肢は紺のセグメントボタン、日付・月・文字は入力欄。qTag: 聞くことの質問と同じ短い名前なら「Q1」のタグ）
+  function fieldRowHtml(it, qTag) {
+    const path = 'values.' + it.id;
+    let ctl, fid = '';
+    if (it.kind === 'choice') {
+      ctl = clSegHtml(path, (Array.isArray(it.options) ? it.options : []).map(function (o) { return { value: o.value, label: o.label || o.value }; }), { aria: it.label });
+    } else {
+      const type = it.kind === 'date' ? 'date' : it.kind === 'month' ? 'month' : 'text';
+      fid = 'ivF-' + it.id;
+      ctl = '<input type="' + type + '" id="' + esc(fid) + '" data-cl="' + esc(path) + '" value="' + esc(clGet(path)) + '"' + (type === 'text' ? ' placeholder="' + esc(fieldPlaceholder(it)) + '"' : '') + '>';
+    }
+    const tag = qTag ? '<span class="q-no" title="聞くことの ' + esc(qTag) + ' の答え">' + esc(qTag) + '</span>' : '';
+    return '<div class="row cl-field" data-item="' + esc(it.id) + '">' +
+      (fid ? '<label class="row-label" for="' + esc(fid) + '">' + esc(it.label) + tag + '</label>' : '<div class="row-label">' + esc(it.label) + tag + '</div>') +
+      '<div class="row-ctl">' + ctl + '</div></div>';
   }
   // 必須条件の不一致と打ち切り（docs/SPEC-flow.md 3-8・F14）。gateReject: 不採用推奨に固定（設定 mustFailResult が review でない）。
   //   省略できる段階 = 必須条件の段階より後〜案内先より前
@@ -1178,38 +1316,43 @@
     const v = state.ivItems[sec + ':' + kind];
     return typeof v === 'boolean' ? v : ivSayState(ivSayItems(sec, kind)) === 'mixed';
   }
-  function ivPartLabel(kind, open) { return (kind === 'notify' ? '一部伝えなかった' : '一部説明しなかった') + (open ? ' ▴' : ' ▾'); }
+  // 「一部説明しなかった ▾」のボタンの中身（文字と ▾▴ は textContent に残し、見た目は SVG。docs/DESIGN.md 2 章）
+  function ivPartInner(kind, open) {
+    return '<span>' + (kind === 'notify' ? '一部伝えなかった' : '一部説明しなかった') + '</span>' + sym(open ? ' ▴' : ' ▾') + ico(open ? 'chevron-up' : 'chevron-down');
+  }
   // 読み上げ用のリスト（閉じているときはタブ位置・クリックの処理を付けない）／項目ごとのチェックボックス（.is-items）
   function ivSayListHtml(sec, kind) {
     const x = ivSayItems(sec, kind);
     const open = ivItemsOpen(sec, kind);
     return '<ul class="iv-say-list' + (open ? ' is-items' : '') + '" data-sec="' + esc(sec) + '" data-kind="' + esc(kind) + '">' + x.shown.map(function (it) {
       const so = kind === 'explain' && it.shortOnly === true;
-      const tag = so && x.mark ? '<span class="tag">短期のみ</span>' : '';
+      const tag = so && x.mark ? '<span class="badge tag">短期のみ</span>' : '';
       const cls = 'iv-say-i' + (so ? ' short-only' : '');
       if (!open) return '<li class="' + cls + '" data-item="' + esc(it.id) + '">' + esc(it.label) + tag + '</li>';
       const on = ivSaidOn(it);
       return '<li class="' + cls + (on ? ' is-on' : '') + '" data-item="' + esc(it.id) + '"><label><input type="checkbox" data-cl="values.' + esc(it.id) + '"' + (on ? ' checked' : '') + '><span>' + esc(it.label) + tag + '</span></label></li>';
     }).join('') + '</ul>';
   }
-  // 段階×種類の「話すこと」（最初の説明〔合否連絡〕ブロックの位置に、段階のその種類の全項目を 1 つのリストで。ブロックの注記・メモも）
-  function ivSayGroupHtml(s, kind) {
+  // 話すことのカード（段階×種類〔説明・合否連絡〕に 1 枚。docs/DESIGN.md 4-3）: 帯の右端に「一部説明しなかった ▾」（ゴースト）と［説明した］（トグル。操作列と同じ 280px）。
+  //   本文は 注記（台本の ※）→ 読み上げる項目（段階のその種類の全項目を 1 つのリストで）→ ブロックのメモ
+  function ivSayCardHtml(s, kind) {
     const blocks = s.blocks.filter(function (b) { return b.type === kind; });
     const posting = String((ensureChecklist().header || {}).posting || '');
     const open = ivItemsOpen(s.id, kind);
+    const x = ivSayItems(s.id, kind);
     //   説明の注記（既定「※は短期求人に応募の場合のみご説明ください」）は短期のみの項目に印を付けて出すとき（求人が未選択）だけ。短期のみの項目が無いブロックの注記・合否連絡の注記は常に
     const notes = blocks.filter(function (b) {
       if (!b.note) return false;
       return kind === 'notify' || !b.items.some(function (it) { return it.shortOnly === true; }) || posting === '';
-    }).map(function (b) { return '<p class="iv-note">' + esc(b.note) + '</p>'; }).join('');
+    }).map(function (b) { return '<p class="iv-note">' + ico('info') + '<span>' + esc(b.note) + '</span></p>'; }).join('');
     const nb = blocks.find(function (b) { return b.title; });
-    return '<div class="iv-grp k-say" data-kind="say" data-say="' + esc(kind) + '">' +
-      '<h3 class="iv-k"><span>話すこと</span>' + (kind === 'notify' ? '<small>' + esc((nb && nb.title) || '合否連絡') + '</small>' : '') +
-        '<span class="iv-k-act"><button type="button" class="btn iv-said" data-action="iv-said" data-sec="' + esc(s.id) + '" data-kind="' + esc(kind) + '" aria-pressed="false">' + (kind === 'notify' ? '伝えた' : '説明した') + '</button>' +
-          '<button type="button" class="btn sm ghost iv-said-part" data-action="iv-said-items" data-sec="' + esc(s.id) + '" data-kind="' + esc(kind) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' + ivPartLabel(kind, open) + '</button></span></h3>' +
-      notes + ivSayListHtml(s.id, kind) +
-      blocks.filter(function (b) { return b.memo; }).map(blockMemoHtml).join('') +
-    '</div>';
+    const kindName = kind === 'notify' ? ((nb && nb.title) || '合否連絡') : '説明';
+    const verb = kind === 'notify' ? '伝えた' : '説明した';
+    const actions = '<button type="button" class="btn sm ghost iv-said-part" data-action="iv-said-items" data-sec="' + esc(s.id) + '" data-kind="' + esc(kind) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' + ivPartInner(kind, open) + '</button>' +
+      '<button type="button" class="btn toggle iv-said" data-action="iv-said" data-sec="' + esc(s.id) + '" data-kind="' + esc(kind) + '" aria-pressed="false">' + ico('circle') + '<span>' + verb + '</span></button>';
+    return cardHtml({ id: 'ivSay-' + kind, cls: 'iv-grp k-say', attrs: ' data-kind="say" data-say="' + esc(kind) + '"', icon: 'say', title: '話すこと', titleCls: 'iv-k',
+      small: esc(kindName + ' ' + x.shown.length + ' 項目'), actions: actions, actCls: 'iv-k-act' },
+      notes + ivSayListHtml(s.id, kind) + blocks.filter(function (b) { return b.memo; }).map(blockMemoHtml).join(''));
   }
   // 項目ごとの表示を切り替えたとき: そのリストと開くボタンだけ描き直す
   function ivRerenderSay(sec, kind) {
@@ -1217,213 +1360,159 @@
     const ul = $('.iv-say-list' + sel);
     if (ul) { const tmp = document.createElement('div'); tmp.innerHTML = ivSayListHtml(sec, kind); ul.replaceWith(tmp.firstElementChild); }
     const pb = $('[data-action="iv-said-items"]' + sel);
-    if (pb) { const open = ivItemsOpen(sec, kind); pb.setAttribute('aria-expanded', open ? 'true' : 'false'); pb.textContent = ivPartLabel(kind, open); }
+    if (pb) { const open = ivItemsOpen(sec, kind); pb.setAttribute('aria-expanded', open ? 'true' : 'false'); pb.innerHTML = ivPartInner(kind, open); }
     updateChecklistUI(true);
   }
 
-  // ---------- 聞くこと（質問ごとのカード。docs/SPEC-flow.md 3-5・F8） ----------
-  //   質問ブロックの直前の記入欄（台本の【質問】の記入欄。既定は ① の短期／長期の希望・契約開始日の希望など）は、その質問の答えを書く欄なので「聞くこと」の先頭に置く（docs/SPEC-flow.md 14 章）
+  // ---------- 聞くこと（全段階で同じ形: Q 番号・質問文〔17/400〕・すぐ下に答えのメモ。docs/DESIGN.md 3-12・docs/SPEC-flow.md 3-5） ----------
   function ivQText(label) { const t = String(label == null ? '' : label).trim(); return /^「/.test(t) ? t : '「' + t + '」'; }
-  function ivAskGroupHtml(blocks) {
-    return '<div class="iv-grp k-ask" data-kind="ask"><h3 class="iv-k"><span>聞くこと</span></h3>' + blocks.map(function (b) {
-      if (b.type === 'fields') return ivFieldsHtml(b, ' iv-ask-fields') + (b.memo ? blockMemoHtml(b) : '');
-      return (b.note ? '<p class="iv-note">' + esc(b.note) + '</p>' : '') + b.items.map(function (it) {
+  //   qBlocks: その段階の質問ブロック（台本の順）・qs: 質問（{ it, no }。Q の番号は段階の中で通し）。ブロックの注記はそのブロックの質問の前、
+  //   2026-10-16 より前の記録の「（以前のメモ）」はそのブロックの質問のあと（値があるときだけ。直せる）
+  function ivAskCardHtml(qBlocks, qs) {
+    let k = 0;
+    const body = qBlocks.map(function (b) {
+      return (b.note ? '<p class="iv-note">' + ico('info') + '<span>' + esc(b.note) + '</span></p>' : '') + b.items.map(function (it) {
+        const no = qs[k++].no;
         //   カードの中のタブ位置はメモ欄だけ（Tab で次の質問のメモへ）。メモを取らない質問ブロック（memo: false）は質問文だけ
-        return '<div class="iv-q" data-item="' + esc(it.id) + '"><div class="iv-q-text">' + esc(ivQText(it.label)) + '</div>' +
-          (b.memo ? '<textarea class="iv-q-memo" data-cl="notes.' + esc(it.id) + '" rows="1" placeholder="答えをメモ" aria-label="' + esc(shortLabel(it) + ' の答え') + '">' + esc(clGet('notes.' + it.id)) + '</textarea>' : '') + '</div>';
+        return '<div class="iv-q" data-item="' + esc(it.id) + '"><span class="q-no">Q' + no + '</span><div class="iv-q-main"><p class="iv-q-text">' + esc(ivQText(it.label)) + '</p>' +
+          (b.memo ? '<textarea class="memo iv-q-memo" data-cl="notes.' + esc(it.id) + '" rows="1" placeholder="答えをメモ" aria-label="' + esc('Q' + no + ' ' + shortLabel(it) + ' の答え') + '">' + esc(clGet('notes.' + it.id)) + '</textarea>' : '') +
+        '</div></div>';
       }).join('') +
-      //   2026-10-16 より前の記録の質問ブロックのメモ（値があるときだけ。直せる）
       (String(b.memoText || '').trim() ? '<div class="field iv-oldmemo" data-block="' + esc(b.id) + '"><label for="ivOld-' + esc(b.id) + '">（以前のメモ）</label>' +
         '<textarea id="ivOld-' + esc(b.id) + '" rows="2" data-cl="notes.' + esc(b.id) + '">' + esc(clGet('notes.' + b.id)) + '</textarea></div>' : '');
-    }).join('') + '</div>';
-  }
-  // ---------- 確かめること（必須条件・記入欄） ----------
-  //   記入欄（choice は cl-set のボタン、text/date/month は input[data-cl]。ラベルは全文）
-  function ivFieldsHtml(b, cls) {
-    return '<div class="iv-fields' + (cls || '') + '" data-block="' + esc(b.id) + '">' + b.items.map(function (it) {
-      const path = 'values.' + it.id;
-      let ctl;
-      if (it.kind === 'choice') {
-        ctl = clSegHtml(path, (Array.isArray(it.options) ? it.options : []).map(function (o) { return { value: o.value, label: o.label || o.value, cls: 'wide' }; }), { aria: it.label });
-      } else {
-        const type = it.kind === 'date' ? 'date' : it.kind === 'month' ? 'month' : 'text';
-        ctl = '<input type="' + type + '" data-cl="' + esc(path) + '" value="' + esc(clGet(path)) + '" aria-label="' + esc(it.label) + '">';
-      }
-      return '<div class="field cl-field" data-item="' + esc(it.id) + '"><label>' + esc(it.label) + '</label>' + ctl + '</div>';
-    }).join('') + '</div>';
-  }
-  function ivCheckGroupHtml(blocks) {
-    const mustNotes = blocks.filter(function (b) { return b.type === 'must' && b.note; }).map(function (b) { return b.note; }).join('　');
-    return '<div class="iv-grp k-check" data-kind="check"><h3 class="iv-k"><span>確かめること</span>' + (mustNotes ? '<small>' + esc(mustNotes) + '</small>' : '') + '</h3>' + blocks.map(function (b) {
-      const h = b.type === 'must' ? b.items.map(function (it) { return mustRowHtml(it, false); }).join('') : ivFieldsHtml(b, '');
-      return h + (b.memo ? blockMemoHtml(b) : '');
-    }).join('') + '</div>';
+    }).join('');
+    return cardHtml({ id: 'ivAsk', cls: 'iv-grp k-ask', attrs: ' data-kind="ask"', icon: 'ask', title: '聞くこと', titleCls: 'iv-k', small: qs.length + ' 問' }, body);
   }
 
-  // ---------- 段階の本文（列の分け方・見出し。docs/SPEC-flow.md 3-3・F4・F5・14 章） ----------
-  //   rating（確認点）は出さない。最初の質問ブロック（その直前の記入欄＝【質問】の記入欄があればそこから）より前を左の列、それ以降を右の列（1100px 以上。台本の順のまま「左 → 右」）。
-  //   続けて同じ種類（確かめる・聞く）なら見出しは 1 つ。話すことは段階×種類に 1 つ（説明と合否連絡はボタンが別なので分ける）。note は流れの 1 行。
-  //   質問ブロックの直前の記入欄は「聞くこと」に入れる（答えを書く欄を質問の隣に置く）
-  const IV_KIND = { must: 'check', fields: 'check', explain: 'say', notify: 'say', question: 'ask', note: 'flow' };
-  function ivColsHtml(s) {
-    const blocks = s.blocks.filter(function (b) { return IV_KIND[b.type] && (b.type === 'note' || b.items.length || b.memo); });
-    const askFields = function (i) { return blocks[i].type === 'fields' && !!blocks[i + 1] && blocks[i + 1].type === 'question'; };
-    let qi = blocks.findIndex(function (b) { return b.type === 'question'; });
-    if (qi > 0 && askFields(qi - 1)) qi--;
-    //   質問が先頭の段階（⑤ 逆質問）は、質問のあとに話すこと・確かめること（合否連絡など）があれば、そこから右の列（左 → 右の順のまま。
-    //   必須条件の案内が出ていても合否連絡が操作行に隠れない。docs/SPEC-flow.md 15 章で F4 を変更）
-    const qj = qi === 0 ? blocks.findIndex(function (b, k) { return k > 0 && (IV_KIND[b.type] === 'say' || IV_KIND[b.type] === 'check') && !askFields(k); }) : -1;
-    const cols = qi > 0 ? [blocks.slice(0, qi), blocks.slice(qi)] : qj > 0 ? [blocks.slice(0, qj), blocks.slice(qj)] : [blocks];
-    const said = {};
-    const colHtml = function (bl) {
-      let h = '', grp = null;
-      const flush = function () {
-        if (!grp) return;
-        h += grp.kind === 'check' ? ivCheckGroupHtml(grp.blocks) : ivAskGroupHtml(grp.blocks);
-        grp = null;
-      };
-      bl.forEach(function (b) {
-        const k = IV_KIND[b.type] === 'check' && askFields(blocks.indexOf(b)) ? 'ask' : IV_KIND[b.type];
-        if (k === 'flow') { flush(); if (b.note) h += '<p class="iv-flow" data-block="' + esc(b.id) + '">→ ' + esc(b.note) + '</p>'; return; }
-        if (k === 'say') {
-          if (said[b.type]) return;   // 同じ種類の 2 つ目以降のブロックは最初のブロックのリストに入れた
-          said[b.type] = true;
-          flush();
-          h += ivSayGroupHtml(s, b.type);
-          return;
+  // ---------- 確かめること（必須条件・記入欄。いつも最後のカード＝［次へ］のすぐ上） ----------
+  //   行は「左にラベル・右に固定幅の操作列」。グループは A4 の用紙と同じ分け方: 「必須条件」＝ 必須条件の行＋その直後の記入欄（① の 土日勤務可否・出勤不可な繁忙）／
+  //   「勤務条件の確認」＝ ほかの記入欄（台本の【質問】の記入欄〔短期／長期の希望・契約開始日の希望など〕もここ。質問ブロックの直前の記入欄があれば注記「聞くことの答えを選ぶ・記入する」）。
+  //   質問と同じ短い名前の記入欄には Q 番号のタグ（既定の台本では「短期／長期の希望」と Q1）
+  function ivCheckCardHtml(s, qs) {
+    const must = [], terms = [], memos = [], mustNotes = [];
+    let afterMust = false, askTerms = false, n = 0;
+    const qOf = function (it) { const sl = shortLabel(it); const q = qs.find(function (x) { return shortLabel(x.it) === sl; }); return q ? 'Q' + q.no : ''; };
+    s.blocks.forEach(function (b, j) {
+      if (b.type === 'must') {
+        b.items.forEach(function (it) { must.push(mustRowHtml(it, false)); n++; });
+        if (b.note) mustNotes.push(b.note);
+        if (b.memo) memos.push(blockMemoHtml(b));
+        afterMust = true;
+        return;
+      }
+      if (b.type === 'fields') {
+        const rows = b.items.map(function (it) { n++; return fieldRowHtml(it, qOf(it)); });
+        if (afterMust) Array.prototype.push.apply(must, rows);
+        else {
+          Array.prototype.push.apply(terms, rows);
+          if (rows.length && s.blocks[j + 1] && s.blocks[j + 1].type === 'question') askTerms = true;
         }
-        if (!grp || grp.kind !== k) { flush(); grp = { kind: k, blocks: [] }; }
-        grp.blocks.push(b);
-      });
-      flush();
-      return '<div class="iv-col">' + h + '</div>';
-    };
-    return '<div class="iv-cols' + (cols.length > 1 ? ' is-two' : '') + '">' + cols.map(colHtml).join('') + '</div>';
+        if (b.memo) memos.push(blockMemoHtml(b));
+      }
+      afterMust = false;
+    });
+    if (!n && !memos.length) return '';
+    const body = (n ? '<div class="rows">' +
+        (must.length ? '<p class="group-h">必須条件' + (mustNotes.length ? '<small>' + esc(mustNotes.join('　')) + '</small>' : '') + '</p>' + must.join('') : '') +
+        (terms.length ? '<p class="group-h">勤務条件の確認' + (askTerms ? '<small>聞くことの答えを選ぶ・記入する</small>' : '') + '</p>' + terms.join('') : '') +
+      '</div>' : '') + memos.join('');
+    return cardHtml({ id: 'ivCheck', cls: 'iv-grp k-check', attrs: ' data-kind="check"', icon: 'check-list', title: '確かめること', titleCls: 'iv-k', small: n + ' 項目' }, body);
+  }
+
+  // ---------- 段階の本文（docs/DESIGN.md 4-3。2026-10-18 に 2 列から縦一列の 3 枚のカードへ） ----------
+  //   カードはいつも 話すこと（説明 → 合否連絡）→ 聞くこと → 確かめること の順・1 列（920px の列）・間 24。その段階に無い種類のカードは出さない。
+  //   確認点（rating）は出さない（評価で付ける）。流れの注記（note）は最後のカードの下に小さく
+  function ivCardsHtml(s) {
+    const blocks = s.blocks;
+    const qBlocks = blocks.filter(function (b) { return b.type === 'question' && (b.items.length || String(b.memoText || '').trim()); });
+    const qs = [];
+    qBlocks.forEach(function (b) { b.items.forEach(function (it) { qs.push({ it: it, no: qs.length + 1 }); }); });
+    const say = ['explain', 'notify'].filter(function (k) { return blocks.some(function (b) { return b.type === k && (b.items.length || b.memo); }); })
+      .map(function (k) { return ivSayCardHtml(s, k); }).join('');
+    const ask = qBlocks.length ? ivAskCardHtml(qBlocks, qs) : '';
+    const flow = blocks.filter(function (b) { return b.type === 'note' && b.note; }).map(function (b) {
+      return '<p class="iv-flow" data-block="' + esc(b.id) + '">' + ico('arrow-right') + sym('→ ') + '<span>' + esc(b.note) + '</span></p>';
+    }).join('');
+    return say + ask + ivCheckCardHtml(s, qs) + flow;
   }
 
   function interviewStepHtml(sec) {
     ensureChecklist();
     const sum = clSummary();
     const ss = sum.sections;
-    if (!ss.length) return stepLeadHtml(2) + '<div class="card"><p>台本に段階がありません。設定の「面接チェックリスト」で台本を確かめてください。</p></div>';
+    if (!ss.length) return stepLeadHtml(2) + cardHtml({ icon: 'alert', title: '台本に段階がありません' }, '<p class="card-note">設定の「面接チェックリスト」で台本を確かめてください。</p>');
     const s = ss.find(function (x) { return x.id === sec; }) || ss[0];
-    const i = ss.indexOf(s);
     const def = sum.def;
     const a = state.applicant;
-    // 上の帯: 段階のチップ（状態は updateInterviewUI）・タイマー・必須条件の案内
+    // 上の帯（1 行目: 段階のチップ〔状態は updateInterviewUI〕＋タイマー。2 行目: 必須条件の不一致の案内。docs/DESIGN.md 3-11）
     const goal = s.minutes > 0 ? (s.minutesMax ? '/ 最大 ' : '/ 目安 ') + s.minutes + '分' : '';
     const noT = !!state.ivNoTimer;   // タイマー導入前の記録（数えない）
     const jump = ss.find(function (x) { return x.id === def.mustFailJumpTo; });
-    const top = '<div class="iv-top" id="ivTop"><div class="iv-bar" id="ivBar">' +
+    const top = '<div class="iv-top" id="ivTop"><div class="iv-bar" id="ivBar"><div class="iv-bar-main">' +
         '<nav class="iv-chips" id="ivChips" aria-label="面接の段階">' + ss.map(function (x) {
-          return '<button type="button" class="iv-chip" data-action="iv-go" data-sec="' + esc(x.id) + '"><span class="iv-chip-no">' + x.noMark + '</span><span class="iv-chip-t">' + esc(x.title) + '</span><span class="iv-chip-s"></span></button>';
+          const name = x.noMark + ' ' + x.title;
+          return '<button type="button" class="iv-chip" data-action="iv-go" data-sec="' + esc(x.id) + '" title="' + esc(name) + '" aria-label="' + esc(name) + '">' +
+            nbOf(x.noMark, 'iv-chip-no') + '<span class="iv-chip-t">' + esc(x.title) + '</span><span class="iv-chip-s"></span></button>';
         }).join('') + '</nav>' +
         '<div class="iv-timer" id="ivTimer" role="timer" aria-live="off"' + (noT ? ' title="タイマーの導入前に保存した記録のため、面接時間は数えません（評価の画面で分を入れられます）"' : '') + '>' +
-          '<span class="iv-t-stage" id="ivTStage">この段階 <b class="num" id="ivTStageVal">' + (noT ? '—' : fmtClock(ivStageSec(s.id))) + '</b> <small id="ivTStageGoal">' + esc(goal) + '</small></span>' +
-          '<span class="iv-t-total">合計 <b class="num" id="ivTTotal">' + (noT ? '—' : fmtClock(ivTotalSec())) + '</b></span></div>' +
+          '<span class="iv-t-stage" id="ivTStage"><span class="iv-t-k lbl-x">この段階</span><span class="iv-t-v"><b class="num" id="ivTStageVal">' + (noT ? '—' : fmtClock(ivStageSec(s.id))) + '</b><small id="ivTStageGoal">' + esc(goal) + '</small></span></span>' +
+          '<span class="iv-t-total"><span class="iv-t-k">合計</span><span class="iv-t-v"><b class="num" id="ivTTotal">' + (noT ? '—' : fmtClock(ivTotalSec())) + '</b></span></span></div>' +
       '</div>' +
-      //   必須条件の案内。スマホの幅（480px 以下）は短い文 #ivMustShort（タイマーと一緒に固定する細い帯に収める。docs/SPEC-flow.md 15 章）
-      '<div class="iv-must hidden" id="ivMustAlert" role="alert"><span class="ico" aria-hidden="true">⚠</span><span id="ivMustAlertText"></span><span class="iv-must-short" id="ivMustShort"></span>' +
-        (jump ? '<button type="button" class="btn sm" id="ivMustJump" data-action="iv-go" data-sec="' + esc(jump.id) + '">' + esc(jump.noMark + ' ' + jump.title + 'へ') + '</button>' : '') + '</div>' +
-    '</div>';
-    // 見出し・応募者（氏名・区分・年齢・求人。空の項目は省く）・前書き（台本のページの最初の段階ならページの前書き＋段階の前書き。1 行・…）
+      //   必須条件の案内（帯の 2 行目。1 文目＋続き。スマホの幅〔480px 以下〕は短い文 #ivMustShort。右端に「該当の行へ」と［⑤ 逆質問へ］。docs/DESIGN.md 3-11）
+      '<div class="iv-must hidden" id="ivMustAlert" role="alert">' + ico('alert') +
+        '<span class="iv-must-txt"><b id="ivMustLead">必須条件が不一致です。</b><span id="ivMustAlertText"></span><span class="iv-must-short" id="ivMustShort"></span></span>' +
+        '<button type="button" class="link-btn" data-action="iv-must-row">該当の行へ</button>' +
+        (jump ? '<button type="button" class="btn sm" id="ivMustJump" data-action="iv-go" data-sec="' + esc(jump.id) + '">' + nbOf(jump.noMark) + ' <span>' + esc(jump.title + 'へ') + '</span></button>' : '') + '</div>' +
+    '</div></div>';
+    // 段階の見出し（番号・名前・目安・応募者〔氏名・区分・年齢・求人。空の項目は省く〕）・前書き（台本のページの最初の段階ならページの前書き＋段階の前書き。全文）
     const who = [a.category, String(a.age == null ? '' : a.age).trim() ? String(a.age).trim() + '歳' : '', sum.header.postingLabel].filter(Boolean);
     const firstOfPage = ss.filter(function (x) { return x.page === s.page; })[0] === s;
     const pg = firstOfPage ? (sum.pages || []).find(function (p) { return U.isObj(p) && Number(p.no) === s.page; }) : null;
     const lead = [pg && pg.lead ? String(pg.lead) : '', s.lead].filter(Boolean).join('　');
+    const goalText = s.minutes > 0 ? (s.minutesMax ? '最大 ' : '目安 ') + s.minutes + ' 分' : '';
     const stage = '<section class="iv-stage" id="ivStage" data-sec="' + esc(s.id) + '" aria-labelledby="ivStageH">' +
-      '<header class="iv-stage-head"><h2 id="ivStageH" tabindex="-1"><span class="iv-no">' + s.noMark + '</span>' + esc(s.title) + '</h2>' +
-        '<span class="iv-who" id="ivWho">' + (a.name ? '<b>' + esc(a.name) + '</b>さん' : '<b>氏名未入力</b>') + (who.length ? '・' + esc(who.join('・')) : '') + '</span>' +
-        (lead ? '<p class="iv-lead" title="' + esc(lead) + '">' + esc(lead) + '</p>' : '') + '</header>' +
-      ivColsHtml(s) + '</section>';
-    // 下の操作行: 左に戻る・右端に主ボタン（最後の段階は「面接を終えて評価へ →」）。評価まで進んだことがあれば（面接を終えた・評価から直しに来た・旧い記録）「評価に戻る」も。
-    //   段階の下の部分が操作行に隠れているあいだは「▼ 下にあと n 項目」（押すとその分スクロール。ivUpdateMore）。
-    //   DOM は主ボタン → 評価に戻る → 前の段階（最後の質問のメモから Tab で主ボタンへ。Enter で戻らない）。見た目の左右は CSS の order（docs/SPEC-flow.md 15 章）
+      '<header class="iv-stage-head"><h2 id="ivStageH" tabindex="-1">' + nbOf(s.noMark, 'lg fill iv-no') + esc(s.title) + '</h2>' +
+        (goalText ? '<span class="iv-goal">' + esc(goalText) + '</span>' : '') +
+        '<span class="iv-who" id="ivWho">' + (a.name ? '<b>' + esc(a.name) + '</b>さん' : '<b>氏名未入力</b>') + (who.length ? '<span class="iv-who-sub">' + sym('・') + esc(who.join('・')) + '</span>' : '') + '</span>' +
+        (lead ? '<p class="iv-lead">' + esc(lead) + '</p>' : '') + '</header>' +
+      ivCardsHtml(s) + '</section>';
+    return stepLeadHtml(2) + top + stage;
+  }
+  // 面接の操作行: 左に戻る（① は「準備に戻る」）・右端に主ボタン（最後の段階は「面接を終えて評価へ →」）。評価まで進んだことがあれば（面接を終えた・評価から直しに来た・旧い記録）「評価に戻る」も。
+  //   段階の下の部分が操作行に隠れているあいだは「▼ 下にあと n 項目」（ゴースト sm。押すとその分スクロール。ivUpdateMore）。
+  //   DOM は主ボタン → 評価に戻る → 前の段階（最後の入力から Tab で主ボタンへ。Enter で戻らない）。見た目の左右は CSS の order（docs/SPEC-flow.md 15 章）
+  function ivFootHtml(sec) {
+    const ss = ivSections();
+    if (!ss.length) return '';
+    const i = Math.max(0, ss.findIndex(function (x) { return x.id === sec; }));
     const next = ss[i + 1];
-    const foot = '<div class="flow-foot is-sticky" id="ivFoot">' +
-      (next ? '<button type="button" class="btn primary lg" id="ivNext" data-action="iv-next">' + esc('次へ：' + next.noMark + ' ' + next.title + ' →') + '</button>'
-        : '<button type="button" class="btn primary lg" id="ivNext" data-action="iv-end">面接を終えて評価へ →</button>') +
+    return '<div class="flow-foot" id="ivFoot">' +
+      (next ? '<button type="button" class="btn primary" id="ivNext" data-action="iv-next"><span>次へ：</span>' + nbOf(next.noMark) + ' <span>' + esc(next.title) + '</span>' + sym(' →') + ico('arrow-right') + '</button>'
+        : '<button type="button" class="btn primary" id="ivNext" data-action="iv-end"><span>面接を終えて評価へ</span>' + sym(' →') + ico('arrow-right') + '</button>') +
       (state.maxStepReached >= 3 && next ? '<button type="button" class="btn" id="ivToEval" data-action="iv-end">評価に戻る</button>' : '') +
-      '<button type="button" class="btn ff-start" id="ivPrev" data-action="iv-prev">' + (i > 0 ? '← 前の段階' : '← 準備に戻る') + '</button>' +
-      '<button type="button" class="btn sm iv-more ff-start hidden" id="ivMore" data-action="iv-more" aria-controls="ivStage"></button><span class="spacer"></span>' +
+      '<button type="button" class="btn ff-start" id="ivPrev" data-action="iv-prev">' + ico('arrow-left') + sym('← ') + '<span>' + (i > 0 ? '前の段階' : '準備に戻る') + '</span></button>' +
+      '<button type="button" class="btn sm ghost iv-more ff-start hidden" id="ivMore" data-action="iv-more" aria-controls="ivStage"></button><span class="spacer"></span>' +
     '</div>';
-    return stepLeadHtml(2) + top + stage + foot;
   }
 
-  // 質問のメモの高さを内容に合わせる（1 行から。168px を超えたらスクロール）
+  // 質問のメモの高さを内容に合わせる（1 行〔40px〕から。168px を超えたらスクロール）
   function ivAutosize(el) {
     if (!el || !el.style) return;
     el.style.height = 'auto';
-    const h = Math.max(38, el.scrollHeight + 2);
+    const h = Math.max(40, el.scrollHeight + 2);
     el.style.height = Math.min(h, 168) + 'px';
     el.style.overflowY = h > 168 ? 'auto' : 'hidden';
   }
-  // 描いた直後: メモの高さ・2 列の高さをそろえる・トップバーと上の帯の高さ・タイマーの表示（00:00 から始めない）・「▼ 下にあと n 項目」
+  // 描いた直後: メモの高さ・チップ（入らなければ番号だけ）とトップバー・上の帯の高さ・タイマーの表示（00:00 から始めない）・「▼ 下にあと n 項目」
   function ivAfterRender() {
     $$('#stepContent textarea.iv-q-memo').forEach(ivAutosize);
-    ivBalanceCols();
     syncFlowLayout();
     ivTick();
     ivUpdateMore();
   }
-  // 2 列の高さをそろえる（docs/SPEC-flow.md 14 章・15 章）: 右の列が「聞くこと」の質問カードで始まり、左の列（話すことだけ、など）よりずっと長いとき、
-  //   先頭の質問カードを左の列の末尾（「聞くこと」の見出しを付けて）へ移す（ivMoveCards）。台本の順（左の列 → 右の列）は変えない。右の列に残した見出しは「聞くこと（つづき）」。
-  //   カードを動かせないとき（① は右の列が【質問】の記入欄で始まる）は列の幅の比を変える（ivWeightCols）。
-  //   描いたときに 1 回だけ（入力でメモが伸びても動かさない＝カードが入力中に列を移らない）。1100px 未満の 1 列では何もしない
-  function ivBalanceCols() {
-    const cols = $('#ivStage .iv-cols.is-two');
-    if (!cols || cols.children.length !== 2 || getComputedStyle(cols).gridTemplateColumns.trim().split(/\s+/).length < 2) return;
-    const left = cols.children[0], right = cols.children[1];
-    if (!ivMoveCards(left, right)) ivWeightCols(cols, left, right);
-  }
-  // 列の幅の比で高さをそろえる（docs/SPEC-flow.md 15 章）: 質問のカードを動かせない・動かしても変わらない段階（① は右の列が【質問】の記入欄で始まる。
-  //   記入欄は 1 問目のすぐ上に置くので動かさない）。高いほうの列を広くする比（2:3・3:5・1:2）のうち最も低くなるものを選ぶ（同じなら 1:1 に近いもの。
-  //   24px 未満しか変わらなければ 1:1 のまま）。台本の順・列の中身は変えない。幅は CSS 変数 --iv-cols（1100px 以上の 2 列のときだけ効く）
-  const IV_RATIOS = [[2, 3], [3, 5], [1, 2]];
-  function ivWeightCols(cols, left, right) {
-    const tall = function () { return Math.max(left.offsetHeight, right.offsetHeight); };
-    const before = tall(), wideRight = right.offsetHeight > left.offsetHeight;
-    let best = before, pick = '';
-    IV_RATIOS.forEach(function (r) {
-      const v = 'minmax(0, ' + (wideRight ? r[0] : r[1]) + 'fr) minmax(0, ' + (wideRight ? r[1] : r[0]) + 'fr)';
-      cols.style.setProperty('--iv-cols', v);
-      const h = tall();
-      if (h < best) { best = h; pick = v; }
-    });
-    if (pick && before - best >= 24) cols.style.setProperty('--iv-cols', pick);
-    else cols.style.removeProperty('--iv-cols');
-  }
-  // 右の列の先頭の質問カードを左の列の末尾へ（② ③ ④）。動かしたら true
-  function ivMoveCards(left, right) {
-    const ask = right.firstElementChild;
-    if (!ask || !ask.classList.contains('k-ask') || !ask.children[1] || !ask.children[1].classList.contains('iv-q')) return false;
-    const tall = function () { return Math.max(left.offsetHeight, right.offsetHeight); };
-    const before = tall();
-    const grp = document.createElement('div');
-    grp.className = ask.className;
-    grp.setAttribute('data-kind', 'ask');
-    grp.appendChild(ask.firstElementChild.cloneNode(true));
-    left.appendChild(grp);
-    let best = before, moved = 0;
-    // 1 枚ずつ移して、いちばん低くなるところで止める（右の列には少なくとも 1 枚残す）
-    while (ask.children[1] && ask.children[1].classList.contains('iv-q') && ask.querySelectorAll(':scope > .iv-q').length > 1) {
-      grp.appendChild(ask.children[1]);
-      const h = tall();
-      if (h >= best) { ask.insertBefore(grp.lastElementChild, ask.children[1]); break; }
-      best = h; moved++;
-    }
-    if (!moved || before - best < 24) {   // ほとんど変わらないなら元のまま
-      while (grp.children.length > 1) ask.insertBefore(grp.lastElementChild, ask.children[1]);
-      grp.remove();
-      return false;
-    }
-    const hd = $('.iv-k', ask);
-    if (hd) hd.insertAdjacentHTML('beforeend', '<small class="iv-k-cont">（つづき）</small>');
-    return true;
-  }
   // 段階の下の部分が下の操作行に隠れているとき、操作行の左に「▼ 下にあと n 項目」（押すと隠れている分だけスクロール）。見えたら消す。
-  //   面接の画面を描いたとき・入力でメモが伸びたとき・スクロール・画面の大きさが変わったとき（docs/SPEC-flow.md 14 章）
-  const IV_MORE_SEL = '.cl-must-row, .iv-fields .field, .iv-say-list, .iv-q, .iv-oldmemo, .iv-memo, .iv-flow';
+  //   面接の画面を描いたとき・入力でメモが伸びたとき・スクロール・画面の大きさが変わったとき（docs/SPEC-flow.md 14 章）。数えるのは項目の行・読み上げる項目・質問・メモ欄・流れの注記
+  const IV_MORE_SEL = '.row, .iv-say-i, .iv-q, .iv-oldmemo, .iv-memo, .iv-flow';
   function ivHiddenBelow() {
     const st = $('#ivStage'), foot = $('#ivFoot');
     if (!st || !foot || getComputedStyle(foot).position !== 'sticky') return [];
@@ -1434,7 +1523,7 @@
     const b = $('#ivMore');
     if (!b) return;
     const n = ivHiddenBelow().length;
-    if (n) b.textContent = '▼ 下にあと ' + n + ' 項目';
+    if (n) b.innerHTML = ico('chevron-down') + sym('▼ ') + '<span>下にあと ' + n + ' 項目</span>';
     show(b, n > 0);
   }
   function ivShowMore() {
@@ -1454,14 +1543,20 @@
     ensureChecklist();
     const sum = clSummary();
     syncSegButtons(root);
-    // 「説明した」: off「説明した」／on「✓ 説明した」／mixed「✓ 一部説明した（n/m）」。対象が無ければ出さない
+    // 「説明した」（トグル。幅は操作列と同じ 280px で 3 つの状態とも同じ。docs/DESIGN.md 3-1）: off「○ 説明した」／on「✓ 説明した」（淡い紺）／mixed「✓ 一部説明した（n/m）」（淡い琥珀）。
+    //   ✓ は SVG（textContent には「✓ 」を .sym で残す）。対象が無ければ出さない
     $$('[data-action="iv-said"]', root).forEach(function (btn) {
       const kind = btn.dataset.kind, x = ivSayItems(btn.dataset.sec, kind), st = ivSayState(x);
       const verb = kind === 'notify' ? '伝えた' : '説明した';
-      btn.textContent = st === 'on' ? '✓ ' + verb : st === 'mixed' ? '✓ 一部' + verb + '（' + x.targets.filter(ivSaidOn).length + '/' + x.targets.length + '）' : verb;
+      const html = st === 'on' ? ico('check') + sym('✓ ') + '<span>' + verb + '</span>'
+        : st === 'mixed' ? ico('check') + sym('✓ ') + '<span>一部' + verb + '（' + x.targets.filter(ivSaidOn).length + '/' + x.targets.length + '）</span>'
+          : ico('circle') + '<span>' + verb + '</span>';
+      if (btn.innerHTML !== html) btn.innerHTML = html;
       btn.setAttribute('aria-pressed', st === 'on' ? 'true' : st === 'mixed' ? 'mixed' : 'false');
       show(btn, x.targets.length > 0);
     });
+    // 必須条件を［不一致］にした行は地を淡い赤（案内の「該当の行へ」の行き先）
+    $$('#ivStage .cl-must-row[data-item]', root).forEach(function (row) { row.classList.toggle('is-ng', clGet('values.' + row.dataset.item) === 'mismatch'); });
     $$('.iv-say-list input[type="checkbox"][data-cl]', root).forEach(function (cb) {
       const on = clGet(cb.dataset.cl) === true;
       cb.checked = on;
@@ -1475,16 +1570,18 @@
     if (alert) {
       show(alert, g.mm);
       if (g.mm) {
+        //   1 文目「必須条件が不一致です。」（#ivMustLead）＋続き（1100px で 1 行に入る長さ。docs/DESIGN.md 3-11 の表）。不一致の条件の名前は title
         let txt, short;
         if (!g.gateReject) {
-          txt = '必須条件が合いません。追加で確認してください（このまま続けると、結果は' + resultTitle('review') + '以下になります）';
+          txt = '追加で確認してください（このまま続けると、結果は' + resultTitle('review') + '以下）';
           short = '必須条件が不一致（追加で確認）';
         } else if (g.jump) {
           const mt = String(g.jump.minutesText || '').replace(/(\d+)分/, ' $1 分').trim();
-          txt = '必須条件が合いません。追加で確認し、解消しなければ ' + g.jump.noMark + ' ' + g.jump.title + 'へ進んで' + (mt ? mt + 'で' : '') + '終了します';
+          txt = cur === g.jump.id ? g.jump.noMark + ' ' + g.jump.title + (mt ? 'は' + mt + 'で終了します' : 'で面接を終えます')
+            : '追加で確認し、解消しなければ ' + g.jump.noMark + ' ' + g.jump.title + 'へ' + (mt ? '（' + mt + 'で終了）' : '');
           short = '必須条件が不一致' + (cur === g.jump.id ? '（' + (mt ? mt + 'で' : '') + '終了）' : '');   // 案内先へのボタンが横に並ぶ
         } else {
-          txt = '必須条件が合いません。追加で確認し、解消しなければ面接を終了します';
+          txt = '追加で確認し、解消しなければ面接を終了します';
           short = '必須条件が不一致（解消しなければ終了）';
         }
         setText('#ivMustAlertText', txt);
@@ -1509,52 +1606,56 @@
       chip.classList.toggle('is-unconf', unconf);
       chip.classList.toggle('is-done', done);
       if (isCur) chip.setAttribute('aria-current', 'step'); else chip.removeAttribute('aria-current');
+      //   名前を隠したとき（省略可・番号だけ）も読めるよう、title と aria-label に番号・名前・状態（docs/DESIGN.md 3-8）
       chip.title = x.noMark + ' ' + x.title + (skip ? '（必須条件不一致のため省略可）' : unconf ? '（必須条件が未確認）' : done ? '（記録あり）' : '');
+      chip.setAttribute('aria-label', chip.title);
       const sEl = $('.iv-chip-s', chip);
       if (sEl) sEl.textContent = skip ? '省略可' : unconf ? '未確認' : done ? '✓' : '';
     });
-    syncFlowLayout();
+    syncFlowLayout();   // チップの幅が変わる（省略可・未確認）→ 入らなければ番号だけ・帯の高さ（案内の出し入れ）
     ivUpdateMore();
   }
 
   // =====================================================================
-  // 評価（step 3。面接のあとに付ける。docs/SPEC-flow.md 4 章）
-  //   上の結果カード（いまの結果・理由・未入力の数）→ 面接時間 → 段階のカード（面接のメモ＋確認点 ○△×）→ 総評（人物像・総合判断・面接所見）→ 下の操作行
+  // 評価（step 3。面接のあとに付ける。docs/SPEC-flow.md 4 章・docs/DESIGN.md 4-4）
+  //   上の結果カード（固定。いまの結果・理由・未入力の数）→ 段階のカード（面接のメモ＋必須条件＋確認点 ○△×）→ 人物像 → 総合判断 → 面接所見 → 面接時間 → 下の操作行
   // =====================================================================
   function evalStepHtml() {
     ensureChecklist();
     const sum = clSummary();
     return stepLeadHtml(3) +
-      '<div class="ev-top" id="evTop"><div class="ev-result" id="evResult" data-result="">' +
+      '<div class="ev-top" id="evTop"><div class="card ev-result" id="evResult" data-result="">' +
         '<span class="ev-res-k">いまの結果</span><span class="badge lg" id="evResultTitle"></span>' +
         '<span class="ev-res-why" id="evResultWhy"></span><span class="ev-res-miss" id="evMissing"></span>' +
         '<span class="ev-res-score" id="clNavScore"></span>' +
         //   面接時間が目安から大きく外れているとき（ivTimeCheck）。押すと下の面接時間の欄へ
         '<button type="button" class="ev-res-time hidden" id="evTimeWarn" data-action="ev-time"></button></div></div>' +
-      evTimeHtml(sum) +
       sum.sections.map(function (s) { return evSecHtml(s, sum); }).join('') +
       clOverallHtml(sum) +
-      // 操作行（DOM は主ボタンが先。面接所見から Tab で「報告書へ →」。docs/SPEC-flow.md 15 章）
-      '<div class="flow-foot is-sticky" id="evFoot"><button type="button" class="btn primary lg" id="toReportBtn" data-action="judge">報告書へ →</button>' +
-        '<button type="button" class="btn ff-start" id="evBack" data-action="to-step" data-step="2">← 面接に戻る</button><span class="spacer"></span></div>';
+      evTimeHtml(sum);
   }
-  // 面接時間の行（docs/SPEC-flow.md 4-5・15 章）: 手入力の分（空ならタイマーの値）・タイマーの合計・目安・段階ごとの時間（表示したことのない段階は「—」）。
-  //   下に常に見える 1 行「紙から転記した面接・中断した面接は、実際の分を入れてください」（記入シートの「面接時間 ___分」を写す欄。title だけにしない）
+  // 評価の操作行（DOM は主ボタンが先。面接時間の欄から Tab で「報告書へ →」。docs/SPEC-flow.md 15 章）
+  function evFootHtml() {
+    return '<div class="flow-foot" id="evFoot"><button type="button" class="btn primary" id="toReportBtn" data-action="judge"><span>報告書へ</span>' + sym(' →') + ico('arrow-right') + '</button>' +
+      '<button type="button" class="btn ff-start" id="evBack" data-action="to-step" data-step="2">' + ico('arrow-left') + sym('← ') + '<span>面接に戻る</span></button><span class="spacer"></span></div>';
+  }
+  // 面接時間のカード（評価の最後。docs/SPEC-flow.md 4-5・15 章・docs/DESIGN.md 4-4）: 手入力の分（空ならタイマーの値。単位は欄の中）・帯にタイマーの合計と目安・段階ごとの時間（表示したことのない段階は「—」）。
+  //   欄の下に常に見える 1 行「紙から転記した面接・中断した面接は、実際の分を入れてください」（記入シートの「面接時間 ___分」を写す欄。title だけにしない）
   function fmtMinSec(sec) { sec = Math.max(0, Math.floor(Number(sec) || 0)); return Math.floor(sec / 60) + '分' + pad2(sec % 60) + '秒'; }
   function evTimeHtml(sum) {
     const tm = sum.timing;
     const t = ivTimingRead();
     const ps = U.isObj(t.perStage) ? t.perStage : {};
     const total = tm ? tm.totalSec : 0;
-    const sub = tm && tm.startedAt ? '（タイマー ' + fmtMinSec(total) + '・目安 ' + sum.minutesTotal + '分）' : '（タイマーの記録なし・目安 ' + sum.minutesTotal + '分）';
-    return '<div class="ev-time" id="evTime"><label class="ev-time-k" for="evTimeMin">面接時間</label>' +
-      '<input type="number" id="evTimeMin" data-cl="timing.min" min="1" max="600" step="1" inputmode="numeric" placeholder="' + (tm && tm.timerMin != null ? tm.timerMin : '') + '"' +
-        ' value="' + (t.min != null ? esc(t.min) : '') + '" aria-label="面接時間（分）" aria-describedby="evTimeHint" title="紙から転記したときなどは、実際の時間（分）を入れてください。空にするとタイマーの値を使います"><span>分</span>' +
-      '<span class="ev-time-sub" id="evTimeSub">' + esc(sub) + '</span>' +
-      '<span class="ev-time-st">' + sum.sections.map(function (s) {
-        return '<span class="ev-t-i" data-sec="' + esc(s.id) + '">' + s.noMark + ' ' + evSecTime(s, ps) + '</span>';
-      }).join('') + '</span>' +
-      '<span class="ev-time-hint" id="evTimeHint">紙（記入シート）から転記した面接・中断した面接は、実際の分を入れてください（空欄ならタイマーの分を使います）</span></div>';
+    const sub = tm && tm.startedAt ? 'タイマー ' + fmtMinSec(total) + '・目安 ' + sum.minutesTotal + '分' : 'タイマーの記録なし・目安 ' + sum.minutesTotal + '分';
+    return cardHtml({ id: 'evTime', icon: 'clock', title: '面接時間', small: '1 項目', meta: '<span id="evTimeSub">' + esc(sub) + '</span>' },
+      '<div class="rows"><div class="row ev-time-row"><div class="row-label"><label for="evTimeMin">面接時間（分）</label>' +
+        '<span class="row-hint" id="evTimeHint">紙（記入シート）から転記した面接・中断した面接は、実際の分を入れてください（空欄ならタイマーの分を使います）</span></div>' +
+        '<div class="row-ctl"><span class="input-unit"><input type="number" id="evTimeMin" class="no-spin" data-cl="timing.min" min="1" max="600" step="1" inputmode="numeric" placeholder="' + (tm && tm.timerMin != null ? tm.timerMin : '') + '"' +
+          ' value="' + (t.min != null ? esc(t.min) : '') + '" aria-describedby="evTimeHint" title="紙から転記したときなどは、実際の時間（分）を入れてください。空にするとタイマーの値を使います"><span class="unit">分</span></span></div></div></div>' +
+      '<p class="ev-time-st">' + sum.sections.map(function (s) {
+        return '<span class="ev-t-i" data-sec="' + esc(s.id) + '">' + nbOf(s.noMark) + ' <b>' + evSecTime(s, ps) + '</b></span>';
+      }).join('') + '</p>');
   }
   // 面接時間を確かめる（docs/SPEC-flow.md 15 章）: 手入力の分が無く、タイマーの合計が目安の 1/4 未満か 2 倍を超えるとき（紙からの転記で数分・PC のスリープで何十分も、など）。
   //   目安は段階の分の合計（必須条件の不一致で打ち切ったときは省略できる段階を除く）。報告書に面接時間を出さない（タイマーの記録なし・0 秒）ときは確かめない。
@@ -1578,9 +1679,14 @@
     const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v), m = /^(\d{4})-(\d{2})$/.exec(v);
     if (it.kind === 'date' && d) v = d[1] + '/' + d[2] + '/' + d[3];
     else if (it.kind === 'month' && m) v = m[1] + '年' + Number(m[2]) + '月';
-    return v ? esc(v) : '<span class="muted">—</span>';
+    return v ? esc(v) : '<span class="is-empty">—</span>';
   }
-  // 説明・合否連絡の 1 行（数え方は A4 と同じ: 短期のみの説明は求人が短期のときだけ数える。項目が無ければ出さない）
+  // 値の行（読み取り専用。左にラベル・右に値。docs/DESIGN.md 3-3）
+  function kvHtml(attrs, k, v, vCls, kCls) {
+    return '<div class="kv' + (attrs.cls ? ' ' + attrs.cls : '') + '"' + (attrs.item ? ' data-item="' + esc(attrs.item) + '"' : '') + (attrs.block ? ' data-block="' + esc(attrs.block) + '"' : '') + (attrs.kind ? ' data-kind="' + esc(attrs.kind) + '"' : '') + '>' +
+      '<dt class="kv-k' + (kCls ? ' ' + kCls : '') + '">' + k + '</dt><dd class="kv-v' + (vCls ? ' ' + vCls : '') + '">' + v + '</dd></div>';
+  }
+  // 説明・合否連絡の値の行（数え方は A4 と同じ: 短期のみの説明は求人が短期のときだけ数える。項目が無ければ出さない）。✓ は SVG（textContent には「✓ 」を残す）
   function evSaidHtml(s, kind, posting) {
     const its = [];
     s.blocks.forEach(function (b) {
@@ -1590,55 +1696,62 @@
     if (!its.length) return '';
     const off = its.filter(function (it) { return !it.value; });
     const k = kind === 'notify' ? '合否連絡' : '説明';
-    const text = !off.length ? k + '：✓ ' + (kind === 'notify' ? '伝えた' : '説明した（' + its.length + '/' + its.length + '）')
-      : off.length === its.length ? k + '：' + (kind === 'notify' ? '伝えていない' : 'していない')
-        : k + '：一部' + (kind === 'notify' ? '伝えていない' : '説明していない') + '（' + off.map(shortLabel).join('、') + '）';
-    return '<p class="ev-said' + (off.length ? ' is-off' : '') + '" data-kind="' + kind + '">' + esc(text) + '</p>';
+    const v = !off.length ? ico('check') + sym('✓ ') + esc(kind === 'notify' ? '伝えた' : '説明した（' + its.length + '/' + its.length + '）')
+      : off.length === its.length ? esc(kind === 'notify' ? '伝えていない' : 'していない')
+        : ico('alert') + esc('一部' + (kind === 'notify' ? '伝えていない' : '説明していない') + '（' + off.map(shortLabel).join('、') + '）');
+    return kvHtml({ cls: 'ev-said' + (off.length ? ' is-off' : ''), kind: kind }, esc(k), v, off.length ? 'is-off' : '');
   }
+  // 確認点の行（左に項目・右の操作列に ○△×。メモは行の下〔ラベルの列〕の小さい欄。未入力は updateEvalUI が .is-missing）
   function rateRowHtml(it) {
-    return '<div class="cl-row cl-rate-row" data-item="' + esc(it.id) + '">' +
-      '<div class="cl-row-main"><div class="cl-label b">' + esc(it.label) + '</div>' + (it.hint ? '<div class="hint">' + esc(it.hint) + '</div>' : '') + '<span class="badge warn ev-miss">未入力</span></div>' +
-      clSegHtml('values.' + it.id, ['good', 'fair', 'poor'].map(function (k) {
-        return { value: k, label: R.RATING_MARKS[k].mark, cls: 'cl-mark ' + k, title: R.RATING_MARKS[k].label };
-      }), { aria: it.label }) +
-      '<input type="text" class="cl-note" data-cl="notes.' + esc(it.id) + '" value="' + esc(clGet('notes.' + it.id)) + '" placeholder="メモ（任意）" aria-label="' + esc(it.label) + ' のメモ">' +
+    return '<div class="row has-memo cl-rate-row" data-item="' + esc(it.id) + '">' +
+      '<div class="row-label">' + esc(it.label) + '<span class="badge warn ev-miss">未入力</span>' + (it.hint ? '<span class="row-hint">' + esc(it.hint) + '</span>' : '') + '</div>' +
+      '<div class="row-ctl">' + clSegHtml('values.' + it.id, ['good', 'fair', 'poor'].map(function (k) {
+        return { value: k, label: R.RATING_MARKS[k].mark, cls: 'mark ' + k, title: R.RATING_MARKS[k].label };
+      }), { aria: it.label }) + '</div>' +
+      '<div class="row-memo"><input type="text" class="cl-note" data-cl="notes.' + esc(it.id) + '" value="' + esc(clGet('notes.' + it.id)) + '" placeholder="メモ（任意）" aria-label="' + esc(it.label) + ' のメモ"></div>' +
     '</div>';
   }
-  // 段階のカード: 面接のメモ（必須条件〔ここでも直せる〕・記入欄・説明・質問ごとのメモ・以前のメモ）→ 確認点 ○△×（未入力は updateEvalUI が強調）
+  const RATE_LEGEND = '<span class="legend"><span class="ja">○</span> できている／<span class="ja">△</span> やや不安／<span class="ja">×</span> できていない</span>';
+  // 段階のカード（docs/DESIGN.md 4-4）: 帯に番号・名前・時間・状態のバッジ・［✎ 面接の画面で直す］。
+  //   本文は「面接のメモ」（読み取り専用の値の行: 記入欄 → 説明・合否連絡 → 質問ごとのメモ〔以前のメモを先に〕→ ブロックのメモ）→「必須条件」（ここでも直せる行）→「確認点」（○△× とメモ）
   function evSecHtml(s, sum) {
     const ps = U.isObj(ivTimingRead().perStage) ? ivTimingRead().perStage : {};
     const goal = s.minutes ? '（' + (s.minutesMax ? '最大 ' : '目安 ') + s.minutes + '分）' : '';
-    const musts = [], kv = [], qa = [], extra = [], rates = [];
+    const musts = [], mustNotes = [], kv = [], qa = [], extra = [], rates = [], rateMemos = [];
+    let qn = 0;
     s.blocks.forEach(function (b) {
-      if (b.type === 'must') b.items.forEach(function (it) { musts.push(mustRowHtml(it, true)); });
-      else if (b.type === 'fields') b.items.forEach(function (it) { kv.push('<div data-item="' + esc(it.id) + '"><dt>' + esc(shortLabel(it)) + '</dt><dd>' + evFieldVal(it) + '</dd></div>'); });
+      if (b.type === 'must') { b.items.forEach(function (it) { musts.push(mustRowHtml(it, true)); }); if (b.note) mustNotes.push(b.note); }
+      else if (b.type === 'fields') b.items.forEach(function (it) { kv.push(kvHtml({ item: it.id }, esc(shortLabel(it)), evFieldVal(it))); });
       else if (b.type === 'question') {
         //   2026-10-16 より前の記録はブロックにメモが 1 つ（以前のメモ）。そのブロックは以前のメモを先に出し、質問ごとの「（メモなし）」は出さない（答えが無いと読み違えないように）
         const old = String(b.memoText || '').trim();
-        if (old) qa.push('<div class="ev-oldmemo" data-block="' + esc(b.id) + '"><dt class="ev-memo-k">（以前のメモ）</dt><dd class="ev-memo-v">' + esc(b.memoText) + '</dd></div>');
+        if (old) qa.push(kvHtml({ cls: 'ev-oldmemo', block: b.id }, '（以前のメモ）', esc(b.memoText), 'ev-memo-v', 'ev-memo-k'));
         b.items.forEach(function (it) {
+          const no = ++qn;
           const v = String(it.note || '').trim();
           if ((!b.memo || old) && !v) return;
-          qa.push('<div data-item="' + esc(it.id) + '"' + (v ? '' : ' class="is-empty"') + '><dt>' + esc(shortLabel(it)) + '</dt><dd>' + (v ? esc(v) : '（メモなし）') + '</dd></div>');
+          qa.push(kvHtml({ item: it.id, cls: v ? '' : 'is-empty' }, '<span class="q">Q' + no + '</span>' + esc(shortLabel(it)), v ? esc(v) : '（メモなし）', v ? '' : 'is-empty'));
         });
       } else if (b.type === 'rating') {
         b.items.forEach(function (it) { rates.push(rateRowHtml(it)); });
-        if (b.memo) rates.push(blockMemoHtml(b));
+        if (b.memo) rateMemos.push(blockMemoHtml(b));
       } else if (b.memo && String(b.memoText || '').trim()) {
-        extra.push('<div class="ev-bmemo" data-block="' + esc(b.id) + '"><span class="ev-memo-k">' + esc(b.memoLabel || 'メモ') + '</span><div class="ev-memo-v">' + esc(b.memoText) + '</div></div>');
+        extra.push(kvHtml({ cls: 'ev-bmemo', block: b.id }, esc(b.memoLabel || 'メモ'), esc(b.memoText), 'ev-memo-v', 'ev-memo-k'));
       }
     });
     const posting = String(sum.header.posting || '');
-    const memo = (musts.length ? '<div class="ev-must">' + musts.join('') + '</div>' : '') + (kv.length ? '<dl class="ev-kv">' + kv.join('') + '</dl>' : '') +
-      evSaidHtml(s, 'explain', posting) + evSaidHtml(s, 'notify', posting) + (qa.length ? '<dl class="ev-qa">' + qa.join('') + '</dl>' : '') + extra.join('');
-    return '<section class="card cl-sec ev-sec" id="cl-' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' +
-      '<div class="card-head"><h2><span class="cl-no">' + s.noMark + '</span>' + esc(s.title) + '</h2>' +
-        '<span class="ev-sec-time">' + esc(evSecTime(s, ps) + goal) + '</span><span class="cl-sec-state" id="clState-' + esc(s.id) + '"></span>' +
-        '<span class="cl-skip-note">必須条件不一致のため省略可</span>' +
-        '<button type="button" class="btn sm ghost ev-fix" data-action="iv-go" data-sec="' + esc(s.id) + '">✎ 面接の画面で直す</button></div>' +
-      (memo ? '<div class="ev-memo">' + memo + '</div>' : '') +
-      (rates.length ? '<div class="ev-rate"><div class="ev-rate-h">確認点<span class="cl-legend">○ できている／△ やや不安／× できていない</span></div>' + rates.join('') + '</div>' : '') +
-    '</section>';
+    const said = evSaidHtml(s, 'explain', posting) + evSaidHtml(s, 'notify', posting);
+    const memo = (kv.length ? '<dl class="ev-kv">' + kv.join('') + '</dl>' : '') + (said ? '<dl class="ev-says">' + said + '</dl>' : '') +
+      (qa.length ? '<dl class="ev-qa">' + qa.join('') + '</dl>' : '') + (extra.length ? '<dl class="ev-extra">' + extra.join('') + '</dl>' : '');
+    const body = '<div class="rows">' +
+        (memo ? '<p class="group-h">面接のメモ</p><div class="panel ev-memo">' + memo + '</div>' : '') +
+        (musts.length ? '<p class="group-h">必須条件' + (mustNotes.length ? '<small>' + esc(mustNotes.join('　')) + '</small>' : '') + '</p><div class="row-group ev-must">' + musts.join('') + '</div>' : '') +
+        (rates.length ? '<p class="group-h">確認点' + RATE_LEGEND + '</p><div class="row-group ev-rate">' + rates.join('') + '</div>' : '') +
+      '</div>' + rateMemos.join('');
+    return cardHtml({ id: 'cl-' + s.id, cls: 'cl-sec ev-sec', attrs: ' data-sec="' + esc(s.id) + '"', no: nbOf(s.noMark), title: esc(s.title),
+      meta: esc(evSecTime(s, ps) + goal), metaCls: 'ev-sec-time',
+      badge: '<span class="cl-sec-state" id="clState-' + esc(s.id) + '"></span><span class="badge cl-skip-note" title="必須条件不一致のため省略可">省略可</span>',
+      actions: '<button type="button" class="btn sm ghost ev-fix" data-action="iv-go" data-sec="' + esc(s.id) + '">' + ico('pencil') + sym('✎ ') + '<span>面接の画面で直す</span></button>' }, body);
   }
 
   // 結果の理由（調整があれば短い言い方を「・」でつなぎ「…のため」。無ければ総合判断から。title は理由の全文）
@@ -1676,7 +1789,7 @@
     const why = evReason(j);
     const wEl = $('#evResultWhy');
     if (wEl) { wEl.textContent = why.text; wEl.title = why.title; }
-    // 未入力の数
+    // 未入力の数（琥珀の文字＋⚠。無ければ「未入力はありません」〔--text-2＋紺の ✓。緑にしない〕）
     const ps = sum.persona;
     const rBlank = sum.ratings.filter(function (r) { return !r.value; }).length;
     const parts = [];
@@ -1688,20 +1801,24 @@
     }
     const mEl = $('#evMissing');
     if (mEl) {
-      mEl.textContent = gate ? '必須条件の不一致のため、ほかの入力は任意です' : parts.length ? '未入力：' + parts.join('・') : '未入力はありません';
+      mEl.innerHTML = gate ? ico('info') + '<span>必須条件の不一致のため、ほかの入力は任意です</span>'
+        : parts.length ? ico('alert') + '<span>' + esc('未入力：' + parts.join('・')) + '</span>' : ico('check') + '<span>未入力はありません</span>';
       mEl.classList.toggle('is-none', !gate && !parts.length);
       mEl.classList.toggle('is-gate', gate);
     }
     // 面接時間を確かめる（紙からの転記・中断など。docs/SPEC-flow.md 15 章）: 結果カードに 1 行・面接時間の欄を琥珀に。分を入れると消える
     const tc = ivTimeCheck(sum);
     const twEl = $('#evTimeWarn');
-    if (twEl) { show(twEl, !!tc); twEl.textContent = tc ? '⚠ ' + tc.text + ' → 面接時間の欄へ' : ''; }
+    if (twEl) {
+      show(twEl, !!tc);
+      twEl.innerHTML = tc ? ico('alert') + sym('⚠ ') + '<span>' + esc(tc.text) + '</span>' + sym(' → ') + ico('arrow-right') + '<span>面接時間の欄へ</span>' : '';
+    }
     const etEl = $('#evTime');
     if (etEl) etEl.classList.toggle('is-check', !!tc);
-    // 未入力の行の強調（必須条件の不一致で不採用推奨に固定したときは付けない）
+    // 未入力の行の強調（必須条件の不一致で不採用推奨に固定したときは付けない）・必須条件を［不一致］にした行は赤（.is-ng）
     sum.must.items.forEach(function (m) {
-      const row = $('.ev-memo .cl-must-row[data-item="' + m.id + '"]', root);
-      if (row) row.classList.toggle('is-missing', !gate && !m.value);
+      const row = $('.ev-must .cl-must-row[data-item="' + m.id + '"]', root);
+      if (row) { row.classList.toggle('is-missing', !gate && !m.value); row.classList.toggle('is-ng', m.value === 'mismatch'); }
     });
     sum.ratings.forEach(function (r) {
       const row = $('.cl-rate-row[data-item="' + r.id + '"]', root);
@@ -1713,7 +1830,7 @@
     });
     const ovRow = $('.cl-overall-row', root);
     if (ovRow) ovRow.classList.toggle('is-missing', !gate && !sum.overall.value);
-    // 段階の状態（不一致あり／必須条件の「未確認 n」・確認点の「未入力 n」〔琥珀〕／必須条件・確認点が全部入力「済」。どちらも無い段階は空）・省略可。
+    // 段階の状態（不一致あり〔赤〕／必須条件の「未確認 n」・確認点の「未入力 n」〔琥珀〕／必須条件・確認点が全部入力「✓ 済」〔紺〕。どちらも無い段階は空）・省略可（点線の枠）。
     //   必須条件の不一致で不採用推奨に固定（gate）したときは、未確認・未入力を出さない（ほかの入力は任意）
     sum.sections.forEach(function (s, i) {
       const stEl = $('#clState-' + s.id);
@@ -1722,15 +1839,17 @@
         const blank = rs.filter(function (r) { return !r.value; }).length;
         const hasMust = s.blocks.some(function (b) { return b.type === 'must' && b.items.length; });
         const open = gate ? [] : [s.mustUnknown ? '未確認 ' + s.mustUnknown : '', blank ? '未入力 ' + blank : ''].filter(Boolean);
-        stEl.innerHTML = s.mustMismatch ? clBadge('danger', '不一致あり') : open.length ? clBadge('warn', open.join('・'))
-          : (rs.length || hasMust) && !blank && !s.mustUnknown ? clBadge('ok', '済') : '';
+        const html = s.mustMismatch ? clBadge('danger', '不一致あり') : open.length ? clBadge('warn', open.join('・'))
+          : (rs.length || hasMust) && !blank && !s.mustUnknown ? '<span class="badge navy">' + ico('check') + '済</span>' : '';
+        if (stEl.innerHTML !== html) stEl.innerHTML = html;
       }
       const el = $('#cl-' + s.id);
       if (el) el.classList.toggle('cl-skippable', g.skippable(i));
     });
     const sc = sum.score;
-    setText('#clNavScore', '面接評価 ' + (sc.rated ? sc.total : '—') + '/' + sc.max + (sc.rated ? '（' + fmtNum(sc.pct) + '%・' + sc.bandLabel + '）' : '') +
-      (ps ? '　人物像 ' + (ps.scored ? ps.total : '—') + '/' + ps.max : ''));
+    const nav = $('#clNavScore');
+    if (nav) nav.innerHTML = '面接評価 <b>' + esc((sc.rated ? sc.total : '—') + '/' + sc.max) + '</b>' + esc(sc.rated ? '（' + fmtNum(sc.pct) + '%・' + sc.bandLabel + '）' : '') +
+      (ps ? '　人物像 <b>' + esc((ps.scored ? ps.total : '—') + '/' + ps.max) + '</b>' : '');
     updatePersonaUI(ps, root);
     const ov = sum.overall.value;
     show('#overallWarn', ov === 'hold' || ov === 'reject');
@@ -1738,31 +1857,31 @@
     syncFlowLayout();   // 結果カード（上の帯）の高さが変わったら scroll-padding も合わせる
   }
 
-  // 総評の人物像（1〜5 点。docs/SPEC-persona.md 3-2）。各行は 1 つのタブ位置（押下中のボタン、無ければ 1。updatePersonaUI が付け直す）
+  // 人物像のカード（1〜5 点。docs/SPEC-persona.md 3-2・docs/DESIGN.md 4-4）: 凡例 → 前書きの 1 行 → 行（左に番号と項目・右の操作列に 1〜5）→ 合計とバッジ → 1 点の警告。
+  //   各行は 1 つのタブ位置（押下中のボタン、無ければ 1。updatePersonaUI が付け直す）
   function clPersonaHtml(ps, sum) {
     //   凡例は「点 意味」ごとに折り返さない span（狭い画面でも「5 とても／良い」と語の途中で割れない。文字は全角空白でつなぐ）
-    const legend = ps.scaleLabels.map(function (l, i) { return '<span>' + esc((i + 1) + ' ' + l) + '</span>'; }).join('　');
-    return '<section class="cl-persona" id="clPersona" aria-labelledby="clPersonaH">' +
-      '<div class="cl-ps-head"><h3 id="clPersonaH">' + esc(ps.title) + '</h3><span class="cl-ps-legend" id="clPsLegend">' + legend + '</span></div>' +
+    const legend = ps.scaleLabels.map(function (l, i) { return '<span><b>' + (i + 1) + '</b> ' + esc(l) + '</span>'; }).join('　');
+    const tone = function (n) { return n === 1 ? ' s1' : n === 2 ? ' s2' : n >= 4 ? ' s' + n : ' s3'; };
+    return cardHtml({ id: 'clPersona', titleId: 'clPersonaH', titleInner: true, icon: 'user', title: esc(ps.title), small: esc(ps.items.length + ' 項目 × 1〜' + ps.scaleMax + ' 点') },
+      '<p class="ps-legend" id="clPsLegend">' + legend + '</p>' +
       clLeadPsHtml(sum) +
-      '<div class="cl-ps-rows">' + ps.items.map(function (it, i) {
+      '<div class="rows cl-ps-rows">' + ps.items.map(function (it, i) {
         let btns = '';
         for (let n = 1; n <= ps.scaleMax; n++) {
           const on = it.score === n, tab = it.score != null ? on : n === 1;
-          btns += '<button type="button" class="seg-btn cl-ps-btn s' + n + (on ? ' active' : '') + '" data-action="ps-set" data-persona="' + esc(it.id) + '" data-score="' + n + '"' +
+          btns += '<button type="button" class="seg-btn cl-ps-btn' + tone(n) + (on ? ' active' : '') + '" data-action="ps-set" data-persona="' + esc(it.id) + '" data-score="' + n + '"' +
             ' aria-pressed="' + (on ? 'true' : 'false') + '" tabindex="' + (tab ? '0' : '-1') + '" title="' + esc(n + ' ' + ps.scaleLabels[n - 1]) + '">' + n + '</button>';
         }
-        return '<div class="cl-ps-row' + (it.score != null ? ' is-set' : '') + (it.score === 1 ? ' is-one' : '') + '" data-ps-row="' + esc(it.id) + '">' +
-          '<div class="cl-ps-main"><span class="cl-ps-no">' + (i + 1) + '</span><span class="cl-label b">' + esc(it.label) + '</span>' + (it.hint ? '<span class="hint">' + esc(it.hint) + '</span>' : '') +
-            '<span class="badge warn ev-miss">未入力</span></div>' +
-          '<div class="score-seg cl-seg cl-ps-seg" role="group" aria-label="' + esc(it.label) + '">' + btns + '</div></div>';
+        return '<div class="row cl-ps-row' + (it.score != null ? ' is-set' : '') + (it.score === 1 ? ' is-one' : '') + '" data-ps-row="' + esc(it.id) + '">' +
+          '<div class="row-label"><span class="row-no">' + (i + 1) + '</span>' + esc(it.label) + '<span class="badge warn ev-miss">未入力</span>' + (it.hint ? '<span class="row-hint hint">' + esc(it.hint) + '</span>' : '') + '</div>' +
+          '<div class="row-ctl"><div class="seg cl-ps-seg" role="group" aria-label="' + esc(it.label) + '">' + btns + '</div></div></div>';
       }).join('') + '</div>' +
-      '<div class="cl-ps-total" id="clPsTotal" aria-live="polite">合計 <b class="num" id="clPsSum">—</b> / <span class="num" id="clPsMax">' + ps.max + '</span>点<span class="num" id="clPsPct"></span><span class="badge" id="clPsState"></span></div>' +
-      '<div class="alert warn hidden" id="clPsWarn"><span class="ico">⚠</span><span id="clPsWarnText"></span></div>' +
-    '</section>';
+      '<div class="ps-total" id="clPsTotal" aria-live="polite">合計 <b class="num" id="clPsSum">—</b> / <span class="num" id="clPsMax">' + ps.max + '</span> 点<span class="num" id="clPsPct"></span><span class="badge" id="clPsState"></span></div>' +
+      '<div class="alert warn hidden" id="clPsWarn">' + ico('alert') + '<span id="clPsWarnText"></span></div>');
   }
   // 台本 1 枚目の前書きの「最低限の話し方、敬語が可能か」は、確認点から外して人物像の「言葉遣い・説明のわかりやすさ」で付ける（2026-10-16。台本の文言は変えない）。
-  //   前書きが話し方・敬語に触れ、確認点に話し方・敬語の項目が無く、人物像に言葉遣いの項目があるとき、付ける場所を人物像の見出しの下に 1 行で示す（docs/SPEC-flow.md 4-6）
+  //   前書きが話し方・敬語に触れ、確認点に話し方・敬語の項目が無く、人物像に言葉遣いの項目があるとき、付ける場所を人物像の凡例の下に 1 行で示す（docs/SPEC-flow.md 4-6）。→ は SVG（textContent には残す）
   const CL_MANNER_RE = /敬語|話し方/;
   function clLeadPsHtml(sum) {
     const ps = sum.persona;
@@ -1773,13 +1892,13 @@
     const it = ps.items.find(function (x) { return x.id === 'ps_speech'; }) || ps.items.find(function (x) { return /言葉遣い|敬語/.test(x.label); });
     if (!it) return '';
     const phrase = (lead.split(/[。\n]/).find(function (x) { return CL_MANNER_RE.test(x); }) || '').trim() || '最低限の話し方、敬語が可能か';
-    return '<div class="hint cl-lead-ps" data-ps-ref="' + esc(it.id) + '">→ 台本 1 枚目の「' + esc(phrase) + '」は、この' + esc(ps.title) + '「' + esc(it.label) + '」で 1〜5 点を付けます。</div>';
+    return '<p class="ps-ref cl-lead-ps" data-ps-ref="' + esc(it.id) + '">' + ico('arrow-right') + sym('→ ') + '<span>台本 1 枚目の「' + esc(phrase) + '」は、この' + esc(ps.title) + '「' + esc(it.label) + '」で 1〜5 点を付けます。</span></p>';
   }
   // 設定で人物像を使うか（ON・項目あり）
   function personaOnNow() { return !!R.personaModel(clDefNow(), { persona: {} }); }
 
-  // 総評（docs/SPEC-persona.md 3-2・docs/SPEC-flow.md 4-6）: 上から 人物像 → 総合判断 → 説明 → 面接所見。人物像を使わない記録（cl.persona === null）は 1 行の注記。
-  //   面接評価の点・必須条件のまとめは上の結果カード（#clNavScore・#evMissing）にある
+  // 総評（docs/SPEC-persona.md 3-2・docs/SPEC-flow.md 4-6）は 3 枚のカード: 人物像（#clPersona）→ 総合判断（#clOverall）→ 面接所見（#clNotes）。続けて面接時間（#evTime。evalStepHtml）。
+  //   人物像を使わない記録（cl.persona === null）は総合判断のカードの先頭に 1 行の注記。面接評価の点・必須条件のまとめは上の結果カード（#clNavScore・#evMissing）
   function clOverallHtml(sum) {
     const def = sum.def;
     const oo = U.isObj(def.overallOptions) ? def.overallOptions : {};
@@ -1789,17 +1908,15 @@
       '、「' + (oo.reject || overallLabelNow('reject')) + '」は' + resultTitle('reject') + 'として報告します（必須条件が不一致なら' + resultTitle(def.mustFailResult === 'review' ? 'review' : 'reject') + '）。',
       ps ? personaRuleText() + '。' : ''].filter(Boolean).join(' ');
     const off = !ps && ensureChecklist().persona === null && personaOnNow();
-    return '<div class="card" id="clOverall"><div class="card-head"><h2>総評</h2></div>' +
-      (ps ? clPersonaHtml(ps, sum) : '') +
-      (off ? '<p class="hint cl-ps-off" id="clPersonaOff">この記録は人物像（1〜5 点）の導入前に保存されたため、人物像は判定に使いません。</p>' : '') +
-      '<div class="cl-overall-row"><div class="cl-label b">' + esc(def.overallLabel || '面接者の総合判断') + '<span class="badge warn ev-miss">未入力</span></div>' +
-        clSegHtml('overall', ['hire', 'hold', 'reject'].map(function (k) { return { value: k, label: oo[k] || overallLabelNow(k), cls: 'wide ' + k }; }), { cls: 'lg', aria: def.overallLabel }) +
-      '</div>' +
-      (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') +
-      '<div class="alert warn hidden" id="overallWarn"><span class="ico">⚠</span><span id="overallWarnText"></span></div>' +
-      '<div class="field cl-notes-field"><label for="clIvNotes">面接所見</label>' +
-        '<textarea id="clIvNotes" data-note="interview" rows="4" placeholder="特記事項、受け答えの印象など">' + esc(state.interviewNotes) + '</textarea></div>' +
-    '</div>';
+    return (ps ? clPersonaHtml(ps, sum) : '') +
+      cardHtml({ id: 'clOverall', icon: 'check', title: '総合判断', small: '1 項目' },
+        (off ? '<p class="card-note" id="clPersonaOff">この記録は人物像（1〜5 点）の導入前に保存されたため、人物像は判定に使いません。</p>' : '') +
+        '<div class="rows"><div class="row cl-overall-row"><div class="row-label">' + esc(def.overallLabel || '面接者の総合判断') + '<span class="badge warn ev-miss">未入力</span></div>' +
+          '<div class="row-ctl">' + clSegHtml('overall', ['hire', 'hold', 'reject'].map(function (k) { return { value: k, label: oo[k] || overallLabelNow(k), cls: k }; }), { aria: def.overallLabel || '面接者の総合判断' }) + '</div></div></div>' +
+        (hint ? '<p class="card-note">' + esc(hint) + '</p>' : '') +
+        '<div class="alert warn hidden" id="overallWarn">' + ico('alert') + '<span id="overallWarnText"></span></div>') +
+      cardHtml({ id: 'clNotes', icon: 'pencil', title: '<label for="clIvNotes">面接所見</label>', small: '任意' },
+        '<textarea class="notes" id="clIvNotes" data-note="interview" rows="4" placeholder="特記事項、受け答えの印象など">' + esc(state.interviewNotes) + '</textarea>');
   }
 
   // ---------- 人物像（docs/SPEC-persona.md 3-2〜3-4） ----------
@@ -1891,9 +2008,9 @@
   function personaSummaryRow(ps, row) {
     if (!ps) return '';
     const ones = ps.ones.length ? ' <span class="badge danger">1点あり</span>' : '';
-    const val = !ps.scored ? '<span class="badge muted">未入力 ' + ps.unscored + '</span>'
+    const val = !ps.scored ? '<span class="badge">未入力 ' + ps.unscored + '</span>'
       : ps.complete ? esc(ps.total + '/' + ps.max + '点・' + ps.pct + '%') + ones
-        : esc(ps.total + '/' + ps.max + '点') + ' <span class="badge muted">未入力 ' + ps.unscored + '</span>' + ones;
+        : esc(ps.total + '/' + ps.max + '点') + ' <span class="badge">未入力 ' + ps.unscored + '</span>' + ones;
     return row('sumPersona', '人物像', val);
   }
   // 表示の更新（面接 → updateInterviewUI・評価 → updateEvalUI。noSummary でなければ右サマリーも。docs/SPEC-flow.md 3-10）
@@ -1956,24 +2073,25 @@
       const gate = mustGateInfo(sum).gateReject;
       const acts = ((ovMissing || psMissing) && !gate ? '<button type="button" class="btn sm" data-action="to-step" data-step="3">評価で入力する</button>' : '') +
         (tc ? '<button type="button" class="btn sm" id="rpTimeFix" data-action="ev-time">評価で面接時間を直す</button>' : '');
-      html += '<div class="card" id="scriptWarnings"><div class="card-head"><h3>確認事項</h3></div><ul class="list-x">' +
+      //   確認事項は注意の警告（.alert.warn。docs/DESIGN.md 3-9・4-5）
+      html += '<div class="alert warn" id="scriptWarnings">' + ico('alert') + '<div class="alert-body"><p class="alert-title">確認事項</p><ul class="alert-list">' +
         warns.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') +
         (tc ? '<li id="rpTimeWarn">' + esc(tc.text + '。紙（記入シート）から転記した面接・中断した面接は、評価の画面で実際の分を入れてください。') + '</li>' : '') + '</ul>' +
-        (acts ? '<div class="actions">' + acts + '</div>' : '') +
-      '</div>';
+        (acts ? '<div class="alert-actions">' + acts + '</div>' : '') +
+      '</div></div>';
     }
-    html += '<div class="report-paper-wrap" id="appPaperWrap">' +
-      '<div class="report-paper-cap"><b>面接チェックリスト報告（A4）</b><span>保存した HTML はこの用紙 1 枚で開きます。押印・合否は下のカードで（保存した HTML では用紙の欄をクリック）</span></div>' +
-      '<div class="a4" id="appPaper">' + reportPaperInnerHtml() + '</div></div>';
+    html += '<div class="report-paper-cap"><b>面接チェックリスト報告（A4）</b><span>保存した HTML はこの用紙 1 枚で開きます。押印・合否は下のカードで（保存した HTML では用紙の欄をクリック）</span></div>' +
+      '<div class="report-paper-wrap" id="appPaperWrap"><div class="a4" id="appPaper">' + reportPaperInnerHtml() + '</div></div>';
     html += managementCardHtml();
     html += decisionCardHtml();
-    // 操作行（左に戻る・右端に主ボタン）。面接・評価と同じ画面の右下に固定し（.is-pinned）、本文の下に操作行の高さの余白（押印・合否のカードのボタンが操作行に隠れない）。
-    //   DOM は主ボタンが先（Tab の順）。見た目の左右は CSS の order（docs/SPEC-flow.md 15 章。5-1 の「固定しない」を変更）
-    html += '<div class="flow-foot is-pinned no-print" id="rpFoot">' +
-      '<button type="button" class="btn primary lg" id="reportSaveBtn" data-action="save">💾 報告書を保存（HTML）</button>' +
-      '<button type="button" class="btn" id="reportPrintBtn" data-action="print-checklist">🖨 A4 で印刷</button>' +
-      '<button type="button" class="btn ff-start" id="backToChecklist" data-action="to-step" data-step="3">← 評価に戻る</button><span class="spacer"></span></div>';
     return html;
+  }
+  // 報告書の操作行（左に戻る・右端に主ボタン。副は「A4 で印刷」）。DOM は主ボタンが先（Tab の順）。見た目の左右は CSS の order（docs/SPEC-flow.md 15 章）
+  function rpFootHtml() {
+    return '<div class="flow-foot no-print" id="rpFoot">' +
+      '<button type="button" class="btn primary" id="reportSaveBtn" data-action="save">' + ico('download') + sym('💾 ') + '<span>報告書を保存<span class="lbl-x">（HTML）</span></span></button>' +
+      '<button type="button" class="btn" id="reportPrintBtn" data-action="print-checklist">' + ico('printer') + sym('🖨 ') + '<span>A4 で印刷</span></button>' +
+      '<button type="button" class="btn ff-start" id="backToChecklist" data-action="to-step" data-step="3">' + ico('arrow-left') + sym('← ') + '<span>評価に戻る</span></button><span class="spacer"></span></div>';
   }
 
   // =====================================================================
@@ -1986,14 +2104,14 @@
     const def = clDefNow();
     const rows = R.scriptApplicantRows(a, cl, p, state.management);
     const rv = function (k) { const r = rows.find(function (x) { return x.key === k; }); return r ? r.value : ''; };
-    // 「応募者」は 氏名・区分/年齢/性別・面接日・担当 の 4 行。求人は短期のときだけ「短期求人」のチップを区分の行に添える（消極属性は 2026-10-13 に削除）
-    const attrs = cl.header.posting === 'short' && rv('posting') ? '<span class="badge info">' + esc(rv('posting')) + '</span>' : '';
+    // 「応募者」は 氏名・区分/年齢/性別・面接日・担当 の 4 行。求人は短期のときだけ「短期求人」の紺のバッジを区分の行に添える（消極属性は 2026-10-13 に削除）
+    const attrs = cl.header.posting === 'short' && rv('posting') ? '<span class="badge navy">' + esc(rv('posting')) + '</span>' : '';
     const model = R.interviewModel(p, cl);
     const c = model.counts || { good: 0, fair: 0, poor: 0, blank: 0 };
     const ms = R.mustSummary(def, cl);
     const mustBd = !ms.total ? '<span class="muted">—</span>'
       : ms.mismatch || ms.unknown
-        ? (ms.mismatch ? '<span class="badge danger">不一致 ' + ms.mismatch + '</span>' : '') + (ms.unknown ? '<span class="badge muted">未確認 ' + ms.unknown + '</span>' : '')
+        ? (ms.mismatch ? '<span class="badge danger">不一致 ' + ms.mismatch + '</span>' : '') + (ms.unknown ? '<span class="badge">未確認 ' + ms.unknown + '</span>' : '')
         : '<span class="badge ok">すべて一致</span>';
     const ov = R.OVERALL_POINTS.hasOwnProperty(cl.overall) ? cl.overall : '';
     // 判定済み（報告書・保存・印刷で state.judgment がある）ならそれを、無いときだけ入力中の内容で評価して表示する
@@ -2005,25 +2123,25 @@
       return esc(f.label) + (e && e.name ? ' ✓ ' + esc(e.short || (Stamp ? Stamp.shortName(e.name) : e.name)) : ' 未押印');
     }).join('／');
     const row = function (id, label, val) { return '<div class="sum-row" id="' + id + '"><span class="sum-label">' + esc(label) + '</span><span class="sum-val">' + val + '</span></div>'; };
-    return '<div class="summary-card" id="sumApplicant"><h4>応募者</h4>' +
-        '<div class="sum-name">' + (a.name ? esc(a.name) + ' <span class="muted" style="font-size:13px;font-weight:600">さん</span>' : '<span class="muted">未入力</span>') + '</div>' +
+    // 小さいカード 3 枚（帯の高さ 44・題 15/700。docs/DESIGN.md 4-8）。採点の ○△× は和文のフォント（.ja）
+    const sm = function (id, title, body) { return '<section class="card sm" id="' + id + '" aria-labelledby="' + id + 'H"><header class="card-band"><h3 class="card-title" id="' + id + 'H">' + title + '</h3></header><div class="card-body">' + body + '</div></section>'; };
+    const mk = function (m, n) { return '<span class="ja">' + m + '</span>' + n; };
+    return sm('sumApplicant', '応募者',
+        '<div class="sum-name">' + (a.name ? esc(a.name) + '<small>さん</small>' : '<span class="muted">未入力</span>') + '</div>' +
         '<div class="sum-sub">' + esc([a.category, String(a.age || '').trim() ? String(a.age).trim() + '歳' : '', a.gender].filter(Boolean).join('・') || '区分・年齢未入力') +
           ' <span class="sum-attrs" id="sumAttrs">' + attrs + '</span></div>' +
-        row('sumDate', '面接日', esc(rv('date') || '—')) +
-        row('sumInterviewer', '担当', esc(rv('interviewer') || '—')) +
-      '</div>' +
-      '<div class="summary-card" id="sumChecklist"><h4>面接チェックリスト</h4>' +
+        row('sumDate', '面接日', '<span class="num">' + esc(rv('date') || '—') + '</span>') +
+        row('sumInterviewer', '担当', esc(rv('interviewer') || '—'))) +
+      sm('sumChecklist', '面接チェックリスト',
         row('sumMust', '必須条件', mustBd) +
-        row('sumMarks', '採点', esc('○' + c.good + ' △' + c.fair + ' ×' + c.poor + (c.blank ? '（未入力 ' + c.blank + '）' : '') + '・' + model.total + '/' + model.max + '点')) +
+        row('sumMarks', '採点', mk('○', c.good) + ' ' + mk('△', c.fair) + ' ' + mk('×', c.poor) + esc((c.blank ? '（未入力 ' + c.blank + '）' : '') + '・' + model.total + '/' + model.max + '点')) +
         personaSummaryRow(R.personaModel(def, cl), row) +
-        row('sumOverall', '総合判断', esc(ov ? overallLabelNow(ov) : '未入力')) +
-      '</div>' +
-      '<div class="summary-card" id="sumJudgment"><h4>報告書</h4>' +
+        row('sumOverall', '総合判断', esc(ov ? overallLabelNow(ov) : '未入力'))) +
+      sm('sumJudgment', '報告書',
         row('sumResult', '結果', live ? '<span class="badge lg ' + RESULT_TONE[live.result] + '">' + esc(live.title) + '</span>' : '—') +
         (stamps ? row('sumStamps', '押印', '<span class="sum-stamps">' + stamps + '</span>') : '') +
         decisionSummaryHtml() +
-        '<div class="sum-sub" id="sumSaved" style="margin-top:8px">' + esc(state.dirty ? '未保存の変更あり' : state.savedAt ? '最終保存 ' + U.fmtDateTime(state.savedAt) : '未保存') + '</div>' +
-      '</div>';
+        '<div class="sum-saved" id="sumSaved">' + esc(state.dirty ? '未保存の変更あり' : state.savedAt ? '最終保存 ' + U.fmtDateTime(state.savedAt) : '未保存') + '</div>');
   }
 
   function renderSummary() {
@@ -2248,7 +2366,7 @@
   }
   // トップバーの「🖨 報告書を印刷」（docs/SPEC-flow.md 15 章）: まだ回答が無い（面接の前・下見の）ときは、紙に書いて面接するための記入シートと取り違えていないか確かめる。
   //   ［キャンセル］なら印刷せず、準備の画面なら「🖨 記入シート（手書き用）」にフォーカス。回答があれば確かめずに印刷する（Ctrl+P は確かめない）
-  const TOP_PRINT_ASK = 'まだ面接の回答がありません。報告書（A4 の面接チェックリスト報告）を印刷しますか？\n\n紙に書いて面接するときは［キャンセル］を押して、準備の画面の「🖨 記入シート（手書き用）」を印刷してください。';
+  const TOP_PRINT_ASK = 'まだ面接の回答がありません。報告書（A4 の面接チェックリスト報告）を印刷しますか？\n\n紙に書いて面接するときは［キャンセル］を押して、準備の画面の「記入シート（手書き用）」を印刷してください。';
   function onTopPrint() {
     if (!ivHasAnswers() && !window.confirm(TOP_PRINT_ASK)) {
       const pb = $('#saPaperBtn');
@@ -2324,11 +2442,12 @@
     if (!lk || finalUnlockedKey === lockKey(lk)) return false;
     return fid === '' || (!!fid && S.finalLockFields(state.profile).indexOf(fid) >= 0);
   }
+  //   パスワードが要る欄（docs/DESIGN.md 3-14）: 鍵のアイコン＋1 行・パスワード（40）＋［確認］（副。紺の塗りは操作行の主ボタンだけ）・エラーの 1 行
   function finalLockRowHtml(where) {
     return '<div class="final-lock no-print" data-lock-for="' + esc(where) + '">' +
-      '<div class="final-lock-msg">🔒 最終承認にはパスワードが必要です</div>' +
+      '<p class="final-lock-msg">' + ico('lock') + '<span>最終承認にはパスワードが必要です</span></p>' +
       '<div class="final-lock-ctl"><input type="password" class="final-lock-pw" autocomplete="off" aria-label="最終承認のパスワード" placeholder="パスワード">' +
-      '<button type="button" class="btn sm primary" data-action="unlock-final">確認</button></div>' +
+      '<button type="button" class="btn" data-action="unlock-final">確認</button></div>' +
       '<div class="final-lock-err" role="alert"></div></div>';
   }
   // ［確認］・Enter: 正しければ解錠して報告書のカードを描き直す（パスワード欄が消え、担当者の選択と押印・合否のボタンが出る）。違えば 1 行出して何もしない
@@ -2336,7 +2455,7 @@
     const lk = stepLockNow();
     if (!row || !lk) return;
     const inp = row.querySelector('.final-lock-pw'), err = row.querySelector('.final-lock-err');
-    const fail = function (msg) { if (err) err.textContent = msg; if (inp) { inp.focus(); inp.select(); } };
+    const fail = function (msg) { if (err) err.innerHTML = ico('alert') + '<span>' + esc(msg) + '</span>'; if (inp) { inp.focus(); inp.select(); } };
     if (!inp || !inp.value) { fail('パスワードを入力してください'); return; }
     if (!Lock.verify(lk, inp.value)) { fail('パスワードが違います'); return; }
     finalUnlockedKey = lockKey(lk);
@@ -2366,13 +2485,14 @@
       const old = $('#pwDialog');
       if (old) old.remove();
       const back = document.createElement('div');
-      back.className = 'pw-dialog-back';
+      //   ダイアログ（docs/DESIGN.md 3-13）: 覆い・題（鍵のアイコン）・本文・パスワード・エラーの 1 行・右寄せの［キャンセル］（副）［確認］（主。覆いの上なので 1 画面に 1 つのまま）
+      back.className = 'dlg-back';
       back.id = 'pwDialog';
-      back.innerHTML = '<div class="pw-dialog" role="dialog" aria-modal="true" aria-labelledby="pwDialogH">' +
-        '<h3 id="pwDialogH">最終承認のパスワード</h3><p>' + esc(msg) + '</p>' +
+      back.innerHTML = '<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="pwDialogH">' +
+        '<h3 id="pwDialogH">' + ico('lock') + '<span>最終承認のパスワード</span></h3><p>' + esc(msg) + '</p>' +
         '<input type="password" id="pwDialogInput" autocomplete="off" aria-label="現在のパスワード" placeholder="現在のパスワード">' +
-        '<div class="pw-dialog-err" id="pwDialogErr" role="alert"></div>' +
-        '<div class="actions"><button type="button" class="btn" data-pw="cancel">キャンセル</button><button type="button" class="btn primary" data-pw="ok">確認</button></div></div>';
+        '<div class="dlg-err" id="pwDialogErr" role="alert"></div>' +
+        '<div class="dlg-actions"><button type="button" class="btn" data-pw="cancel">キャンセル</button><button type="button" class="btn primary" data-pw="ok">確認</button></div></div>';
       document.body.appendChild(back);
       const inp = $('#pwDialogInput'), err = $('#pwDialogErr');
       const onKey = function (e) {
@@ -2380,9 +2500,10 @@
         else if (e.key === 'Enter' && e.target === inp) { e.preventDefault(); tryOk(); }
       };
       const done = function (ok) { document.removeEventListener('keydown', onKey, true); back.remove(); resolve(ok); };
+      const fail = function (msg) { err.innerHTML = ico('alert') + '<span>' + esc(msg) + '</span>'; };
       const tryOk = function () {
-        if (!inp.value) { err.textContent = 'パスワードを入力してください'; inp.focus(); return; }
-        if (!Lock.verify(lk, inp.value)) { err.textContent = 'パスワードが違います'; inp.focus(); inp.select(); return; }
+        if (!inp.value) { fail('パスワードを入力してください'); inp.focus(); return; }
+        if (!Lock.verify(lk, inp.value)) { fail('パスワードが違います'); inp.focus(); inp.select(); return; }
         done(true);
       };
       back.addEventListener('click', function (e) {
@@ -2403,14 +2524,14 @@
     const ivField = (clDefNow().header || {}).interviewerField || '';
     const ivName = String(((state.checklist || {}).header || {}).interviewer || '').trim();
     const ivIdx = ivName ? managers.findIndex(function (m) { return m && m.name === ivName; }) : -1;
-    return '<div class="card" id="mgmtCard"><div class="card-head"><h2>応募者の管理（押印）</h2>' +
-      '<p>担当者を選んで押印してください。押印は保存ファイル（HTML）に入り、保存した HTML でも用紙の欄をクリックして押印できます。名簿は設定の「応募者の管理」で編集します。</p></div>' +
+    //   カード（帯: 押印・欄の数）の本文は 説明 → 押印の欄（2 列〔760px 以下は 1 列〕）。欄は 名前と説明 → 印の場所 → 押した人と日付 → 担当者の選択＋［押印］（副）→ 押した後は［取消］（ゴースト）。docs/DESIGN.md 3-14
+    return cardHtml({ id: 'mgmtCard', icon: 'stamp', title: '応募者の管理（押印）', small: fields.length + ' 欄' },
+      '<p class="card-note">担当者を選んで押印してください。押印は保存ファイル（HTML）に入り、保存した HTML でも用紙の欄をクリックして押印できます。名簿は設定の「応募者の管理」で編集します。</p>' +
       '<div class="stamp-row' + (fields.length === 2 ? ' cols-2' : '') + '">' + fields.map(function (fld, idx) {
         const e = state.management[fld.id];
         const svg = e && e.name ? Stamp.render(e, { size: 88, id: 'app' + idx }) : '';
         return '<div class="stamp-box" data-field-id="' + esc(fld.id) + '">' +
-          '<div class="stamp-label">' + esc(fld.label) + '</div>' +
-          '<div class="stamp-hint">' + esc(fld.hint || '') + '</div>' +
+          '<div class="stamp-head"><span class="stamp-label">' + esc(fld.label) + '</span>' + (fld.hint ? '<span class="stamp-hint">' + esc(fld.hint) + '</span>' : '') + '</div>' +
           '<div class="stamp-area">' + (svg || '<div class="stamp-empty">未押印</div>') + '</div>' +
           '<div class="stamp-meta">' + (e && e.name ? esc(e.name + (e.title ? '（' + e.title + '）' : '') + '　' + (e.date || '')) : '') + '</div>' +
           (finalNeedsPw(fld.id) ? finalLockRowHtml(fld.id) + '</div>' :
@@ -2422,11 +2543,11 @@
               }).join('') +
               (mg.allowFreeName !== false ? '<option value="__free">名簿にない担当者（手入力）</option>' : '') +
             '</select>' +
-            (mg.allowFreeName !== false ? '<input type="text" class="stamp-free hidden" placeholder="氏名（例：山田 太郎）">' : '') +
-            '<button type="button" class="btn sm primary" data-action="stamp">押印</button>' +
+            (mg.allowFreeName !== false ? '<input type="text" class="stamp-free hidden" placeholder="氏名（例：山田 太郎）" aria-label="' + esc(fld.label) + ' 担当者の氏名">' : '') +
+            '<button type="button" class="btn" data-action="stamp">' + ico('stamp') + '<span>押印</span></button>' +
             (e && e.name ? '<button type="button" class="btn sm ghost" data-action="unstamp">取消</button>' : '') +
           '</div></div>');
-      }).join('') + '</div></div>';
+      }).join('') + '</div>');
   }
 
   function rerenderManagementCard() {
@@ -2469,36 +2590,43 @@
     const useFree = !!selName && selIdx < 0 && allowFree;
     const note = decisionNoteText(d, state.judgment);
     const linked = dcfg.autoStampFinal && dcfg.stampField ? fields.find(function (f) { return f.id === dcfg.stampField; }) : null;
-    const btn = function (r, lbl, col) {
+    //   最終合否はセグメントボタン［採用（緑）｜不採用（赤）］（押下中は aria-pressed。スタンプのインクの色〔朱・藍〕はボタンに使わない。docs/DESIGN.md 3-14）
+    const btn = function (r, lbl) {
       const on = !!d && d.result === r;
-      return '<button type="button" class="btn sm decide-btn decide-' + r + (on ? ' on' : '') + '" data-action="decide" data-value="' + r + '" aria-pressed="' + (on ? 'true' : 'false') + '" style="--dec:' + esc(col) + '">' + esc(lbl) + '</button>';
+      return '<button type="button" class="seg-btn ' + r + (on ? ' active' : '') + '" data-action="decide" data-value="' + r + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(lbl) + '</button>';
     };
     const stamp = d
       ? Stamp.verdict({ label: decisionLabelOf(d, dcfg), date: d.date, color: d.result === 'hire' ? dcfg.hireColor : dcfg.rejectColor, size: 120, id: 'vdApp', sub: dcfg.sub })
       : '<div class="verdict-empty">未押印</div>';
     const meta = d ? decisionLabelOf(d, dcfg) + '・' + d.by.name + (d.by.title ? '（' + d.by.title + '）' : '') + '　' + (d.date || '') : 'まだ押されていません';
-    return '<div class="card decision-card ' + (d ? 'is-' + d.result : 'is-none') + '" id="decisionCard" data-result="' + (d ? d.result : '') + '">' +
-      '<div class="card-head"><h2>' + esc(dcfg.label) + '</h2><p>' + (dcfg.hint ? esc(dcfg.hint) + '。' : '') +
-        'アプリの判定（推奨）とは別に、最終確認者が「' + esc(dcfg.hireLabel) + '」「' + esc(dcfg.rejectLabel) + '」を決めて押します。保存した HTML 上でも押せます。</p></div>' +
+    const locked = finalNeedsPw('');
+    //   カード（帯: 最終合否・採用／不採用。押した後は帯の右端に［取消］）の本文: 説明 → 左にスタンプ・右に状態の 1 行と項目の行 2 つ（担当者＋選択／最終合否＋［採用｜不採用］）。
+    //   パスワードが要るときは項目の行の代わりにパスワードの欄
+    return cardHtml({ id: 'decisionCard', cls: 'decision-card ' + (d ? 'is-' + d.result : 'is-none'), attrs: ' data-result="' + (d ? d.result : '') + '"', icon: 'check', title: esc(dcfg.label),
+      small: esc(dcfg.hireLabel + '／' + dcfg.rejectLabel), actions: d && !locked ? '<button type="button" class="btn sm ghost no-print" data-action="undecide">取消</button>' : '' },
+      '<p class="card-note">' + (dcfg.hint ? esc(dcfg.hint) + '。' : '') +
+        'アプリの判定（推奨）とは別に、最終確認者が「' + esc(dcfg.hireLabel) + '」「' + esc(dcfg.rejectLabel) + '」を決めて押します。保存した HTML 上でも押せます。</p>' +
       '<div class="decision-body">' +
         '<div class="decision-stamp" id="decisionStamp">' + stamp + '</div>' +
         '<div class="decision-main">' +
-          '<div class="decision-meta" id="decisionMeta">' + esc(meta) + '</div>' +
-          (note ? '<div class="decision-note" id="decisionNote">' + esc(note) + '</div>' : '') +
-          (finalNeedsPw('') ? finalLockRowHtml('decision') :
-          '<div class="decision-ctl no-print">' +
-            '<select id="decisionManager" data-decision-select aria-label="' + esc(dcfg.label) + ' 担当者"><option value="">担当者を選択</option>' +
-              managers.map(function (m, i) { return '<option value="' + i + '"' + (i === selIdx ? ' selected' : '') + '>' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
-              (allowFree ? '<option value="__free"' + (useFree ? ' selected' : '') + '>名簿にない担当者（手入力）</option>' : '') +
-            '</select>' +
-            (allowFree ? '<input type="text" id="decisionFree" class="stamp-free' + (useFree ? '' : ' hidden') + '" placeholder="氏名（例：山田 太郎）" value="' + (useFree ? esc(selName) : '') + '">' : '') +
-            btn('hire', dcfg.hireLabel, dcfg.hireColor) + btn('reject', dcfg.rejectLabel, dcfg.rejectColor) +
-            (d ? '<button type="button" class="btn sm ghost" data-action="undecide">取消</button>' : '') +
+          '<p class="decision-meta" id="decisionMeta">' + esc(meta) + '</p>' +
+          (note ? '<div class="alert warn" id="decisionNote">' + ico('alert') + '<span>' + esc(note) + '</span></div>' : '') +
+          (locked ? finalLockRowHtml('decision') :
+          '<div class="rows decision-ctl no-print">' +
+            '<div class="row"><label class="row-label" for="decisionManager">担当者</label><div class="row-ctl">' +
+              '<select id="decisionManager" data-decision-select><option value="">担当者を選択</option>' +
+                managers.map(function (m, i) { return '<option value="' + i + '"' + (i === selIdx ? ' selected' : '') + '>' + esc(m.name + (m.title ? '（' + m.title + '）' : '')) + '</option>'; }).join('') +
+                (allowFree ? '<option value="__free"' + (useFree ? ' selected' : '') + '>名簿にない担当者（手入力）</option>' : '') +
+              '</select>' +
+              (allowFree ? '<input type="text" id="decisionFree" class="stamp-free' + (useFree ? '' : ' hidden') + '" placeholder="氏名（例：山田 太郎）" aria-label="' + esc(dcfg.label) + ' 担当者の氏名" value="' + (useFree ? esc(selName) : '') + '">' : '') +
+            '</div></div>' +
+            //   連動の案内は「採用」「不採用」のボタンを出しているときだけ（パスワード欄のときはボタンが無い）
+            '<div class="row"><div class="row-label">' + esc(dcfg.label) +
+              (linked ? '<span class="row-hint hint">押すと、押印欄「' + esc(linked.label) + '」が未押印なら同じ担当者の印も押します</span>' : '') + '</div>' +
+              '<div class="row-ctl"><div class="seg" role="group" aria-label="' + esc(dcfg.label) + '">' + btn('hire', dcfg.hireLabel) + btn('reject', dcfg.rejectLabel) + '</div></div></div>' +
           '</div>') +
-          // 連動の案内は「採用」「不採用」のボタンを出しているときだけ（パスワード欄のときはボタンが無い）
-          (linked && !finalNeedsPw('') ? '<div class="hint no-print">「' + esc(dcfg.hireLabel) + '」「' + esc(dcfg.rejectLabel) + '」を押すと、押印欄「' + esc(linked.label) + '」が未押印なら同じ担当者の印も押します。</div>' : '') +
         '</div>' +
-      '</div></div>';
+      '</div>');
   }
 
   function rerenderDecisionCard() {
@@ -2554,7 +2682,8 @@
     const dcfg = decisionCfg();
     const d = dcfg.enabled ? S.normalizeDecision(state.decision) : null;
     if (!d) return '';
-    return '<div class="sum-row" id="sumDecision" style="margin-top:8px"><span class="sum-label">' + esc(dcfg.label) + '</span><span class="sum-val"><span class="badge dec-' + d.result + '">' +
+    //   採用＝緑・不採用＝赤のバッジ（スタンプのインクの色は使わない）
+    return '<div class="sum-row" id="sumDecision"><span class="sum-label">' + esc(dcfg.label) + '</span><span class="sum-val"><span class="badge ' + (d.result === 'hire' ? 'ok' : 'danger') + ' dec-' + d.result + '">' +
       esc(decisionLabelOf(d, dcfg) + '・' + (d.by.short || Stamp.shortName(d.by.name))) + '</span></span></div>';
   }
 
@@ -2566,14 +2695,15 @@
     const capName = function (c) { return c === 'reject' ? resultTitle('reject') : c === 'review' ? resultTitle('review') + 'まで' : '下げない'; };
     const keep = R.num(pd.keepPct, 70), rej = R.num(pd.rejectBelowPct, 40);
     const labels = ps ? ps.scaleLabels : ['不採用レベル', 'やや不安', '普通', '良い', 'とても良い'];
-    return '<div class="card" id="helpPersona"><div class="card-head"><h3>人物像（1〜5 点）と記入シート</h3></div><ol class="list-plain">' +
+    const n = (ps ? 4 : 5);
+    return helpCard('helpPersona', 'user', '人物像（1〜5 点）と記入シート', n + ' 項目', '<ol class="help-list">' +
       (ps ? '' : '<li id="helpPersonaOff"><b>いまの設定では人物像を使いません</b>（設定「面接チェックリスト」の「人物像を使う」で ON にできます）。評価の画面・報告書・記入シートに人物像は出ず、判定にも使いません。</li>') +
-      '<li><b>人物像</b>：評価の画面の総評で、' + (ps ? ps.items.length + ' 項目（' + esc(ps.items.map(function (it) { return it.name; }).join('、')) + '）' : '接客の項目') + 'に 1〜5 点を付けます（' +
+      '<li><b>人物像</b>：評価の画面の人物像のカードで、' + (ps ? ps.items.length + ' 項目（' + esc(ps.items.map(function (it) { return it.name; }).join('、')) + '）' : '接客の項目') + 'に 1〜5 点を付けます（' +
         esc(labels.map(function (l, i) { return (i + 1) + ' ' + l; }).join('・')) + '）。' + (ps ? '満点は ' + ps.max + ' 点です。' : '') + 'クリックのほか、数字キー 1〜5 でも入力できます（次の行へ進みます）。</li>' +
       '<li><b>判定への反映</b>：得点率 ' + keep + '% 以上はそのまま・' + rej + '% 以上 ' + keep + '% 未満は' + esc(resultTitle('review')) + 'まで・' + rej + '% 未満は' + esc(resultTitle('reject')) + '。1 点の項目が 1 つでもあれば' +
         esc(capName(pd.onePointResult || 'review')) + '、未入力があれば' + esc(capName(pd.unscoredResult || 'review')) + '（下げる方向だけ。上げることはありません。設定の「面接チェックリスト」で変更できます）。</li>' +
-      '<li><b>記入シート（手書き用）</b>：準備の画面の「🖨 記入シート（手書き用）」（「面接を始める →」の左）で A4 1 枚を印刷できます（面接 → 評価の画面と同じ並び・質問ごとに答えの線。準備に入力した氏名などは印字）。紙に書いて面接し、終わったらアプリに転記します。</li>' +
-      '<li>確認点「最低限の話し方、敬語が可能か」は人物像の「言葉遣い・説明のわかりやすさ」と重なるため、既定の台本から外しました（台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます）。</li></ol></div>';
+      '<li><b>記入シート（手書き用）</b>：準備の画面の「記入シート（手書き用）」（「面接を始める →」の左）で A4 1 枚を印刷できます（面接 → 評価の画面と同じ並び・質問ごとに答えの線。準備に入力した氏名などは印字）。紙に書いて面接し、終わったらアプリに転記します。</li>' +
+      '<li>確認点「最低限の話し方、敬語が可能か」は人物像の「言葉遣い・説明のわかりやすさ」と重なるため、既定の台本から外しました（台本 1 枚目の前書きにある話し方・敬語は、この人物像の項目で付けます）。</li></ol>');
   }
   // 人物像で結果が下がる条件の文（文字列。HTML にするときは esc）。上長最終判断要まで下げる条件と不採用推奨にする条件を、1 点・未入力の設定（onePointResult・unscoredResult）と境界から組み立てる。
   //   使い方の「結果（推奨）の決まり方」と評価の画面の総評の説明で共用（既定: 「人物像（1〜5 点）の合計が低い・1 点の項目がある・未入力があると、結果を上長最終判断要（合計が 40% 未満なら不採用推奨）まで下げます」）
@@ -2603,48 +2733,55 @@
     const sName = function (x) { return x ? x.noMark + ' ' + x.title : ''; };
     // 読み終えたら元の画面へ（サイドバーの手順は使い方では隠れるので、上と下にボタン。docs/SPEC-flow.md 14 章）
     const cur = STEPS.find(function (x) { return x.n === state.step; }) || STEPS[0];
-    const back = function (where) { return '<div class="help-back" data-where="' + where + '"><button type="button" class="btn" data-action="back-to-judge">' + esc('← ' + cur.label + 'の画面に戻る') + '</button></div>'; };
-    return back('top') + '<div class="card"><div class="card-head"><h2>' + esc(m.appTitle) + ' の使い方</h2><p>面接台本のとおりに 準備 → 面接 → 評価 → 報告書 の 4 つの手順で進めると、A4 1 枚の報告書ができます。</p></div>' +
-      '<div class="help-steps">' +
-        '<div class="help-step"><span class="n">1</span><h3>準備</h3><p>応募者の名前（必須）・年齢・性別・区分、面接日・面接担当者・応募した求人、タクシー可否とメモを入れて「面接を始める」。紙に書いて面接するときは「🖨 記入シート（手書き用）」を印刷します（上の「🖨 報告書を印刷」は報告書の用紙です）。</p></div>' +
-        '<div class="help-step"><span class="n">2</span><h3>面接</h3><p>台本の ①〜⑤ を 1 段階ずつ表示します。上から 確かめること（必須条件は［一致］［不一致］）・話すこと（読み上げたら［説明した］）・聞くこと（答えを短くメモ）。［次へ］で次の段階へ。</p></div>' +
-        '<div class="help-step"><span class="n">3</span><h3>評価</h3><p>面接のあとに、段階ごとのメモを見ながら 確認点の ○△×・' + (personaOnNow() ? '人物像（1〜5 点）・' : '') + '総合判断（採用／保留／不採用）・面接所見を付けます。上の「いまの結果」で推奨と未入力が分かります。</p></div>' +
-        '<div class="help-step"><span class="n">4</span><h3>報告書</h3><p>A4 1 枚の用紙を確かめ、「面接対応者」に押印して「報告書を保存（HTML）」。最終確認と最終合否は副支配人が保存した HTML で押します（最終承認のパスワードがあるときはその入力が必要です）。</p></div>' +
-      '</div></div>' +
-      '<div class="card" id="helpInterview"><div class="card-head"><h3>面接の進め方（1 分で読めます）</h3></div><ol class="list-plain">' +
+    const back = function (where) { return '<div class="help-back" data-where="' + where + '"><button type="button" class="btn" data-action="back-to-judge">' + ico('arrow-left') + sym('← ') + '<span>' + esc(cur.label + 'の画面に戻る') + '</span></button></div>'; };
+    //   4 つの手順は小さい箱（地 --surface-2・番号の丸）。手順の番号はリストの番号なので読み上げない（docs/DESIGN.md 4-7）
+    const step = function (n, name, text) { return '<li class="help-step"><h3>' + nbHtml(n, '', '', true) + '<span>' + name + '</span></h3><p>' + text + '</p></li>'; };
+    //   ページは 920 の 1 列（.page.reading）。カードの帯は アイコン＋題＋数
+    return '<div class="page reading"><div class="judge-layout"><div class="work">' + back('top') +
+      helpCard('', 'book', esc(m.appTitle) + ' の使い方', '4 つの手順',
+        '<p class="card-note">面接台本のとおりに 準備 → 面接 → 評価 → 報告書 の 4 つの手順で進めると、A4 1 枚の報告書ができます。</p>' +
+        '<ol class="help-steps">' +
+          step(1, '準備', '応募者の名前（必須）・年齢・性別・区分、面接日・面接担当者・応募した求人、タクシー可否とメモを入れて「面接を始める」。紙に書いて面接するときは「記入シート（手書き用）」を印刷します（上の「報告書を印刷」は報告書の用紙です）。') +
+          step(2, '面接', '台本の ①〜⑤ を 1 段階ずつ表示します。上から 話すこと（読み上げたら［説明した］）・聞くこと（答えを短くメモ）・確かめること（必須条件は［一致］［不一致］）。［次へ］で次の段階へ。') +
+          step(3, '評価', '面接のあとに、段階ごとのメモを見ながら 確認点の <span class="ja">○△×</span>・' + (personaOnNow() ? '人物像（1〜5 点）・' : '') + '総合判断（採用／保留／不採用）・面接所見を付けます。上の「いまの結果」で推奨と未入力が分かります。') +
+          step(4, '報告書', 'A4 1 枚の用紙を確かめ、「面接対応者」に押印して「報告書を保存（HTML）」。最終確認と最終合否は副支配人が保存した HTML で押します（最終承認のパスワードがあるときはその入力が必要です）。') +
+        '</ol>') +
+      helpCard('helpInterview', 'say', '面接の進め方', '1 分で読めます', '<ol class="help-list">' +
         '<li>「面接を始める」でタイマーが動き、' + esc(first ? sName(first) + 'から ' : '') + '1 段階ずつ表示します（回答を入れる前なら、下見して準備に戻っても「面接を始める」で 0 から数え直します）。</li>' +
-        '<li>1 つの段階は上から順に進めます：確かめること → 話すこと → 聞くこと（2 列の画面では左の列のあと右の列）。</li>' +
+        '<li>1 つの段階は上から順に進めます：話すこと → 聞くこと → 確かめること（どの段階も同じ順番。一致／不一致や選択のボタンはいつも最後のカードにあります）。</li>' +
         '<li>話すことは読み上げたら［説明した］を 1 回。言わなかった項目があるときだけ「一部説明しなかった」から外します（※短期求人のみの項目は、求人が短期なら出し、通常求人では出しません。求人が未選択なら「短期のみ」の印つきで出し、［説明した］の対象にしません）。</li>' +
         '<li>聞くことは質問の下に答えを短くメモします（Tab で次の質問のメモへ）。○△× などの評価は面接のあとでまとめて付けます。</li>' +
         '<li>上の帯に、この段階の経過時間と目安（過ぎると色が変わります。止まりません）・合計が出ます。段階の番号を押すとその段階へ移れます。入力した段階には ✓（必須条件が未確認なら「未確認」）が付きます。</li>' +
         '<li>必須条件が 1 つでも［不一致］になると赤い案内が出ます。' + esc(jump ? '追加で確認して解消しなければ ' + sName(jump) + 'へ進み、' + (jumpMin ? jumpMin + 'で' : '') + '終えます。' : '追加で確認して解消しなければ面接を終えます。') + '</li>' +
         '<li>' + esc(last && lastNotify ? last.noMark + ' の最後に合否連絡を伝えて［伝えた］を押し、「面接を終えて評価へ」。' : '最後の段階で「面接を終えて評価へ」。') + 'Ctrl＋Enter でも次へ進めます。</li>' +
-        '<li>1 対 1 でない面接は記入シートに書き、終わったら面接の画面に転記してください。転記にかかった時間は面接時間ではないので、評価の画面の「面接時間」に記入シートの分を入れます（目安から大きく外れていると「面接時間を確かめてください」と出ます）。</li></ol></div>' +
-      '<div class="card" id="helpScriptFlow"><div class="card-head"><h3>報告書（HTML）の流れ</h3></div><ol class="list-plain">' +
+        '<li>1 対 1 でない面接は記入シートに書き、終わったら面接の画面に転記してください。転記にかかった時間は面接時間ではないので、評価の画面の「面接時間」に記入シートの分を入れます（目安から大きく外れていると「面接時間を確かめてください」と出ます）。</li></ol>') +
+      helpCard('helpScriptFlow', 'report', '報告書（HTML）の流れ', '4 項目', '<ol class="help-list">' +
         '<li>面接者が「面接対応者」に押印して保存し、社内スレッドに添付します。</li>' +
         '<li>副支配人がファイルをブラウザで開きます（A4 縦の用紙 1 枚。そのまま印刷しても同じ 1 枚です。「…」で切れたメモはクリックすると全文を表示）。</li>' +
         '<li><b>最終合否</b>：用紙の「最終合否」の欄をクリックし（最終承認のパスワードがあるときは、最初にパスワードを入力します）、担当者を選んで「採用」または「不採用」を押します（最終確認の印も自動で押されます）。押印欄もクリックで押せます。右下の「押印を保存」で再出力します（ファイル名の末尾に _採用 / _不採用）。</li>' +
-        '<li>再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。</li></ol></div>' +
+        '<li>再出力したファイルはアプリの「読み込み」で押印・合否ごと引き継げます。</li></ol>') +
       helpPersonaHtml() +
-      '<div class="card"><div class="card-head"><h3>結果（推奨）の決まり方</h3></div><ul class="list-plain">' +
+      helpCard('', 'check', '結果（推奨）の決まり方', '4 項目', '<ul class="help-list dots">' +
         '<li>必須条件に不一致がある → 不採用推奨（設定で上長最終判断要に変更可）。</li>' +
         '<li>それ以外は面接者の総合判断のとおり（採用 → 採用推奨、保留 → 上長最終判断要、不採用 → 不採用推奨）。総合判断が未入力なら上長最終判断要です。</li>' +
         helpPersonaRuleLi() +
-        '<li>確認点の ○△× は面接評価（点数）として報告書に載ります。最終合否（採用／不採用のスタンプ）はこの推奨とは別の、最終確認者の決定です。</li></ul></div>' +
-      '<div class="card"><div class="card-head"><h3>保存と読み込み</h3></div><ul class="list-plain">' +
+        '<li>確認点の ○△× は面接評価（点数）として報告書に載ります。最終合否（採用／不採用のスタンプ）はこの推奨とは別の、最終確認者の決定です。</li></ul>') +
+      helpCard('', 'download', '保存と読み込み', '2 項目', '<ul class="help-list dots">' +
         '<li>応募者ごとに 1 ファイル（HTML）。途中で保存しても、読み込むと続きの段階から再開できます（面接の途中なら同じ段階から）。</li>' +
-        '<li>応募者データはこの端末のブラウザには残りません（保存したファイルのみが記録です）。</li></ul></div>' +
-      '<div class="card"><div class="card-head"><h3>設定（劇場プロファイル）</h3></div><ul class="list-plain">' +
+        '<li>応募者データはこの端末のブラウザには残りません（保存したファイルのみが記録です）。</li></ul>') +
+      helpCard('', 'settings', '設定（劇場プロファイル）', '2 項目', '<ul class="help-list dots">' +
         '<li>劇場情報・応募者の区分と性別・面接チェックリスト（台本の文言・項目・確認点・人物像）・押印欄と担当者名簿・最終合否を画面から変更できます。台本を変えると面接・評価の画面と記入シートにそのまま反映されます。</li>' +
-        '<li>設定は端末のブラウザに保存されます。他の劇場・端末へ展開するときは JSON を書き出して読み込んでください。</li></ul></div>' +
-      '<div class="card" id="helpFinalLock"><div class="card-head"><h3>最終承認のパスワード</h3></div><ul class="list-plain">' +
+        '<li>設定は端末のブラウザに保存されます。他の劇場・端末へ展開するときは JSON を書き出して読み込んでください。</li></ul>') +
+      helpCard('helpFinalLock', 'lock', '最終承認のパスワード', '5 項目', '<ul class="help-list dots">' +
         '<li>設定の「応募者の管理（押印）」でパスワードを決めると、最終確認の押印・取消と最終合否（採用／不採用）の決定・取消の前に求めます（報告書の画面と保存した HTML の両方。面接対応者の押印には要りません）。一度正しく入れると、そのページを閉じる（読み込み直す）まで続けて押せます。</li>' +
         '<li>誤操作を防ぐための鍵です。HTML をテキストで開いて書き換える人までは防げません。</li>' +
         '<li>パスワードそのものは保存しません（照合用の値〔ハッシュ〕だけを設定と保存した HTML に入れます）。保存した HTML は保存した時点のパスワードで照合します。</li>' +
         '<li>変更・解除・JSON の読み込み・初期化でパスワードが変わるときは、現在のパスワードが必要です。ロゴ・名簿入りの版（ローカル版）の初期パスワードは管理者に確認してください（公開版には初期パスワードはありません）。</li>' +
-        '<li>最終確認の欄は「押印欄と連動」を「連動しない」や別の欄に変えてもパスワードの対象のままです（連動する欄もパスワードの対象）。パスワードがあるときに「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えて保存（JSON の読み込みを含む）するには、現在のパスワードが必要です。押印欄の説明・名簿だけの変更には要りません。</li></ul></div>' +
-      back('bottom') + '<div class="view-footer">' + esc(m.footer) + '</div>';
+        '<li>最終確認の欄は「押印欄と連動」を「連動しない」や別の欄に変えてもパスワードの対象のままです（連動する欄もパスワードの対象）。パスワードがあるときに「押印欄と連動」・最終合否のスタンプの ON/OFF・押印欄の構成・押印欄の表示名を変えて保存（JSON の読み込みを含む）するには、現在のパスワードが必要です。押印欄の説明・名簿だけの変更には要りません。</li></ul>') +
+      back('bottom') + '<div class="view-footer">' + esc(m.footer) + '</div></div></div></div>';
   }
+  // 使い方のカード（帯: アイコン＋題＋数）
+  function helpCard(id, icon, title, small, body) { return cardHtml({ id: id, icon: icon, title: title, small: small }, body); }
 
   // =====================================================================
   // トースト

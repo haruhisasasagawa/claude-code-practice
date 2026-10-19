@@ -228,7 +228,7 @@
     h.posting.options = popts.length ? popts.map(function (x) { x.label = asStr(x.label); return x; }) : U.deepClone(bh.posting.options);
     h.interviewerField = strOr(h.interviewerField, bh.interviewerField);
 
-    // セクション → ブロック → 項目
+    // 段階（セクション）→ ブロック → 項目
     const seen = {};
     const uniq = function (id) {
       let x = id;
@@ -383,7 +383,7 @@
     const TYPE_NAMES = { must: '必須条件', fields: '記入欄', explain: '説明', question: '質問', rating: '確認点', notify: '合否連絡', note: '注記' };
     const P0 = '面接チェックリスト';
     const secs = Array.isArray(cl.sections) ? cl.sections.filter(function (s) { return U.isObj(s); }) : [];
-    if (!secs.length) errors.push(P0 + 'のセクションがありません。');
+    if (!secs.length) errors.push(P0 + 'の段階がありません。');
     const seen = {};
     const idCheck = function (id, where) {
       if (typeof id !== 'string' || !CL_ID_RE.test(id)) { errors.push(P0 + ' ' + where + 'の id「' + asStr(id) + '」が正しくありません（英字で始まる英数字・_・-）。'); return; }
@@ -393,7 +393,7 @@
     let mustN = 0, ratingN = 0;
     secs.forEach(function (sec, i) {
       const sn = circ(i + 1) + ' ' + (asStr(sec.title).trim() || '（名前なし）');
-      if (!asStr(sec.title).trim()) errors.push(P0 + 'の' + circ(i + 1) + 'のセクション名が空です。');
+      if (!asStr(sec.title).trim()) errors.push(P0 + 'の' + circ(i + 1) + 'の段階の名前が空です。');
       if (!intIn(sec.minutes, 0, 60)) errors.push(P0 + ' ' + sn + 'の目安時間は0〜60分の整数にしてください。');
       if (!intIn(sec.page, 1)) errors.push(P0 + ' ' + sn + 'のページは1以上の整数にしてください。');
       idCheck(sec.id, sn);
@@ -749,7 +749,7 @@
       'html,body{margin:0;padding:0}',
       'body{background:#e6e9ee;color:#111;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}',
       'body>.a4{margin:24px auto}',
-      '.a4-foot{width:210mm;max-width:calc(100% - 32px);margin:0 auto 24px;font-size:11px;line-height:1.5;color:#5b6675;text-align:center}',
+      '.a4-foot{width:210mm;max-width:calc(100% - 32px);margin:0 auto 24px;font-size:11px;line-height:1.5;color:#525d70;text-align:center}',
       '@media screen{',
       //   狭い画面の縮小は zoom ではなく transform:scale（描画だけを縮める。レイアウト＝行の高さ・折り返しは計測したときの原寸のまま。docs/SPEC-a4.md 12 章 F7）。
       //   --a4-zoom が無ければ transform は無効（none）。用紙の箱は原寸のまま流れに残るので、余白で縮小後の大きさに合わせる
@@ -757,40 +757,40 @@
       '.a4{transform:scale(var(--a4-zoom));transform-origin:0 0}',
       'body>.a4{margin:calc(24px * var(--a4-zoom,1)) 0 calc(24px * var(--a4-zoom,1) - 297mm * (1 - var(--a4-zoom,1))) max(0px,calc((100% - 210mm * var(--a4-zoom,1)) / 2))}',
       'body.a4-live .a4 [data-a4-t]{cursor:pointer}',
-      'body.a4-live .a4 [data-a4-t="stamp"]:hover,body.a4-live .a4 [data-a4-t="decision"]:hover,body.a4-live .a4 [aria-expanded="true"]{outline:2px solid rgba(31,95,191,.4);outline-offset:1px}',
-      'body.a4-live .a4 [data-a4-t]:focus-visible{outline:2px solid #1f5fbf;outline-offset:1px}',
+      'body.a4-live .a4 [data-a4-t="stamp"]:hover,body.a4-live .a4 [data-a4-t="decision"]:hover,body.a4-live .a4 [aria-expanded="true"]{outline:2px solid rgba(59,87,145,.4);outline-offset:1px}',
+      'body.a4-live .a4 [data-a4-t]:focus-visible{outline:2px solid #3b5791;outline-offset:1px}',
       'body.a4-live .a4 [data-a4-t="stamp"]:hover::after{content:"クリックで押印"}',
       'body.a4-live .a4 [data-a4-t="decision"]:hover::after{content:"クリックで合否を押す"}',
-      'body.a4-live .a4 [data-a4-t="stamp"]:hover::after,body.a4-live .a4 [data-a4-t="decision"]:hover::after{position:absolute;right:3px;bottom:2px;padding:0 4px;border-radius:3px;background:#1f5fbf;color:#fff;font-size:8px;font-weight:700;line-height:1.5;white-space:nowrap;pointer-events:none}',
+      'body.a4-live .a4 [data-a4-t="stamp"]:hover::after,body.a4-live .a4 [data-a4-t="decision"]:hover::after{position:absolute;right:3px;bottom:2px;padding:0 4px;border-radius:3px;background:#3b5791;color:#fff;font-size:8px;font-weight:700;line-height:1.5;white-space:nowrap;pointer-events:none}',
       // 最終合否の欄は小さい（未押印で 86×58px）ので、案内は欄の上の辺の外に 1 行で出す（「未押印」・押した日付を隠さない）
       'body.a4-live .a4 [data-a4-t="decision"]:hover::after{right:-1px;bottom:100%;margin-bottom:3px}',
       'body.a4-live .a4 [data-a4-t="memo"]:hover,body.a4-live .a4 [data-a4-t="memos"]:hover{color:#1f4e8c;text-decoration:underline dotted}',
       '}',
       // 窓（ポップオーバー。body の末尾にスクリプトが作る）
-      '.pop{position:absolute;z-index:30;width:260px;max-width:calc(100vw - 16px);padding:10px 12px;background:#fff;color:#1a2233;border:1px solid #c9d2dd;border-radius:8px;box-shadow:0 8px 24px rgba(16,24,40,.18);font-size:13px;line-height:1.5}',
+      '.pop{position:absolute;z-index:30;width:260px;max-width:calc(100vw - 16px);padding:10px 12px;background:#fff;color:#161e2e;border:1px solid #c9d2dd;border-radius:8px;box-shadow:0 12px 32px rgba(16,24,40,.18);font-size:13px;line-height:1.5}',
       // メモの窓は高さ 60vh まで。本文（.pop-b）だけをスクロールし、見出しと［閉じる］は常に見せる
       '.pop[data-kind="memo"],.pop[data-kind="memos"]{width:380px;max-height:60vh;display:flex;flex-direction:column}',
       '.pop[data-kind="memo"] .pop-b,.pop[data-kind="memos"] .pop-b{flex:1 1 auto;min-height:0;overflow:auto}',
-      '.pop-h{font-weight:800;font-size:13.5px}.pop-sub,.pop-ref{font-size:11.5px;color:#5b6675}',
+      '.pop-h{font-weight:800;font-size:13.5px}.pop-sub,.pop-ref{font-size:11.5px;color:#525d70}',
       '.pop-b{display:flex;flex-direction:column;gap:6px;margin:8px 0}',
-      '.pop-l{display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:700;color:#5b6675}',
-      '.pop select,.pop input{font:inherit;font-size:13px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;background:#fff;color:#1a2233;width:100%}',
+      '.pop-l{display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:700;color:#525d70}',
+      '.pop select,.pop input{font:inherit;font-size:13px;padding:5px 8px;border:1px solid #c7d0db;border-radius:6px;background:#fff;color:#161e2e;width:100%}',
       '.pop input[hidden]{display:none}',
-      '.pop-note{font-size:12px;color:#9a5b00;background:#fdf1dc;border:1px solid #f3cf8a;border-radius:6px;padding:3px 8px}',
+      '.pop-note{font-size:12px;color:#7a4106;background:#fdf4e3;border:1px solid #efcf94;border-radius:6px;padding:3px 8px}',
       '.pop-err{font-size:12px;font-weight:700;color:#b42318}.pop-err:empty{display:none}',
       // 最終承認のパスワード（ロックがあり、このページでまだ解錠していないとき。docs/SPEC-a4.md 11 章）
-      '.pop-lock{font-size:12px;font-weight:700;color:#5b6675}',
+      '.pop-lock{font-size:12px;font-weight:700;color:#525d70}',
       '.pop-text{white-space:pre-wrap;overflow-wrap:anywhere}',
-      '.pop-memos{margin:0}.pop-memos dt{font-size:11.5px;font-weight:700;color:#5b6675;margin-top:6px}.pop-memos dt:first-child{margin-top:0}.pop-memos dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}',
+      '.pop-memos{margin:0}.pop-memos dt{font-size:11.5px;font-weight:700;color:#525d70;margin-top:6px}.pop-memos dt:first-child{margin-top:0}.pop-memos dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}',
       '.pop-f{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}',
-      '.pop-f button,.savebar-btn{font:inherit;font-size:12.5px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid #c7d0db;background:#fff;color:#1a2233;cursor:pointer}',
-      '.pop-f button.primary,.savebar-btn{background:#1f5fbf;border-color:#1f5fbf;color:#fff}',
+      '.pop-f button,.savebar-btn{font:inherit;font-size:13px;font-weight:700;padding:5px 12px;border-radius:8px;border:1px solid #c7d0db;background:#fff;color:#161e2e;cursor:pointer}',
+      '.pop-f button.primary,.savebar-btn{background:#223a70;border-color:#223a70;color:#fff}',
       '.pop-dec{color:var(--dec) !important;border:1.5px solid var(--dec) !important}.pop-hire{--dec:var(--dec-hire,#c8232c)}.pop-reject{--dec:var(--dec-reject,#1f4e8c)}',
       '.pop-dec:hover,.pop-dec.on{background:var(--dec) !important;color:#fff !important}',
       // 保存バー（右下。押印・合否を変えたときだけスクリプトが作る）。出ているあいだは body.a4-sb で下に余白（バーの高さ＋12px。--a4-sbh はスクリプトが置く）を足し、
       //   いちばん下までスクロールすれば用紙と注記がバーに隠れない（画面だけ。印刷の 1 ページに影響させない）。保存後は［×］で閉じられる
-      '.savebar{position:fixed;z-index:40;right:12px;bottom:12px;max-width:calc(100vw - 24px);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:8px;background:#fdf1dc;border:1px solid #f3cf8a;box-shadow:0 4px 14px rgba(16,24,40,.15);font-size:13px}',
-      '.savebar-x{font:inherit;font-size:16px;line-height:1;padding:3px 6px;border:0;border-radius:6px;background:transparent;color:#5b6675;cursor:pointer}.savebar-x:hover{background:rgba(0,0,0,.06)}',
+      '.savebar{position:fixed;z-index:40;right:12px;bottom:12px;max-width:calc(100vw - 24px);display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:8px;background:#fdf4e3;border:1px solid #efcf94;box-shadow:0 4px 14px rgba(16,24,40,.15);font-size:13px}',
+      '.savebar-x{font:inherit;font-size:16px;line-height:1;padding:3px 6px;border:0;border-radius:6px;background:transparent;color:#525d70;cursor:pointer}.savebar-x:hover{background:rgba(0,0,0,.06)}',
       '@media screen{body.a4-sb{padding-bottom:calc(var(--a4-sbh,49px) + 12px)}}',
       '@page{size:A4 portrait;margin:0}',
       '@media print{',
@@ -1209,7 +1209,7 @@
       // A4 縦の用紙（210×297mm・内側の余白 上下 8mm／左右 10mm＝内寸 190×281mm）。はみ出しは切る（用紙が伸びて 2 ページにならない）
       '.a4{display:block;box-sizing:border-box;width:210mm;height:297mm;padding:8mm 10mm;margin:0 auto;background:#fff;color:#111;color-scheme:light;overflow:hidden;' +
         'box-shadow:0 1px 3px rgba(16,24,40,.12),0 12px 32px rgba(16,24,40,.16)}',
-      '.cl-sheet{color:#1a2233;font-size:13px;line-height:1.5}',
+      '.cl-sheet{color:#161e2e;font-size:13px;line-height:1.5}',
       '.cl-sheet *{box-sizing:border-box}',
       '.cl-sheet .cl-blank{color:#8a94a3}',
       // ---- sheet（A4 報告・1 ページの要約）。本文 9.5px・ラベル 8.5px・見出し 10.5px。画面でも同じ寸法にして計測する ----
@@ -1222,18 +1222,18 @@
       '.cl-sheet.cl-mode-sheet.cl-measure{min-height:0 !important;max-height:none !important}',
       '.cl-mode-sheet .cl-blank{color:#8a94a3;font-weight:400}',
       // 1. 見出し（白地＋濃紺 2px の下線。左にロゴ・題、右に版／劇場／作成日）
-      '.cl-mode-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #24324a}',
+      '.cl-mode-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #1a2e5a}',
       '.cl-mode-sheet .cl-title-logo{flex:none;display:block;height:7mm;width:auto;max-width:50mm;object-fit:contain}',
-      '.cl-mode-sheet .cl-title-t{flex:none;font-size:13px;font-weight:800;letter-spacing:.04em;line-height:1.3;color:#1a2233}',
-      '.cl-mode-sheet .cl-title-r{margin-left:auto;min-width:0;font-size:8.5px;color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.cl-mode-sheet .cl-title-t{flex:none;font-size:13px;font-weight:800;letter-spacing:.04em;line-height:1.3;color:#161e2e}',
+      '.cl-mode-sheet .cl-title-r{margin-left:auto;min-width:0;font-size:8.5px;color:#3c4658;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       // 2. 応募者（2 行）
       '.cl-mode-sheet .cl-who{padding:6px 2px 6px;border-bottom:1px solid #d5dbe3}',
       '.cl-mode-sheet .cl-who-1{display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;min-width:0}',
       '.cl-mode-sheet .cl-sh-name{font-size:16px;font-weight:800;line-height:1.25;overflow-wrap:anywhere}.cl-mode-sheet .cl-sh-name small{font-size:10px;font-weight:600;margin-left:2px}',
-      '.cl-mode-sheet .cl-sh-who,.cl-mode-sheet .cl-sh-grad{font-size:9.5px;font-weight:600;color:#3a4556}.cl-mode-sheet .cl-sh-grad b{font-size:8.5px;font-weight:600;color:#5b6675;margin-right:4px}',
+      '.cl-mode-sheet .cl-sh-who,.cl-mode-sheet .cl-sh-grad{font-size:9.5px;font-weight:600;color:#3c4658}.cl-mode-sheet .cl-sh-grad b{font-size:8.5px;font-weight:600;color:#525d70;margin-right:4px}',
       '.cl-mode-sheet dl.cl-sh-kv{display:flex;flex-wrap:wrap;gap:1px 16px;margin:3px 0 0}',
       '.cl-mode-sheet dl.cl-sh-kv>div{display:flex;gap:5px;align-items:baseline;min-width:0;max-width:100%}',
-      '.cl-mode-sheet dl.cl-sh-kv dt{flex:none;font-size:8.5px;font-weight:600;color:#5b6675}',
+      '.cl-mode-sheet dl.cl-sh-kv dt{flex:none;font-size:8.5px;font-weight:600;color:#525d70}',
       '.cl-mode-sheet dl.cl-sh-kv dd{margin:0;min-width:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       // 3. 結果ストリップ（結果・総合判断・必須条件・確認点＋最終合否。調整は 1 行ずつ）
       '.cl-mode-sheet .cl-judge{margin:8px 0 0;padding:6px;border:1px solid #d5dbe3;border-radius:5px;background:#f3f5f8;break-inside:avoid}',
@@ -1242,20 +1242,20 @@
       '.cl-mode-sheet .cl-judge-main{flex:1 1 auto;min-width:0;display:flex}',
       '.cl-mode-sheet .cl-tiles{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:6px}',
       '.cl-mode-sheet .cl-tile{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;padding:3px 8px;background:#fff;border:1px solid #d5dbe3;border-radius:4px}',
-      '.cl-mode-sheet .cl-tile-k{font-size:8.5px;font-weight:700;color:#5b6675;line-height:1.2}',
+      '.cl-mode-sheet .cl-tile-k{font-size:8.5px;font-weight:700;color:#525d70;line-height:1.2}',
       '.cl-mode-sheet .cl-tile-v{font-size:11px;font-weight:800;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.cl-mode-sheet .cl-tile-v small{font-size:8.5px;font-weight:600;color:#5b6675;margin-left:1px}',
-      '.cl-mode-sheet .cl-tile-s{font-size:8.5px;color:#3a4556;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.cl-mode-sheet .cl-tile-v small{font-size:8.5px;font-weight:600;color:#525d70;margin-left:1px}',
+      '.cl-mode-sheet .cl-tile-s{font-size:8.5px;color:#3c4658;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-tile.is-ng .cl-tile-v{color:#b42318}',
       //   人物像のタイルがあるとき（.has-ps）は 5 枚（docs/SPEC-persona.md 4-1。4 枚の規則は人物像を使わない記録用に残す）。
       //   各タイルは中身（nowrap の値・補足）の幅より狭くしない（min-content）＝「上長最終判断要」「未入力 3・1点あり」を「…」で切らない
       '.cl-mode-sheet .cl-tiles.has-ps{grid-template-columns:minmax(min-content,1.5fr) repeat(4,minmax(min-content,1fr))}',
       '.cl-mode-sheet .cl-tile-res{border-width:2px;padding:3px 10px}.cl-mode-sheet .cl-tile-res .cl-tile-v{font-size:14px;line-height:1.3}',
-      '.cl-mode-sheet .cl-tile-res.t-ok{border-color:#0b7a55}.cl-mode-sheet .cl-tile-res.t-ok .cl-tile-v{color:#0b7a55}',
-      '.cl-mode-sheet .cl-tile-res.t-warn{border-color:#c98a1b}.cl-mode-sheet .cl-tile-res.t-warn .cl-tile-v{color:#9a5b00}',
+      '.cl-mode-sheet .cl-tile-res.t-ok{border-color:#146c43}.cl-mode-sheet .cl-tile-res.t-ok .cl-tile-v{color:#146c43}',
+      '.cl-mode-sheet .cl-tile-res.t-warn{border-color:#a35a0b}.cl-mode-sheet .cl-tile-res.t-warn .cl-tile-v{color:#7a4106}',
       '.cl-mode-sheet .cl-tile-res.t-danger{border-color:#b42318}.cl-mode-sheet .cl-tile-res.t-danger .cl-tile-v{color:#b42318}',
-      '.cl-mode-sheet .cl-tile-res.t-none{border-color:#b8c2cf;border-style:dashed}.cl-mode-sheet .cl-tile-res.t-none .cl-tile-v{color:#5b6675}',
-      '.cl-mode-sheet .cl-adj{list-style:none;margin:5px 2px 0;padding:0;font-size:9px;color:#3a4556}',
+      '.cl-mode-sheet .cl-tile-res.t-none{border-color:#b8c2cf;border-style:dashed}.cl-mode-sheet .cl-tile-res.t-none .cl-tile-v{color:#525d70}',
+      '.cl-mode-sheet .cl-adj{list-style:none;margin:5px 2px 0;padding:0;font-size:9px;color:#3c4658}',
       '.cl-mode-sheet .cl-adj li{overflow-wrap:anywhere}.cl-mode-sheet .cl-adj li::before{content:"※ "}.cl-mode-sheet .cl-adj li b{color:#111}',
       // 最終合否（ストリップの右端）
       //   幅は結果ストリップの 36% まで（担当者名が改行できない長い文字列でも、左の 5 枚のタイルを潰さない。担当者・日付は「…」で切る。docs/SPEC-persona.md D10）
@@ -1265,45 +1265,45 @@
       '.cl-mode-sheet .cl-judge-main{flex-basis:0%;min-width:min-content}.cl-mode-sheet .cl-decision{flex-shrink:1}',
       '.cl-mode-sheet .cl-dec-stamp{flex:none;display:grid;place-items:center}.cl-mode-sheet .cl-dec-stamp .verdict-stamp{width:64px;height:41px;mix-blend-mode:multiply;filter:none}',
       '.cl-mode-sheet .cl-dec-meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}',
-      '.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#5b6675}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}',
-      '.cl-mode-sheet .cl-dec-by,.cl-mode-sheet .cl-dec-date{font-size:8.5px;color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.cl-mode-sheet .cl-dec-kv{display:flex;align-items:baseline;gap:4px}.cl-mode-sheet .cl-dec-k{font-size:8.5px;font-weight:700;color:#525d70}.cl-mode-sheet .cl-dec-v{font-size:12px;font-weight:800}',
+      '.cl-mode-sheet .cl-dec-by,.cl-mode-sheet .cl-dec-date{font-size:8.5px;color:#3c4658;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-decision.is-none{padding:3px 6px}',
-      '.cl-mode-sheet .cl-dec-empty{width:72px;height:44px;border:1.5px dashed #b8c2cf;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.3;color:#5b6675;text-align:center}',
+      '.cl-mode-sheet .cl-dec-empty{width:72px;height:44px;border:1.5px dashed #b8c2cf;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.3;color:#525d70;text-align:center}',
       // 見出し（左に濃紺のアクセント線）・ブロック
       '.cl-mode-sheet .cl-blk{margin:10px 0 0;break-inside:avoid}',
-      '.cl-mode-sheet .cl-h{margin:0 0 3px;padding:0 0 0 6px;border-left:3px solid #24324a;font-size:10.5px;font-weight:800;line-height:1.35;color:#1a2233}',
-      '.cl-mode-sheet .cl-h small{margin-left:10px;font-size:8.5px;font-weight:500;color:#5b6675}',
+      '.cl-mode-sheet .cl-h{margin:0 0 3px;padding:0 0 0 6px;border-left:3px solid #1a2e5a;font-size:10.5px;font-weight:800;line-height:1.35;color:#161e2e}',
+      '.cl-mode-sheet .cl-h small{margin-left:10px;font-size:8.5px;font-weight:500;color:#525d70}',
       // 4. 必須条件｜勤務条件の確認（左 45%・右 55%）
       '.cl-mode-sheet .cl-cols{display:grid;grid-template-columns:minmax(0,45fr) minmax(0,55fr);gap:0 16px;margin-top:10px}.cl-mode-sheet .cl-cols>.cl-blk{margin-top:0}',
       '.cl-mode-sheet table.cl-mtab{width:100%;border-collapse:collapse}',
       '.cl-mode-sheet .cl-mtab td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:top}',
       '.cl-mode-sheet .cl-mm-c{width:5em;white-space:nowrap}.cl-mode-sheet .cl-mm-l{font-weight:600}',
-      '.cl-mode-sheet .cl-mm{display:inline-block;padding:0 5px;border-radius:3px;font-weight:800;line-height:1.45;color:#5b6675;background:#eef1f5}',
-      '.cl-mode-sheet .m-match .cl-mm{color:#0b7a55;background:#e3f6ee}.cl-mode-sheet .m-mismatch .cl-mm{color:#fff;background:#b42318}',
+      '.cl-mode-sheet .cl-mm{display:inline-block;padding:0 5px;border-radius:3px;font-weight:800;line-height:1.45;color:#525d70;background:#eef1f5}',
+      '.cl-mode-sheet .m-match .cl-mm{color:#146c43;background:#e3f6ee}.cl-mode-sheet .m-mismatch .cl-mm{color:#fff;background:#b42318}',
       '.cl-mode-sheet dl.cl-kv{margin:0}',
       '.cl-mode-sheet dl.cl-kv>div{display:grid;grid-template-columns:9.5em minmax(0,1fr);gap:6px;align-items:baseline;padding:3px 4px;border-bottom:1px solid #e6eaef}',
-      '.cl-mode-sheet dl.cl-kv dt{font-size:8.5px;font-weight:600;color:#5b6675}',
+      '.cl-mode-sheet dl.cl-kv dt{font-size:8.5px;font-weight:600;color:#525d70}',
       '.cl-mode-sheet dl.cl-kv dd{margin:0;min-width:0;font-weight:700;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}',
       // 5. 確認点（○緑 △琥珀 ×赤 の丸バッジ。未入力は灰「—」。メモの列は 2026-10-16 に外した＝確認点のメモは面接メモ・所見の枠の 1 行）
       '.cl-mode-sheet table.cl-rt{width:100%;border-collapse:collapse;table-layout:fixed}',
       '.cl-mode-sheet .cl-rt col.c-no{width:20px}.cl-mode-sheet .cl-rt col.c-lbl{width:auto}.cl-mode-sheet .cl-rt col.c-mk{width:30px}',
       '.cl-mode-sheet .cl-rt td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:middle}',
-      '.cl-mode-sheet .cl-rt-no{font-size:8.5px;color:#5b6675;text-align:center}.cl-mode-sheet .cl-rt-lbl{font-weight:600}.cl-mode-sheet .cl-rt-mk{text-align:center}',
+      '.cl-mode-sheet .cl-rt-no{font-size:8.5px;color:#525d70;text-align:center}.cl-mode-sheet .cl-rt-lbl{font-weight:600}.cl-mode-sheet .cl-rt-mk{text-align:center}',
       '.cl-mode-sheet .cl-mark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:10px;font-weight:800;line-height:1;color:#fff;background:#8a94a3}',
-      '.cl-mode-sheet .cl-mark.m-good{background:#0b7a55}.cl-mode-sheet .cl-mark.m-fair{background:#c98a1b}.cl-mode-sheet .cl-mark.m-poor{background:#b42318}.cl-mode-sheet .cl-mark.m-none{color:#8a94a3;background:#eef1f5}',
+      '.cl-mode-sheet .cl-mark.m-good{background:#146c43}.cl-mode-sheet .cl-mark.m-fair{background:#a35a0b}.cl-mode-sheet .cl-mark.m-poor{background:#b42318}.cl-mode-sheet .cl-mark.m-none{color:#8a94a3;background:#eef1f5}',
       // 5b. 確認点｜人物像の 2 カラム（50:50）・人物像の表（項目名・5 段の目盛り・点。1 点は赤・2 点は琥珀・3〜5 点は濃い灰色。docs/SPEC-persona.md 4-2）
       '.cl-mode-sheet .cl-cols.cl-cols-eval{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}',
-      '.cl-mode-sheet .cl-blk-persona .cl-h{display:flex;align-items:baseline}.cl-mode-sheet .cl-ps-sum{margin-left:auto;font-size:9px;font-weight:800;color:#1a2233}',
+      '.cl-mode-sheet .cl-blk-persona .cl-h{display:flex;align-items:baseline}.cl-mode-sheet .cl-ps-sum{margin-left:auto;font-size:9px;font-weight:800;color:#161e2e}',
       '.cl-mode-sheet table.cl-ps{width:100%;border-collapse:collapse;table-layout:fixed}',
       '.cl-mode-sheet .cl-ps col.c-no{width:16px}.cl-mode-sheet .cl-ps col.c-sc{width:64px}.cl-mode-sheet .cl-ps col.c-v{width:18px}',
       '.cl-mode-sheet .cl-ps td{padding:3px 4px;border-bottom:1px solid #e6eaef;vertical-align:middle}',
-      '.cl-mode-sheet .cl-ps-no{font-size:8.5px;color:#5b6675;text-align:center}',
+      '.cl-mode-sheet .cl-ps-no{font-size:8.5px;color:#525d70;text-align:center}',
       '.cl-mode-sheet .cl-ps-lbl{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.cl-mode-sheet .cl-ps-bar{display:flex;gap:2px}.cl-mode-sheet .cl-ps-bar i{flex:1 1 0;height:9px;border:1px solid #b8c2cf;border-radius:2px;background:#fff}',
-      '.cl-mode-sheet .cl-ps-bar i.on{background:#3a4556;border-color:#3a4556}',
-      '.cl-mode-sheet .cl-ps tr.s-2 .cl-ps-bar i.on{background:#c98a1b;border-color:#c98a1b}.cl-mode-sheet .cl-ps tr.s-1 .cl-ps-bar i.on{background:#b42318;border-color:#b42318}',
+      '.cl-mode-sheet .cl-ps-bar i.on{background:#3c4658;border-color:#3c4658}',
+      '.cl-mode-sheet .cl-ps tr.s-2 .cl-ps-bar i.on{background:#a35a0b;border-color:#a35a0b}.cl-mode-sheet .cl-ps tr.s-1 .cl-ps-bar i.on{background:#b42318;border-color:#b42318}',
       '.cl-mode-sheet .cl-ps-v{text-align:center;font-weight:800}.cl-mode-sheet .cl-ps tr.s-1 .cl-ps-v{color:#b42318}',
-      '.cl-mode-sheet .cl-nm-rt-i b{font-weight:700;color:#3a4556}.cl-mode-sheet .cl-nm-rt-sep{margin:0 5px;color:#8a94a3}',
+      '.cl-mode-sheet .cl-nm-rt-i b{font-weight:700;color:#3c4658}.cl-mode-sheet .cl-nm-rt-sep{margin:0 5px;color:#8a94a3}',
       // 6. 面接メモ・所見の枠（質問の回答は 2 行まで。面接所見・メモは全文）。名前の列は「1 問目の短い名前 ほか n 問」が 1 行に入る幅。
       //   枠は残りの高さいっぱい（flex）。記入の下は手書き用の薄い点線の罫線（7.5mm 間隔。flex-basis 0・overflow:hidden で内容の高さに入れない）。
       //   記入が無い枠は罫線 1 本分（7.5mm）を最低の高さにする
@@ -1314,27 +1314,27 @@
       '.cl-mode-sheet .cl-nm-box.is-empty .cl-nm-lines{min-height:7.5mm}',
       '.cl-mode-sheet .cl-nm-lines i{display:block;height:7.5mm;border-bottom:1px dotted #b8c2cf}',
       '.cl-mode-sheet .cl-nm-row{display:grid;grid-template-columns:18em minmax(0,1fr);gap:8px;padding:3px 4px;border-bottom:1px solid #e6eaef}',
-      '.cl-mode-sheet .cl-nm-k{font-size:8.5px;font-weight:700;color:#5b6675;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}',
-      '.cl-mode-sheet .cl-nm-no{margin-right:3px;color:#24324a}',
+      '.cl-mode-sheet .cl-nm-k{font-size:8.5px;font-weight:700;color:#525d70;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}',
+      '.cl-mode-sheet .cl-nm-no{margin-right:3px;color:#1a2e5a}',
       '.cl-mode-sheet .cl-nm-v{min-width:0;overflow-wrap:anywhere}',
       '.cl-mode-sheet .cl-nm-q .cl-nm-v,.cl-mode-sheet .cl-nm-b .cl-nm-v{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}',
       '.cl-mode-sheet .cl-nm-iv .cl-nm-v,.cl-mode-sheet .cl-nm-memo .cl-nm-v{white-space:pre-wrap}',
       // 案内 1 行: 「…」で切れたメモがある（.cl-nm-cut）／質問の回答を省いた（.cl-compact-2）ときだけ
-      '.cl-mode-sheet .cl-nm-ref{display:none;margin:3px 4px 0;font-size:8.5px;color:#5b6675}',
+      '.cl-mode-sheet .cl-nm-ref{display:none;margin:3px 4px 0;font-size:8.5px;color:#525d70}',
       '.cl-mode-sheet.cl-nm-cut .cl-nm-ref,.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q{display:block}',
       '.cl-mode-sheet .cl-nm-ref-q{display:none}.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q .cl-nm-ref-q{display:inline}.cl-mode-sheet.cl-compact-2 .cl-nm-ref.has-q .cl-nm-ref-c{display:none}',
       // 7. 説明・連絡（1 行）
       '.cl-mode-sheet .cl-exline{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 5px;margin:10px 0 0;padding:4px 8px;border:1px solid #e1e6ec;border-radius:4px;background:#fafbfc}',
-      '.cl-mode-sheet .cl-ex-k{font-size:8.5px;font-weight:700;color:#5b6675;margin-right:2px}.cl-mode-sheet .cl-ex-i{font-weight:600;white-space:nowrap}.cl-mode-sheet .cl-ex-i.is-off{font-weight:800;text-decoration:underline}',
+      '.cl-mode-sheet .cl-ex-k{font-size:8.5px;font-weight:700;color:#525d70;margin-right:2px}.cl-mode-sheet .cl-ex-i{font-weight:600;white-space:nowrap}.cl-mode-sheet .cl-ex-i.is-off{font-weight:800;text-decoration:underline}',
       '.cl-mode-sheet .cl-ex-sep{color:#8a94a3}.cl-mode-sheet .cl-ex-bar{margin:0 6px;color:#b8c2cf}',
       // 8. 押印行
       '.cl-mode-sheet .cl-stamps{margin:10px 0 0;break-inside:avoid}',
       '.cl-sheet .stamp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;break-inside:avoid}',
       '.cl-sheet .stamp-row.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}',
       '.cl-sheet .stamp-box{display:flex;align-items:center;gap:6px;text-align:left;padding:2px 8px;border:1px solid #c9d2dd;border-radius:4px;background:#fff;min-width:0}',
-      '.cl-sheet .stamp-label{font-size:9.5px;font-weight:700;min-width:5em;color:#1a2233}.cl-sheet .stamp-area{height:auto;display:grid;place-items:center}',
-      '.cl-sheet .hanko{width:46px;height:46px}.cl-sheet .stamp-empty{width:44px;height:44px;font-size:8.5px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;color:#5b6675;background:#fff}',
-      '.cl-sheet .stamp-meta{font-size:8.5px;min-height:0;line-height:1.3;color:#3a4556}',
+      '.cl-sheet .stamp-label{font-size:9.5px;font-weight:700;min-width:5em;color:#161e2e}.cl-sheet .stamp-area{height:auto;display:grid;place-items:center}',
+      '.cl-sheet .hanko{width:46px;height:46px}.cl-sheet .stamp-empty{width:44px;height:44px;font-size:8.5px;border:2px dashed #c7d0db;border-radius:50%;display:grid;place-items:center;color:#525d70;background:#fff}',
+      '.cl-sheet .stamp-meta{font-size:8.5px;min-height:0;line-height:1.3;color:#3c4658}',
       // 押せる欄の案内（保存 HTML の ::after。position:absolute）の土台は常時付けておく（ホバーで付け外しすると寸法が変わる）。
       //   アプリのダークテーマのハンコの明るさ補正（:root[data-theme="dark"] .hanko）を用紙では効かせない
       '.cl-sheet .stamp-box,.cl-mode-sheet .cl-decision{position:relative}',
@@ -1494,28 +1494,28 @@
       '.pp-sheet{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,"Noto Sans JP",system-ui,sans-serif;font-size:11px;line-height:1.4;color:#111;background:#fff;display:flex;flex-direction:column;min-height:100%;max-height:100%}',
       '.pp-sheet.pp-measure{min-height:0 !important;max-height:none !important}',
       '.pp-sheet *{box-sizing:border-box}',
-      '.pp-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #24324a}',
+      '.pp-sheet .cl-title{display:flex;align-items:center;gap:8px;min-height:7mm;padding:0 1px 3px;border-bottom:2px solid #1a2e5a}',
       '.pp-sheet .cl-title-logo{flex:none;display:block;height:7mm;width:auto;max-width:50mm;object-fit:contain}',
-      '.pp-sheet .cl-title-t{flex:none;font-size:15px;font-weight:800;letter-spacing:.04em;line-height:1.3;color:#1a2233}',
-      '.pp-sheet .cl-title-r{margin-left:auto;min-width:0;font-size:9.5px;color:#3a4556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.pp-sheet .cl-title-t{flex:none;font-size:15px;font-weight:800;letter-spacing:.04em;line-height:1.3;color:#161e2e}',
+      '.pp-sheet .cl-title-r{margin-left:auto;min-width:0;font-size:9.5px;color:#3c4658;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.pp-who{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin:0;padding:6px 2px 5px;border-bottom:1px solid #d5dbe3}',
       '.pp-who>div{display:flex;align-items:baseline;gap:5px;min-width:0;max-width:100%}',
-      '.pp-who dt{flex:none;font-size:10px;font-weight:700;color:#5b6675}',
+      '.pp-who dt{flex:none;font-size:10px;font-weight:700;color:#525d70}',
       '.pp-who dd{margin:0;min-width:0;font-weight:700;overflow-wrap:anywhere}',
-      '.pp-f-name dd{font-size:16px;font-weight:800}.pp-f-name small{font-size:10px;font-weight:600;margin-left:2px}.pp-f-name .pp-who-s{font-size:10px;font-weight:600;color:#3a4556;margin-left:6px}',
-      '.pp-line{display:inline-block;width:26mm;height:1.1em;border-bottom:1px solid #5b6675;vertical-align:-3px}',
+      '.pp-f-name dd{font-size:16px;font-weight:800}.pp-f-name small{font-size:10px;font-weight:600;margin-left:2px}.pp-f-name .pp-who-s{font-size:10px;font-weight:600;color:#3c4658;margin-left:6px}',
+      '.pp-line{display:inline-block;width:26mm;height:1.1em;border-bottom:1px solid #525d70;vertical-align:-3px}',
       '.pp-f-name .pp-line{width:46mm}',
-      '.pp-box{display:inline-block;width:12px;height:12px;border:1px solid #3a4556;margin:0 3px 0 8px;vertical-align:-2px}',
+      '.pp-box{display:inline-block;width:12px;height:12px;border:1px solid #3c4658;margin:0 3px 0 8px;vertical-align:-2px}',
       '.pp-box:first-child{margin-left:0}',
       //   「面接」「評価」の帯（濃紺の地に白い文字。紙の上でもどこからが面接のあとに付ける部分か分かる）
-      '.pp-part{display:flex;align-items:baseline;gap:8px;margin:7px 0 4px;padding:2px 6px;border-radius:3px;background:#24324a;color:#fff;font-size:11.5px;font-weight:800;letter-spacing:.06em}',
+      '.pp-part{display:flex;align-items:baseline;gap:8px;margin:7px 0 4px;padding:2px 6px;border-radius:3px;background:#1a2e5a;color:#fff;font-size:11.5px;font-weight:800;letter-spacing:.06em}',
       '.pp-part small{font-size:9.5px;font-weight:600;letter-spacing:0;color:#d5dbe3}',
       '.pp-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 14px}',
       '.pp-col{min-width:0}',
       '.pp-sec{margin-top:7px}.pp-col>.pp-sec:first-child{margin-top:0}',
-      '.pp-h{display:flex;align-items:baseline;gap:6px;margin:0 0 2px;padding:0 0 0 6px;border-left:3px solid #24324a;font-size:12px;font-weight:800;line-height:1.35;color:#1a2233}',
-      '.pp-h small{font-size:9.5px;font-weight:600;color:#5b6675}',
-      '.pp-k{flex:none;font-size:10px;font-weight:700;color:#5b6675;margin-right:4px}',
+      '.pp-h{display:flex;align-items:baseline;gap:6px;margin:0 0 2px;padding:0 0 0 6px;border-left:3px solid #1a2e5a;font-size:12px;font-weight:800;line-height:1.35;color:#161e2e}',
+      '.pp-h small{font-size:9.5px;font-weight:600;color:#525d70}',
+      '.pp-k{flex:none;font-size:10px;font-weight:700;color:#525d70;margin-right:4px}',
       'table.pp-t{width:100%;border-collapse:collapse}',
       '.pp-t td{padding:2px 3px;border-bottom:1px solid #e6eaef;vertical-align:middle}',
       '.pp-t .pp-lbl{font-weight:600}',
@@ -1525,12 +1525,12 @@
       '.pp-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 8px;margin:0}',
       //   記入欄は 2 列。見出しと □選択肢 が 1 行に入らない欄（既定の「短期／長期の希望 □短期希望 □長期希望」）は □選択肢 を次の行へ（欄からはみ出して隣の欄の見出しとつながらない）
       '.pp-fields>div{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 4px;min-width:0;padding:2px 3px;border-bottom:1px solid #e6eaef}',
-      '.pp-fields dt{flex:none;font-size:10px;font-weight:700;color:#5b6675}',
+      '.pp-fields dt{flex:none;font-size:10px;font-weight:700;color:#525d70}',
       '.pp-fields dd{margin:0;min-width:0;flex:1 1 auto;white-space:nowrap}',
       '.pp-fields dd .pp-line{width:100%}',
       '.pp-ex{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 9px;padding:2px 3px;border-bottom:1px solid #e6eaef}',
       '.pp-ck{white-space:nowrap}',
-      '.pp-note{font-size:9px;color:#5b6675}',
+      '.pp-note{font-size:9px;color:#525d70}',
       //   聞く: 質問ごとに 短い名前＋答えの線（同じ行）と次の行の線（.pp-qx。段階 pp-a3＝2 本・pp-a2＝1 本・pp-a1＝なし）
       '.pp-qs{padding-bottom:2px;border-bottom:1px solid #e6eaef}',
       '.pp-qa{display:flex;align-items:flex-end;gap:6px;padding:3px 3px 0;min-width:0}',
@@ -1547,21 +1547,21 @@
       '.pp-sum{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;margin-top:2px}',
       '.pp-rate-h{display:block;padding:0 3px}',
       '.pp-ev-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 14px;align-items:start}',
-      '.pp-rate td.pp-no{width:16px;font-size:10px;color:#5b6675;text-align:center}',
+      '.pp-rate td.pp-no{width:16px;font-size:10px;color:#525d70;text-align:center}',
       '.pp-ps{margin-top:5px}',
       '.pp-ps-head{display:flex;align-items:baseline;gap:10px;padding:0 3px 1px}',
       '.pp-ps-head b{font-size:11px}',
-      '.pp-legend{font-size:9.5px;color:#3a4556}',
+      '.pp-legend{font-size:9.5px;color:#3c4658}',
       '.pp-ps-sum{margin-left:auto;font-size:10.5px;font-weight:700;white-space:nowrap}.pp-ps-sum .pp-line{width:12mm}',
       'table.pp-ps-t{width:100%;border-collapse:collapse}',
       '.pp-ps-t td{padding:2.5px 3px;border-bottom:1px solid #e6eaef;vertical-align:middle}',
-      '.pp-ps-t .pp-no{width:16px;font-size:10px;color:#5b6675;text-align:center}',
-      '.pp-ps-t .pp-lbl{font-weight:600}.pp-ps-t .pp-lbl small{font-size:9.5px;font-weight:500;color:#5b6675;margin-left:4px}',
+      '.pp-ps-t .pp-no{width:16px;font-size:10px;color:#525d70;text-align:center}',
+      '.pp-ps-t .pp-lbl{font-weight:600}.pp-ps-t .pp-lbl small{font-size:9.5px;font-weight:500;color:#525d70;margin-left:4px}',
       '.pp-ps-t .pp-sc{white-space:nowrap;text-align:right;width:43mm}',
       '.pp-ps-t .pp-sc span{display:inline-block;width:8.4mm;text-align:center;font-size:14px;font-weight:700}',
       '.pp-ov{display:flex;align-items:baseline;gap:6px;margin-top:5px;padding:2px 3px}',
       '.pp-ov-o{font-size:14px;font-weight:800;padding:0 10px}',
-      '.pp-ov small{font-size:9.5px;color:#5b6675}',
+      '.pp-ov small{font-size:9.5px;color:#525d70}',
       '.pp-ov-time{margin-left:auto;white-space:nowrap;font-weight:700}.pp-ov-time .pp-line{width:14mm;margin-right:2px}',
       '.pp-notes{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;margin-top:3px;padding:0 3px}',
       '.pp-notes .pp-lines{flex:1 1 0;min-height:0;overflow:hidden}',
