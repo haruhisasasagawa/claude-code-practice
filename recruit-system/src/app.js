@@ -867,6 +867,13 @@
     if (t.dataset.note === 'interview') { state.interviewNotes = t.value; state.dirty = true; return; }
   }
 
+  // 案内から行へ移すとき（「該当の行へ」・評価の未入力の数）は、行の操作（一致・不一致・○・1 点・採用）ではなく行そのものにフォーカスする（tabindex=-1。Tab で行の最初の操作へ）。
+  //   操作へ移すと、キーボードで押した直後の 2 回目の Enter・Space や押しっぱなしが移った先に当たり、確かめていない値を記録する・不一致を外すため（ivMustHold と同じ考え。docs/SPEC-flow.md 16-12）
+  function focusRow(row) {
+    if (!row.hasAttribute('tabindex')) row.setAttribute('tabindex', '-1');
+    try { row.focus({ preventScroll: true }); } catch (e) { row.focus(); }
+  }
+
   function onContentClick(e) {
     const b = e.target.closest('[data-action]');
     if (!b) return;
@@ -939,18 +946,16 @@
         const row = $('#ivStage .cl-must-row[data-item="' + (window.CSS && CSS.escape ? CSS.escape(ng.item.id) : ng.item.id) + '"]');
         if (!row) break;
         row.scrollIntoView({ block: 'start' });
-        const nb = $('[data-value="mismatch"]', row);
-        if (nb) nb.focus({ preventScroll: true });
+        focusRow(row);
         break;
       }
       case 'ev-miss': {
-        // 評価の結果カードの未入力の数（必須条件 n・確認点 n・人物像 n・総合判断）: その種類の最初の未入力の行を帯の下に出し、その行の操作（一致・○・1 点・採用）にフォーカス（16-7）
+        // 評価の結果カードの未入力の数（必須条件 n・確認点 n・人物像 n・総合判断）: その種類の最初の未入力の行を画面の中ほどに出し、その行にフォーカス（16-7・16-12）
         const sel = { must: '.ev-must .cl-must-row.is-missing', rate: '.cl-rate-row.is-missing', ps: '#clPersona .cl-ps-row.is-missing', overall: '.cl-overall-row.is-missing' }[b.dataset.miss];
         const row = sel ? $(sel, $('#stepContent')) : null;
         if (!row) break;
-        const ctl = b.dataset.miss === 'ps' ? ($('.cl-ps-btn[tabindex="0"]', row) || $('.cl-ps-btn', row)) : $('.seg-btn', row);
         row.scrollIntoView({ block: 'center' });
-        if (ctl) ctl.focus({ preventScroll: true });
+        focusRow(row);
         break;
       }
       case 'ev-time': {
@@ -2232,11 +2237,13 @@
     const live = state.judgment ? state.judgment : R.checklistHasInput(cl) ? R.evaluateScript(a, cl, p) : null;
     const mg = p.management || {};
     const fields = Array.isArray(mg.fields) ? mg.fields : [];
-    const stamps = fields.map(function (f) {
+    const stamps = fields.map(function (f, i) {
       const e = state.management[f.id];
-      //   ✓ は SVG（textContent には「✓ 」を .sym で残す。docs/DESIGN.md 2 章）
-      return esc(f.label) + (e && e.name ? ' ' + ico('check') + sym('✓ ') + esc(e.short || (Stamp ? Stamp.shortName(e.name) : e.name)) : ' 未押印');
-    }).join('／');
+      //   ✓ は SVG（textContent には「✓ 」を .sym で残す。docs/DESIGN.md 2 章）。1 欄ずつ .sum-stamp（inline-block）にまとめ、折り返すのは欄と欄の間だけ（氏名の途中で割らない）。
+      //   区切りの「／」は前の欄の末尾に付ける（次の行の頭に来ない）
+      return '<span class="sum-stamp">' + esc(f.label) + (e && e.name ? ' ' + ico('check') + sym('✓ ') + esc(e.short || (Stamp ? Stamp.shortName(e.name) : e.name)) : ' 未押印') +
+        (i < fields.length - 1 ? '／' : '') + '</span>';
+    }).join('<wbr>');
     const row = function (id, label, val) { return '<div class="sum-row" id="' + id + '"><span class="sum-label">' + esc(label) + '</span><span class="sum-val">' + val + '</span></div>'; };
     // 小さいカード 3 枚（帯の高さ 44・題 15/700。docs/DESIGN.md 4-8）。採点の ○△× は和文のフォント（.ja）
     const sm = function (id, title, body) { return '<section class="card sm" id="' + id + '" aria-labelledby="' + id + 'H"><header class="card-band"><h3 class="card-title" id="' + id + 'H">' + title + '</h3></header><div class="card-body">' + body + '</div></section>'; };

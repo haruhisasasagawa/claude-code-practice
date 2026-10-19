@@ -634,6 +634,7 @@ textarea.iv-q-memo { margin-top: var(--sp-2); }
 .sum-label { color: var(--muted); white-space: nowrap; }
 .sum-val { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--sp-1); font-size: var(--fs-13); font-weight: var(--fw-bold); text-align: right; min-width: 0; }
 .sum-stamps { font-size: var(--fs-13); font-weight: var(--fw-bold); text-align: right; }
+.sum-stamp { display: inline-block; max-width: 100%; }   /* 1 欄（面接対応者 ✓笹川／）ずつ。入りきらないときは欄と欄の間で折り返す（氏名の途中で割らない） */
 .sum-stamps .ico { color: var(--accent-text); vertical-align: -3px; margin-right: var(--sp-1); }   /* 押印済みの ✓（i-check。紺） */
 .sum-saved { padding-top: var(--sp-2); border-top: 1px solid var(--divider); font-size: var(--fs-12); line-height: var(--lh-label); color: var(--muted); }
 .card-body > .sum-saved { margin-top: 0; }

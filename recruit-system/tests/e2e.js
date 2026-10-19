@@ -1429,6 +1429,19 @@ const pdfTextOf = (f) => {
     'E9 最終合否で「最終確認」に自動押印: ' + t9);
   await page.click('#mgmtCard .stamp-box[data-field-id="interviewer"] [data-action="stamp"]');
   await wait(150);
+  // 右サマリーの押印の行（2 欄とも押した状態）: 1 欄ずつ 1 行で、氏名の途中で割れない（1440・1366・1280・390px。docs/SPEC-flow.md 16-12）
+  const vp9 = page.viewportSize();
+  const ss9 = {};
+  for (const w of [1440, 1366, 1280, 390]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await wait(150);
+    ss9[w] = await page.evaluate(() => Array.from(document.querySelectorAll('#sumStamps .sum-stamp')).map(e => { const lh = parseFloat(getComputedStyle(e).lineHeight) || 20; return Math.round(e.getBoundingClientRect().height / lh); }));
+  }
+  await page.setViewportSize(vp9);
+  await wait(150);
+  ss9.text = (await txtIn(page, '#sumStamps')).replace(/\s+/g, ' ');
+  expect([1440, 1366, 1280, 390].every(w => ss9[w].length === 2 && ss9[w].every(n => n === 1)) && ss9.text.includes('面接対応者 ✓ 笹川／最終確認 ✓ 笹川'),
+    'E9 右サマリーの押印の行は 1 欄ずつ 1 行（氏名の途中で割れない）: ' + JSON.stringify(ss9));
   // 印刷用（#clSheet）の用紙の押印行も 2 つ・2 列
   const cs9 = await st(() => { window.RecruitApp.prepareChecklistSheet(true); const r = document.querySelector('#clSheet .a4 .cl-stamps .stamp-row');
     const out = { ids: Array.from(document.querySelectorAll('#clSheet .a4 .cl-stamps .stamp-box')).map(b => b.dataset.fieldId), cols: !!r && r.classList.contains('cols-2'), grid: r ? getComputedStyle(r).gridTemplateColumns.split(' ').length : 0,
@@ -3473,7 +3486,7 @@ const pdfTextOf = (f) => {
     //   マウスは要素の外へ（ホバーの色を写さない）・要素の中のフォーカスは外す（入力欄のフォーカス枠を写さない）・toast は消す
     const shotEl17 = async (sel, file) => {
       await page.mouse.move(1, 1);
-      await page.evaluate((q) => { const s = document.createElement('style'); s.id = 'e2eNoSticky'; s.textContent = '.topbar,.iv-top,.ev-top,.iv-timer,.iv-must,.flow-foot{position:static !important}'; document.head.appendChild(s);
+      await page.evaluate((q) => { const s = document.createElement('style'); s.id = 'e2eNoSticky'; s.textContent = '.topbar,.iv-top,.ev-top,.iv-timer,.iv-must{position:static !important}.flow-foot{position:relative !important}'; document.head.appendChild(s);
         const a = document.activeElement, el = document.querySelector(q); if (a && el && el.contains(a) && a.blur) a.blur();
         const t = document.getElementById('toast'); if (t) t.classList.remove('show'); }, sel);
       await wait(80);
@@ -4148,7 +4161,9 @@ const pdfTextOf = (f) => {
     const e18 = [];
     const PS18 = ['ps_greeting', 'ps_impression', 'ps_smile', 'ps_voice', 'ps_eye', 'ps_speech', 'ps_motivation'];
     const SECS18 = ['conditions', 'continuity', 'job', 'teamwork', 'reverse'];
-    const NOSTICKY18 = '.topbar,.iv-top,.ev-top,.iv-timer,.iv-must,.flow-foot{position:static !important}';   // 準備・報告書の操作行（固定）・狭い画面のタイマーと案内（固定）も
+    //   準備・報告書の操作行（固定）・狭い画面のタイマーと案内（固定）も。操作行は static でなく relative（横いっぱいの地 ::before〔inset: 0 -100vmax〕の基準を操作行のままにする。
+    //   static だと基準がページの先頭の 1 画面になり、全体のスクリーンショットの上 1 画面を地が覆って幅も 2 倍〔2880px〕になった。2026-10-19）
+    const NOSTICKY18 = '.topbar,.iv-top,.ev-top,.iv-timer,.iv-must{position:static !important}.flow-foot{position:relative !important}';
     // 全体のスクリーンショット（撮るあいだだけ sticky を外す・先頭へ・toast とフォーカスを外す）／見えている範囲のスクリーンショット
     const full18 = async (pg, name) => {
       await pg.mouse.move(1, 1);
@@ -5466,9 +5481,15 @@ const pdfTextOf = (f) => {
     await page.click('#ivMustAlert [data-action="iv-must-row"]');
     await wait(300);
     const go20 = await page.evaluate(() => { const a = document.activeElement, r = a.getBoundingClientRect(), band = document.getElementById('ivTop').getBoundingClientRect(), ft = document.getElementById('ivFoot').getBoundingClientRect();
-      return { sec: document.getElementById('ivStage').dataset.sec, act: a && a.dataset ? a.dataset.cl + ':' + a.dataset.value : '', ng: !!a.closest('.row.is-ng'), below: r.top >= band.bottom - 1, above: r.bottom <= ft.top + 1 }; });
-    expect(go20.sec === 'conditions' && go20.act === 'values.must_busy:mismatch' && go20.ng && go20.below && go20.above,
-      'E20 (5) 案内の「該当の行へ」（⑤ から）で ① へ移り、不一致の行（淡い赤）の［不一致］にフォーカス（上の帯の下・操作行の上に見える）: ' + JSON.stringify(go20));
+      return { sec: document.getElementById('ivStage').dataset.sec, act: a.matches('.cl-must-row') ? 'row:' + a.dataset.item : (a.dataset.cl || a.tagName) + ':' + (a.dataset.value || ''), ng: a.matches('.row.is-ng'),
+        below: r.top >= band.bottom - 1, above: r.bottom <= ft.top + 1 }; });
+    // 続けて Enter・Space を押しても（キーボードで押した 2 回目・押しっぱなし）［不一致］は外れない。Tab で行の最初の操作（［一致］）へ（16-12）
+    for (const k of ['Enter', ' ', 'Enter']) { await page.keyboard.press(k); await wait(80); }
+    go20.after = await st(() => window.RecruitApp.state.checklist.values.must_busy + ':' + document.getElementById('ivStage').dataset.sec);
+    await page.keyboard.press('Tab');
+    go20.tab = await st(() => { const a = document.activeElement; return (a.dataset.cl || a.tagName) + ':' + (a.dataset.value || '') + ':' + !!a.closest('.cl-must-row.is-ng'); });
+    expect(go20.sec === 'conditions' && go20.act === 'row:must_busy' && go20.ng && go20.below && go20.above && go20.after === 'mismatch:conditions' && go20.tab === 'values.must_busy:match:true',
+      'E20 (5) 案内の「該当の行へ」（⑤ から）で ① へ移り、不一致の行（淡い赤）そのものにフォーカス（上の帯の下・操作行の上に見える）。続けて Enter・Space を押しても［不一致］は外れず、Tab で行の［一致］へ: ' + JSON.stringify(go20));
     // (6) 設定の［設定を保存］も主ボタンと同じ座標（ページの先頭・末尾とも）
     await page.setViewportSize({ width: 1440, height: 900 });
     await wait(150);
@@ -5570,12 +5591,12 @@ const pdfTextOf = (f) => {
     const mr21 = await page.$('#evMissing [data-miss="rate"]');   // （無ければ押さずに確かめで落とす）
     if (mr21) await mr21.click();
     await wait(200);
-    k21.miss = await st(() => { const a = document.activeElement; return a && a.dataset ? a.dataset.cl + ':' + a.dataset.value : ''; });
+    k21.miss = await st(() => { const a = document.activeElement; return a && a.matches && a.matches('.cl-rate-row.is-missing') ? 'row:' + a.dataset.item : (a && a.dataset ? a.dataset.cl + ':' + a.dataset.value : ''); });
     await page.clock.setFixedTime(NOW);
     expect(k21.mut === 0 && k21.said === 'ex_fare,ex_hours' && k21.unsaid === '' && /^\[chevron-down\] 下にあと \d+ 項目$/.test(k21.more.text) && k21.more.y1 > k21.more.y0 && k21.notify === 'nt_hire,nt_reject' &&
-      k21.time === 'evTimeMin' && k21.miss === 'values.rt_concrete:good',
+      k21.time === 'evTimeMin' && k21.miss === 'row:rt_concrete',
       'E21 (1) メモ欄・文字の欄に書いた直後（フォーカスを残したまま）でも 1 回目のクリックが届く: ① Q1 のメモ →［説明した］で 2 項目・文字の欄 → もう一度で外れる・「▼ 下にあと n 項目」でスクロール・' +
-      '⑤ 逆質問のメモ →［伝えた］で合否連絡 2 つ・評価の確認点のメモ →「面接時間の欄へ」で面接時間の欄・「未入力：確認点 n」で最初の未入力の行の ○。押した瞬間の change ではボタンの中身を作り直さない: ' + JSON.stringify(k21));
+      '⑤ 逆質問のメモ →［伝えた］で合否連絡 2 つ・評価の確認点のメモ →「面接時間の欄へ」で面接時間の欄・「未入力：確認点 n」で最初の未入力の行（行そのもの。16-12）。押した瞬間の change ではボタンの中身を作り直さない: ' + JSON.stringify(k21));
 
     // (2) 必須条件を確かめないまま［次へ］（#15）: 1 回目は進まずに ① の確かめることの最初の未確認の行へ（［一致］にフォーカス・帯の下と操作行の上に見える・未確認の行は琥珀・短い案内）。
     //   1 つ確かめると残りだけ琥珀・もう一度押すと ② へ（案内は消え、① のチップは「未確認」）。Ctrl+Enter も 1 回目は止まり 2 回目で進む。
@@ -5649,9 +5670,25 @@ const pdfTextOf = (f) => {
     await page.click('#ivNext');
     await wait(300);
     const e21 = { miss: await page.textContent('#evMissing'), btns: await page.$$eval('#evMissing [data-action="ev-miss"]', els => els.map(b => b.tagName + ':' + b.dataset.miss + ':' + b.textContent)) };
+    // 移った先は行そのもの（tabindex=-1。行の操作には移さない。16-12）。Tab で行の最初の操作（一致・○・1・採用）へ
     const foc21 = () => page.evaluate(() => { const a = document.activeElement, r = a.getBoundingClientRect(), top = document.getElementById('evTop').getBoundingClientRect(), ft = document.getElementById('evFoot').getBoundingClientRect();
-      return (a.dataset.cl || a.dataset.persona || '') + ':' + (a.dataset.value || a.dataset.score || '') + (r.top >= top.bottom - 1 && r.bottom <= ft.top + 1 ? '' : ':hidden'); });
-    for (const k of ['must', 'rate', 'ps', 'overall']) { const b = await page.$('#evMissing [data-miss="' + k + '"]'); if (b) await b.click(); await wait(200); e21[k] = await foc21(); }
+      const kind = a.matches('.cl-must-row') ? 'must' : a.matches('.cl-rate-row') ? 'rate' : a.matches('.cl-ps-row') ? 'ps' : a.matches('.cl-overall-row') ? 'overall' : a.tagName;
+      return kind + ':' + (a.dataset.item || a.dataset.psRow || '') + (a.matches('.row.is-missing') ? '' : ':filled') + (r.top >= top.bottom - 1 && r.bottom <= ft.top + 1 ? '' : ':hidden'); });
+    const tab21 = async () => { await page.keyboard.press('Tab'); return st(() => { const a = document.activeElement; return (a.dataset.cl || a.dataset.persona || a.tagName) + ':' + (a.dataset.value || a.dataset.score || ''); }); };
+    for (const k of ['must', 'rate', 'ps', 'overall']) { const b = await page.$('#evMissing [data-miss="' + k + '"]'); if (b) await b.click(); await wait(200); e21[k] = await foc21(); e21[k + 'Tab'] = await tab21(); }
+    // キーボードで押して、続けて Enter・Space・Enter（押した 2 回目・押しっぱなしに当たる）: 何も記録しない（D12 と同じ形を評価に作らない）
+    const vals21 = () => st(() => { const c = window.RecruitApp.state.checklist; return JSON.stringify({ v: c.values, o: c.overall || '', p: c.persona || {} }); });
+    const v21a = await vals21();
+    //   （Space は行の上ではページを送る〔ブラウザの既定〕ので、2 回目のあとは行が見えているかは問わず、フォーカスが同じ行にあることだけを見る）
+    for (const k of ['must', 'rate', 'ps', 'overall']) {
+      await page.focus('#evMissing [data-miss="' + k + '"]');
+      await page.keyboard.press('Enter');
+      await wait(150);
+      e21[k + 'Kb'] = await foc21();
+      for (const key of ['Enter', ' ', 'Enter']) { await page.keyboard.press(key); await wait(60); }
+      e21[k + 'Kb2'] = (await foc21()).replace(/:hidden$/, '');
+    }
+    e21.kbSame = (await vals21()) === v21a;
     const back21 = async (sec, via) => {
       await page.evaluate((sec) => { const c = document.getElementById('cl-' + sec); window.scrollTo(0, Math.round(c.getBoundingClientRect().top + scrollY - 320)); }, sec);
       await wait(150);
@@ -5669,9 +5706,12 @@ const pdfTextOf = (f) => {
     e21.job = await back21('job', '#ivToEval');
     e21.reverse = await back21('reverse', '#ivNext');
     expect(e21.miss === '未入力：必須条件 2・確認点 6・人物像 7・総合判断' && JSON.stringify(e21.btns) === JSON.stringify(['BUTTON:must:必須条件 2', 'BUTTON:rate:確認点 6', 'BUTTON:ps:人物像 7', 'BUTTON:overall:総合判断']) &&
-      e21.must === 'values.must_weekly:match' && e21.rate === 'values.rt_concrete:good' && e21.ps === 'ps_greeting:1' && e21.overall === 'overall:hire' &&
+      e21.must === 'must:must_weekly' && e21.rate === 'rate:rt_concrete' && e21.ps === 'ps:ps_greeting' && e21.overall === 'overall:' &&
+      e21.mustTab === 'values.must_weekly:match' && e21.rateTab === 'values.rt_concrete:good' && e21.psTab === 'ps_greeting:1' && e21.overallTab === 'overall:hire' &&
+      ['must', 'rate', 'ps', 'overall'].every(k => e21[k + 'Kb'] === e21[k] && e21[k + 'Kb2'] === e21[k]) && e21.kbSame &&
       ['job', 'reverse'].every(k => { const o = e21[k]; return o.iv === '2:' + k && o.step === 3 && o.sy0 > 0 && o.sy > 0 && Math.abs(o.after - o.before) <= 2 && o.focus === k; }),
-      'E21 (4) 評価の結果カードの未入力の数はボタン（必須条件 → ［一致］・確認点 → ○・人物像 → 1・総合判断 → 採用。結果のカードの下・操作行の上に見える）。「✎ 面接の画面で直す」→［評価に戻る］・⑤ は［面接を終えて評価へ］で、' +
+      'E21 (4) 評価の結果カードの未入力の数はボタン（必須条件・確認点・人物像・総合判断の最初の未入力の行そのものにフォーカス〔結果のカードの下・操作行の上に見える〕・Tab で［一致］・○・1・採用へ。' +
+      'キーボードで押して続けて Enter・Space を押しても何も記録しない〔16-12〕）。「✎ 面接の画面で直す」→［評価に戻る］・⑤ は［面接を終えて評価へ］で、' +
       '直しに行ったカードが元の高さに戻り「面接の画面で直す」にフォーカス: ' + JSON.stringify(e21));
 
     // (5) 390×844 の操作行は 1 段（高さ 64。#0）: 準備・面接 ①②⑤・評価・評価から直しに来た ②（［評価に戻る］つき。主ボタンは「次へ：③ →」）・報告書。
@@ -5762,12 +5802,12 @@ const pdfTextOf = (f) => {
     if (await visible('#ivMustAlert [data-action="iv-must-row"]')) await page.click('#ivMustAlert [data-action="iv-must-row"]');   // （出ていなければ押さずに確かめで落とす）
     await wait(300);
     l21.go = await page.evaluate(() => { const a = document.activeElement, r = a.getBoundingClientRect(), al = document.getElementById('ivMustAlert').getBoundingClientRect(), ft = document.getElementById('ivFoot').getBoundingClientRect();
-      return { sec: document.getElementById('ivStage').dataset.sec, act: a.dataset.cl + ':' + a.dataset.value, seen: r.top >= al.bottom - 1 && r.bottom <= ft.top + 1 }; });
+      return { sec: document.getElementById('ivStage').dataset.sec, act: a.matches('.cl-must-row.is-ng') ? 'row:' + a.dataset.item : (a.dataset.cl || a.tagName) + ':' + (a.dataset.value || ''), seen: r.top >= al.bottom - 1 && r.bottom <= ft.top + 1 }; });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await wait(150);
     expect(!l21[390].link && !l21[480].link && [481, 600, 768, 840].every(w => l21[w].link && l21[w].h <= 48 && l21[w].ov <= 1) && l21[481].short && l21[600].short && !l21[768].short && !l21[840].short &&
-      l21.go.sec === 'conditions' && l21.go.act === 'values.must_busy:mismatch' && l21.go.seen,
-      'E21 (7) 「該当の行へ」は 481〜840px でも出る（480px 以下は出さない）・案内は 2 行まで（600px 以下は短い文）・768px で ⑤ から押すと ① の不一致の行の［不一致］（固定の案内の下・操作行の上）: ' + JSON.stringify(l21));
+      l21.go.sec === 'conditions' && l21.go.act === 'row:must_busy' && l21.go.seen,
+      'E21 (7) 「該当の行へ」は 481〜840px でも出る（480px 以下は出さない）・案内は 2 行まで（600px 以下は短い文）・768px で ⑤ から押すと ① の不一致の行そのもの（固定の案内の下・操作行の上）: ' + JSON.stringify(l21));
   }
 
   // =====================================================================
