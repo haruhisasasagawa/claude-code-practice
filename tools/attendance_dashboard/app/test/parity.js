@@ -48,6 +48,7 @@ const CFG = loadConfig();
 // Golden cases (CONTRACT.md): default settings, CSVs in slot order 1..6.
 const CALC_SHEETS = ['計算1', '計算2', '計算3', '計算4', '計算5', '計算6'];
 const CASES = {
+  fx6: { golden: () => path.join(__dirname, 'fixtures', 'sample6', 'fx6_golden.json'), csvs: 'fixture6' },   // runs from a clean checkout
   ns_s6: { golden: () => path.join(CFG.goldenDir, 'ns_s6.json'), csvs: 'sample6' },
   gold_asa: { golden: () => path.join(CFG.goldenDir, 'gold_asa.json'), csvs: 'sample6' },
   gold_mit: { golden: () => path.join(CFG.goldenDir, 'gold_mit.json'), csvs: 'sample6' },
@@ -71,7 +72,7 @@ const CASES = {
     CASES[id] = { golden: () => path.join(__dirname, 'fixtures', 'view_edge', t + '_golden.json'), csvs: 'vb:' + files.join(','),
       maxrows: 60, extra: true, holidays: 'golden' };
   });
-const PUBLIC_CASES = ['ns_s6', 'gold_asa', 'gold_mit', 'ns_job'];
+const PUBLIC_CASES = ['fx6', 'ns_s6', 'gold_asa', 'gold_mit', 'ns_job'];   // cases whose golden is missing are reported as skipped
 
 // ---------------------------------------------------------------- arguments
 function parseArgs(argv) {
@@ -103,6 +104,10 @@ function csvFiles(kind) {
   } else if (kind === 'private') {
     if (!CFG.privateCsv || !fs.existsSync(CFG.privateCsv)) throw new Error('private CSV not configured (privateCsv / AE_PRIVATE_CSV)');
     files = [{ name: path.basename(CFG.privateCsv), text: AE.api.decode(fs.readFileSync(CFG.privateCsv)) }, null, null, null, null, null];
+  } else if (kind === 'fixture6') {                 // test/fixtures/sample6: invented 30-staff theatre, 6 months (committed)
+    const dir = path.join(__dirname, 'fixtures', 'sample6');
+    files = fs.readdirSync(dir).filter((n) => /\.csv$/i.test(n)).sort()
+      .map((n) => ({ name: n, text: AE.api.decode(fs.readFileSync(path.join(dir, n))) }));
   } else if (kind === 'edge') {
     const dir = path.join(__dirname, 'fixtures', 'edge');
     files = ['edge1.csv', 'edge2.csv', 'edge3.csv', null, 'edge5.csv', 'edge6.csv']
@@ -287,7 +292,7 @@ function main() {
   if (args.all) cases = PUBLIC_CASES.slice();
   if (args.priv && !cases.includes('ns_aug')) cases.push('ns_aug');
   if (args.extra) for (const c of Object.keys(CASES)) if (CASES[c].extra && !cases.includes(c)) cases.push(c);
-  if (!cases.length) cases = ['ns_s6'];
+  if (!cases.length) cases = ['fx6'];
   for (const c of cases) {
     if (!CASES[c]) { console.error('unknown case: ' + c + ' (known: ' + Object.keys(CASES).join(', ') + ')'); return 2; }
     if (CASES[c].private && !args.priv) { console.error(`case ${c} uses real staff data: add --private`); return 2; }
@@ -296,6 +301,11 @@ function main() {
   const summary = [];
   for (const c of cases) {
     let f;
+    if (!fs.existsSync(CASES[c].golden())) {           // a golden kept outside the repo (scratch / private data) may be absent
+      console.log(`\n== case ${c}: SKIPPED (golden not found: ${CASES[c].golden()})`);
+      summary.push(`${c}: skipped`);
+      continue;
+    }
     try { f = runCase(c, args); } catch (e) { console.log(`\n== case ${c}: ERROR ${e.message}`); f = 1; }
     total += f;
     summary.push(`${c}: ${f ? f + ' failing' : 'ok'}`);

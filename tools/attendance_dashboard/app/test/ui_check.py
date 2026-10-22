@@ -344,9 +344,16 @@ def main():
         # ---------------------------------------------------------------- load the CSVs
         print('\n[load CSVs]')
         page.set_input_files('#file-input', csvs)
-        ck.ok(wait_until(page, "!document.getElementById('tab-dash').hidden && document.getElementById('busy').hidden "
-                               "&& !!document.querySelector('#dash-host [data-cell=\"B15\"]')", 60000),
-              'switches to the dashboard after loading')
+        ck.ok(wait_until(page, "document.getElementById('busy').hidden && document.querySelectorAll('#paste-body tr').length === 6 "
+                               "&& /OK|※|未貼付/.test(document.getElementById('paste-body').textContent)", 60000),
+              'load finishes and the 貼付状況 table is filled')
+        settled(page)
+        ck.ok(page.locator('#tab-howto').is_visible() and not page.locator('#tab-dash').is_visible(),
+              'stays on the CSV tab after loading (more files may follow)')
+        ck.ok('ダッシュボードを見る' in (page.locator('#load-msg').inner_text() or ''), 'load message tells to press ダッシュボードを見る')
+        page.click('#btn-go-dash')
+        ck.ok(wait_until(page, "!document.getElementById('tab-dash').hidden && !!document.querySelector('#dash-host [data-cell=\"B15\"]')", 60000),
+              '「ダッシュボードを見る」 opens the dashboard')
         settled(page)
         rows = page.eval_on_selector_all('#paste-body tr', 'trs => trs.map(tr => Array.from(tr.cells).map(td => td.textContent))')
         ck.ok(len(rows) == 6, '貼付状況 has 6 rows', str(len(rows)))
@@ -552,7 +559,10 @@ def main():
         settled(page)
         ck.ok(good.input_value() == new_text, f'after reload: 「{label}」 kept as {new_text}', good.input_value())
         page.set_input_files('#file-input', csvs)
-        wait_until(page, "!document.getElementById('tab-dash').hidden && document.getElementById('busy').hidden", 60000)
+        wait_until(page, "document.getElementById('busy').hidden && document.querySelectorAll('#paste-body tr').length === 6", 60000)
+        settled(page)
+        page.click('#tabbtn-dash')                    # the app no longer switches tabs by itself after a load (we are on 設定 here)
+        wait_until(page, "!document.getElementById('tab-dash').hidden", 60000)
         settled(page)
         page.select_option('#staff-select', staff)
         settled(page)

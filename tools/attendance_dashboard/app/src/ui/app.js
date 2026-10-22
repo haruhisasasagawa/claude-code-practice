@@ -652,11 +652,11 @@
     if (noMonth.length) { msgs.push('月を読み取れなかったファイル：' + noMonth.map(d => '「' + d.name + '」').join('、') + '（貼付状況を確認してください）'); warn = true; }
     state.files = files2;
     if (loaded.length) msgs.unshift(loaded.length + '件のファイルを読み込みました。古い月から順に並べています。');
-    setLoadMsg(msgs.join('\n'), warn);
+    if (!(loaded.length && !warn)) setLoadMsg(msgs.join('\n'), warn);
     hideBusy();
-    const first = state.files.length > 0 && !state.loadedOnce;
-    state.loadedOnce = state.loadedOnce || state.files.length > 0;
-    recompute(() => { if (first && state.WB && !warn) switchTab('dash'); });
+    // stay on this tab: more files may follow. The user opens the dashboard with 「ダッシュボードを見る」
+    if (loaded.length && !warn) setLoadMsg(msgs.join('\n') + '\n読み込みが終わったら「ダッシュボードを見る」を押してください。', false);
+    recompute();
   }
   function clearData() {
     if (!state.files.length) { setLoadMsg('読み込んだデータはありません。'); return; }
