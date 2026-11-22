@@ -133,7 +133,7 @@ guide = [
     ("B27", "■ 変換ルール", BOLD),
     ("B28", "・記号(A〜X、A'など)はマスタの出勤〜退勤(8.5時間)に展開し、配置先には下の「配置先グループ」の名前(記号の範囲と出勤時刻)を入れます。", BLACK),
     ("B29", "・休・有・リフ・特・外・出・Ｂ半・出勤 など出勤時刻のない記号は「勤務なし(空欄)」になります。休憩は反映しません。", BLACK),
-    ("B30", "・表示は14時間分のみ。表示時間帯の外(深夜など)の勤務は日別シートの予定hに含まれません。前日からの持ち越し(0時以降)は表示しません。", BLACK),
+    ("B30", "・日別シートの社員はその日の出勤者だけを出勤時刻の早い順に並べます(休みの人は出ません)。表示は14時間分のみ。表示時間帯の外(深夜など)の勤務は日別シートの予定hに含まれません。前日からの持ち越し(0時以降)は表示しません。", BLACK),
     ("B31", "・日別シートの黄色いマスを直接書き換えると数式が消え、その日は自動反映されなくなります(元に戻すには他の日のセルをコピー)。", BLACK),
     ("B32", "・設定シートの社員名はMGRマスタ順で先頭20人まで。配置先は10か所までのため、出勤時刻が近い記号を1つの配置先にまとめています(下の表で変更可)。", BLACK),
 ]
@@ -235,7 +235,22 @@ for n in range(1, 32):
             c = ws.cell(r, col, f"=MOD(MGR設定!$C$4+{k}/24,1)"); c.number_format = "h:mm"
         for r in (9 + k, 29 + k):
             c = ws.cell(r, 19, f"=MOD(MGR設定!$C$4+{k}/24,1)"); c.number_format = "h:mm"
-    # 補助列 Z:AC (記号 / 出勤h / 退勤h / 区分)
+    # 補助列 AE:AH (設定の社員順: 記号 / 区分 / 出勤h / 並べ替えキー)
+    for i in range(20):
+        r = 9 + i
+        m2 = f'MATCH($AE{r},MGRマスタ!$B$6:$B$53,0)'
+        raw2 = f'INDEX(MGRマスタ!$A$6:$A$53,{m2})*24'
+        ws.cell(r, 31, f'=IF(OR($B$3="",設定!$C${10+i}=""),"",IFERROR(TRIM(INDEX(MGR貼付!$D$7:$AH$65,MATCH(設定!$C${10+i},MGR貼付!$C$7:$C$65,0),{n})&""),""))')
+        ws.cell(r, 32, f'=IF($AE{r}="","",IFERROR(INDEX(MGRマスタ!$D$6:$D$53,{m2})&"",""))')
+        ws.cell(r, 33, f'=IF($AE{r}="","",IFERROR(ROUND(IF(AND({raw2}>=24,$AF{r}<>"夜番"),{raw2}-24,{raw2}),4),""))')
+        ws.cell(r, 34, f'=IF($AG{r}="","",$AG{r}*100+{i+1})')
+        for col in (31, 32, 33, 34):
+            ws.cell(r, col).font = GREY
+    # 社員名: 出勤時刻の早い順(同時刻は設定の順)。出勤者のみ表示
+    for k in range(20):
+        r = 9 + k
+        ws.cell(r, 2, f'=IFERROR(INDEX(設定!$C$10:$C$29,MATCH(SMALL($AH$9:$AH$28,{k+1}),$AH$9:$AH$28,0)),"")')
+    # 補助列 Z:AD (表示行の社員: 記号 / 出勤h / 退勤h / 配置先 / 区分)
     for i in range(20):
         r = 9 + i
         ws.cell(r, 26, f'=IF(OR($B$3="",$B{r}=""),"",IFERROR(TRIM(INDEX(MGR貼付!$D$7:$AH$65,MATCH($B{r},MGR貼付!$C$7:$C$65,0),{n})&""),""))')
@@ -260,9 +275,9 @@ for n in range(1, 32):
         # 予定h: COUNTA → 文字列セルのみ数える
         q = ws.cell(r, 17)
         q.value = q.value.replace(f"COUNTA(C{r}:P{r})", f'COUNTIF(C{r}:P{r},"?*")')
-    for col, t in zip((26, 27, 28, 29, 30), ("記号", "出勤h", "退勤h", "配置先", "区分")):
+    for col, t in zip((26, 27, 28, 29, 30, 31, 32, 33, 34), ("記号", "出勤h", "退勤h", "配置先", "区分", "設定順:記号", "区分", "出勤h", "並替キー")):
         ws.cell(8, col, t).font = GREY
-    for col in ("Z", "AA", "AB", "AC", "AD"):
+    for col in ("Z", "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH"):
         ws.column_dimensions[col].hidden = True
         ws.column_dimensions[col].width = 6
     # 配置先名が長くなるので列幅を広げる
@@ -279,6 +294,20 @@ for n in range(1, 32):
     # 注記
     ws["B4"] = "1マス＝表示時刻から1時間。配置は「MGR貼付」の記号から自動反映(配置先＝記号グループと出勤時刻)。表示時間帯・グループは「MGR設定」で変更できます。"
     ws["B45"] = "必要人数は「MGR設定」シートの表(配置先×時間)から自動反映。空欄は「人数確認」と表示します。"
+
+# ---------------------------------------------------------------- 集計: 社員名で日別シートを参照
+sk = wb["集計"]
+for e in range(20):                       # 社員別の勤務予定時間(日別)
+    r = 47 + e
+    for d in range(31):
+        col = 6 + d; n = d + 1
+        sk.cell(r, col, f'=IF(OR($B{r}="",{L(col)}$45=""),"",IFERROR(INDEX(\'{n}\'!$Q$9:$Q$28,MATCH($B{r},\'{n}\'!$B$9:$B$28,0)),IF(\'{n}\'!$I$3="未入力","",0)))')
+for r in range(99, 719):                  # 日別・社員別・配置先別
+    n = sk.cell(r, 2).value
+    if not isinstance(n, int):
+        continue
+    for col in range(5, 15):
+        sk.cell(r, col, f'=IF(OR({L(col)}$98="",$D{r}=""),"",IFERROR(COUNTIF(INDEX(\'{n}\'!$C$9:$P$28,MATCH($D{r},\'{n}\'!$B$9:$B$28,0),0),{L(col)}$98),0))')
 
 wb.save(OUT)
 print("saved", OUT)
