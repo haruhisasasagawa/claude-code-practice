@@ -131,14 +131,79 @@ guide = [
     ("B24", "3. これだけで完了。対象年月は貼付シートの D3 の日付、社員名は C列(C7,C9,…C45 の20人)から自動で設定され、日別1〜31に配置が反映されます。", BLACK),
     ("B25", "4. 出勤記号や時刻が変わったときは、MGRシフト表の「マスタ」シートも同じ手順で「MGRマスタ」シートの A1 に値貼り付けします。", BLACK),
     ("B27", "■ 変換ルール", BOLD),
-    ("B28", "・記号(A〜X、A'など)はマスタの出勤〜退勤(8.5時間)に展開し、配置先には区分(早番/中番/遅番/夜番)を入れます。", BLACK),
+    ("B28", "・記号(A〜X、A'など)はマスタの出勤〜退勤(8.5時間)に展開し、配置先には下の「配置先グループ」の名前(記号の範囲と出勤時刻)を入れます。", BLACK),
     ("B29", "・休・有・リフ・特・外・出・Ｂ半・出勤 など出勤時刻のない記号は「勤務なし(空欄)」になります。休憩は反映しません。", BLACK),
     ("B30", "・表示は14時間分のみ。表示時間帯の外(深夜など)の勤務は日別シートの予定hに含まれません。前日からの持ち越し(0時以降)は表示しません。", BLACK),
     ("B31", "・日別シートの黄色いマスを直接書き換えると数式が消え、その日は自動反映されなくなります(元に戻すには他の日のセルをコピー)。", BLACK),
-    ("B32", "・設定シートの社員名はMGRマスタ順で先頭20人まで。配置先名(早番/中番/遅番/夜番)はMGRマスタのD列と同じ表記にしてください。", BLACK),
+    ("B32", "・設定シートの社員名はMGRマスタ順で先頭20人まで。配置先は10か所までのため、出勤時刻が近い記号を1つの配置先にまとめています(下の表で変更可)。", BLACK),
 ]
 for addr, text, f in guide:
     S[addr] = text; S[addr].font = f
+# --- 配置先グループ表 (記号を出勤時刻で10グループに分け、配置先名にする)
+def hm(h):
+    h = h % 24
+    return f"{int(h)}:{int(round((h - int(h)) * 60)):02d}"
+
+codes = []   # (記号, 出勤h, 退勤h, 区分)
+for r in range(6, 54):
+    code = master.cell(r, 2).value
+    if code is None:
+        continue
+    s_h, e_h, kb = hours(master.cell(r, 1).value), hours(master.cell(r, 3).value), master.cell(r, 4).value
+    if s_h is None:
+        continue
+    if s_h >= 24 and kb != "夜番":
+        s_h -= 24; e_h -= 24
+    if e_h <= s_h:
+        e_h += 24
+    codes.append((str(code), s_h, e_h, kb or ""))
+# 出勤時刻の境界(時)で10グループ。最後の行は 0:00〜4:30 出勤(24〜29h)
+BOUNDS = [(5, 7), (7, 9), (9, 11), (11, 13), (13, 15), (15, 17), (17, 18), (18, 21), (21, 24), (24, 29)]
+groups = []
+for lo, hi in BOUNDS:
+    members = [c for c in codes if lo <= c[1] < hi]
+    if not members:
+        groups.append(None); continue
+    first, last = members[0], members[-1]
+    name = f"{first[0]}〜{last[0]} {hm(first[1])}-{hm(last[1])}" if len(members) > 1 else f"{first[0]} {hm(first[1])}"
+    note = f"出勤 {hm(min(m[1] for m in members))}〜{hm(max(m[1] for m in members))} ／ 退勤 {hm(min(m[2] for m in members))}〜{hm(max(m[2] for m in members))} ／ {'・'.join(sorted(set(m[3] for m in members if m[3])))}"
+    groups.append((name, note, [m[0] for m in members]))
+code2group = {}
+for gi, g in enumerate(groups):
+    if g:
+        for c in g[2]:
+            code2group[c] = gi + 1
+
+S["B37"] = "■ 配置先グループ(設定シートの配置先名になります。名前は書き換え可。10か所まで)"; S["B37"].font = BOLD
+for col, text in zip("BCH", ["No", "配置先名(記号 出勤時刻)", "内容"]):
+    c = S[f"{col}38"]; c.value = text; c.font = BOLD; c.fill = HEAD; c.border = BOX
+S.merge_cells("C38:G38"); S.merge_cells("H38:P38")
+for gi in range(10):
+    r = 39 + gi
+    S.cell(r, 2, gi + 1).font = BLACK; S.cell(r, 2).border = BOX; S.cell(r, 2).alignment = Alignment(horizontal="center")
+    g = groups[gi]
+    c = S.cell(r, 3, g[0] if g else None); c.font = BLUE; c.fill = YELLOW; c.border = BOX
+    S.merge_cells(start_row=r, start_column=3, end_row=r, end_column=7)
+    c = S.cell(r, 8, g[1] if g else None); c.font = GREY
+    S.merge_cells(start_row=r, start_column=8, end_row=r, end_column=16)
+
+S["B50"] = "■ 記号ごとの配置先(No列を書き換えるとグループを変えられます。記号・時刻はMGRマスタから自動)"; S["B50"].font = BOLD
+for col, text in zip("BCDEFG", ["記号", "出勤", "退勤", "区分", "No", "配置先名"]):
+    c = S[f"{col}51"]; c.value = text; c.font = BOLD; c.fill = HEAD; c.border = BOX
+S.merge_cells("G51:K51")
+for i in range(48):
+    r = 52 + i; mr = 6 + i
+    S.cell(r, 2, f'=IF(MGRマスタ!$B${mr}="","",MGRマスタ!$B${mr})').font = BLACK
+    c = S.cell(r, 3, f'=IF(MGRマスタ!$A${mr}="","",MGRマスタ!$A${mr})'); c.number_format = "h:mm"; c.font = BLACK
+    c = S.cell(r, 4, f'=IF(MGRマスタ!$C${mr}="","",MGRマスタ!$C${mr})'); c.number_format = "h:mm"; c.font = BLACK
+    S.cell(r, 5, f'=IF(MGRマスタ!$D${mr}="","",MGRマスタ!$D${mr})').font = BLACK
+    code = master.cell(mr, 2).value
+    c = S.cell(r, 6, code2group.get(str(code)) if code is not None else None); c.font = BLUE; c.fill = YELLOW; c.alignment = Alignment(horizontal="center")
+    S.cell(r, 7, f'=IF(OR($B{r}="",$F{r}=""),"",IFERROR(INDEX($C$39:$C$48,$F{r}),""))').font = BLACK
+    S.merge_cells(start_row=r, start_column=7, end_row=r, end_column=11)
+    for col in range(2, 8):
+        S.cell(r, col).border = BOX
+
 S["B34"] = '=IFERROR(HYPERLINK("#\'ダッシュボード\'!B2","▦ ダッシュボードへ"),"▦ ダッシュボードへ")'
 S["B34"].font = Font(name=FONT, size=10, bold=True, color="2F6597")
 S["B35"] = '=IFERROR(HYPERLINK("#\'MGR貼付\'!A1","MGR貼付シートへ"),"MGR貼付シートへ")'
@@ -150,10 +215,8 @@ st["C6"] = "=IF(ISNUMBER(MGR貼付!$D$3),YEAR(MGR貼付!$D$3),2026)"
 st["F6"] = "=IF(ISNUMBER(MGR貼付!$D$3),MONTH(MGR貼付!$D$3),12)"
 for i in range(20):
     st.cell(10 + i, 3, f'=TRIM(MGR貼付!$C${7 + 2*i}&"")')
-for i, name in enumerate(["早番", "中番", "遅番", "夜番"]):
-    st.cell(10 + i, 8, name)
-for r in range(14, 20):
-    st.cell(r, 8).value = None
+for i in range(10):
+    st.cell(10 + i, 8, f'=IF(MGR設定!$C${39 + i}="","",MGR設定!$C${39 + i})')
 st["B45"] = "MGRシフト表の月シートを「MGR貼付」に値貼り付けすると、年月・社員名・日別の配置が自動で反映されます(設定は「MGR設定」シート)。"
 
 # ダッシュボードの社員数は空文字の数式セルを数えないようにする
@@ -179,13 +242,14 @@ for n in range(1, 32):
         m = f'MATCH($Z{r},MGRマスタ!$B$6:$B$53,0)'
         raw_s = f'INDEX(MGRマスタ!$A$6:$A$53,{m})*24'
         raw_e = f'INDEX(MGRマスタ!$C$6:$C$53,{m})*24'
-        # 区分
-        ws.cell(r, 29, f'=IF($Z{r}="","",IFERROR(INDEX(MGRマスタ!$D$6:$D$53,{m})&"",""))')
+        # 区分(マスタ) → AD、配置先名(MGR設定の記号表) → AC
+        ws.cell(r, 30, f'=IF($Z{r}="","",IFERROR(INDEX(MGRマスタ!$D$6:$D$53,{m})&"",""))')
+        ws.cell(r, 29, f'=IF($Z{r}="","",IFERROR(INDEX(MGR設定!$G$52:$G$99,MATCH($Z{r},MGR設定!$B$52:$B$99,0))&"",""))')
         # 出勤h: マスタで 24:00 以降(翌日)として持つ時刻は、夜番以外なら当日の時刻に戻す(W=5:00 など早番)
-        ws.cell(r, 27, f'=IF($Z{r}="","",IFERROR(ROUND(IF(AND({raw_s}>=24,$AC{r}<>"夜番"),{raw_s}-24,{raw_s}),4),""))')
+        ws.cell(r, 27, f'=IF($Z{r}="","",IFERROR(ROUND(IF(AND({raw_s}>=24,$AD{r}<>"夜番"),{raw_s}-24,{raw_s}),4),""))')
         # 退勤h = 出勤h + 勤務時間(退勤が出勤以前なら翌日扱い)
         ws.cell(r, 28, f'=IF($AA{r}="","",IFERROR(ROUND($AA{r}+IF({raw_e}<={raw_s},{raw_e}+24-{raw_s},{raw_e}-{raw_s}),4),""))')
-        for col in (26, 27, 28, 29):
+        for col in (26, 27, 28, 29, 30):
             ws.cell(r, col).font = GREY
         # 配置マス
         for k in range(14):
@@ -196,11 +260,16 @@ for n in range(1, 32):
         # 予定h: COUNTA → 文字列セルのみ数える
         q = ws.cell(r, 17)
         q.value = q.value.replace(f"COUNTA(C{r}:P{r})", f'COUNTIF(C{r}:P{r},"?*")')
-    ws.cell(8, 25, "記号"); ws.cell(8, 26, "記号"); ws.cell(8, 27, "出勤h"); ws.cell(8, 28, "退勤h"); ws.cell(8, 29, "区分")
-    ws.cell(8, 25).value = None
-    for col in ("Z", "AA", "AB", "AC"):
+    for col, t in zip((26, 27, 28, 29, 30), ("記号", "出勤h", "退勤h", "配置先", "区分")):
+        ws.cell(8, col, t).font = GREY
+    for col in ("Z", "AA", "AB", "AC", "AD"):
         ws.column_dimensions[col].hidden = True
         ws.column_dimensions[col].width = 6
+    # 配置先名が長くなるので列幅を広げる
+    for col in range(3, 17):
+        ws.column_dimensions[L(col)].width = 15
+    for col in ("T", "U", "V", "W", "X"):
+        ws.column_dimensions[col].width = 13
     # 入力状況・必要人時の COUNTA 置換
     ws["I3"] = ws["I3"].value.replace(COUNTA_OLD, COUNTA_NEW)
     for r in range(34, 44):
@@ -208,7 +277,7 @@ for n in range(1, 32):
         for k in range(14):
             ws.cell(r, 3 + k, f'=IF(OR($B$3="",$B{r}=""),"",MGR設定!{L(3+k)}{r - 25})')
     # 注記
-    ws["B4"] = "1マス＝表示時刻から1時間。配置は「MGR貼付」の記号から自動反映(区分＝早番/中番/遅番/夜番)。表示時間帯は「MGR設定」で変更できます。"
+    ws["B4"] = "1マス＝表示時刻から1時間。配置は「MGR貼付」の記号から自動反映(配置先＝記号グループと出勤時刻)。表示時間帯・グループは「MGR設定」で変更できます。"
     ws["B45"] = "必要人数は「MGR設定」シートの表(配置先×時間)から自動反映。空欄は「人数確認」と表示します。"
 
 wb.save(OUT)
