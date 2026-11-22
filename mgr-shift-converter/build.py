@@ -16,6 +16,7 @@ import sys, datetime as dt
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter as L
+from openpyxl.formatting.rule import ColorScaleRule
 
 TEMPLATE, MGR, MONTH_SHEET, OUT = sys.argv[1:5]
 
@@ -291,9 +292,68 @@ for n in range(1, 32):
         ws.cell(r, 17).value = ws.cell(r, 17).value.replace(COUNTA_OLD, COUNTA_NEW)
         for k in range(14):
             ws.cell(r, 3 + k, f'=IF(OR($B$3="",$B{r}=""),"",MGR設定!{L(3+k)}{r - 25})')
+    # 29行目: 時間帯ごとの人数(配置あり・休憩を除く)と出勤者数
+    HFILL = PatternFill("solid", fgColor="EAF0F3"); HFONT = Font(name=FONT, size=10, bold=True, color="30363B")
+    ws.row_dimensions[29].height = 20
+    c = ws["B29"]; c.value = '=IF($B$3="","人数",IF(COUNTIF($B$9:$B$28,"?*")=0,"人数","人数（出勤 "&COUNTIF($B$9:$B$28,"?*")&"名）"))'
+    c.font = HFONT; c.fill = HFILL; c.border = BOX; c.alignment = Alignment(horizontal="center", vertical="center")
+    for k in range(14):
+        col = L(3 + k)
+        c = ws.cell(29, 3 + k, f'=IF($B$3="","",COUNTIF({col}$9:{col}$28,"?*")-COUNTIF({col}$9:{col}$28,"休憩"))')
+        c.font = HFONT; c.fill = HFILL; c.border = BOX; c.alignment = Alignment(horizontal="center", vertical="center")
+    c = ws["Q29"]; c.value = '=IF($B$3="","",COUNTIF($B$9:$B$28,"?*"))'
+    c.font = HFONT; c.fill = HFILL; c.border = BOX; c.alignment = Alignment(horizontal="center", vertical="center"); c.number_format = '0"名"'
+    ws.conditional_formatting.add("C29:P29", ColorScaleRule(start_type="num", start_value=0, start_color="FFFFFF", end_type="max", end_color="5B9BD5"))
     # 注記
     ws["B4"] = "1マス＝表示時刻から1時間。配置は「MGR貼付」の記号から自動反映(配置先＝記号グループと出勤時刻)。表示時間帯・グループは「MGR設定」で変更できます。"
     ws["B45"] = "必要人数は「MGR設定」シートの表(配置先×時間)から自動反映。空欄は「人数確認」と表示します。"
+
+# ---------------------------------------------------------------- 時間帯人数(月間一覧)
+H = wb.create_sheet("時間帯人数", wb.sheetnames.index("ダッシュボード") + 1)
+H.sheet_view.showGridLines = False
+H.sheet_properties.tabColor = "8DBCAF"
+H.column_dimensions["A"].width = 2; H.column_dimensions["B"].width = 5; H.column_dimensions["C"].width = 9
+H.column_dimensions["D"].width = 5; H.column_dimensions["E"].width = 8
+for k in range(14):
+    H.column_dimensions[L(6 + k)].width = 7
+H.column_dimensions["T"].width = 3
+H["B2"] = "▦　時間帯別の人数（月間）"; H["B2"].font = TITLE
+H["B3"] = "各日の配置表(29行目)の人数を一覧にしたものです。色が濃いほど人数が多い時間帯です。休憩は含みません。"; H["B3"].font = GREY
+H["U2"] = '=IFERROR(HYPERLINK("#\'ダッシュボード\'!B2","▦ ダッシュボードへ"),"▦ ダッシュボードへ")'
+H["U2"].font = Font(name=FONT, size=10, bold=True, color="2F6597")
+HFILL = PatternFill("solid", fgColor="EAF0F3"); HFONT = Font(name=FONT, size=10, bold=True, color="30363B")
+CENTER = Alignment(horizontal="center", vertical="center")
+for col, t in zip("BCDE", ["日", "日付", "曜日", "出勤者"]):
+    c = H[f"{col}5"]; c.value = t; c.font = HFONT; c.fill = HFILL; c.border = BOX; c.alignment = CENTER
+for k in range(14):
+    c = H.cell(5, 6 + k, f"=MOD(MGR設定!$C$4+{k}/24,1)"); c.number_format = "h:mm"
+    c.font = HFONT; c.fill = HFILL; c.border = BOX; c.alignment = CENTER
+H.row_dimensions[5].height = 22
+for d in range(31):
+    r = 6 + d; n = d + 1
+    H.cell(r, 2, n)
+    c = H.cell(r, 3, f"=IF(LEN('{n}'!$B$3)=0,\"\",'{n}'!$B$3)"); c.number_format = "m/d"
+    H.cell(r, 4, f'=IF(C{r}="","",CHOOSE(WEEKDAY(C{r},2),"月","火","水","木","金","土","日"))')
+    c = H.cell(r, 5, f"=IF(LEN('{n}'!$Q$29)=0,\"\",'{n}'!$Q$29)"); c.number_format = '0"名"'
+    for k in range(14):
+        col = L(3 + k)
+        H.cell(r, 6 + k, f"=IF(LEN('{n}'!{col}$29)=0,\"\",'{n}'!{col}$29)")
+    for col in range(2, 20):
+        c = H.cell(r, col); c.font = BLACK; c.border = BOX; c.alignment = CENTER
+    H.row_dimensions[r].height = 18
+r = 37
+H.cell(r, 2, "平均").font = HFONT
+H.merge_cells("B37:E37"); H["B37"].fill = HFILL; H["B37"].border = BOX; H["B37"].alignment = CENTER
+for k in range(14):
+    col = L(6 + k)
+    c = H.cell(r, 6 + k, f'=IF(COUNT({col}6:{col}36)=0,"",ROUND(AVERAGE({col}6:{col}36),1))')
+    c.font = HFONT; c.fill = HFILL; c.border = BOX; c.alignment = CENTER
+H.conditional_formatting.add("F6:S36", ColorScaleRule(start_type="num", start_value=0, start_color="FFFFFF", end_type="max", end_color="5B9BD5"))
+# 土日は日付を色分け
+from openpyxl.formatting.rule import FormulaRule
+H.conditional_formatting.add("B6:E36", FormulaRule(formula=['AND(ISNUMBER($C6),WEEKDAY($C6,2)=7)'], font=Font(color="C00000")))
+H.conditional_formatting.add("B6:E36", FormulaRule(formula=['AND(ISNUMBER($C6),WEEKDAY($C6,2)=6)'], font=Font(color="2F6597")))
+H.freeze_panes = "F6"
 
 # ---------------------------------------------------------------- 集計: 社員名で日別シートを参照
 sk = wb["集計"]
