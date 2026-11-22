@@ -355,6 +355,113 @@ H.conditional_formatting.add("B6:E36", FormulaRule(formula=['AND(ISNUMBER($C6),W
 H.conditional_formatting.add("B6:E36", FormulaRule(formula=['AND(ISNUMBER($C6),WEEKDAY($C6,2)=6)'], font=Font(color="2F6597")))
 H.freeze_panes = "F6"
 
+# ---------------------------------------------------------------- シフトライン(30分単位・日付選択)
+from openpyxl.formatting.rule import FormulaRule, Rule
+from openpyxl.styles.differential import DifferentialStyle
+from openpyxl.worksheet.datavalidation import DataValidation
+
+SL = wb.create_sheet("シフトライン", wb.sheetnames.index("ダッシュボード") + 1)
+SL.sheet_view.showGridLines = False
+SL.sheet_properties.tabColor = "2F6597"
+SLOT0, NSLOT = 5.0, 50                       # 5:00 〜 29:30 を30分刻み(翌6:00まで)
+FIRST = 5                                    # バーの先頭列(E)
+HFILL = PatternFill("solid", fgColor="2F6597"); HFONT = Font(name=FONT, size=9, bold=True, color="FFFFFF")
+CENTER = Alignment(horizontal="center", vertical="center")
+SL.column_dimensions["A"].width = 2; SL.column_dimensions["B"].width = 9
+SL.column_dimensions["C"].width = 4.5; SL.column_dimensions["D"].width = 11.5
+for j in range(NSLOT):
+    SL.column_dimensions[L(FIRST + j)].width = 2.9
+# 補助列(非表示)
+HC = FIRST + NSLOT + 1                       # 表示行用: pos / 出勤h / 退勤h
+HS = HC + 4                                  # 設定順: 記号 / 区分 / 出勤h / 退勤h / キー
+for col in list(range(HC, HC + 3)) + list(range(HS, HS + 5)):
+    SL.column_dimensions[L(col)].hidden = True
+SL.column_dimensions[L(FIRST + NSLOT)].width = 2
+
+SL["B2"] = '="【"&MGR貼付!$B$1&"】シフトライン人数確認表"'; SL["B2"].font = Font(name=FONT, size=16, bold=True, color="2F6597")
+SL["B4"] = "↓ 日を選ぶ(1〜31)"; SL["B4"].font = Font(name=FONT, size=9, color="2F6597")
+c = SL["B5"]; c.value = 1; c.font = Font(name=FONT, size=16, bold=True); c.fill = YELLOW; c.alignment = CENTER; c.border = BOX
+SL.merge_cells("B5:C5")
+dv = DataValidation(type="whole", operator="between", formula1="1", formula2="31", allow_blank=False)
+SL.add_data_validation(dv); dv.add("B5")
+c = SL["D5"]; c.value = '=IF(AND(ISNUMBER($B$5),$B$5>=1,$B$5<=集計!$F$5),TEXT(DATE(設定!$C$6,設定!$F$6,$B$5),"yyyy/m/d")&"（"&CHOOSE(WEEKDAY(DATE(設定!$C$6,設定!$F$6,$B$5),2),"月","火","水","木","金","土","日")&"）","")'
+c.font = Font(name=FONT, size=16, bold=True); c.alignment = Alignment(horizontal="left", vertical="center")
+SL.merge_cells(start_row=5, start_column=4, end_row=5, end_column=FIRST + 9)
+c = SL.cell(5, FIRST + 11, '=IF($D$5="","対象月にこの日はありません","出勤 "&COUNTIF($B$9:$B$28,"?*")&" 名")')
+c.font = Font(name=FONT, size=12, bold=True, color="2F6597")
+SL.row_dimensions[5].height = 30
+SL["B6"] = "名前・記号・勤務時間はMGR貼付から自動。バーは30分単位(5:00〜翌6:00)。上段の数字はその30分にいる人数。"; SL["B6"].font = GREY
+
+# 見出し行(7) と 人数行(8)
+for col, t in zip((2, 3, 4), ("名前", "記号", "勤務時間")):
+    c = SL.cell(7, col, t); c.font = HFONT; c.fill = HFILL; c.alignment = CENTER
+for j in range(NSLOT):
+    c = SL.cell(7, FIRST + j); c.fill = HFILL; c.font = HFONT; c.alignment = Alignment(horizontal="left", vertical="center")
+    if j % 2 == 0:
+        c.value = f"{int(SLOT0 + j * 0.5)}:00"
+SL.row_dimensions[7].height = 18
+c = SL.cell(8, 4, "人数 →"); c.font = Font(name=FONT, size=8, bold=True, color="30363B"); c.alignment = Alignment(horizontal="right")
+for j in range(NSLOT):
+    col = L(FIRST + j)
+    c = SL.cell(8, FIRST + j, f'=IF($D$5="","",COUNTIF({col}$9:{col}$28,1))')
+    c.font = Font(name=FONT, size=8, bold=True, color="30363B"); c.alignment = CENTER
+    c.fill = PatternFill("solid", fgColor="EAF0F3")
+SL.row_dimensions[8].height = 15
+
+# 設定順の補助(記号/区分/出勤/退勤/キー) と 表示行
+for i in range(20):
+    r = 9 + i
+    cS, cK, cB, cE, cKey = (L(HS + k) for k in range(5))
+    m2 = f'MATCH(${cS}{r},MGRマスタ!$B$6:$B$53,0)'
+    raw_s = f'INDEX(MGRマスタ!$A$6:$A$53,{m2})*24'; raw_e = f'INDEX(MGRマスタ!$C$6:$C$53,{m2})*24'
+    SL.cell(r, HS,     f'=IF(OR($D$5="",設定!$C${10+i}=""),"",IFERROR(TRIM(INDEX(MGR貼付!$D$7:$AH$65,MATCH(設定!$C${10+i},MGR貼付!$C$7:$C$65,0),$B$5)&""),""))')
+    SL.cell(r, HS + 1, f'=IF(${cS}{r}="","",IFERROR(INDEX(MGRマスタ!$D$6:$D$53,{m2})&"",""))')
+    SL.cell(r, HS + 2, f'=IF(${cS}{r}="","",IFERROR(ROUND(IF(AND({raw_s}>=24,${cK}{r}<>"夜番"),{raw_s}-24,{raw_s}),4),""))')
+    SL.cell(r, HS + 3, f'=IF(${cB}{r}="","",IFERROR(ROUND(${cB}{r}+IF({raw_e}<={raw_s},{raw_e}+24-{raw_s},{raw_e}-{raw_s}),4),""))')
+    SL.cell(r, HS + 4, f'=IF(${cB}{r}="","",${cB}{r}*100+{i+1})')
+for k in range(20):
+    r = 9 + k
+    cP, cB2, cE2 = L(HC), L(HC + 1), L(HC + 2)
+    cS, cK, cB, cE, cKey = (L(HS + x) for x in range(5))
+    SL.cell(r, HC,     f'=IFERROR(MATCH(SMALL(${cKey}$9:${cKey}$28,{k+1}),${cKey}$9:${cKey}$28,0),"")')
+    SL.cell(r, HC + 1, f'=IF(${cP}{r}="","",INDEX(${cB}$9:${cB}$28,${cP}{r}))')
+    SL.cell(r, HC + 2, f'=IF(${cP}{r}="","",INDEX(${cE}$9:${cE}$28,${cP}{r}))')
+    c = SL.cell(r, 2, f'=IF(${cP}{r}="","",INDEX(設定!$C$10:$C$29,${cP}{r}))'); c.font = Font(name=FONT, size=10, bold=True); c.alignment = CENTER
+    c = SL.cell(r, 3, f'=IF(${cP}{r}="","",INDEX(${cS}$9:${cS}$28,${cP}{r}))'); c.font = Font(name=FONT, size=10); c.alignment = CENTER
+    c = SL.cell(r, 4, f'=IF(${cP}{r}="","",TEXT(${cB2}{r}/24,"[h]:mm")&"-"&TEXT(${cE2}{r}/24,"[h]:mm"))'); c.font = Font(name=FONT, size=9); c.alignment = CENTER
+    for j in range(NSLOT):
+        t = SLOT0 + j * 0.5
+        c = SL.cell(r, FIRST + j, f'=IF(${cB2}{r}="","",IF(AND({t}>=${cB2}{r},{t}<${cE2}{r}),1,""))')
+        c.number_format = ";;;"
+    SL.row_dimensions[r].height = 18
+# 出勤計
+c = SL.cell(29, 2, "出勤計"); c.font = HFONT; c.fill = HFILL; c.alignment = CENTER
+c = SL.cell(29, 3, '=IF($D$5="","",COUNTIF($B$9:$B$28,"?*"))'); c.number_format = '0"名"'; c.font = Font(name=FONT, size=10, bold=True); c.alignment = CENTER
+SL.merge_cells("C29:D29")
+
+# 条件付き書式: 名前のある行だけ罫線・塗り、バーは青
+last = L(FIRST + NSLOT - 1)
+body = f"B9:{last}28"
+bar_fill = PatternFill("solid", fgColor="5B9BD5", bgColor="5B9BD5")
+SL.conditional_formatting.add(f"{L(FIRST)}9:{last}28",
+    Rule(type="expression", formula=[f"{L(FIRST)}9=1"], dxf=DifferentialStyle(fill=bar_fill), stopIfTrue=False))
+grid = Border(left=Side(style="hair", color="9AA5AE"), right=Side(style="hair", color="9AA5AE"),
+              top=Side(style="thin", color="9AA5AE"), bottom=Side(style="thin", color="9AA5AE"))
+SL.conditional_formatting.add(body, Rule(type="expression", formula=['$B9<>""'], dxf=DifferentialStyle(border=grid)))
+SL.conditional_formatting.add("B9:D28", Rule(type="expression", formula=['$B9<>""'],
+    dxf=DifferentialStyle(fill=PatternFill("solid", fgColor="EAF0F3", bgColor="EAF0F3"))))
+# 毎正時の左側に薄い縦線
+for j in range(0, NSLOT, 2):
+    rng = f"{L(FIRST + j)}9:{L(FIRST + j)}28"
+    SL.conditional_formatting.add(rng, Rule(type="expression", formula=['$B9<>""'],
+        dxf=DifferentialStyle(border=Border(left=Side(style="thin", color="6B7780")))))
+    SL.cell(8, FIRST + j).border = Border(left=Side(style="thin", color="6B7780"))
+SL.freeze_panes = "E9"
+SL.sheet_view.zoomScale = 90
+SL.print_area = f"B2:{last}29"
+SL.page_setup.orientation = "landscape"; SL.page_setup.paperSize = SL.PAPERSIZE_A4
+SL.page_setup.fitToWidth = 1; SL.page_setup.fitToHeight = 1; SL.sheet_properties.pageSetUpPr.fitToPage = True
+
 # ---------------------------------------------------------------- 集計: 社員名で日別シートを参照
 sk = wb["集計"]
 for e in range(20):                       # 社員別の勤務予定時間(日別)
