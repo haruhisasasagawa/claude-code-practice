@@ -163,6 +163,11 @@ for ref, t in steps.items():
     x = set_cell(x, ref, text=esc(t))
 parts[p] = x.encode("utf-8")
 
+# ---------------------------------------------------------------- 太枠(thick)の罫線を周囲と同じ細線に戻す
+# シフト記号のマスに残っていた強調用の太枠。色も周囲の細線(theme 0, tint -0.5)に合わせる
+st = st.replace('style="thick"><color theme="1"/>', 'style="thin"><color theme="0" tint="-0.499984740745262"/>')
+st = st.replace('style="thick"', 'style="thin"')
+
 # ---------------------------------------------------------------- 開いたときに全再計算
 wbx = re.sub(r"<calcPr ", '<calcPr fullCalcOnLoad="1" ', wbx, count=1)
 parts["xl/workbook.xml"] = wbx.encode("utf-8")
