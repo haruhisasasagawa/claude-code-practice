@@ -188,21 +188,22 @@ DATEX = 'DATE(YEAR(設定!$C$6),MONTH(設定!$C$6),$B$5)'
 E1 = guard(f'IFERROR(INDEX(MGR貼付!$D$69:$D$84,MATCH({DATEX},MGR貼付!$B$69:$B$84,0)),"")')
 E2 = guard(f'IFERROR(INDEX(MGR貼付!$U$69:$U$84,MATCH({DATEX},MGR貼付!$S$69:$S$84,0)),"")')
 EVENT = f'{E1}&IF(AND({E1}<>"",{E2}<>"")," ／ ","")&{E2}'
-# 見出し横: 行事(5行目と6行目をつなぐ)
-x = set_cell(x, "AF5", formula=esc(f'IF($D$5="","",IF({GYOJI}="","","行事： "&{GYOJI}))'))
-# 出勤計の下: 行事とイベント・公開作品を全文表示(折り返し)
-s_head = style_of(cell_re("B39").search(x).group("attrs"))
-font_id = re.search(r'fontId="(\d+)"', re.findall(r'<xf [^>]*?(?:/>|>.*?</xf>)', re.search(r'<cellXfs count="\d+">(.*?)</cellXfs>', st, re.S).group(1), re.S)[int(style_of(cell_re("D9").search(x).group("attrs")))]).group(1)
+# 見出し横の行事表示は使わず、6行目(表のすぐ上)に 行事とイベントを2行で表示する
+x = set_cell(x, "AF5", blank=True)
+s_label = style_of(cell_re("B39").search(x).group("attrs"))
+xfs_all = re.findall(r'<xf [^>]*?(?:/>|>.*?</xf>)', re.search(r'<cellXfs count="\d+">(.*?)</cellXfs>', st, re.S).group(1), re.S)
+font_id = re.search(r'fontId="(\d+)"', xfs_all[int(style_of(cell_re("C9").search(x).group("attrs")))]).group(1)
 st, S_WRAP = add_xf(st, f'<xf numFmtId="0" fontId="{font_id}" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>')
-for r, label, body in ((41, "行事", GYOJI), (42, "イベント・公開作品", EVENT)):
-    x = ensure_row(x, r, ht=30)
-    x = set_cell(x, f"B{r}", text=label, style=s_head)
-    x = set_cell(x, f"E{r}", formula=esc(f'IF($D$5="","",{body})'), style=S_WRAP)
-    x = add_merge(x, f"B{r}:D{r}")
-    x = add_merge(x, f"E{r}:BB{r}")
+x = ensure_row(x, 6)
+rm = re.search(r'<row r="6"([^>]*)>', x)
+attrs = re.sub(r'\s(ht|customHeight)="[^"]*"', "", rm.group(1))
+x = x[:rm.start()] + f'<row r="6"{attrs} ht="34" customHeight="1">' + x[rm.end():]
+x = set_cell(x, "B6", text="行事・イベント", style=s_label)
+x = set_cell(x, "E6", formula=esc(
+    f'IF($D$5="","",IF({GYOJI}="","行事： なし","行事： "&{GYOJI})&CHAR(10)&IF({EVENT}="","イベント・公開作品： なし","イベント・公開作品： "&{EVENT}))'), style=S_WRAP)
+x = add_merge(x, "B6:D6")
+x = add_merge(x, "E6:BB6")
 parts[p] = x.encode("utf-8")
-# 印刷範囲を広げる
-wbx = wbx.replace("シフトライン!$B$2:$BB$39", "シフトライン!$B$2:$BB$42")
 
 # ---------------------------------------------------------------- 月間: 行事は5行目と6行目をつなぐ
 p = sheet_part["月間"]
