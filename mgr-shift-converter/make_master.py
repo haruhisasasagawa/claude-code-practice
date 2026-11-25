@@ -205,6 +205,25 @@ x = set_cell(x, "E6", formula=esc(
     f'IF($D$5="","",IF({GYOJI}="","行事： なし","行事： "&{GYOJI})&CHAR(10)&IF({EVENT}="","イベント： なし","イベント： "&{EVENT}))'), style=S_WRAP)
 x = add_merge(x, "B6:D6")
 x = add_merge(x, "E6:BB6")
+
+# 出勤計を、その日の最後の社員行のすぐ下に出す(39行目の固定表示はやめる)
+for r in range(9, 39):
+    prev = "TRUE" if r == 9 else f'$BE{r-1}<>""'
+    x = set_cell(x, f"B{r}", formula=esc(f'IF($BE{r}<>"",INDEX(計算!$C$2:$C$931,$BE{r}),IF(AND($D$5<>"",{prev}),"出勤計",""))'))
+    x = set_cell(x, f"C{r}", formula=esc(f'IF($BE{r}<>"",INDEX(計算!$D$2:$D$931,$BE{r}),IF($B{r}="出勤計",COUNT($BE$9:$BE$38)&"名",""))'))
+for ref in ("B39", "C39", "D39"):
+    x = re.sub(r'<c r="%s"[^>]*?(?:/>|>.*?</c>)' % ref, "", x, count=1, flags=re.S)
+x = x.replace('<mergeCell ref="C39:D39"/>', "")
+x = re.sub(r'<mergeCells count="(\d+)">', lambda m: f'<mergeCells count="{int(m.group(1))-1}">', x, count=1)
+x = x.replace('COUNTIF($B$9:$B$38,"?*")', "COUNT($BE$9:$BE$38)")
+# 既存の「名前がある行」の書式ルールから出勤計の行を外し、出勤計の行用の書式を足す
+x = x.replace('<formula>$B9&lt;&gt;""</formula>', '<formula>AND($B9&lt;&gt;"",$B9&lt;&gt;"出勤計")</formula>')
+dm = re.search(r'<dxfs count="(\d+)">(.*?)</dxfs>', st, re.S)
+ndxf = int(dm.group(1))
+st = st[:dm.start()] + f'<dxfs count="{ndxf+1}">' + dm.group(2) + \
+     '<dxf><font><b/><color rgb="FFFFFFFF"/></font><fill><patternFill patternType="solid"><fgColor rgb="FF2F6597"/><bgColor rgb="FF2F6597"/></patternFill></fill></dxf></dxfs>' + st[dm.end():]
+last_cf = x.rfind("</conditionalFormatting>") + len("</conditionalFormatting>")
+x = x[:last_cf] + f'<conditionalFormatting sqref="B9:C38"><cfRule type="expression" dxfId="{ndxf}" priority="30"><formula>$B9="出勤計"</formula></cfRule></conditionalFormatting>' + x[last_cf:]
 parts[p] = x.encode("utf-8")
 
 # ---------------------------------------------------------------- 月間: 行事は5行目と6行目をつなぐ
