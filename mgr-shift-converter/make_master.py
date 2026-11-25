@@ -141,7 +141,6 @@ for n in range(0, 31):
     col = L(4 + n)
     x = set_cell(x, f"{col}4", formula=esc(f'IF({col}$3="","",CHOOSE(WEEKDAY({col}$3,2),"月","火","水","木","金","土","日"))'))
 x = set_cell(x, "E1", text="← D3 に月初の日付を入力(例 2026/12/1)。日付・曜日・年月は自動で更新。", style=style_of(cell_re("B3").search(x).group("attrs")))
-x = set_cell(x, "B6", text="イベント", style=style_of(cell_re("B5").search(x).group("attrs")))
 
 # 行事・記号・必要人数・空き枠の氏名を空に
 for r in ([] if KEEP else list(range(5, 7)) + list(range(7, 66)) + [66]):
@@ -184,12 +183,12 @@ def guard(expr):
     return f'IF(OR({expr}="",{expr}=0),"",TRIM({expr}&""))'
 G1 = guard("INDEX(MGR貼付!$D$5:$AH$5,$B$5)")
 G2 = guard("INDEX(MGR貼付!$D$6:$AH$6,$B$5)")
-GYOJI = G1
+GYOJI = f'{G1}&IF(AND({G1}<>"",{G2}<>"")," ／ ","")&{G2}'
 DATEX = 'DATE(YEAR(設定!$C$6),MONTH(設定!$C$6),$B$5)'
 E1 = guard(f'IFERROR(INDEX(MGR貼付!$D$69:$D$84,MATCH({DATEX},MGR貼付!$B$69:$B$84,0)),"")')
 E2 = guard(f'IFERROR(INDEX(MGR貼付!$U$69:$U$84,MATCH({DATEX},MGR貼付!$S$69:$S$84,0)),"")')
 EV0 = f'{E1}&IF(AND({E1}<>"",{E2}<>"")," ／ ","")&{E2}'
-EVENT = f'{G2}&IF(AND({G2}<>"",{EV0}<>"")," ／ ","")&{EV0}'
+EVENT = EV0
 # 見出し横の行事表示は使わず、6行目(表のすぐ上)に 行事とイベントを2行で表示する
 x = set_cell(x, "AF5", blank=True)
 s_label = style_of(cell_re("B39").search(x).group("attrs"))
@@ -201,10 +200,33 @@ rm = re.search(r'<row r="6"([^>]*)>', x)
 attrs = re.sub(r'\s(ht|customHeight)="[^"]*"', "", rm.group(1))
 x = x[:rm.start()] + f'<row r="6"{attrs} ht="34" customHeight="1">' + x[rm.end():]
 x = set_cell(x, "B6", text="行事・イベント", style=s_label)
-x = set_cell(x, "E6", formula=esc(
-    f'IF($D$5="","",IF({GYOJI}="","行事： なし","行事： "&{GYOJI})&CHAR(10)&IF({EVENT}="","イベント： なし","イベント： "&{EVENT}))'), style=S_WRAP)
-x = add_merge(x, "B6:D6")
-x = add_merge(x, "E6:BB6")
+# 補助(非表示列): BD6=行事全文("/"→"／"), BE6=イベント全文, BF6=1つ目の区切り位置, BG6=残り, BI6=2つ目の区切り位置
+x = set_cell(x, "BD6", formula=esc(f'IF($D$5="","",SUBSTITUTE({GYOJI},"/","／"))'), style="6")
+x = set_cell(x, "BE6", formula=esc(f'IF($D$5="","",{EVENT})'), style="6")
+x = set_cell(x, "BF6", formula=esc('IF($BD$6="",0,IFERROR(FIND("／",$BD$6),0))'), style="6")
+x = set_cell(x, "BG6", formula=esc('IF($BF$6=0,"",MID($BD$6,$BF$6+1,999))'), style="6")
+x = set_cell(x, "BI6", formula=esc('IF($BG$6="",0,IFERROR(FIND("／",$BG$6),0))'), style="6")
+# 項目セル用のスタイル(中央寄せ・薄い塗り) とイベント用(折り返し)
+fm = re.search(r'<fills count="(\d+)">(.*?)</fills>', st, re.S)
+st = st[:fm.start()] + f'<fills count="{int(fm.group(1))+1}">' + fm.group(2) + '<fill><patternFill patternType="solid"><fgColor rgb="FFEAF0F3"/><bgColor indexed="64"/></patternFill></fill></fills>' + st[fm.end():]
+TAG_FILL = int(fm.group(1))
+st, S_TAG = add_xf(st, f'<xf numFmtId="0" fontId="{font_id}" fillId="{TAG_FILL}" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" shrinkToFit="1"/></xf>')
+x = set_cell(x, "E6", formula=esc('IF($D$5="","",IF($BD$6="","行事なし",TRIM(IF($BF$6=0,$BD$6,LEFT($BD$6,$BF$6-1)))))'), style=S_TAG)
+x = set_cell(x, "M6", formula=esc('IF($BG$6="","",TRIM(IF($BI$6=0,$BG$6,LEFT($BG$6,$BI$6-1))))'), style=S_TAG)
+x = set_cell(x, "U6", formula=esc('IF($BI$6=0,"",TRIM(MID($BG$6,$BI$6+1,999)))'), style=S_TAG)
+x = set_cell(x, "AC6", formula=esc('IF($D$5="","",IF($BE$6="","イベント： なし","イベント： "&$BE$6))'), style=S_WRAP)
+for ref in ("E6:L6", "M6:T6", "U6:AB6", "AC6:BB6"):
+    x = add_merge(x, ref)
+# 行事の色: ナイト=紫太字、早期オープン=青太字
+dm = re.search(r'<dxfs count="(\d+)">(.*?)</dxfs>', st, re.S)
+nd = int(dm.group(1))
+st = st[:dm.start()] + f'<dxfs count="{nd+2}">' + dm.group(2) + \
+     '<dxf><font><b/><color rgb="FF7030A0"/></font></dxf><dxf><font><b/><color rgb="FF0070C0"/></font></dxf></dxfs>' + st[dm.end():]
+last_cf = x.rfind("</conditionalFormatting>") + len("</conditionalFormatting>")
+x = x[:last_cf] + (
+    f'<conditionalFormatting sqref="E6:AB6"><cfRule type="expression" dxfId="{nd}" priority="31"><formula>ISNUMBER(SEARCH("ナイト",E6))</formula></cfRule></conditionalFormatting>'
+    f'<conditionalFormatting sqref="E6:AB6"><cfRule type="expression" dxfId="{nd+1}" priority="32"><formula>OR(ISNUMBER(SEARCH("早期オープン",E6)),ISNUMBER(SEARCH("早朝オープン",E6)))</formula></cfRule></conditionalFormatting>'
+) + x[last_cf:]
 
 # 出勤計を、その日の最後の社員行のすぐ下に出す(39行目の固定表示はやめる)
 for r in range(9, 39):
@@ -229,7 +251,7 @@ parts[p] = x.encode("utf-8")
 # ---------------------------------------------------------------- 月間: 行事は5行目と6行目をつなぐ
 p = sheet_part["月間"]
 x = parts[p].decode("utf-8")
-x = set_cell(x, "E5", text="行事・イベント")
+x = set_cell(x, "E5", text="行事")
 for d in range(1, 32):
     r = 5 + d
     g1 = guard(f"INDEX(MGR貼付!$D$5:$AH$5,{d})"); g2 = guard(f"INDEX(MGR貼付!$D$6:$AH$6,{d})")
