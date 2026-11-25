@@ -24,7 +24,8 @@ python build.py <MGRシフト.xlsx> <月シート名> <出力.xlsx>
 x14 形式の条件付き書式・入力規則・図形を保つため、openpyxl を通さず xlsx 内の XML を直接編集します。
 
 ```
-python make_master.py <安定版.xlsx> <原本.xlsx>
+python make_master.py <安定版.xlsx> <原本.xlsx>              # データを空にした原本
+python make_master.py --keep-data <安定版.xlsx> <出力.xlsx>  # データを残したまま機能だけ適用
 ```
 
 生成済み: `MGRシフトライン_原本.xlsx`

@@ -15,7 +15,9 @@ openpyxl を通すと x14 条件付き書式・入力規則・図形が落ちる
 import sys, re, zipfile, shutil
 from openpyxl.utils import get_column_letter as L, column_index_from_string as CI
 
-SRC, OUT = sys.argv[1:3]
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+KEEP = "--keep-data" in sys.argv
+SRC, OUT = args[:2]
 
 def cell_re(ref):
     return re.compile(r'<c r="%s"(?P<attrs>[^>]*?)(?:/>|>(?P<body>.*?)</c>)' % ref, re.S)
@@ -52,6 +54,30 @@ def set_cell(xml, ref, *, formula=None, text=None, blank=False, style=None, row_
             pos = c.start(); break
     body2 = body[:pos] + new + body[pos:]
     return xml[:rm.start(1)] + body2 + xml[rm.end(1):]
+
+def ensure_row(xml, rown, ht=None):
+    """行が無ければ順序を保って挿入する"""
+    if re.search(r'<row r="%d"[\s>]' % rown, xml):
+        return xml
+    attrs = f' ht="{ht}" customHeight="1"' if ht else ""
+    new = f'<row r="{rown}"{attrs}></row>'
+    pos = None
+    for m in re.finditer(r'<row r="(\d+)"', xml):
+        if int(m.group(1)) > rown:
+            pos = m.start(); break
+    if pos is None:
+        pos = xml.find("</sheetData>")
+    return xml[:pos] + new + xml[pos:]
+
+def add_merge(xml, ref):
+    m = re.search(r'<mergeCells count="(\d+)">(.*?)</mergeCells>', xml, re.S)
+    n = int(m.group(1))
+    return xml[:m.start()] + f'<mergeCells count="{n+1}">' + m.group(2) + f'<mergeCell ref="{ref}"/>' + "</mergeCells>" + xml[m.end():]
+
+def add_xf(st, xf_xml):
+    m = re.search(r'<cellXfs count="(\d+)">(.*?)</cellXfs>', st, re.S)
+    n = int(m.group(1))
+    return st[:m.start()] + f'<cellXfs count="{n+1}">' + m.group(2) + xf_xml + "</cellXfs>" + st[m.end():], n
 
 def esc(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
@@ -102,7 +128,10 @@ st, S_D3 = add_xf_like(st, int(d3_style), fillId=YELLOW_FILL, applyFill=1)
 
 # 表題・月初入力・日付・曜日
 x = set_cell(x, "D1", formula=esc('IF($D$3="","",TEXT($D$3,"m")&"月シフト")'))
-x = set_cell(x, "D3", blank=True, style=S_D3)
+if not KEEP:
+    x = set_cell(x, "D3", blank=True, style=S_D3)
+else:
+    x = x.replace('<c r="D3" s="%s"' % d3_style, '<c r="D3" s="%d"' % S_D3)
 for n in range(1, 31):
     col = L(4 + n)
     x = set_cell(x, f"{col}3", formula=esc(f'IF($D$3="","",IF($D$3+{n}>EOMONTH($D$3,0),"",$D$3+{n}))'))
@@ -114,12 +143,12 @@ for n in range(0, 31):
 x = set_cell(x, "E1", text="← D3 に月初の日付を入力(例 2026/12/1)。日付・曜日・年月は自動で更新。", style=style_of(cell_re("B3").search(x).group("attrs")))
 
 # 行事・記号・必要人数・空き枠の氏名を空に
-for r in list(range(5, 7)) + list(range(7, 66)) + [66]:
+for r in ([] if KEEP else list(range(5, 7)) + list(range(7, 66)) + [66]):
     for c in range(4, 35):
         ref = f"{L(c)}{r}"
         if cell_re(ref).search(x):
             x = set_cell(x, ref, blank=True)
-for r in range(7, 66, 2):
+for r in ([] if KEEP else range(7, 66, 2)):
     m = cell_re(f"C{r}").search(x)
     if m and m.group("body") and re.search(r"<v>0</v>", m.group("body")) and 't="s"' not in m.group("attrs"):
         x = set_cell(x, f"C{r}", blank=True)
@@ -135,7 +164,7 @@ for i in range(16):                      # S69:S84
     f = 'IF(B83="","",IF(B83+1>EOMONTH($D$3,0),"",B83+1))' if i == 0 else f'IF(S{r-1}="","",IF(S{r-1}+1>EOMONTH($D$3,0),"",S{r-1}+1))'
     x = set_cell(x, f"S{r}", formula=esc(f)); x = x.replace(f'<c r="S{r}" s="{style_of(cell_re("S"+str(r)).search(x).group("attrs"))}" t="str">', f'<c r="S{r}" s="{style_of(cell_re("S"+str(r)).search(x).group("attrs"))}">')
     x = set_cell(x, f"T{r}", formula=esc(f'IF(S{r}="","","/"&DAY(S{r}))'))
-for r in range(69, 85):
+for r in ([] if KEEP else range(69, 85)):
     for c in list(range(4, 18)) + list(range(21, 35)):
         ref = f"{L(c)}{r}"
         m = cell_re(ref).search(x)
@@ -143,11 +172,45 @@ for r in range(69, 85):
             x = set_cell(x, ref, blank=True)
 parts[p] = x.encode("utf-8")
 
-# ---------------------------------------------------------------- シフトライン: 日を 1 に
+# ---------------------------------------------------------------- シフトライン: 日を 1 に、行事2行とイベント欄を表示
 p = sheet_part["シフトライン"]
 x = parts[p].decode("utf-8")
-m = cell_re("B5").search(x)
-x = x[:m.start()] + f'<c r="B5" s="{style_of(m.group("attrs"))}"><v>1</v></c>' + x[m.end():]
+if not KEEP:
+    m = cell_re("B5").search(x)
+    x = x[:m.start()] + f'<c r="B5" s="{style_of(m.group("attrs"))}"><v>1</v></c>' + x[m.end():]
+
+def guard(expr):
+    return f'IF(OR({expr}="",{expr}=0),"",TRIM({expr}&""))'
+G1 = guard("INDEX(MGR貼付!$D$5:$AH$5,$B$5)")
+G2 = guard("INDEX(MGR貼付!$D$6:$AH$6,$B$5)")
+GYOJI = f'{G1}&IF(AND({G1}<>"",{G2}<>"")," ／ ","")&{G2}'
+DATEX = 'DATE(YEAR(設定!$C$6),MONTH(設定!$C$6),$B$5)'
+E1 = guard(f'IFERROR(INDEX(MGR貼付!$D$69:$D$84,MATCH({DATEX},MGR貼付!$B$69:$B$84,0)),"")')
+E2 = guard(f'IFERROR(INDEX(MGR貼付!$U$69:$U$84,MATCH({DATEX},MGR貼付!$S$69:$S$84,0)),"")')
+EVENT = f'{E1}&IF(AND({E1}<>"",{E2}<>"")," ／ ","")&{E2}'
+# 見出し横: 行事(5行目と6行目をつなぐ)
+x = set_cell(x, "AF5", formula=esc(f'IF($D$5="","",IF({GYOJI}="","","行事： "&{GYOJI}))'))
+# 出勤計の下: 行事とイベント・公開作品を全文表示(折り返し)
+s_head = style_of(cell_re("B39").search(x).group("attrs"))
+font_id = re.search(r'fontId="(\d+)"', re.findall(r'<xf [^>]*?(?:/>|>.*?</xf>)', re.search(r'<cellXfs count="\d+">(.*?)</cellXfs>', st, re.S).group(1), re.S)[int(style_of(cell_re("D9").search(x).group("attrs")))]).group(1)
+st, S_WRAP = add_xf(st, f'<xf numFmtId="0" fontId="{font_id}" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>')
+for r, label, body in ((41, "行事", GYOJI), (42, "イベント・公開作品", EVENT)):
+    x = ensure_row(x, r, ht=30)
+    x = set_cell(x, f"B{r}", text=label, style=s_head)
+    x = set_cell(x, f"E{r}", formula=esc(f'IF($D$5="","",{body})'), style=S_WRAP)
+    x = add_merge(x, f"B{r}:D{r}")
+    x = add_merge(x, f"E{r}:BB{r}")
+parts[p] = x.encode("utf-8")
+# 印刷範囲を広げる
+wbx = wbx.replace("シフトライン!$B$2:$BB$39", "シフトライン!$B$2:$BB$42")
+
+# ---------------------------------------------------------------- 月間: 行事は5行目と6行目をつなぐ
+p = sheet_part["月間"]
+x = parts[p].decode("utf-8")
+for d in range(1, 32):
+    r = 5 + d
+    g1 = guard(f"INDEX(MGR貼付!$D$5:$AH$5,{d})"); g2 = guard(f"INDEX(MGR貼付!$D$6:$AH$6,{d})")
+    x = set_cell(x, f"E{r}", formula=esc(f'IF($C{r}="","",{g1}&IF(AND({g1}<>"",{g2}<>"")," ／ ","")&{g2})'))
 parts[p] = x.encode("utf-8")
 
 # ---------------------------------------------------------------- 設定: 手順文
