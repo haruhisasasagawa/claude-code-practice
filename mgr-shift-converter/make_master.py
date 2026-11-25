@@ -259,6 +259,17 @@ wbx = re.sub(r"<calcPr ", '<calcPr fullCalcOnLoad="1" ', wbx, count=1)
 parts["xl/workbook.xml"] = wbx.encode("utf-8")
 parts["xl/styles.xml"] = st.encode("utf-8")
 
+# ---------------------------------------------------------------- 計算チェーンは捨てる(消した数式を指したままだと Excel が修復を求める。Excel が開くときに作り直す)
+if "xl/calcChain.xml" in parts:
+    del parts["xl/calcChain.xml"]
+    names = [n for n in names if n != "xl/calcChain.xml"]
+    rels2 = parts["xl/_rels/workbook.xml.rels"].decode("utf-8")
+    rels2 = re.sub(r'<Relationship [^>]*calcChain[^>]*/>', "", rels2)
+    parts["xl/_rels/workbook.xml.rels"] = rels2.encode("utf-8")
+    ct = parts["[Content_Types].xml"].decode("utf-8")
+    ct = re.sub(r'<Override [^>]*calcChain[^>]*/>', "", ct)
+    parts["[Content_Types].xml"] = ct.encode("utf-8")
+
 with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as zout:
     for n in names:
         zout.writestr(zin.getinfo(n), parts[n])
