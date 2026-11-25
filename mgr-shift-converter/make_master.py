@@ -199,7 +199,16 @@ x = ensure_row(x, 6)
 rm = re.search(r'<row r="6"([^>]*)>', x)
 attrs = re.sub(r'\s(ht|customHeight)="[^"]*"', "", rm.group(1))
 x = x[:rm.start()] + f'<row r="6"{attrs} ht="34" customHeight="1">' + x[rm.end():]
-x = set_cell(x, "B6", text="行事・イベント", style=s_label)
+# ラベルは2行に折り返す(「行事・イベント」が1行では収まらない)
+base_xf = xfs_all[int(s_label)]
+if "<alignment" in base_xf:
+    label_xf = re.sub(r"<alignment ", '<alignment wrapText="1" ', base_xf, count=1)
+else:
+    label_xf = base_xf.replace("/>", '><alignment horizontal="center" vertical="center" wrapText="1"/></xf>', 1) if base_xf.endswith("/>") else base_xf
+label_xf = re.sub(r'applyAlignment="\d"', 'applyAlignment="1"', label_xf) if 'applyAlignment=' in label_xf else label_xf.replace("<xf ", '<xf applyAlignment="1" ', 1)
+st, S_LABELW = add_xf(st, label_xf)
+x = set_cell(x, "B6", text="行事・イベント", style=S_LABELW)
+x = add_merge(x, "B6:D6")
 # 補助(非表示列): BD6=行事全文("/"→"／"), BE6=イベント全文, BF6=1つ目の区切り位置, BG6=残り, BI6=2つ目の区切り位置
 x = set_cell(x, "BD6", formula=esc(f'IF($D$5="","",SUBSTITUTE({GYOJI},"/","／"))'), style="6")
 x = set_cell(x, "BE6", formula=esc(f'IF($D$5="","",{EVENT})'), style="6")
