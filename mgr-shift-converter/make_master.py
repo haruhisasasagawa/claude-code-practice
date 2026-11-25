@@ -141,6 +141,7 @@ for n in range(0, 31):
     col = L(4 + n)
     x = set_cell(x, f"{col}4", formula=esc(f'IF({col}$3="","",CHOOSE(WEEKDAY({col}$3,2),"月","火","水","木","金","土","日"))'))
 x = set_cell(x, "E1", text="← D3 に月初の日付を入力(例 2026/12/1)。日付・曜日・年月は自動で更新。", style=style_of(cell_re("B3").search(x).group("attrs")))
+x = set_cell(x, "B6", text="イベント", style=style_of(cell_re("B5").search(x).group("attrs")))
 
 # 行事・記号・必要人数・空き枠の氏名を空に
 for r in ([] if KEEP else list(range(5, 7)) + list(range(7, 66)) + [66]):
@@ -183,11 +184,12 @@ def guard(expr):
     return f'IF(OR({expr}="",{expr}=0),"",TRIM({expr}&""))'
 G1 = guard("INDEX(MGR貼付!$D$5:$AH$5,$B$5)")
 G2 = guard("INDEX(MGR貼付!$D$6:$AH$6,$B$5)")
-GYOJI = f'{G1}&IF(AND({G1}<>"",{G2}<>"")," ／ ","")&{G2}'
+GYOJI = G1
 DATEX = 'DATE(YEAR(設定!$C$6),MONTH(設定!$C$6),$B$5)'
 E1 = guard(f'IFERROR(INDEX(MGR貼付!$D$69:$D$84,MATCH({DATEX},MGR貼付!$B$69:$B$84,0)),"")')
 E2 = guard(f'IFERROR(INDEX(MGR貼付!$U$69:$U$84,MATCH({DATEX},MGR貼付!$S$69:$S$84,0)),"")')
-EVENT = f'{E1}&IF(AND({E1}<>"",{E2}<>"")," ／ ","")&{E2}'
+EV0 = f'{E1}&IF(AND({E1}<>"",{E2}<>"")," ／ ","")&{E2}'
+EVENT = f'{G2}&IF(AND({G2}<>"",{EV0}<>"")," ／ ","")&{EV0}'
 # 見出し横の行事表示は使わず、6行目(表のすぐ上)に 行事とイベントを2行で表示する
 x = set_cell(x, "AF5", blank=True)
 s_label = style_of(cell_re("B39").search(x).group("attrs"))
@@ -200,7 +202,7 @@ attrs = re.sub(r'\s(ht|customHeight)="[^"]*"', "", rm.group(1))
 x = x[:rm.start()] + f'<row r="6"{attrs} ht="34" customHeight="1">' + x[rm.end():]
 x = set_cell(x, "B6", text="行事・イベント", style=s_label)
 x = set_cell(x, "E6", formula=esc(
-    f'IF($D$5="","",IF({GYOJI}="","行事： なし","行事： "&{GYOJI})&CHAR(10)&IF({EVENT}="","イベント・公開作品： なし","イベント・公開作品： "&{EVENT}))'), style=S_WRAP)
+    f'IF($D$5="","",IF({GYOJI}="","行事： なし","行事： "&{GYOJI})&CHAR(10)&IF({EVENT}="","イベント： なし","イベント： "&{EVENT}))'), style=S_WRAP)
 x = add_merge(x, "B6:D6")
 x = add_merge(x, "E6:BB6")
 parts[p] = x.encode("utf-8")
@@ -208,6 +210,7 @@ parts[p] = x.encode("utf-8")
 # ---------------------------------------------------------------- 月間: 行事は5行目と6行目をつなぐ
 p = sheet_part["月間"]
 x = parts[p].decode("utf-8")
+x = set_cell(x, "E5", text="行事・イベント")
 for d in range(1, 32):
     r = 5 + d
     g1 = guard(f"INDEX(MGR貼付!$D$5:$AH$5,{d})"); g2 = guard(f"INDEX(MGR貼付!$D$6:$AH$6,{d})")
