@@ -219,7 +219,7 @@ x = set_cell(x, "BI6", formula=esc('IF($BG$6="",0,IFERROR(FIND("／",$BG$6),0))'
 fm = re.search(r'<fills count="(\d+)">(.*?)</fills>', st, re.S)
 st = st[:fm.start()] + f'<fills count="{int(fm.group(1))+1}">' + fm.group(2) + '<fill><patternFill patternType="solid"><fgColor rgb="FFEAF0F3"/><bgColor indexed="64"/></patternFill></fill></fills>' + st[fm.end():]
 TAG_FILL = int(fm.group(1))
-st, S_TAG = add_xf(st, f'<xf numFmtId="0" fontId="{font_id}" fillId="{TAG_FILL}" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" shrinkToFit="1"/></xf>')
+st, S_TAG = add_xf(st, f'<xf numFmtId="0" fontId="{font_id}" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" shrinkToFit="1"/></xf>')
 # 見出し「行事」→ 項目3つ → 見出し「イベント」→ 内容
 x = set_cell(x, "E6", text="行事", style=S_LABELW)
 x = set_cell(x, "G6", formula=esc('IF($D$5="","",IF($BD$6="","なし",TRIM(IF($BF$6=0,$BD$6,LEFT($BD$6,$BF$6-1)))))'), style=S_TAG)
