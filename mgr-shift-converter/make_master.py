@@ -220,11 +220,14 @@ fm = re.search(r'<fills count="(\d+)">(.*?)</fills>', st, re.S)
 st = st[:fm.start()] + f'<fills count="{int(fm.group(1))+1}">' + fm.group(2) + '<fill><patternFill patternType="solid"><fgColor rgb="FFEAF0F3"/><bgColor indexed="64"/></patternFill></fill></fills>' + st[fm.end():]
 TAG_FILL = int(fm.group(1))
 st, S_TAG = add_xf(st, f'<xf numFmtId="0" fontId="{font_id}" fillId="{TAG_FILL}" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" shrinkToFit="1"/></xf>')
-x = set_cell(x, "E6", formula=esc('IF($D$5="","",IF($BD$6="","行事なし",TRIM(IF($BF$6=0,$BD$6,LEFT($BD$6,$BF$6-1)))))'), style=S_TAG)
-x = set_cell(x, "M6", formula=esc('IF($BG$6="","",TRIM(IF($BI$6=0,$BG$6,LEFT($BG$6,$BI$6-1))))'), style=S_TAG)
+# 見出し「行事」→ 項目3つ → 見出し「イベント」→ 内容
+x = set_cell(x, "E6", text="行事", style=S_LABELW)
+x = set_cell(x, "G6", formula=esc('IF($D$5="","",IF($BD$6="","なし",TRIM(IF($BF$6=0,$BD$6,LEFT($BD$6,$BF$6-1)))))'), style=S_TAG)
+x = set_cell(x, "N6", formula=esc('IF($BG$6="","",TRIM(IF($BI$6=0,$BG$6,LEFT($BG$6,$BI$6-1))))'), style=S_TAG)
 x = set_cell(x, "U6", formula=esc('IF($BI$6=0,"",TRIM(MID($BG$6,$BI$6+1,999)))'), style=S_TAG)
-x = set_cell(x, "AC6", formula=esc('IF($D$5="","",IF($BE$6="","イベント： なし","イベント： "&$BE$6))'), style=S_WRAP)
-for ref in ("E6:L6", "M6:T6", "U6:AB6", "AC6:BB6"):
+x = set_cell(x, "AB6", text="イベント", style=S_LABELW)
+x = set_cell(x, "AF6", formula=esc('IF($D$5="","",IF($BE$6="","なし",$BE$6))'), style=S_WRAP)
+for ref in ("E6:F6", "G6:M6", "N6:T6", "U6:AA6", "AB6:AE6", "AF6:BB6"):
     x = add_merge(x, ref)
 # 行事の色: ナイト=紫太字、早期オープン=青太字
 dm = re.search(r'<dxfs count="(\d+)">(.*?)</dxfs>', st, re.S)
@@ -233,8 +236,8 @@ st = st[:dm.start()] + f'<dxfs count="{nd+2}">' + dm.group(2) + \
      '<dxf><font><b/><color rgb="FF7030A0"/></font></dxf><dxf><font><b/><color rgb="FF0070C0"/></font></dxf></dxfs>' + st[dm.end():]
 last_cf = x.rfind("</conditionalFormatting>") + len("</conditionalFormatting>")
 x = x[:last_cf] + (
-    f'<conditionalFormatting sqref="E6:AB6"><cfRule type="expression" dxfId="{nd}" priority="31"><formula>ISNUMBER(SEARCH("ナイト",E6))</formula></cfRule></conditionalFormatting>'
-    f'<conditionalFormatting sqref="E6:AB6"><cfRule type="expression" dxfId="{nd+1}" priority="32"><formula>OR(ISNUMBER(SEARCH("早期オープン",E6)),ISNUMBER(SEARCH("早朝オープン",E6)))</formula></cfRule></conditionalFormatting>'
+    f'<conditionalFormatting sqref="G6:AA6"><cfRule type="expression" dxfId="{nd}" priority="31"><formula>ISNUMBER(SEARCH("ナイト",G6))</formula></cfRule></conditionalFormatting>'
+    f'<conditionalFormatting sqref="G6:AA6"><cfRule type="expression" dxfId="{nd+1}" priority="32"><formula>OR(ISNUMBER(SEARCH("早期オープン",G6)),ISNUMBER(SEARCH("早朝オープン",G6)))</formula></cfRule></conditionalFormatting>'
 ) + x[last_cf:]
 
 # 出勤計を、その日の最後の社員行のすぐ下に出す(39行目の固定表示はやめる)
